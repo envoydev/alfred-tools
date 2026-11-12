@@ -6,6 +6,8 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+// POSIX fixture paths (/work/shop): on a Windows host node's path module resolves them under a drive
+const POSIX_FIXTURE = process.platform === 'win32' && 'NOT RUN: POSIX fixture paths meet node\'s win32 path module on this host';
 const { spawnSync } = require('node:child_process');
 const roots = require('../scripts/roots.js');
 const asks = require('../scripts/asks.js');
@@ -37,7 +39,7 @@ test('global root options: ~/.preferred-tools first; ~/.alfred only when it exis
     assert.deepStrictEqual(both.map((o) => o.label).slice(0, 2), ['~/.preferred-tools', '~/.alfred']);
 });
 
-test('a root in use is listed first and recommended: the map, else a managed registration\'s helper or data folder, else the root holding .mcps-secrets', () => {
+test('a root in use is listed first and recommended: the map, else a managed registration\'s helper or data folder, else the root holding .mcps-secrets', { skip: POSIX_FIXTURE }, () => {
     const named = '/work/shop/tools/keys';
     const helper = reg('gh', 'local', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: 'node "/work/shop/kit/mcp-headers.js" GITHUB_PERSONAL_ACCESS_TOKEN Bearer' }, 'github', 'remote');
     const data = reg('pw', 'local', { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '/work/shop/.preferred-tools/playwright-chrome'] }, 'playwright-chrome', 'local');
@@ -141,7 +143,7 @@ test('roots map: missing or malformed reads empty with a note; a second project 
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('a record file: missing is null, malformed or another version reads empty with a note', () => {
+test('a record file: missing is null, malformed or another version reads empty with a note', { skip: POSIX_FIXTURE }, () => {
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-record-')));
     try
     {

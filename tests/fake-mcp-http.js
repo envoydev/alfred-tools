@@ -86,13 +86,16 @@ const stubBridgeCatalog = (port) => catalogWith((raw) =>
     bridge.fingerprints = [{ bridge: `127.0.0.1:${port}/mcp/` }];
 });
 
-// A folder's trust, as the trust dialog writes it in the account file of a harness world (tests/harness.js)
+// A folder's trust, as the trust dialog writes it in the account file of a harness world (tests/harness.js), under the
+// key Claude Code reads: on Windows the folder with `/` (account.js projectEntry) - a `\` key leaves the folder untrusted,
+// so a project-scope headersHelper never runs (measured, Windows 11 ARM64, 2.1.309, 2026-11-12)
 function trust(h, dir, on = true)
 {
     const file = account.accountFile(h.env);
     const doc = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
     doc.projects = doc.projects || {};
-    doc.projects[dir] = { ...(doc.projects[dir] || {}), hasTrustDialogAccepted: on };
+    const key = process.platform === 'win32' ? dir.replace(/\\/g, '/') : dir;
+    doc.projects[key] = { ...(doc.projects[key] || {}), hasTrustDialogAccepted: on };
     fs.writeFileSync(file, JSON.stringify(doc, null, 2));
 }
 

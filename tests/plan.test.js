@@ -29,6 +29,10 @@ const MAC = { os: 'darwin', arch: 'arm64', project: '/work/shop' };
 const LINUX = { os: 'linux', arch: 'x64', project: '/work/shop' };
 const WIN = { os: 'win32', arch: 'x64', project: 'C:\\work\\shop' };
 const WINARM = { os: 'win32', arch: 'arm64', project: 'C:\\work\\shop' };
+// a test of a darwin plan whose fixture paths (/work/shop, /Users/me) or real folders meet node's own path module: on a
+// Windows host that module is win32 and the two never agree - the plan runs with one platform's paths on a real machine,
+// and the matrix runs these flows on Windows
+const POSIX_FIXTURE = process.platform === 'win32' && 'NOT RUN: a darwin fixture meets node\'s win32 path module on this host (the matrix covers Windows)';
 const inv = (base, extra = {}) => ({ version: 1, ...base, cli: { ok: true }, unreadable: [], registrations: [], plugins: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, ...extra });
 const opts = (home, extra = {}) => ({ home, env: {}, exists: () => false, machine: { docker: true }, ...extra });
 const pickOne = (id, pick = {}) => ({ picks: { [id]: pick } });
@@ -441,7 +445,7 @@ test('a scope change moves the registration and rewrites its paths for the new s
     assert.strictEqual(e.args[e.args.indexOf('--user-data-dir') + 1], '/work/shop/.preferred-tools/playwright-chrome', 'absolute in the project root, as at local scope');
 });
 
-test('changing the route rebuilds from the catalog; changing only the key adds the helper to the entry as read', () => {
+test('changing the route rebuilds from the catalog; changing only the key adds the helper to the entry as read', { skip: POSIX_FIXTURE }, () => {
     const r = installed('context7', { route: 'remote', scope: 'project', token: false });
     const key = plan(inv(MAC, { registrations: [r] }), changeOf(r, { token: true }), opts('/h'));
     assert.deepStrictEqual(key.steps.map((s) => s.op), ['root-ignore', 'write-helper', 'ensure-key-name', 'mcp-replace', 'record-root', 'order-mcp-json']);
@@ -702,7 +706,7 @@ test('a hosted row installed for every project at its recommended Global scope i
     assert.ok(!asks.pickQuestions(hud, catalog).flat().flatMap((q) => q.options.map((o) => o.label)).some((l) => l.startsWith('claude-hud')));
 });
 
-test('install questions for a copy: the taken scope is not offered, and an account-default folder becomes the project one', () => {
+test('install questions for a copy: the taken scope is not offered, and an account-default folder becomes the project one', { skip: POSIX_FIXTURE }, () => {
     const i = inv(MAC, { registrations: [reg('memory', 'user', { command: 'uvx', args: ['--from', 'mcp-memory-service[sqlite]==12.1.1'] }, 'memory', 'local')], plugins: [{ id: 'claude-hud@claude-hud', scope: 'user', enabled: true, rowId: 'claude-hud', alfredRetired: false }, { id: 'typescript-lsp@claude-plugins-official', scope: 'user', enabled: true, rowId: 'typescript-lsp', alfredRetired: false }] });
     const offered = asks.pickQuestions(i, catalog).flat().flatMap((q) => q.options);
     const mem = offered.find((o) => o.label.startsWith('memory'));
@@ -1092,7 +1096,7 @@ test('serena on Windows: the root when it is space-free, the profile .serena whe
     assert.deepStrictEqual(q('C:\\work\\shop', 'project'), { question: null, answers: {}, only: { side: 'project' } }, 'project scope: <root>\\serena too');
 });
 
-test('--questions: a location row asks scope and name first; the location follows them; no scopes or names - the recommended scope and the original name', () => {
+test('--questions: a location row asks scope and name first; the location follows them; no scopes or names - the recommended scope and the original name', { skip: POSIX_FIXTURE }, () => {
     // a row with two places: Playwright with alfred-code 2.x data on disk
     const project = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-loc-')));
     fs.mkdirSync(path.join(project, '.alfred', 'chrome-control'), { recursive: true });
@@ -1789,7 +1793,7 @@ test('an existing root without a .gitignore gets no key file step and the plan n
     finally { w.clean(); }
 });
 
-test('the file steps come before the registration steps and the records last', () => {
+test('the file steps come before the registration steps and the records last', { skip: POSIX_FIXTURE }, () => {
     const p = plan(inv(MAC), { picks: { github: { route: 'remote', scope: 'user' }, 'playwright-chrome': {}, sentry: { route: 'local', scope: 'local' } } }, opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
     const ops = p.steps.map((s) => s.op);
@@ -1918,7 +1922,7 @@ test('an install at project scope ends with the order step; one at local scope h
     assert.ok(!local.steps.some((s) => s.op === 'order-mcp-json'), local.steps.map((s) => s.op).join());
 });
 
-test('install with no key answer: gitlab gets the helper, an empty name line and the fill line; OAuth gives no helper', () => {
+test('install with no key answer: gitlab gets the helper, an empty name line and the fill line; OAuth gives no helper', { skip: POSIX_FIXTURE }, () => {
     const p = plan(inv(MAC), pickOne('gitlab'), opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
     const add = p.steps.find((s) => s.op === 'mcp-add');
@@ -1934,7 +1938,7 @@ test('install with no key answer: gitlab gets the helper, an empty name line and
     assert.ok(!oauth.steps.some((s) => s.op === 'ensure-key-name'));
 });
 
-test("context7's local route: keyless at project scope; at local scope an unfilled key leaves --api-key out", () => {
+test("context7's local route: keyless at project scope; at local scope an unfilled key leaves --api-key out", { skip: POSIX_FIXTURE }, () => {
     const fs = require('node:fs');
     const os = require('node:os');
     const project = plan(inv(MAC), pickOne('context7', { route: 'local', scope: 'project' }), opts('/Users/me'));
@@ -2086,7 +2090,7 @@ test('change the root: each managed registration of the family is re-added with 
 
 test('change the root: the old data and the old key file stay, the new key file holds the names with empty values, the record\'s entries move', () => {
     const fs = require('node:fs');
-    const { world, writeJson } = require('./helpers.js');
+    const { world, writeJson, helperCmd } = require('./helpers.js');
     const { apply } = require('../scripts/apply.js');
     const cli = require('../scripts/claude-cli.js');
     const roots = require('../scripts/roots.js');
@@ -2130,7 +2134,7 @@ test('change the root: the old data and the old key file stay, the new key file 
         assert.ok(!fs.existsSync(path.join(old, 'preferred-tools.json')), 'the old root\'s record, left with nothing, is removed');
         assert.strictEqual(roots.readMap(data).projects[roots.mapKey(w.project)], fresh);
         const local = account.readAccount(w.env, w.project).local;
-        assert.strictEqual(local.github.headersHelper, `node ${path.join(fresh, 'mcp-headers.js')} ${G} Bearer`);
+        assert.strictEqual(local.github.headersHelper, helperCmd(path.join(fresh, 'mcp-headers.js'), G, 'Bearer'));
         assert.deepStrictEqual(local.context7, { command: 'npx', args: ['-y', '@upstash/context7-mcp@2.0.0'] }, 'a server on its own is untouched');
         assert.ok(local['playwright-chrome'].args.includes(path.join(fresh, 'playwright-chrome')));
     }
@@ -2445,7 +2449,10 @@ const bridgeWorld = () =>
     fs.mkdirSync(home, { recursive: true });
     return { d, project, home, proot: path.join(project, '.preferred-tools'), groot: path.join(home, '.preferred-tools'), clean: () => fs.rmSync(d, { recursive: true, force: true }) };
 };
-const bridgePlan = (b, pick) => plan(inv({ ...MAC, project: b.project }), pickOne('sentry', pick), { home: b.home, env: {}, machine: { docker: true } });
+// the folders are real, so the plan runs as this machine does - a MAC fixture on a Windows host would join a real
+// C:\ path with '/'
+const HOST = { os: process.platform, arch: process.arch };
+const bridgePlan = (b, pick) => plan(inv({ ...MAC, ...HOST, project: b.project }), pickOne('sentry', pick), { home: b.home, env: {}, machine: { docker: true } });
 const putSecrets = (dir, text) => { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, '.mcps-secrets'), text); };
 
 test('a sentry bridge install writes helper and bridge, names the key and the URL names, and says a restart applies a change', () => {
@@ -2517,7 +2524,7 @@ test("sentry's local route is still refused at project scope", () => {
 const bridgeArgs = (root, { template = 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}', key = 'SENTRY_ACCESS_TOKEN', pin = '0.16.0' } = {}) =>
     [path.join(root, 'mcp-bridge.js'), template, key, 'Sentry-Bearer', `mcp-remote@${pin}`];
 const bridgeReg = (b, scope, o = {}) => reg('sentry', scope, { command: 'node', args: bridgeArgs(scope === 'user' ? b.groot : b.proot, o), env: { npm_config_before: '2026-11-11T23:59:59Z' } }, 'sentry', 'bridge');
-const bridgeAnswers = (b, regs, answers) => plan(inv({ ...MAC, project: b.project }, { registrations: regs }), answers, { home: b.home, env: {}, machine: { docker: true } });
+const bridgeAnswers = (b, regs, answers) => plan(inv({ ...MAC, ...HOST, project: b.project }, { registrations: regs }), answers, { home: b.home, env: {}, machine: { docker: true } });
 const changedStep = (p) => p.steps.find((s) => s.op === 'mcp-replace' || s.op === 'mcp-move');
 
 test('answers.json urlNames reaches the registration at install and at configure', () => {

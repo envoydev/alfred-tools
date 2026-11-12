@@ -826,6 +826,33 @@ linear in the argument - then caret-escapes each cmd.exe metacharacter ``()[]%!^
 2026-10-29). All 14 measured values - a JSON quote, `%VAR%`, carets, `&` and `|`, runs of backslashes before a quote and
 the end, an empty argument, Unicode - came back unchanged (`tests/claude-cli.test.js`).
 
+## Windows - 0.4.0 (measured 2026-11-12, Windows 11 on ARM64, Claude Code 2.1.309, node 22.23.3)
+
+The released 0.4.0 (`2e6e0ea`), cloned from GitHub into the Parallels VM and run through `prlctl exec` (SYSTEM):
+
+- A headersHelper runs with `CLAUDE_CODE_MCP_SERVER_NAME` set, so helper 4 sends the key: a stand-in helper registered
+  at user scope was run once per `claude mcp get`, with the server's name and URL in its environment, and its header
+  reached the stub. At project scope it ran only once the account trusted the folder under the key `C:/x/proj` (the
+  folder with `/`, as `account.js` `projectEntry` reads it); a trust entry under `C:\x\proj` left the folder untrusted
+  and the helper unrun. The matrix's `trust()` wrote the `\` key until this run, which failed K1-K4, K6, W4 and X7.
+- `claude mcp get` prints `Status: × Failed to connect` (and `√ Connected`) where macOS prints `✘` (and `✔`); the
+  `Issue:` line for a refused key is word for word the macOS one, so `apply.REFUSED` matches it. `fetch.js` passes the
+  Status line on as written.
+- Git for Windows installs with `core.autocrlf=true` in its system gitconfig, so a clone - `claude plugin install`'s
+  included - checks out CRLF except where `.gitattributes` says `eol=lf` (only `scripts/mcp-headers.js`). A CRLF
+  `mcp-bridge.js` is the same bridge: `roots.js` and lint compare through `digestOf`, and its first-line pattern
+  takes a CR.
+- npm test on a CRLF clone: 529, 513 pass, 1 fail, 15 skip (8 darwin-fixture tests NOT RUN on a Windows host, the
+  7 skipped before); the one failure, the catalog's serialize check reading CRLF, was fixed and its file re-run there
+  (4 of 4). Matrix on an LF clone: 79, 69 pass, 0 fail, 10 NOT RUN (macos-control x2: not darwin; the
+  windows-control start: no interactive desktop for SYSTEM; sentry local: no token; github local: docker not on PATH;
+  typescript-language-server and csharp-ls: not on PATH; W2, W4 with alfred-code and W5: no alfred-code 3.2.1 beside
+  the copy). B1 started the bridge for real, followed a changed slug after a restart and served a child folder.
+- The first run's other failures were test shapes, fixed in the tests: helper commands expected in `\` (the apply writes
+  `/` on win32, `entries.js` `shellArg`), SYSTEM's `TEMP` of `C:\WINDOWS\TEMP` against the real `C:\Windows\Temp`
+  (the runs set `TEMP` to a folder of the right case), CRLF in the ask-block parser and two file checks, and fresh
+  serena still expecting 0.2.0's `<home>\.serena`.
+
 ## windows-mcp 0.8.8 - the sticky overlay failure (read 2026-10-29)
 
 The `windows-mcp-one-per-desktop` fix row (advice only) rests on the 0.8.8 wheel from

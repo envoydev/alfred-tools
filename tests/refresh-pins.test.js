@@ -33,7 +33,8 @@ const copy = () =>
 
 test('the catalog file is what serialize writes, so a refresh changes only the pins and cut-offs', () =>
 {
-    const text = fs.readFileSync(FILE, 'utf8');
+    // as git stores it: a Windows checkout under Git's default autocrlf adds a CR to each line, and git drops it again
+    const text = fs.readFileSync(FILE, 'utf8').replace(/\r\n/g, '\n');
     assert.ok(text === refreshPins.serialize(JSON.parse(text)), 'catalog/tools.json is JSON.stringify(.., null, 2) plus a newline');
 });
 

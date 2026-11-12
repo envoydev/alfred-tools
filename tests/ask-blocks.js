@@ -16,7 +16,7 @@ const OPTION = /^- '(.+)' - (.+)$/;
 function parseAskBlocks(text)
 {
     const blocks = [];
-    const lines = text.split('\n');
+    const lines = text.split(/\r?\n/);
     for (let i = 0; i < lines.length; i++)
     {
         const open = /^```ask(?:\s+(\S+))?\s*$/.exec(lines[i]);

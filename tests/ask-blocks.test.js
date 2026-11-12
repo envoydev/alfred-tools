@@ -33,6 +33,13 @@ test('every way a block can break the limits is named', () =>
     assert.match(problemsOf(parseAskBlocks('```ask menu\nQ?\n- \'A (Recommended)\' - a')[0]).join(), /never closed/);
 });
 
+test('a command file with CRLF line endings - a Windows checkout under Git\'s default autocrlf - parses as with LF', () => {
+    const lf = fs.readFileSync(path.join(__dirname, '..', 'commands', 'configure.md'), 'utf8').replace(/\r\n/g, '\n');
+    const crlf = lf.replace(/\n/g, '\r\n');
+    assert.deepStrictEqual(parseAskBlocks(crlf), parseAskBlocks(lf));
+    assert.deepStrictEqual(parseAskBlocks(crlf).flatMap(problemsOf), []);
+});
+
 test('the commands hold every ask block to the limits', () =>
 {
     const root = path.join(__dirname, '..');

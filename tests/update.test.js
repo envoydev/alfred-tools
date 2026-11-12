@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { world, writeJson, readJson, tempOf } = require('./helpers.js');
+const { world, writeJson, readJson, tempOf, helperCmd } = require('./helpers.js');
 const inventory = require('../scripts/inventory.js');
 const { plan } = require('../scripts/plan.js');
 const { apply } = require('../scripts/apply.js');
@@ -576,7 +576,7 @@ test('update offers the new ways to pass data that fix knows - a 0.1.x key heade
         const doc = readJson(account.accountFile(w.env));
         const local = account.projectEntry(doc.projects, w.project).mcpServers.github;
         assert.strictEqual(local.headers, undefined, 'the header is gone');
-        assert.strictEqual(local.headersHelper, `node ${path.join(pt, 'mcp-headers.js')} ACME_GH Bearer`);
+        assert.strictEqual(local.headersHelper, helperCmd(path.join(pt, 'mcp-headers.js'), 'ACME_GH', 'Bearer'));
         assert.ok(fs.existsSync(path.join(pt, 'mcp-headers.js')), 'the helper is written with it');
         assert.deepStrictEqual(doc.mcpServers.github.headers, gh.headers, 'github (user) was not picked: left');
         const mem = readJson(path.join(w.project, '.mcp.json')).mcpServers.memory;

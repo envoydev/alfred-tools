@@ -281,7 +281,7 @@ test('a root under a type-module package.json runs with its own commonjs package
 
 test('the bridge requires only node: modules and ./mcp-headers.js, and its CREDENTIAL equals keys.js', () => {
     const src = fs.readFileSync(BRIDGE, 'utf8');
-    assert.match(src.split('\n')[0], /^\/\/ preferred-tools mcp-bridge 1$/);
+    assert.match(src.split(/\r?\n/)[0], /^\/\/ preferred-tools mcp-bridge 1$/, 'the first line, CRLF or LF (roots.js SHIPPED_LINE reads both)');
     const reqs = [...src.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]);
     assert.ok(reqs.length && reqs.every((r) => r.startsWith('node:') || r === './mcp-headers.js'), reqs.join(', '));
     const b = bridge();

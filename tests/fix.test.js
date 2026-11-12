@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
-const { world, readJson } = require('./helpers.js');
+const { world, readJson, helperCmd } = require('./helpers.js');
 const catalogLib = require('../scripts/catalog.js');
 const inventory = require('../scripts/inventory.js');
 const E = require('../scripts/entries.js');
@@ -895,7 +895,7 @@ test('key-to-helper: a ${VAR} filled in the chain is moved to the helper under t
         assert.strictEqual(res.failed, null, l.text());
         const e = localEntry(w, 'github');
         assert.strictEqual(e.headers, undefined, 'the header is gone');
-        assert.strictEqual(e.headersHelper, `node ${path.join(ptRoot(w), 'mcp-headers.js')} ACME_GH Bearer`);
+        assert.strictEqual(e.headersHelper, helperCmd(path.join(ptRoot(w), 'mcp-headers.js'), 'ACME_GH', 'Bearer'));
         assert.strictEqual(fsx.readFileSync(path.join(ptRoot(w), 'mcp-headers.js'), 'utf8'), rootsLib.helperSource(), 'R9: the helper is written with it');
         assert.match(l.text(), new RegExp(`root ${ptRoot(w).replace(/[\\.]/g, '\\$&')}`), 'the root is named');
         assert.deepStrictEqual(res.applied.map((x) => x.id), ['key-to-helper']);
@@ -942,7 +942,7 @@ test('key-to-helper: a literal equal to a filled value applies with that name; o
         assert.strictEqual(res.failed, null, l.text());
         const e = userEntry(w, 'sentry');
         assert.strictEqual(e.headers, undefined);
-        assert.strictEqual(e.headersHelper, `node ${path.join(homeRoot(w), 'mcp-headers.js')} MY_SENTRY Sentry-Bearer`);
+        assert.strictEqual(e.headersHelper, helperCmd(path.join(homeRoot(w), 'mcp-headers.js'), 'MY_SENTRY', 'Sentry-Bearer'));
         assert.deepStrictEqual(localEntry(w, 'github').headers, { Authorization: `Bearer ${v2}` }, 'blocked: unchanged');
         for (const v of [v1, v2]) assert.ok(!l.text().includes(v), 'nothing printed holds a literal');
         for (const file of files(path.join(w.dir, 'tmp'))) for (const v of [v1, v2]) assert.ok(!fsx.readFileSync(file, 'utf8').includes(v), path.basename(file));

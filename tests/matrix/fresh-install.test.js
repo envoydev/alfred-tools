@@ -71,10 +71,9 @@ for (const c of spec.cases)
             assert.deepStrictEqual(stored[step.name], want);
             if (c.expect.files)
             {
-                // the data folder: in the project, or on Windows for a row whose home must be absolute
-                // (serena-windows-home), the default the plan offers there, <home>\.serena
-                const absolute = process.platform === 'win32' && catalog.byId.get(c.row).locations.windowsAbsolute;
-                assert.strictEqual(fs.readFileSync(path.join(absolute ? path.join(h.home, '.serena') : path.join(project, c.expect.files), '.gitignore'), 'utf8'), '*\n', 'the data folder keeps itself out of git');
+                // the data folder, in the project root on every platform since 0.3.0 - serena's Windows home included
+                // (absolute and in backslashes there, serena-windows-home)
+                assert.strictEqual(fs.readFileSync(path.join(project, c.expect.files, '.gitignore'), 'utf8'), '*\n', 'the data folder keeps itself out of git');
             }
             if (c.expect.scope === 'project') assert.ok(!/(?:^|[^$])\/(?:Users|home)\//.test(JSON.stringify(stored)), 'the committed file holds no absolute local path');
         }

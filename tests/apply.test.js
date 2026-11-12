@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
-const { world, writeJson, readJson, accountKey, tempOf, files } = require('./helpers.js');
+const { world, writeJson, readJson, accountKey, tempOf, files, helperCmd } = require('./helpers.js');
 const inventory = require('../scripts/inventory.js');
 const { plan } = require('../scripts/plan.js');
 const { apply } = require('../scripts/apply.js');
@@ -329,7 +329,7 @@ test('no token value reaches any file the install wrote', () => {
             for (const [name, value] of Object.entries(tokens)) assert.ok(!body.includes(value), `${name} value found in ${path.relative(w.dir, f)}`);
         }
         // a hosted key is read by mcp-headers.js when Claude Code connects: the committed entry names the helper, no key
-        assert.deepStrictEqual(mcpJson(w).mcpServers.github, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${path.join(w.project, '.preferred-tools', 'mcp-headers.js')} GITHUB_PERSONAL_ACCESS_TOKEN Bearer` });
+        assert.deepStrictEqual(mcpJson(w).mcpServers.github, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: helperCmd(path.join(w.project, '.preferred-tools', 'mcp-headers.js'), 'GITHUB_PERSONAL_ACCESS_TOKEN', 'Bearer') });
         assert.strictEqual(accountDoc(w).mcpServers.sentry.env.SENTRY_ACCESS_TOKEN, '', 'a key in the shell is never written in: the apply reads .mcps-secrets only');
     }
     finally { w.clean(); }
@@ -534,7 +534,7 @@ test('a stdio key at local scope is written in from the key file, a hosted route
         assert.deepStrictEqual(r.p.errors, []);
         assert.strictEqual(r.report.failed, null, r.text);
         assert.strictEqual(accountDoc(w).projects[accountKey(w.project)].mcpServers.sentry.env[S], s, 'the value, as the file holds it');
-        assert.deepStrictEqual(mcpJson(w).mcpServers.github, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${path.join(w.project, '.preferred-tools', 'mcp-headers.js')} ${G} Bearer` }, 'the project file names the helper by absolute path');
+        assert.deepStrictEqual(mcpJson(w).mcpServers.github, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: helperCmd(path.join(w.project, '.preferred-tools', 'mcp-headers.js'), G, 'Bearer') }, 'the project file names the helper by absolute path');
         assert.ok(r.text.includes(`${S} for 'sentry' (local) from ${path.join(w.project, '.preferred-tools', '.mcps-secrets')}`), r.text);
         noValueIn(w, r, [s, g]);
     }
@@ -545,7 +545,7 @@ test('a configure move local -> project of a github remote re-adds its helper wi
     const w = world();
     try
     {
-        const helper = (p) => `node ${p} ${G} Bearer`;
+        const helper = (p) => helperCmd(p, G, 'Bearer');
         register(w, 'github', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: helper(path.join(w.project, '.preferred-tools', 'mcp-headers.js')) });
         const r = keptWalk(w, { change: { 'mcp:github~local': { scope: 'project' } } });
         assert.deepStrictEqual(r.p.errors, []);
@@ -593,7 +593,7 @@ test('a configure move local -> user points the helper into the global root and 
         register(w, 'github', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${path.join(w.project, '.preferred-tools', 'mcp-headers.js')} ACME_GITHUB_TOKEN Bearer` });
         const r = keptWalk(w, { change: { 'mcp:github~local': { scope: 'user' } } });
         assert.strictEqual(r.report.failed, null, r.text);
-        assert.deepStrictEqual(accountDoc(w).mcpServers.github, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${path.join(w.home, '.preferred-tools', 'mcp-headers.js')} ACME_GITHUB_TOKEN Bearer` });
+        assert.deepStrictEqual(accountDoc(w).mcpServers.github, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: helperCmd(path.join(w.home, '.preferred-tools', 'mcp-headers.js'), 'ACME_GITHUB_TOKEN', 'Bearer') });
         assert.deepStrictEqual(r.p.keys.map((k) => [k.variable, k.scope, k.files[0]]), [['ACME_GITHUB_TOKEN', 'user', path.join(w.home, '.preferred-tools', '.mcps-secrets')]]);
     }
     finally { w.clean(); }
