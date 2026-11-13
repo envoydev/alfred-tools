@@ -157,55 +157,6 @@ for (const id of catalog.tools.filter((r) => r.kind === 'mcp' && r.routes.remote
     });
 }
 
-// The language servers the typescript-lsp and csharp-lsp plugins launch: the binary on PATH, started with --stdio as
-// the plugin's lspServers entry starts it, sent an LSP initialize (Content-Length framing). That the plugin itself is
-// loaded by a session is the live check's, since no session runs here.
-function lspInitialize(command, args)
-{
-    return new Promise((resolve) =>
-    {
-        const child = spawn(command, args, { env: h.env, cwd: root, stdio: ['pipe', 'pipe', 'pipe'], shell: process.platform === 'win32', detached: process.platform !== 'win32' });
-        children.push(child);
-        let buf = Buffer.alloc(0);
-        let err = '';
-        const done = (r) => { clearTimeout(timer); stop(child); resolve(r); };
-        const timer = setTimeout(() => done({ ok: false, why: `no answer in 120s; stderr: ${err.slice(-400)}; stdout: ${buf.toString().slice(-400)}` }), 120000);
-        child.on('error', (e) => done({ ok: false, why: e.message }));
-        child.on('exit', (code) => done({ ok: false, why: `exited ${code}; stderr: ${err.slice(-400)}` }));
-        child.stderr.on('data', (d) => { err += d; });
-        // Content-Length framed messages, one after another; a server may log or notify before it answers
-        child.stdout.on('data', (d) =>
-        {
-            buf = Buffer.concat([buf, d]);
-            for (;;)
-            {
-                const end = buf.indexOf('\r\n\r\n');
-                if (end < 0) return;
-                const len = Number((/content-length:\s*(\d+)/i.exec(buf.subarray(0, end).toString()) || [])[1]);
-                if (!len || buf.length < end + 4 + len) return;
-                const body = buf.subarray(end + 4, end + 4 + len).toString();
-                buf = buf.subarray(end + 4 + len);
-                let msg;
-                try { msg = JSON.parse(body); } catch { continue; }
-                if (msg.id === 1 && !msg.method) return done(msg.result ? { ok: true, info: msg.result.serverInfo || {} } : { ok: false, why: JSON.stringify(msg.error) });
-            }
-        });
-        const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { processId: process.pid, rootUri: null, capabilities: {} } });
-        child.stdin.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
-    });
-}
-
-for (const [plugin, bin] of [['typescript-lsp', 'typescript-language-server'], ['csharp-lsp', 'csharp-ls']])
-{
-    test(`starts: ${bin} (the ${plugin} plugin's server) answers an LSP initialize`, { skip: skipAll, timeout: 180000 }, async (t) =>
-    {
-        if (!which(bin)) return t.skip(`NOT RUN: ${bin} not on PATH (prereq.js names the install line)`);
-        const got = await lspInitialize(bin, bin === 'csharp-ls' ? [] : ['--stdio']);
-        assert.ok(got.ok, `${bin} did not start: ${got.why}`);
-        t.diagnostic(`${bin} on ${process.platform}: ${got.info.name || bin} ${got.info.version || ''}`.trim());
-    });
-}
-
 test('the real account is untouched by the start checks', { skip: skipAll }, () =>
 {
     const real = h.realUntouched();

@@ -37,7 +37,6 @@ const mcpOrder = require('./mcp-order.js');
 const lists = require('./mcps-list.js');
 const cursorMcp = require('./cursor-mcp.js');
 
-const SCRIPTS = __dirname;
 const quote = (s) => (/^[A-Za-z0-9_\-./:=@,+]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`);
 const restoreLine = (name, scope, entry) => `claude mcp add-json ${quote(name)} ${quote(JSON.stringify(entry))} -s ${scope}`;
 // the line that puts a registration back by hand, its credential values as the marker
@@ -125,12 +124,6 @@ function fillStep(step, ctx)
     const held = step.old ? keys.tokenFields(step.old, route).map((f) => f.at.reduce((o, k) => (o == null ? undefined : o[k]), step.old)).find((v) => typeof v === 'string' && v !== '' && !keys.PLACEHOLDER.test(v) && !v.includes(kept.MARKER)) : undefined;
     if (held !== undefined) return { step: fill(held), note: `${name} for ${where} is in none of ${files.join(', ')} - the key it holds is kept; fill ${name} in ${files[0]} to replace it` };
     return { step: fill(''), note: `${name} for ${where} is in none of ${files.join(', ')} - written empty: fill ${name} in ${files[0]}, then run /preferred-tools:configure and keep ${name} as the key's name - it writes the key in` };
-}
-
-function pluginState(ctx, id, scope)
-{
-    const inv = inventory.buildInventory({ project: ctx.project, env: ctx.env });
-    return inv.plugins.find((p) => p.id === id && p.scope === scope);
 }
 
 // ---- the file steps (spec D2-D4, D6, D8): each skips what is in place, so a re-run after a failed add writes nothing again
@@ -460,31 +453,6 @@ function runStep(step, ctx)
             if (!rm.ok) return { ok: false, detail: `${rm.detail}; the new one is in place, the old one is still there - remove it by hand: claude mcp remove ${step.from.name} -s ${step.from.scope}` };
             return { ok: true, detail: `moved '${step.from.name}' (${step.from.scope}) to '${step.to.name}' (${step.to.scope}): added, read back, old removed` };
         }
-        case 'plugin-marketplace-add': {
-            const r = call(argvOf(step));
-            if (!r.ok) return { ok: false, detail: `claude plugin marketplace add ${step.source} failed: ${r.out}` };
-            const list = ctx.runCli(['plugin', 'marketplace', 'list', '--json'], { cwd: ctx.project, env: ctx.env });
-            let names = [];
-            try { names = JSON.parse(list.stdout || '[]').map((m) => m.name); } catch { /* read-back failed below */ }
-            return names.includes(step.name) ? { ok: true, detail: `marketplace ${step.name} registered` } : { ok: false, detail: `marketplace ${step.name} not in the list after the add` };
-        }
-        case 'plugin-install': case 'plugin-enable': {
-            const r = call(argvOf(step));
-            if (!r.ok) return { ok: false, detail: `claude ${argvOf(step).join(' ')} failed: ${r.out}` };
-            const p = pluginState(ctx, step.id, step.scope);
-            return p && p.enabled ? { ok: true, detail: `${step.id} installed and enabled at ${step.scope} scope (read from the plugin list and the settings file)` } : { ok: false, detail: `${step.id} is not enabled at ${step.scope} scope after the call${p && p.errors.length ? ` (errors: ${p.errors.join('; ')})` : ''}` };
-        }
-        case 'plugin-uninstall': {
-            const r = call(argvOf(step));
-            if (!r.ok) return { ok: false, detail: `claude ${argvOf(step).join(' ')} failed: ${r.out}` };
-            return pluginState(ctx, step.id, step.scope) ? { ok: false, detail: `${step.id} is still installed at ${step.scope} scope` } : { ok: true, detail: `${step.id} uninstalled from ${step.scope} scope` };
-        }
-        case 'hud': {
-            const flags = step.mode === 'replace' ? ['--replace'] : step.mode === 'skip' ? ['--statusline-only'] : [];
-            const args = [path.join(SCRIPTS, 'hud-statusline.js'), ...flags, '--catalog', path.join(SCRIPTS, '..', 'catalog', 'plugin-settings.json'), '--config-dir', account.configDir(ctx.env), '--project', ctx.project];
-            const r = require('node:child_process').spawnSync(process.execPath, args, { encoding: 'utf8', env: ctx.env, cwd: ctx.project });
-            return r.status === 0 ? { ok: true, detail: `claude-hud settings (${step.mode}): ${(r.stdout || '').trim().split('\n').slice(-1)[0]}` } : { ok: false, detail: `hud-statusline.js failed: ${(r.stderr || r.stdout || '').trim()}` };
-        }
         default: return { ok: false, detail: `unknown operation ${step.op}` };
     }
 }
@@ -538,20 +506,12 @@ function apply(plan, { env = process.env, tmp, runCli = cli.run, log = console.l
     const inv = inventory.buildInventory({ project, env });
     for (const e of plan.expect || [])
     {
-        if (e.kind === 'mcp')
-        {
-            const got = inv.registrations.find((r) => r.name === e.name && r.scope === e.scope);
-            report.readback.push({ kind: 'mcp', name: e.name, scope: e.scope, expectedRoute: e.route, found: Boolean(got), route: got ? got.route : null, row: got ? got.rowId : null });
-        }
-        else
-        {
-            const got = inv.plugins.find((p) => p.id === e.id && p.scope === e.scope);
-            report.readback.push({ kind: 'plugin', id: e.id, scope: e.scope, found: Boolean(got), enabled: got ? got.enabled : null, version: got ? got.version : null });
-        }
+        const got = inv.registrations.find((r) => r.name === e.name && r.scope === e.scope);
+        report.readback.push({ kind: 'mcp', name: e.name, scope: e.scope, expectedRoute: e.route, found: Boolean(got), route: got ? got.route : null, row: got ? got.rowId : null });
     }
     log('', 'Read back:');
     for (const r of report.readback)
-        log(r.kind === 'mcp' ? `  ${r.found ? 'ok ' : 'MISSING'} ${r.name} - ${r.scope} scope, ${r.route || '?'} route${r.row ? ` (${r.row})` : ''}` : `  ${r.found && r.enabled ? 'ok ' : 'MISSING'} ${r.id} - ${r.scope} scope${r.version ? `, ${r.version}` : ''}`);
+        log(`  ${r.found ? 'ok ' : 'MISSING'} ${r.name} - ${r.scope} scope, ${r.route || '?'} route${r.row ? ` (${r.row})` : ''}`);
     // what was written and read back: with a package to fetch, fetch.js fetches it and then asks the CLI for the status;
     // with none (a hosted URL, a rename, a move), the status is asked here
     const done = new Set(report.applied.map((a) => a.i));

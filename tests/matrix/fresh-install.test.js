@@ -2,9 +2,9 @@
 // Step 10 check: a fresh install for every catalog row and route, from an answers file, through the REAL claude CLI in
 // the throwaway world (tests/harness.js), then read back from the files the CLI wrote - never from an exit code.
 //
-//   npm run matrix        (about five minutes: each case is real CLI calls; plugin cases need the network)
+//   npm run matrix        (about five minutes: each case is real CLI calls)
 //
-// A case whose OS the row is not offered on, and a plugin case with no network, is reported as skipped with the reason
+// A case whose OS the row is not offered on, and a case with no network, is reported as skipped with the reason
 // ('NOT RUN'), never as passed.
 const test = require('node:test');
 const assert = require('node:assert');
@@ -77,38 +77,8 @@ for (const c of spec.cases)
             }
             if (c.expect.scope === 'project') assert.ok(!/(?:^|[^$])\/(?:Users|home)\//.test(JSON.stringify(stored)), 'the committed file holds no absolute local path');
         }
-        else
-        {
-            const p = inv.plugins.find((x) => x.rowId === c.row && x.scope === c.expect.scope);
-            assert.ok(p, `${c.row}: not read back at ${c.expect.scope} scope\n${r.text}`);
-            assert.strictEqual(p.enabled, true);
-            assert.deepStrictEqual(p.errors, [], 'the plugin list reports no load error');
-            if (c.expect.hudAfter) hudAfterInstall(project, r, c);
-        }
+        else assert.fail(`${c.row}: the catalog lists only MCP servers since 0.5.0, not a ${c.expect.kind}`);
     });
-}
-
-// claude-hud was planned with hud: 'defer'; the walk then asks and runs hud-statusline.js itself
-function hudAfterInstall(project, r, c)
-{
-    assert.strictEqual(r.plan.hudAfter, true);
-    assert.ok(!r.plan.steps.some((s) => s.op === 'hud'));
-    const script = path.join(__dirname, '..', '..', 'scripts', 'hud-statusline.js');
-    const catalog = path.join(__dirname, '..', '..', 'catalog', 'plugin-settings.json');
-    const run = (...flags) => spawnSync(process.execPath, [script, ...flags, '--catalog', catalog, '--project', '.'], { cwd: project, env: h.env, encoding: 'utf8' });
-    const check = run('--check');
-    assert.strictEqual(check.status, 0, check.stdout + check.stderr);
-    assert.match(check.stdout, /^hud-check: statusLine=absent missing=13 differs=0 match=0$/m, 'a fresh account counts the refresh interval');
-    // the walk's 'Skip': the statusLine alone
-    const skip = run(`--${c.expect.hudAfter === 'skip' ? 'statusline-only' : 'replace'}`);
-    assert.strictEqual(skip.status, 0, skip.stdout + skip.stderr);
-    const settings = JSON.parse(fs.readFileSync(path.join(h.account, 'settings.json'), 'utf8'));
-    assert.strictEqual(settings.statusLine.type, 'command');
-    assert.match(settings.statusLine.command, /claude-hud/);
-    assert.ok(!('refreshInterval' in settings.statusLine), 'Skip writes no catalog key');
-    assert.ok(!fs.existsSync(path.join(h.account, 'plugins', 'claude-hud', 'config.json')), 'and no claude-hud config.json');
-    const again = run('--check');
-    assert.match(again.stdout, /^hud-check: statusLine=current missing=13 differs=0 match=0$/m, 'the statusLine is current; the 13 keys are still the walk\'s to offer');
 }
 
 test('no config file holds a key value outside a local route written in at Local or Global scope, and the real account is untouched', { skip: skipAll }, () =>

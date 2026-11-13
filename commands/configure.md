@@ -1,8 +1,8 @@
 ---
-description: "Change or remove installed preferred tools - an MCP server's route, scope, name, data folder, key name or settings, a root folder, a plugin's scope, claude-hud's settings - one confirmed plan"
-argument-hint: "[registration name | tool id | hud]"
+description: "Change or remove installed preferred tools - an MCP server's route, scope, name, data folder, key name or settings, a root folder, the apps it is set up for - one confirmed plan"
+argument-hint: "[registration name | tool id]"
 disable-model-invocation: true
-allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.js"), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/table.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/hud-statusline.js" --check *)
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.js"), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/table.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.js" *)
 ---
 
 Walk the user through changing or removing preferred tools that are already installed here. The scripts do the work and
@@ -61,34 +61,31 @@ each scope as `name [route, pin]`.
 node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" --questions <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
-Its `change.keys` maps each option to its key: an installed registration or plugin (`mcp:<name>~<scope>`,
-`plugin:<id>~<scope>`), a server left on its own (`mcp:...`, `plugin-mcp:<plugin>/<server>`, `connector:<Name>`), and a
+Its `change.keys` maps each option to its key: an installed registration (`mcp:<name>~<scope>`), a server left on its own (`mcp:...`, `plugin-mcp:<plugin>/<server>`, `connector:<Name>`), and a
 root folder in use (`root:project`, `root:global`). When it is empty, say nothing from the catalog is installed here,
 point to `/preferred-tools:install`, and stop.
 
 The argument, when given:
 
-- `hud` - go straight to 'claude-hud' (claude-hud not installed: say so and point to `/preferred-tools:install`).
 - a registration name, or a tool id - the keys whose label starts with that name or names that tool. Exactly one: it is
   the only pick, go to step 5. Several: say where it is installed and ask step 4 as printed. None: say it is not
   installed and point to `/preferred-tools:install <id>`.
 
-Otherwise ask, leaving out 'claude-hud settings' when the table shows claude-hud not installed:
+Otherwise ask:
 
 ```ask menu
 What do you want to change?
 - 'Change tools (Recommended)' - pick installed tools, servers on their own or a root folder, then what to change
-- 'Remove tools' - choose the registrations and plugins to remove
-- 'claude-hud settings' - the status line and its recommended settings - only shown when claude-hud is installed
+- 'Remove tools' - choose the servers to remove
 - 'Done' - nothing changes
 ```
 
-'Done' ends the command. 'Remove tools' goes to step 9. 'claude-hud settings' goes to 'claude-hud'.
+'Done' ends the command. 'Remove tools' goes to step 9.
 
 ## 4. Pick
 
 Ask each `change.calls` call as printed - one `AskUserQuestion` of up to four multi-select questions, one option per
-registration or plugin (a tool at two scopes is two options; your own servers are not there), then the 'On their own'
+registration (a tool at two scopes is two options; your own servers are not there), then the 'On their own'
 group (servers left on their own, with a plugin or with claude.ai) and the 'Root folders' group. Turn each picked label
 into its key through `change.keys`. 'None of these', or nothing picked: say so and stop.
 
@@ -135,7 +132,6 @@ What each step is, and where its answer goes:
     `next.answers.<question id>.<label>`: `["claude", "cursor"]` or `["claude"]`, written as `"clients"` in the
     target's `change` entry when it is not `current.clients`. A change of the apps alone makes no `claude` call: the
     plan writes the list and Cursor's file only.
-- **A plugin**: one question, its scope.
 
 The key name is `next.answers.<question id>.<label>` - the name it uses now first, 'A name you choose' asked next - and
 another name goes to `"keyNames": {<key>: "<NAME>"}` at the top of `answers.json`. The walk leaves the key name out when
@@ -176,10 +172,6 @@ key goes in `.mcps-secrets` and is picked as the key's name, never typed here.
 A scope change on an MCP server is a move too: the registration picked leaves its old scope, so a copy for every project
 moved to Local is gone from the other projects. To keep it there and add this project's own copy, use
 `/preferred-tools:install` instead; say so when the user picks another scope for a Global registration.
-
-A plugin has one question, its scope; another scope is a move - the plan installs it there and uninstalls the copy you
-picked once the new one reads back. When claude-hud is picked, run 'claude-hud' now and set `"hud"` in the answers from
-its answer.
 
 ## 6. Prerequisites
 
@@ -294,45 +286,13 @@ also needs the trust prompt then. When background runs are turned off, run fetch
 
 ```ask removeFirst
 Remove what?
-- 'Pick which (Recommended)' - choose the registrations and plugins to remove
+- 'Pick which (Recommended)' - choose the servers to remove
 - 'Cancel' - nothing is removed
 ```
 
 'Pick which': ask the `remove` calls from step 3's output as printed (one option per registration; a tool at two scopes
 is two options). Each option's description is the exact command, from which you read the target:
-`claude mcp remove <name> -s <scope>` is `{"kind": "mcp", "name": ..., "scope": ...}`, and
-`claude plugin uninstall <id> --scope <scope>` is `{"kind": "plugin", "id": ..., "scope": ...}`. 'None of these', or
+`claude mcp remove <name> -s <scope>` is `{"kind": "mcp", "name": ..., "scope": ...}`. 'None of these', or
 nothing picked: say so and stop. Put them in `answers.json` under `"remove"` and go to step 7. A server removed leaves
 both apps: its list entry goes, and so does its entry in Cursor's file when it was set up for Cursor. Data folders and
 key files stay where they are; the plan names them.
-
-## claude-hud
-
-The status line and its recommended settings, for an installed claude-hud.
-
-```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/hud-statusline.js" --check --catalog "${CLAUDE_PLUGIN_ROOT}/catalog/plugin-settings.json" --project .
-```
-
-Paste its output verbatim. It shows the statusLine's state and the row as it lands after the statusLine write - the
-refresh interval included, and none beside a statusLine that is not claude-hud's. Its last line is
-`hud-check: statusLine=<state> missing=<n> differs=<m> match=<k>`. The statusLine itself is never behind the ask: it is
-written whenever claude-hud is kept, add-only. Ask once, with the counts:
-
-```ask hud
-Apply the recommended claude-hud settings? <n> missing, <m> differing, <k> matching.
-- 'Apply recommended (Recommended)' - adds only the missing keys; every value already chosen is kept
-- 'Apply and replace differing' - adds the missing keys and overwrites the differing ones
-- 'Skip' - nothing changes
-```
-
-- claude-hud picked in step 5: the answer goes into `answers.json` as `"hud": "recommended"`, `"replace"` or `"skip"`,
-  and `apply.js` runs it after the plugin calls.
-- Reached from the menu or the `hud` argument: this ask is the confirmation. Run the same script with the matching flag
-  (`--catalog` and `--project .` as above) and paste its output; Claude Code asks permission for it, since only
-  `--check` is in `allowed-tools`. 'Apply recommended': `hud-statusline.js`. 'Apply and replace differing':
-  `hud-statusline.js --replace`. 'Skip': `hud-statusline.js --statusline-only` - claude-hud still shows on screen, no
-  catalog key is written.
-
-The account's `settings.json` is copied to `settings.json.bak.<date>` before the first write; name that file. On Windows
-the output carries a note about the refresh interval; pass it on.

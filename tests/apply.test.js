@@ -257,56 +257,18 @@ test('a user\'s own server beside the catalog\'s is never touched by any apply',
     finally { w.clean(); }
 });
 
-test('plugins: marketplace first, then the install at its scope, read back from the list and the settings file', () => {
+test('a plugin is neither installed nor changed nor removed: the catalog lists none since 0.5.0', () => {
     const w = world();
     try
     {
-        const r = walk(w, { picks: { 'typescript-lsp': {}, 'claude-hud': {} }, hud: 'skip' }, { planOpts: {} });
-        // the hud step needs hud-statusline.js (step 8); every step before it must have applied
-        const done = r.report.applied.map((a) => a.op);
-        assert.deepStrictEqual(done.slice(0, 4), ['plugin-marketplace-add', 'plugin-install', 'plugin-marketplace-add', 'plugin-install']);
-        const calls = w.writes().filter((a) => a[0] === 'plugin').map((a) => a.join(' '));
-        assert.deepStrictEqual(calls.slice(0, 2), ['plugin marketplace add anthropics/claude-plugins-official', 'plugin install typescript-lsp@claude-plugins-official --scope project']);
-        assert.deepStrictEqual(readJson(path.join(w.project, '.claude', 'settings.json')).enabledPlugins, { 'typescript-lsp@claude-plugins-official': true });
-        assert.deepStrictEqual(readJson(path.join(w.account, 'settings.json')).enabledPlugins, { 'claude-hud@claude-hud': true });
-        // a second run never installs over the installed plugins
-        const before = w.calls().filter((a) => a[1] === 'install').length;
-        walk(w, { picks: { 'typescript-lsp': {} } });
-        assert.strictEqual(w.calls().filter((a) => a[1] === 'install').length, before);
-    }
-    finally { w.clean(); }
-});
-
-test('a disabled plugin is enabled, not installed over; enable over enabled is skipped by the plan', () => {
-    const w = world();
-    try
-    {
-        walk(w, { picks: { 'csharp-lsp': {} } });
-        // through claude-cli.js, which reaches the shim on Windows too (a bare spawn finds only a .exe or .com)
-        cli.run(['plugin', 'disable', 'csharp-lsp@claude-plugins-official', '--scope', 'project'], { cwd: w.project, env: w.env });
-        const before = w.calls().length;
-        const r = walk(w, { picks: { 'csharp-lsp': {} } });
-        assert.strictEqual(r.report.failed, null, r.text);
-        const made = w.writes().slice(w.writes().length - 1).map((a) => a.join(' '));
-        assert.deepStrictEqual(made, ['plugin enable csharp-lsp@claude-plugins-official --scope project']);
-        const again = walk(w, { picks: { 'csharp-lsp': {} } });
-        assert.strictEqual(again.report.noop, true);
-    }
-    finally { w.clean(); }
-});
-
-test('a plugin move installs at the new scope first and uninstalls the old copy last', () => {
-    const w = world();
-    try
-    {
-        walk(w, { picks: { 'csharp-lsp': { scope: 'user' } } });
-        const before = w.calls().length;
-        const r = walk(w, { change: { 'plugin:csharp-lsp@claude-plugins-official~user': { scope: 'project' } } });
-        assert.strictEqual(r.report.failed, null, r.text);
-        const made = w.writes().slice(-2).map((a) => a.slice(0, 3).join(' '));
-        assert.deepStrictEqual(made, ['plugin install csharp-lsp@claude-plugins-official', 'plugin uninstall csharp-lsp@claude-plugins-official']);
         const inv = inventory.buildInventory({ project: w.project, env: w.env });
-        assert.deepStrictEqual(inv.plugins.map((p) => p.scope), ['project']);
+        const p = plan(inv, { picks: { 'claude-hud': {} }, change: { 'plugin:claude-hud@claude-hud~user': { scope: 'project' } }, remove: [{ kind: 'plugin', id: 'claude-hud@claude-hud', scope: 'user' }] }, { home: w.home, env: w.env });
+        assert.deepStrictEqual(p.errors, [
+            "unknown tool 'claude-hud'",
+            "change: nothing is installed as 'plugin:claude-hud@claude-hud~user' (a key is mcp:<name>~<scope>)",
+            'remove: claude-hud@claude-hud is a plugin - the catalog lists none since 0.5.0; claude plugin uninstall claude-hud@claude-hud --scope user removes it',
+        ]);
+        assert.ok(!p.steps.some((s) => /^plugin-|^hud$/.test(s.op)));
     }
     finally { w.clean(); }
 });

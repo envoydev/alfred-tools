@@ -143,17 +143,21 @@ test("configure: a registration target starts with its own question; 'Leave it o
     assert.ok(!managed.some((s) => s.id.startsWith('root:')), 'configure asks no root for a target');
 });
 
+test('the walk offers no plugin', () => {
+    // an old plugin installed here is no row: install's pick, configure's pick and remove name none of them
+    const plug = (id, scope) => ({ id, plugin: id.split('@')[0], marketplace: id.split('@')[1], scope, version: '1.0.0', enabled: true, enabledHere: true, rowId: null, alfredRetired: false });
+    const i = inv(MAC, { plugins: [plug('claude-hud@claude-hud', 'user'), plug('typescript-lsp@claude-plugins-official', 'project')] });
+    const b = asks.all(i, {}, catalog);
+    const text = JSON.stringify([b.pick, b.change, b.remove]);
+    for (const name of ['claude-hud', 'typescript-lsp', 'csharp-lsp']) assert.ok(!text.includes(name), name);
+    assert.ok(catalog.tools.every((r) => r.kind === 'mcp'));
+});
+
 test('a tool with nothing to ask is passed over, and no id comes twice', () => {
-    const hud = (scope) => ({ id: 'claude-hud@claude-hud', plugin: 'claude-hud', marketplace: 'claude-hud', scope, version: '1.0.0', enabled: true, enabledHere: true, rowId: 'claude-hud', alfredRetired: false });
-    const i = inv(MAC, { plugins: [hud('project'), hud('user')] });
-    const steps = walk(i, { rows: ['claude-hud', 'gitlab'], walk: 'each', done: ['clients', 'settings'] });
-    assert.ok(!steps.some((s) => s.tool === 'claude-hud'), steps.map((s) => s.id).join(', '));
+    const steps = walk(inv(MAC), { rows: ['serena', 'gitlab'], walk: 'each', done: ['clients', 'settings'] });
     for (const s of steps) assert.ok(s.call.length || s.set, s.id);
     const ids = steps.map((s) => s.id);
     assert.strictEqual(new Set(ids).size, ids.length);
-    // a plugin with scopes left: one scope step
-    const one = walk(inv(MAC, { plugins: [hud('user')] }), { rows: ['claude-hud'], walk: 'each', done: ['clients', 'settings'] });
-    assert.deepStrictEqual(one.map((s) => [s.id, s.call.map((q) => q.id)]), [['claude-hud:questions', ['scope-claude-hud']]]);
 });
 
 test('gitlab asks scope, name, host and its key in one call', () => {

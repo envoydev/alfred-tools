@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 'use strict';
-// THE UPDATE ENGINE - what is installed and behind its release: plugins (catalog or not), the pinned MCP servers, the
-// language servers on PATH, the helper and bridge copies, and the new ways to pass data (fix's `upgrade` rows).
+// THE UPDATE ENGINE - what is installed and behind its release: every plugin, the pinned MCP servers, the helper, bridge
+// and serena-context copies, and the new ways to pass data (fix's `upgrade` rows, the old plugins' uninstall among them).
 //
 //   node update.js --check [--json] [--no-refresh] [--project <dir>] [--data <dir>]   read-only (it refreshes the marketplace clones)
 //   node update.js --questions [--no-refresh] [--project <dir>] [--data <dir>]        the asks, as data
 //   --data: the plugin's data folder, whose roots map finds the records - a server left on its own (spec D6) is skipped
-//   node update.js --apply <id,id | all> [--project <dir>] [--tmp <dir>]  changes the install
+//   node update.js --apply <id,id | all | none> [--input retired-declined=<id>~<scope>,...] [--project <dir>] [--tmp <dir>]  changes the install
 //
-// An offer id is `plugin:<plugin id>~<scope>`, `mcp:<name>~<scope>`, `lsp:typescript`, `helper:<file>` (an
+// An offer id is `plugin:<plugin id>~<scope>`, `mcp:<name>~<scope>`, `helper:<file>` (an
 // mcp-headers.js copy older than this plugin's), `bridge:<file>`, `context:<file>` (serena's, 0.5.0), or `upgrade:<fix id>:<name>~<scope>` (`:<path>` for a
-// file or folder finding); `all` is every offer whose newer version is known. A plugin whose
+// file or folder finding, `:<plugin id>~<scope>` for retired-plugin); `all` is every offer whose newer version is known. A plugin whose
 // marketplace lists no version cannot be compared ahead: it is listed as unchecked, and `claude plugin update` is the
 // check, run only on its own id.
 //
@@ -34,8 +34,6 @@ const { realMachine, clone, compareVersions, pinnedVersion } = require('./fixes/
 const { bareName } = inventory;
 const asksLib = require('./asks.js');
 const mcpOrder = require('./mcp-order.js');
-
-const TS_LSP_INSTALL = ['install', '-g', 'typescript-language-server', 'typescript@6'];
 
 // ---- the pin, edited -------------------------------------------------------------------------------------------------
 
@@ -183,32 +181,6 @@ async function cursorPinOffers(ctx, out)
     }
 }
 
-// ---- language servers ------------------------------------------------------------------------------------------------
-
-async function lspOffers(ctx, out)
-{
-    const m = ctx.machine;
-    const version = (bin) =>
-    {
-        if (!m.which(bin)) return null;
-        const r = m.run(bin, ['--version']);
-        return r && r.status === 0 ? (/\d+(\.\d+)+/.exec(String(r.stdout || r.stderr)) || [null])[0] : undefined;
-    };
-    const ts = version('typescript-language-server');
-    if (ts)
-    {
-        let pick = null;
-        try { pick = registryLib.choose(await ctx.registry.versionsOf('npm', 'typescript-language-server'), { registry: 'npm', now: ctx.now, current: ts }); }
-        catch (e) { out.errors.push(`typescript-language-server: npm lookup failed - ${e.message}`); }
-        out.lsp.push(`typescript-language-server ${ts}${pick && pick.offer ? ` (${pick.offer.version} is out)` : ''}`);
-        if (pick && pick.offer) out.offers.push({ kind: 'lsp', id: 'lsp:typescript', from: ts, to: pick.offer.version, group: 'lsp', label: 'typescript-language-server (global npm)', command: `npm ${TS_LSP_INSTALL.join(' ')}` });
-    }
-    else if (ts === undefined) out.lsp.push('typescript-language-server is on PATH but did not report a version');
-    const cs = version('csharp-ls');
-    if (cs) out.lsp.push(`csharp-ls ${cs} (latest not checked - a dotnet tool copy updates with: dotnet tool update --global csharp-ls)`);
-    else if (cs === undefined) out.lsp.push('csharp-ls is on PATH but did not report a version');
-}
-
 // ---- key helpers (spec D7, R10) ---------------------------------------------------------------------------------------
 
 // Each mcp-headers.js a managed registration names, or a root in use holds, with a lower number than this plugin's is
@@ -269,6 +241,15 @@ function upgradeOffers(ctx, out)
     const fctx = fixLib.makeCtx({ inv: ctx.inv, catalog, env: ctx.env, machine: ctx.machine, data: ctx.data });
     for (const f of fixLib.detectAll(fctx).found)
     {
+        // an uninstall the user turned down is theirs to keep: no offer, no note, nothing waiting (spec D9)
+        if (f.declined) continue;
+        if (f.id === 'retired-plugin')
+        {
+            // one offer per id and scope, so picking one uninstalls only that scope; where alfred-code is set up it is
+            // named and kept out of 'All of them'
+            out.offers.push({ kind: 'upgrade', id: `upgrade:retired-plugin:${f.name}~${f.scope}`, fix: f.id, name: f.name, scope: f.scope, found: f.found, group: 'upgrade', label: f.alfred ? `${f.name} - alfred-code also installs it, and this removes it for both` : `${f.name} (${f.scope})`, alfred: f.alfred });
+            continue;
+        }
         const label = upgradeLabel(f);
         if (f.blocked || f.input)
         {
@@ -293,16 +274,20 @@ function makeCtx({ inv, project, catalog = catalogLib.load(), env = process.env,
     };
 }
 
-// -> { offers, unchecked, skipped, held, errors, lsp, notes }
+// -> { offers, unchecked, skipped, held, errors, notes, waiting }
 async function check(ctx)
 {
-    const out = { offers: [], unchecked: [], skipped: [], held: [], errors: [], lsp: [], notes: [], waiting: 0 };
+    const out = { offers: [], unchecked: [], skipped: [], held: [], errors: [], notes: [], waiting: 0 };
     pluginOffers(ctx, out);
     await mcpOffers(ctx, out);
     await cursorPinOffers(ctx, out);
-    await lspOffers(ctx, out);
     helperOffers(ctx, out);
     upgradeOffers(ctx, out);
+    // a plugin offered for uninstall is not offered an update beside it
+    const leaving = new Set(out.offers.filter((o) => o.fix === 'retired-plugin').map((o) => `${o.name}~${o.scope}`));
+    const stays = (o) => !(o.kind === 'plugin' && leaving.has(`${o.plugin}~${o.scope}`));
+    out.offers = out.offers.filter(stays);
+    out.unchecked = out.unchecked.filter(stays);
     return out;
 }
 
@@ -321,7 +306,6 @@ function render(out)
     table('Catalog plugins:', out.offers.filter((o) => o.kind === 'plugin' && o.group === 'catalog'));
     table('Other plugins:', out.offers.filter((o) => o.kind === 'plugin' && o.group === 'other'));
     table('MCP servers (pin -> newest release at least 7 days old):', out.offers.filter((o) => o.kind === 'mcp' || o.kind === 'cursor-pin'));
-    table('Language servers:', out.offers.filter((o) => o.kind === 'lsp'));
     table('Key helpers:', out.offers.filter((o) => o.kind === 'helper' || o.kind === 'bridge' || o.kind === 'context'));
     const ups = out.offers.filter((o) => o.kind === 'upgrade');
     if (ups.length)
@@ -335,7 +319,7 @@ function render(out)
         lines.push('Plugins whose marketplace lists no version (`claude plugin update` is the check; each is offered on its own):');
         for (const u of out.unchecked) lines.push(`  ${u.label}  ${u.from || '?'}`);
     }
-    for (const [title, list] of [['Held back', out.held], ['Skipped', out.skipped], ['Language servers on PATH', out.lsp], ['Could not check', out.errors], ['Notes', out.notes]])
+    for (const [title, list] of [['Held back', out.held], ['Skipped', out.skipped], ['Could not check', out.errors], ['Notes', out.notes]])
         if (list.length) lines.push(`${title}:`, ...list.map((l) => `  ${l}`));
     // a note that waits on the user is never 'everything current' (a key to fill, a key file git would commit)
     if (!behind(out) && out.waiting) lines.push('', `preferred-tools: nothing to update - ${out.waiting} wait${out.waiting === 1 ? 's' : ''} on you first (the notes above)`);
@@ -352,7 +336,7 @@ function questions(out)
 {
     const items = [...out.offers, ...out.unchecked];
     if (!items.length) return { offer: null, pick: [] };
-    const groups = [['catalog', 'Catalog plugins'], ['other', 'Other plugins'], ['mcp', 'MCP servers'], ['lsp', 'Language servers'], ['helper', 'Key helpers'], ['upgrade', 'New ways to pass data', 'Data passing']];
+    const groups = [['catalog', 'Catalog plugins'], ['other', 'Other plugins'], ['mcp', 'MCP servers'], ['helper', 'Key helpers'], ['upgrade', 'New ways to pass data', 'Data passing']];
     const qs = [];
     for (const [g, title, header] of groups)
     {
@@ -370,15 +354,6 @@ function questions(out)
 
 // ---- apply -----------------------------------------------------------------------------------------------------------
 
-function updateLsp(ctx, offer, log)
-{
-    const r = ctx.machine.run('npm', TS_LSP_INSTALL);
-    if (!r || r.status !== 0) { log(`FAILED ${offer.label}: npm ${TS_LSP_INSTALL.join(' ')} failed - ${String((r && (r.stderr || r.stdout)) || 'no output').trim().split('\n').slice(-1)[0]}`); return false; }
-    const now = (/\d+(\.\d+)+/.exec(String((ctx.machine.run('typescript-language-server', ['--version']) || {}).stdout)) || [null])[0];
-    log(`${now === offer.to ? 'ok    ' : 'CHECK '} ${offer.label}: ${offer.from} -> ${now || '?'} (read back from --version)`);
-    return now === offer.to;
-}
-
 function updatePlugin(ctx, offer, log)
 {
     const r = ctx.runCli(['plugin', 'update', offer.plugin, '--scope', offer.scope], { cwd: ctx.project, env: ctx.env });
@@ -387,28 +362,7 @@ function updatePlugin(ctx, offer, log)
     const v = after ? after.version : null;
     if (offer.to === null) log(`ok     ${offer.label}: ${offer.from || '?'} -> ${v || '?'}${v === offer.from ? ' (already the latest)' : ''}`);
     else log(`${v === offer.to ? 'ok    ' : 'CHECK '} ${offer.label}: ${offer.from || '?'} -> ${v || '?'} (read back from the plugin list)`);
-    if (offer.plugin.startsWith('claude-hud@') && v !== offer.from) hudAfterUpdate(ctx, offer, log);
     return offer.to === null || v === offer.to;
-}
-
-// After claude-hud moves: --check again, and name any catalog key the new version's config no longer mentions. Never remove one.
-function hudAfterUpdate(ctx, offer, log)
-{
-    const script = path.join(__dirname, 'hud-statusline.js');
-    const catalogFile = path.join(__dirname, '..', 'catalog', 'plugin-settings.json');
-    const r = require('node:child_process').spawnSync(process.execPath, [script, '--check', '--catalog', catalogFile, '--project', ctx.project], { encoding: 'utf8', env: ctx.env, cwd: ctx.project });
-    log(`claude-hud --check: ${(r.stdout || r.stderr || '').trim().split('\n').slice(-1)[0] || 'no output'}`);
-    const list = JSON.parse(ctx.runCli(['plugin', 'list', '--json'], { cwd: ctx.project, env: ctx.env }).stdout || '[]');
-    const row = list.find((p) => p.id === offer.plugin && p.scope === offer.scope);
-    const file = row && row.installPath ? path.join(row.installPath, 'dist', 'config.js') : null;
-    if (!file || !fs.existsSync(file)) { log('claude-hud: dist/config.js was not found in the new version - check the recommended keys with /preferred-tools:configure hud'); return; }
-    const text = fs.readFileSync(file, 'utf8');
-    const settings = JSON.parse(fs.readFileSync(catalogFile, 'utf8')).plugins['claude-hud'];
-    const keys = (settings.targets || []).filter((t) => /config\.json$/.test(t.file)).flatMap((t) => require('./plugin-settings.js').leaves(t.settings).map(([k]) => k));
-    const gone = keys.filter((k) => !new RegExp(`\\b${k.split('.').pop()}\\b`).test(text));
-    log(gone.length
-        ? `claude-hud: ${gone.length} recommended key(s) not found in the new dist/config.js: ${gone.join(', ')} - none was removed from your config; report it in the catalog`
-        : `claude-hud: every recommended key is still in the new dist/config.js`);
 }
 
 function updateMcp(ctx, offer, tmp, log)
@@ -481,17 +435,34 @@ function updateUpgrade(ctx, offer, dir, log)
     const r = fixLib.applyFixes(fctx, [offer.fix], { only: offer.name, name: offer.name, scope: offer.scope || undefined, tmp: dir, log, runCli: ctx.runCli, fetchFile: false });
     if (r.fetch && r.fetch.fetch.length) ctx.fetches.push(r.fetch);
     for (const f of r.applied.filter((x) => x.kind === 'registration')) { ctx.restart = true; ctx.touched.add(`${f.name}~${f.scope}`); }
+    // a plugin taken out leaves the session's plugins as they were until it reloads
+    if (r.applied.some((x) => x.id === 'retired-plugin')) ctx.restart = true;
     const ok = !r.failed && !r.remaining.length && (r.applied.length > 0 || r.gone);
     log(`${ok ? 'ok    ' : 'CHECK '} ${offer.label}: ${offer.fix} (${r.gone ? 'already done by an earlier step in this run' : 'read back by its detector'})`);
     return ok;
 }
 
 // -> { applied: [id], failed: [id], unknown: [id], fetchFile }
-function applyUpdates(ctx, ids, out, { tmp, log = console.log } = {})
+function applyUpdates(ctx, ids, out, { tmp, log = console.log, input = {} } = {})
 {
     const res = { applied: [], failed: [], unknown: [], fetchFile: null, dir: null };
+    // the uninstall offers turned down (spec D9): shown and left unpicked, or kept out of 'All of them' for alfred-code
+    const declines = require('./declines.js');
+    let turnedDown;
+    try { turnedDown = declines.parse(input['retired-declined']); }
+    catch (e) { log(`FAILED ${e.message}`); res.failed.push('retired-declined'); return res; }
     const known = [...out.offers, ...out.unchecked];
-    const picked = ids.includes('all') ? [...out.offers, ...ids.filter((i) => i !== 'all').map((i) => known.find((o) => o.id === i)).filter(Boolean)] : ids.map((i) => known.find((o) => o.id === i) || i);
+    const named = ids.filter((i) => i !== 'all' && i !== 'none');
+    let everything = [];
+    if (ids.includes('all'))
+    {
+        // where alfred-code is set up, an old plugin's uninstall is reached only by its own pick
+        const kept = out.offers.filter((o) => o.alfred && !named.includes(o.id));
+        for (const o of kept) log(`${o.name} kept - alfred-code installs it; fix lists it`);
+        everything = out.offers.filter((o) => !kept.includes(o));
+    }
+    if (turnedDown.length) log(declines.add(ctx.data, turnedDown).detail);
+    const picked = ids.includes('all') ? [...everything, ...named.map((i) => known.find((o) => o.id === i)).filter((o) => o && !everything.includes(o))] : named.map((i) => known.find((o) => o.id === i) || i);
     // the new ways to pass data first - a registration's, then a file's or folder's - and the pins after them (updateUpgrade)
     const rank = (c) => (typeof c === 'string' || c.kind !== 'upgrade' ? 2 : c.scope ? 0 : 1);
     const chosen = [0, 1, 2].flatMap((n) => picked.filter((c) => rank(c) === n));
@@ -503,7 +474,7 @@ function applyUpdates(ctx, ids, out, { tmp, log = console.log } = {})
     for (const c of chosen)
     {
         if (typeof c === 'string') { res.unknown.push(c); log(`NOT OFFERED ${c}: nothing is behind under that id`); continue; }
-        const ok = c.kind === 'plugin' ? updatePlugin(ctx, c, log) : c.kind === 'lsp' ? updateLsp(ctx, c, log) : c.kind === 'helper' || c.kind === 'bridge' || c.kind === 'context' ? updateHelper(c, log) : c.kind === 'upgrade' ? updateUpgrade(ctx, c, dir, log) : c.kind === 'cursor-pin' ? updateCursorPin(ctx, c, dir, log) : updateMcp(ctx, c, dir, log);
+        const ok = c.kind === 'plugin' ? updatePlugin(ctx, c, log) : c.kind === 'helper' || c.kind === 'bridge' || c.kind === 'context' ? updateHelper(c, log) : c.kind === 'upgrade' ? updateUpgrade(ctx, c, dir, log) : c.kind === 'cursor-pin' ? updateCursorPin(ctx, c, dir, log) : updateMcp(ctx, c, dir, log);
         (ok ? res.applied : res.failed).push(c.id);
     }
     // every rewritten server in one fetch file, for fetch.js in the background (apply.js says why); a server rewritten
@@ -526,15 +497,23 @@ function applyUpdates(ctx, ids, out, { tmp, log = console.log } = {})
 
 function parseArgs(argv)
 {
-    const args = {};
+    const args = { input: {} };
     for (let i = 0; i < argv.length; i++)
     {
         const a = argv[i];
         if (['--check', '--questions', '--json', '--no-refresh'].includes(a)) { args[a.slice(2)] = true; continue; }
-        if (!['--apply', '--project', '--tmp', '--data'].includes(a)) throw new Error(`unknown argument '${a}'`);
+        if (!['--apply', '--project', '--tmp', '--data', '--input'].includes(a)) throw new Error(`unknown argument '${a}'`);
         const v = argv[i + 1];
         if (v === undefined || v.startsWith('--')) throw new Error(`${a} needs a value`);
         i++;
+        // fix.js's rule: split on the first =, repeatable
+        if (a === '--input')
+        {
+            const eq = v.indexOf('=');
+            if (eq < 1) throw new Error('--input needs key=value');
+            args.input[v.slice(0, eq)] = v.slice(eq + 1);
+            continue;
+        }
         if (Object.hasOwn(args, a.slice(2))) throw new Error(`${a} is given twice`);
         args[a.slice(2)] = v;
     }
@@ -546,7 +525,7 @@ async function main(argv, { env = process.env, out = (s) => process.stdout.write
 {
     let args;
     try { args = parseArgs(argv); }
-    catch (e) { out(`update: ${e.message}\nusage: node scripts/update.js --check | --questions | --apply <id,id|all> [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`); return 2; }
+    catch (e) { out(`update: ${e.message}\nusage: node scripts/update.js --check | --questions | --apply <id,id|all|none> [--input key=value] [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`); return 2; }
     const project = path.resolve(args.project || process.cwd());
     const inv = inventory.buildInventory({ project, env, run: runCli || cli.run, data: args.data || null });
     if (!inv.cli.ok) { out('preferred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
@@ -555,7 +534,7 @@ async function main(argv, { env = process.env, out = (s) => process.stdout.write
     if (args.apply)
     {
         const log = (...a) => out(a.join('\n'));
-        const res = applyUpdates(ctx, args.apply.split(',').filter(Boolean), found, { tmp: args.tmp, log });
+        const res = applyUpdates(ctx, args.apply.split(',').filter(Boolean), found, { tmp: args.tmp, log, input: args.input });
         // the last script on <tmp> removes it, unless fetch.js takes it on; apply() per server never does
         if (!res.fetchFile) tmpdir.release(res.dir, log);
         return res.failed.length || res.unknown.length ? 1 : 0;

@@ -196,7 +196,7 @@ test('servers under a name alfred-code once registered are marked retired, whate
     finally { w.clean(); }
 });
 
-test('plugins: catalog rows by exact id, enabled read from the settings file at their scope, errors kept', () => {
+test('plugins: by exact id, enabled read from the settings file at their scope, errors kept; none is a catalog row since 0.5.0', () => {
     const w = world();
     try
     {
@@ -216,7 +216,7 @@ test('plugins: catalog rows by exact id, enabled read from the settings file at 
         const by = Object.fromEntries(i.plugins.map((p) => [p.id, p]));
         assert.strictEqual(by['claude-hud@claude-hud'].enabled, true);
         assert.strictEqual(by['claude-hud@claude-hud'].enabledFrom, 'settings');
-        assert.strictEqual(by['claude-hud@claude-hud'].rowId, 'claude-hud');
+        assert.strictEqual(by['claude-hud@claude-hud'].rowId, null, 'claude-hud is no catalog row - retired-plugin offers its uninstall');
         assert.strictEqual(by['typescript-lsp@claude-plugins-official'].enabled, true);
         assert.ok(!('csharp-lsp@claude-plugins-official' in by), 'another project\'s plugin row is not this project\'s');
         assert.strictEqual(by['alfred-navigation@envoydev'].alfredRetired, true);

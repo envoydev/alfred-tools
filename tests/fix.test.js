@@ -483,45 +483,41 @@ test('apply: npx-cache-entry removes the folder and hands the package to fetch.j
     finally { w.clean(); }
 });
 
-// ---- typescript-lsp-ts7 ---------------------------------------------------------------------------------------------
+// ---- retired-plugin (spec D8, D9) -----------------------------------------------------------------------------------
 
-test('typescript-lsp-ts7: a global TypeScript 7 under the installed plugin is found, fixed with typescript@6 and read back', () =>
+const RETIRED = { ts: 'typescript-lsp@claude-plugins-official', cs: 'csharp-lsp@claude-plugins-official', hud: 'claude-hud@claude-hud' };
+const plug = (id, scope, over = {}) => ({ id, plugin: id.split('@')[0], marketplace: id.split('@')[1], scope, enabled: true, rowId: null, alfredRetired: false, ...over });
+
+test('retired-plugin offers an uninstall per installed id and scope', () =>
 {
-    const plugin = { id: 'typescript-lsp@claude-plugins-official', plugin: 'typescript-lsp', scope: 'project', enabled: true, rowId: 'typescript-lsp', alfredRetired: false };
-    let installed = '7.0.2';
-    const calls = [];
-    const machine = noMachine({
-        run: (cmd, args) =>
-        {
-            calls.push([cmd, ...args].join(' '));
-            if (args[0] === 'ls') return { status: 0, stdout: JSON.stringify({ dependencies: { typescript: { version: installed } } }) };
-            installed = '6.0.3';
-            return { status: 0, stdout: '' };
-        },
-    });
-    const ctx = ctxFor({ plugins: [plugin], machine });
-    const [f] = detect(ctx).found;
-    assert.strictEqual(f.id, 'typescript-lsp-ts7');
-    assert.strictEqual(f.kind, 'machine');
-    assert.match(f.found, /global typescript is 7\.0\.2/);
-    const res = F.typescriptLspTs7Fix(f, ctx);
-    assert.deepStrictEqual(res, { ok: true, detail: 'global typescript is now 6.0.3' });
-    assert.ok(calls.includes('npm install -g typescript-language-server typescript@6'));
-    assert.deepStrictEqual(detect(ctx).found, [], 'read back: the detector finds nothing now');
-    // 6.x, no npm, no plugin, a disabled plugin: nothing
-    assert.deepStrictEqual(detect(ctxFor({ plugins: [plugin], machine: noMachine({ run: () => ({ status: 0, stdout: JSON.stringify({ dependencies: { typescript: { version: '6.0.3' } } }) }) }) })).found, []);
-    assert.deepStrictEqual(detect(ctxFor({ plugins: [plugin], machine: noMachine() })).found, []);
-    assert.deepStrictEqual(detect(ctxFor({ machine: noMachine({ run: () => ({ status: 0, stdout: JSON.stringify({ dependencies: { typescript: { version: '7.0.2' } } }) }) }) })).found, []);
-    assert.deepStrictEqual(detect(ctxFor({ plugins: [{ ...plugin, enabled: false }], machine: noMachine({ run: () => ({ status: 0, stdout: JSON.stringify({ dependencies: { typescript: { version: '7.0.2' } } }) }) }) })).found, []);
-    // too old a Node: blocked, and says why
-    installed = '7.0.2';
-    const old = detect(ctxFor({ plugins: [plugin], machine: { ...machine, nodeVersion: '20.11.0' } })).found[0];
-    assert.match(old.blocked, /needs Node 22\.22\.2/);
-    // a failing install is reported, not swallowed
-    const failing = { ...ctx, machine: noMachine({ run: (c, a) => (a[0] === 'ls' ? { status: 0, stdout: JSON.stringify({ dependencies: { typescript: { version: '7.0.2' } } }) } : { status: 1, stderr: 'EACCES: permission denied' }) }) };
-    const r = F.typescriptLspTs7Fix(f, failing);
-    assert.strictEqual(r.ok, false);
-    assert.match(r.detail, /EACCES/);
+    const ctx = ctxFor({ plugins: [plug(RETIRED.ts, 'project'), plug(RETIRED.hud, 'user'), plug(RETIRED.hud, 'local'), plug('tidy@someone', 'user')] });
+    const found = detect(ctx).found.filter((f) => f.id === 'retired-plugin');
+    assert.deepStrictEqual(found.map((f) => [f.name, f.scope, f.kind, f.alfred, Boolean(f.blocked)]), [
+        [RETIRED.ts, 'project', 'machine', false, false], [RETIRED.hud, 'user', 'machine', false, false], [RETIRED.hud, 'local', 'machine', false, false]]);
+    assert.match(found[0].found, /no longer lists it - it works in Claude Code alone/);
+    assert.deepStrictEqual(found[0].proposal, { command: `claude plugin uninstall ${RETIRED.ts} --scope project` });
+    // alfred-code set up: each finding says it removes it for both
+    const both = detect({ ...ctx, inv: { ...ctx.inv, alfredCodeEnabled: true } }).found.filter((f) => f.id === 'retired-plugin');
+    assert.ok(both.every((f) => f.alfred === true));
+    assert.match(both[0].found, new RegExp(`${RETIRED.ts} - alfred-code also installs it, and this removes it for both$`));
+});
+
+test('fix reports a declined id with no apply step', () =>
+{
+    const fs = require('node:fs');
+    const os = require('node:os');
+    const data = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-declined-'));
+    try
+    {
+        require('../scripts/declines.js').add(data, [{ id: RETIRED.hud, scope: 'user' }]);
+        const ctx = fix.makeCtx({ ...ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }), inv: ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }).inv, catalog, machine: noMachine(), data });
+        const [f] = detect(ctx).found.filter((x) => x.id === 'retired-plugin');
+        assert.strictEqual(f.declined, true);
+        assert.strictEqual(f.blocked, `${RETIRED.hud} is kept at user; remove it with claude plugin uninstall ${RETIRED.hud} --scope user`);
+        assert.ok(!(fix.questions(detect(ctx)).pick.flat().flatMap((q) => q.options.map((o) => o.label))).includes('retired-plugin'), 'no apply step is offered');
+        assert.match(fix.render(detect(ctx)), /NOT APPLICABLE: claude-hud@claude-hud is kept at user/);
+    }
+    finally { fs.rmSync(data, { recursive: true, force: true }); }
 });
 
 // ---- windows-mcp-one-per-desktop ------------------------------------------------------------------------------------
@@ -790,25 +786,97 @@ test('apply: a failing add puts the old registration back; if that fails too, th
     finally { w.clean(); }
 });
 
+// A world whose fake claude has these plugins installed, alfred-code among them when `alfred`.
+function plugWorld(w, installed, { alfred = false } = {})
+{
+    const fs = require('node:fs');
+    const all = alfred ? [...installed, ['alfred-code@envoydev', 'user']] : installed;
+    const file = path.join(w.dir, 'state', 'plugins.json');
+    fs.writeFileSync(file, JSON.stringify({
+        marketplaces: [],
+        installed: all.map(([id, scope]) => ({ id, version: '1.0.0', scope, enabled: true, installPath: path.join(w.dir, 'cache', id), ...(scope === 'user' ? {} : { projectPath: fs.realpathSync(w.project) }) })),
+    }));
+    // the fake reads enabledPlugins from each scope's settings file
+    const settings = { user: path.join(w.account, 'settings.json'), project: path.join(w.project, '.claude', 'settings.json'), local: path.join(w.project, '.claude', 'settings.local.json') };
+    for (const [id, scope] of all)
+    {
+        fs.mkdirSync(path.dirname(settings[scope]), { recursive: true });
+        const doc = fs.existsSync(settings[scope]) ? JSON.parse(fs.readFileSync(settings[scope], 'utf8')) : {};
+        doc.enabledPlugins = { ...(doc.enabledPlugins || {}), [id]: true };
+        fs.writeFileSync(settings[scope], JSON.stringify(doc, null, 2));
+    }
+}
+
 test('the machine fix runs after the registration edits and is read back; its failure stops the run', () =>
 {
+    const fs = require('node:fs');
     const w = world();
     try
     {
-        const plugin = { id: 'typescript-lsp@claude-plugins-official', plugin: 'typescript-lsp', scope: 'project', enabled: true, rowId: 'typescript-lsp', alfredRetired: false };
-        let v = '7.0.2';
-        const machine = noMachine({ run: (c, a) => { if (a[0] === 'ls') return { status: 0, stdout: JSON.stringify({ dependencies: { typescript: { version: v } } }) }; v = '6.0.3'; return { status: 0, stdout: '' }; } });
-        const base = ctxOf(w, { machine });
-        const ctx = { ...base, inv: { ...base.inv, plugins: [plugin] } };
+        plugWorld(w, [[RETIRED.hud, 'user'], [RETIRED.ts, 'project']]);
+        // claude-hud's own statusLine in the account settings
+        const settings = path.join(w.account, 'settings.json');
+        const doc = JSON.parse(fs.readFileSync(settings, 'utf8'));
+        doc.statusLine = { type: 'command', command: `${require('../scripts/hud-statusline.js').fill(require('../scripts/hud-statusline.js').SHAPES.sortV, { RUNTIME_PATH: process.execPath, SOURCE: 'dist/index.js' })}` };
+        fs.writeFileSync(settings, JSON.stringify(doc, null, 2));
         const lines = [];
-        const res = fix.applyFixes(ctx, ['typescript-lsp-ts7'], { log: (...a) => lines.push(a.join(' ')) });
+        const res = fix.applyFixes(ctxOf(w), ['retired-plugin'], { log: (...a) => lines.push(a.join(' ')) });
         assert.strictEqual(res.failed, null, lines.join('\n'));
-        assert.match(lines.join('\n'), /ok +typescript-lsp-ts7: global typescript is now 6\.0\.3/);
+        const text = lines.join('\n');
+        assert.match(text, /ok +retired-plugin: uninstalled claude-hud@claude-hud \(user\); removed claude-hud's statusLine from /);
+        assert.match(text, /ok +retired-plugin: uninstalled typescript-lsp@claude-plugins-official \(project\)/);
+        assert.match(text, /fixed +retired-plugin on claude-hud@claude-hud/);
+        assert.deepStrictEqual(w.calls().filter((a) => a[0] === 'plugin' && a[1] === 'uninstall').map((a) => a.slice(2)), [[RETIRED.hud, '--scope', 'user'], [RETIRED.ts, '--scope', 'project']]);
+        assert.strictEqual(JSON.parse(fs.readFileSync(settings, 'utf8')).statusLine, undefined, 'claude-hud\'s statusLine is gone');
+        assert.match(text, /Restart Claude Code/);
+        // a refused uninstall stops the run and says so
+        plugWorld(w, [[RETIRED.cs, 'user']]);
+        const failing = [];
+        const bad = fix.applyFixes(ctxOf(w, { env: { ...w.env, FAKE_CLAUDE_FAIL: 'uninstall' } }), ['retired-plugin'], { log: (...a) => failing.push(a.join(' ')) });
+        assert.ok(bad.failed);
+        assert.match(failing.join('\n'), /FAILED retired-plugin: claude plugin uninstall csharp-lsp@claude-plugins-official --scope user failed/);
     }
     finally { w.clean(); }
 });
 
-test('a fix that only writes a data folder\'s .gitignore asks for no restart; the language server fix still does', () =>
+test('declines per answer: unpicked recorded; kept out for alfred-code recorded and named; Skip records nothing; fix with one id', () =>
+{
+    const fs = require('node:fs');
+    const declines = require('../scripts/declines.js');
+    const w = world();
+    const data = path.join(w.dir, 'data');
+    try
+    {
+        plugWorld(w, [[RETIRED.hud, 'user'], [RETIRED.ts, 'project']], { alfred: true });
+        // 'Skip' runs nothing: no file
+        assert.deepStrictEqual(declines.read(data), []);
+        // 'Apply all found' with alfred-code set up: both are kept out, the command passes them as declined, and each is named
+        const lines = [];
+        const res = fix.applyFixes(ctxOf(w, { data }), ['all'], { input: { 'retired-declined': `${RETIRED.hud}~user,${RETIRED.ts}~project` }, log: (...a) => lines.push(a.join(' ')) });
+        assert.strictEqual(res.failed, null, lines.join('\n'));
+        assert.match(lines.join('\n'), /claude-hud@claude-hud kept - alfred-code installs it; fix lists it/);
+        assert.match(lines.join('\n'), /typescript-lsp@claude-plugins-official kept - alfred-code installs it; fix lists it/);
+        assert.ok(!w.calls().some((a) => a[0] === 'plugin' && a[1] === 'uninstall'), 'nothing uninstalled');
+        assert.deepStrictEqual(declines.read(data), [{ id: RETIRED.hud, scope: 'user' }, { id: RETIRED.ts, scope: 'project' }]);
+        // the next detect: advice only
+        const again = fix.detectAll(ctxOf(w, { data })).found.filter((f) => f.id === 'retired-plugin');
+        assert.ok(again.every((f) => f.declined && f.blocked), JSON.stringify(again));
+        // 'Pick which' with one id picked: the other, shown and unpicked, is the one passed as declined
+        const data2 = path.join(w.dir, 'data2');
+        fix.applyFixes(ctxOf(w, { data: data2 }), ['none'], { input: { 'retired-declined': `${RETIRED.ts}~project` }, log: () => {} });
+        assert.deepStrictEqual(declines.read(data2), [{ id: RETIRED.ts, scope: 'project' }]);
+        // fix with retired-plugin as its only pick reaches an alfred-code one
+        const one = [];
+        const r = fix.applyFixes(ctxOf(w, { data: data2 }), ['retired-plugin'], { log: (...a) => one.push(a.join(' ')) });
+        assert.strictEqual(r.failed, null, one.join('\n'));
+        assert.match(one.join('\n'), /uninstalled claude-hud@claude-hud \(user\)/);
+        assert.match(one.join('\n'), /skipped retired-plugin on typescript-lsp@claude-plugins-official: typescript-lsp@claude-plugins-official is kept at project/);
+        assert.ok(fs.existsSync(path.join(data2, 'retired-declined.json')));
+    }
+    finally { w.clean(); }
+});
+
+test('a fix that only writes a data folder\'s .gitignore asks for no restart', () =>
 {
     const fs = require('node:fs');
     const w = world();
@@ -820,14 +888,6 @@ test('a fix that only writes a data folder\'s .gitignore asks for no restart; th
         assert.strictEqual(res.failed, null, lines.join('\n'));
         assert.match(lines.join('\n'), /fixed +data-folder-ignore/);
         assert.ok(!lines.join('\n').includes('Restart Claude Code'), lines.join('\n'));
-        // the language server fix: a restart, as before
-        const plugin = { id: 'typescript-lsp@claude-plugins-official', plugin: 'typescript-lsp', scope: 'project', enabled: true, rowId: 'typescript-lsp', alfredRetired: false };
-        let v = '7.0.2';
-        const machine = noMachine({ run: (c, a) => { if (a[0] === 'ls') return { status: 0, stdout: JSON.stringify({ dependencies: { typescript: { version: v } } }) }; v = '6.0.3'; return { status: 0, stdout: '' }; } });
-        const base = ctxOf(w, { machine });
-        const ts = [];
-        fix.applyFixes({ ...base, inv: { ...base.inv, plugins: [plugin] } }, ['typescript-lsp-ts7'], { log: (...a) => ts.push(a.join(' ')) });
-        assert.match(ts.join('\n'), /Restart Claude Code/);
     }
     finally { w.clean(); }
 });

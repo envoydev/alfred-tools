@@ -10,8 +10,6 @@ const problems = [];
 const need = (cond, msg) => { if (!cond) problems.push(msg); };
 
 const jsonFiles = ['.claude-plugin/plugin.json', 'catalog/tools.json', 'catalog/fixes.json', 'catalog/reserved-names.json', 'package.json'];
-const plugSettings = path.join(root, 'catalog', 'plugin-settings.json');
-if (fs.existsSync(plugSettings)) jsonFiles.push('catalog/plugin-settings.json');
 const docs = {};
 for (const rel of jsonFiles)
 {
@@ -49,7 +47,7 @@ for (const file of textFiles)
 // allowed-tools is a pre-approval, so it never covers a call that changes an install: the CLI's own prompt is the guard
 // beside the command's written ask. A script that writes is listed only with a read-only flag.
 // fetch.js downloads and runs a package's own install, so it counts as a write; cursor-mcp.js writes Cursor's files
-const WRITES = /scripts\/(?:apply|fetch)\.js|cursor-mcp\.js|scripts\/(?:fix|update)\.js"\s*(?:\*|--apply|\))|scripts\/hud-statusline\.js"\s*(?:\*|--replace|--statusline-only|\))/;
+const WRITES = /scripts\/(?:apply|fetch)\.js|cursor-mcp\.js|scripts\/(?:fix|update)\.js"\s*(?:\*|--apply|\))/;
 for (const file of textFiles)
 {
     const m = /^allowed-tools:\s*(.+)$/m.exec(fs.readFileSync(file, 'utf8'));

@@ -4,7 +4,8 @@
 //
 //   node fix.js --detect [--only <fix id | tool | registration name>] [--json] [--project <dir>] [--data <dir>]
 //   node fix.js --questions [--project <dir>] [--data <dir>]   the asks, as data (the same --only narrows it)
-//   node fix.js --apply <id,id | all> [--only <x>] [--input key=value] [--project <dir>] [--tmp <dir>] [--data <dir>]
+//   node fix.js --apply <id,id | all | none> [--only <x>] [--input key=value] [--project <dir>] [--tmp <dir>] [--data <dir>]
+//   --input retired-declined=<id>~<scope>,...  the plugin uninstall offers turned down (spec D9), kept in --data
 //
 // --data: the plugin's data folder, whose roots map finds the records - a registration left on its own (spec D6) is
 // not checked, and is listed once as such.
@@ -33,6 +34,7 @@ const E = require('./entries.js');
 const mcpOrder = require('./mcp-order.js');
 const keys = require('./keys.js');
 const roots = require('./roots.js');
+const declines = require('./declines.js');
 
 function makeCtx({ inv, catalog = catalogLib.load(), env = process.env, machine, platform, arch, data = null })
 {
@@ -149,10 +151,25 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
 {
     const res = { applied: [], skipped: [], failed: null, remaining: [], steps: 0, fetchFile: null, fetch: null, gone: false, tmp: tmp || null };
     const known = new Set(ctx.catalog.fixes.map((f) => f.id));
-    const unknown = ids.filter((id) => id !== 'all' && !known.has(id));
+    const unknown = ids.filter((id) => id !== 'all' && id !== 'none' && !known.has(id));
     if (unknown.length) { res.failed = `unknown fix id${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}`; log(res.failed); return res; }
+    // the uninstall offers the user turned down (spec D9): those shown and left unpicked, and those kept out of 'Apply all
+    // found' for alfred-code - the command passes them, recorded once the findings are read; 'Skip' passes none, so the
+    // offer comes back
+    let turnedDown = [];
+    try { turnedDown = declines.parse(input['retired-declined']); }
+    catch (e) { res.failed = e.message; log(res.failed); return res; }
     const detected = detectAll(ctx, { only });
-    const picked = detected.found.filter((f) => (ids.includes('all') || ids.includes(f.id)) && (!name || f.name === name) && (!scope || f.scope === scope));
+    let picked = ids.includes('none') ? [] : detected.found.filter((f) => (ids.includes('all') || ids.includes(f.id)) && (!name || f.name === name) && (!scope || f.scope === scope));
+    // where alfred-code is set up it installs the retired plugins too: 'Apply all found' leaves them, only a pick reaches them
+    if (ids.includes('all') && !ids.includes('retired-plugin'))
+    {
+        const kept = picked.filter((f) => f.id === 'retired-plugin' && f.alfred && !f.blocked);
+        for (const f of kept) log(`${f.name} kept - alfred-code installs it; fix lists it`);
+        picked = picked.filter((f) => !kept.includes(f));
+    }
+    if (turnedDown.length) log(declines.add(ctx.data, turnedDown).detail);
+    if (ids.includes('none')) { log('Nothing picked to apply.'); return res; }
     if (!picked.length) { res.gone = true; log('Nothing to apply: no picked problem is found any more.'); return res; }
 
     for (const f of picked.filter((x) => x.blocked || (x.input && !input[x.input.id])))

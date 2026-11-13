@@ -267,9 +267,13 @@
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md rulings 12, 13"
     },
     {
-      "id": "typescript-lsp-ts7",
-      "tool": [
-        "typescript-lsp"
+      "id": "retired-plugin",
+      "upgrade": "0.5.0",
+      "tool": [],
+      "ids": [
+        "typescript-lsp@claude-plugins-official",
+        "csharp-lsp@claude-plugins-official",
+        "claude-hud@claude-hud"
       ],
       "os": [
         "darwin",
@@ -277,11 +281,11 @@
         "win32"
       ],
       "kind": "machine",
-      "symptom": "typescript-lsp shows no diagnostics: TypeScript 7 ships no tsserver.js, and the plugin README's install line fetches it",
-      "detect": "typescriptLspTs7Detect",
-      "fix": "typescriptLspTs7Fix",
-      "verifiedOn": "typescript@7.0.2 package contents read 2026-10-27; typescript-language-server 6.0.2 README says typescript@6",
-      "source": "docs/sources.md 'LSP plugins'"
+      "symptom": "a plugin the catalog no longer lists - it works in Claude Code alone - is installed at a scope, and its uninstall was not declined there",
+      "detect": "retiredPluginDetect",
+      "fix": "retiredPluginFix",
+      "verifiedOn": "this build: tests/fix.test.js and tests/update.test.js retired-plugin (2026-11-13)",
+      "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D8, D9"
     },
     {
       "id": "windows-mcp-one-per-desktop",

@@ -1,8 +1,8 @@
 ---
-description: "Install preferred tools that are not installed yet (MCP servers and plugins): pick, set up, one confirmed plan"
+description: "Install preferred MCP servers that are not installed yet, for Claude Code and Cursor: pick, set up, one confirmed plan"
 argument-hint: "[tool id]"
 disable-model-invocation: true
-allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.js"), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/table.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/hud-statusline.js" --check *)
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.js"), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/table.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.js" *)
 ---
 
 Walk the user through installing preferred tools that are not installed here yet. The scripts do the work and print what
@@ -187,9 +187,6 @@ anyway': keep it, and say in the confirmation that it will not start yet.
 
 ## 6. Plan, then one confirmation
 
-When claude-hud is picked, set `"hud": "defer"` in the answers: its settings are asked after the install (see
-'claude-hud').
-
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" <tmp>/inventory.json <tmp>/answers.json --out <tmp>/plan.json --data "${CLAUDE_PLUGIN_DATA}" --connectors "<Name>,<Name>"
 ```
@@ -243,7 +240,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/apply.js" <tmp>/plan.json --tmp <tmp> --data
 ```
 
 Run it with the Bash tool's `timeout: 600000` (10 minutes, the most it allows by default). It writes the root's files
-first, then makes the CLI calls and their read-back - seconds a tool, a plugin install a little more - then the records,
+first, then makes the CLI calls and their read-back - seconds a tool - then the records,
 and leaves every download to step 8, so it ends well inside the limit and its report comes back in this turn. Claude
 Code asks permission for this call itself - `apply.js` is deliberately not in `allowed-tools` - so a skipped ask still
 cannot change anything. It runs the steps in order, reads each back, and stops at the first failure, leaving what was
@@ -251,8 +248,7 @@ applied in place and naming it; a re-run reuses the files already written. Paste
 the line that puts a registration back (`RESTORE BY HAND`): give it to the user as written. A key in it shows as
 `${PREFERRED_TOOLS_KEPT}`, never its value: the user puts their key back there.
 
-Then report each picked tool as the read-back printed it (name, scope, route). Start step 8, and while it runs, continue
-with 'claude-hud' if the plan set `hudAfter`. Keys: relay each `key:` line as printed (the name and its file, never a
+Then report each picked tool as the read-back printed it (name, scope, route). Start step 8. Keys: relay each `key:` line as printed (the name and its file, never a
 value). After the read-back the apply prints one line per hosted server that takes a key - relay each as printed:
 
 - `<name>: connects with its key at the next session start; in a session already running, /mcp -> <name> -> Reconnect`
@@ -270,7 +266,7 @@ is `/preferred-tools:configure`.
 
 ## 8. Fetch
 
-With no `Fetch next` line there is nothing to download (hosted routes and plugins only): the apply printed each server's
+With no `Fetch next` line there is nothing to download (hosted routes only): the apply printed each server's
 status itself, so end with the restart line below. When the apply output has `Fetch next, in the background (...):
 <file>`, run, with the Bash tool's `run_in_background`:
 
@@ -294,34 +290,3 @@ verbatim and end with the restart line: the new registrations load on the next s
 server also needs the trust prompt then. A `warn` line changes nothing: the registration stays, and its first session
 start does the download or first-run work and may time out once - say so. When background runs are turned off, run it
 in the foreground with `timeout: 600000`; one stopped by the limit is run again, and the cache keeps what it finished.
-
-## claude-hud
-
-The status line and its recommended settings, asked once claude-hud has just been installed (the plan's `hudAfter`).
-Later changes to them are `/preferred-tools:configure hud`.
-
-```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/hud-statusline.js" --check --catalog "${CLAUDE_PLUGIN_ROOT}/catalog/plugin-settings.json" --project .
-```
-
-Paste its output verbatim. It shows the statusLine's state and the row as it lands after the statusLine write - the
-refresh interval included, and none beside a statusLine that is not claude-hud's. Its last line is
-`hud-check: statusLine=<state> missing=<n> differs=<m> match=<k>`. The statusLine itself is never behind the ask: it is
-written whenever claude-hud is installed, add-only. Ask once, with the counts:
-
-```ask hud
-Apply the recommended claude-hud settings? <n> missing, <m> differing, <k> matching.
-- 'Apply recommended (Recommended)' - adds only the missing keys; every value already chosen is kept
-- 'Apply and replace differing' - adds the missing keys and overwrites the differing ones
-- 'Skip' - nothing changes
-```
-
-Run the same script with the matching flag (`--catalog` and `--project .` as above) and paste its output; Claude Code asks
-permission for it, since only `--check` is in `allowed-tools`:
-
-- 'Apply recommended': `hud-statusline.js`
-- 'Apply and replace differing': `hud-statusline.js --replace`
-- 'Skip': `hud-statusline.js --statusline-only` - claude-hud still shows on screen, no catalog key is written
-
-The account's `settings.json` is copied to `settings.json.bak.<date>` before the first write; name that file. On Windows
-the output carries a note about the refresh interval; pass it on.

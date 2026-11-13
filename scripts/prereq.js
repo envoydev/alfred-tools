@@ -16,13 +16,9 @@ const os = require('node:os');
 const path = require('node:path');
 const catalogLib = require('./catalog.js');
 const account = require('./account.js');
-const { realMachine, compareVersions } = require('./fixes/common.js');
+const { realMachine } = require('./fixes/common.js');
 const { androidSdk, javaHome } = require('./fixes/registration.js');
-const { globalTypescript } = require('./fixes/machine.js');
 const { blockingStdio } = require('./json-file.js');
-
-const NODE_MIN = '22.22.2'; // typescript-language-server 6.x
-const DOTNET_MIN = '6.0'; // the csharp-lsp plugin README: '.NET SDK 6.0 or later'
 
 const versionOf = (text) => (/(\d+\.\d+(?:\.\d+)?)/.exec(String(text || '')) || [])[1] || null;
 
@@ -46,28 +42,6 @@ const CHECKS = {
         if (ctx.machine.which('docker')) return { ok: true, found: 'docker (the image route)', machine: { docker: true } };
         if (ctx.machine.which('github-mcp-server')) return { ok: true, found: 'github-mcp-server binary (no Docker: the binary route)', machine: { docker: false } };
         return { ok: false, install: { url: 'https://docs.docker.com/get-started/get-docker/', note: "or the vendor's github-mcp-server binary: https://github.com/github/github-mcp-server/releases" }, machine: { docker: true } };
-    },
-    'node-lsp': (ctx) =>
-    {
-        const v = ctx.machine.nodeVersion;
-        return compareVersions(v, NODE_MIN) === -1 ? { ok: false, found: `node ${v}`, install: { url: 'https://nodejs.org/en/download', note: `typescript-language-server needs Node ${NODE_MIN} or newer` } } : { ok: true, found: `node ${v}` };
-    },
-    'ts-lsp': (ctx) =>
-    {
-        const server = ctx.machine.which('typescript-language-server');
-        const ts = globalTypescript(ctx.machine);
-        const install = { command: 'npm install -g typescript-language-server typescript@6', note: 'TypeScript 7 ships no tsserver.js, so the language server needs typescript@6' };
-        if (!server) return { ok: false, install };
-        if (!ts) return { ok: false, found: 'typescript-language-server, no global typescript', install };
-        return parseInt(ts, 10) >= 7 ? { ok: false, found: `typescript ${ts}`, install } : { ok: true, found: `typescript-language-server, typescript ${ts}` };
-    },
-    'csharp-ls': (ctx) =>
-    {
-        const install = { command: ctx.platform === 'darwin' ? 'brew install csharp-ls' : 'dotnet tool install --global csharp-ls', note: ctx.platform === 'darwin' ? 'or: dotnet tool install --global csharp-ls' : undefined };
-        const dotnet = versionOf((ctx.machine.which('dotnet') && ctx.machine.run('dotnet', ['--version']) || {}).stdout);
-        if (!dotnet) return { ok: false, found: 'no .NET SDK', install: { url: 'https://dotnet.microsoft.com/download', note: `the .NET SDK ${DOTNET_MIN} or later, then: ${install.command}` } };
-        if (compareVersions(dotnet, DOTNET_MIN) === -1) return { ok: false, found: `.NET SDK ${dotnet}`, install: { url: 'https://dotnet.microsoft.com/download', note: `the .NET SDK ${DOTNET_MIN} or later` } };
-        return ctx.machine.which('csharp-ls') ? { ok: true, found: `csharp-ls, .NET SDK ${dotnet}` } : { ok: false, found: `.NET SDK ${dotnet}, no csharp-ls`, install };
     },
     'android-sdk': (ctx) =>
     {
@@ -195,4 +169,4 @@ function main(argv, { env = process.env, machine, platform = process.platform, o
 }
 
 if (require.main === module) { blockingStdio(); process.exit(main(process.argv.slice(2))); }
-module.exports = { CHECKS, check, audit, render, main, NODE_MIN, DOTNET_MIN };
+module.exports = { CHECKS, check, audit, render, main };

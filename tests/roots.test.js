@@ -185,7 +185,6 @@ test('a root is asked for a family only a pick records into', () => {
     assert.deepStrictEqual(qs({ existing: { 'mcp:atlassian~user': 'own', 'connector:Atlassian': 'own', 'plugin-mcp:x@m/srv': 'add' } }).questions, []);
     assert.deepStrictEqual(qs({ rows: ['playwright-chrome'] }).questions.map((x) => x.id), ['root-project'], 'a local route: local scope, the project family');
     assert.deepStrictEqual(qs({ rows: ['playwright-chrome'], scopes: { 'playwright-chrome': 'user' } }).questions.map((x) => x.id), ['root-global']);
-    assert.deepStrictEqual(qs({ rows: ['claude-hud'] }).questions, [], 'a plugin needs no root');
     assert.deepStrictEqual(qs(null).questions, []);
     // one question per family, however many picks; the answers map each label to its root
     const r = qs({ rows: ['playwright-chrome', 'serena', 'memory'] });

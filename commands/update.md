@@ -1,11 +1,10 @@
 ---
-description: "Update what is behind - installed plugins, pinned MCP servers and language servers - to releases at least 7 days old, and move servers an older preferred-tools set up to the way it passes data now, after one confirmation"
+description: "Update what is behind - installed plugins and pinned MCP servers - to releases at least 7 days old, and move servers an older preferred-tools set up to the way it passes data now, after one confirmation"
 disable-model-invocation: true
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --check), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --check *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --questions), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --questions *)
 ---
 
-Bring what is installed up to date: every plugin on this machine (catalog or not), the pinned MCP servers, the
-language servers on PATH, the key helper (`mcp-headers.js`) and URL bridge (`mcp-bridge.js`) in each root folder, and
+Bring what is installed up to date: every plugin on this machine, the pinned MCP servers, the key helper (`mcp-headers.js`) and URL bridge (`mcp-bridge.js`) in each root folder, and
 the way this plugin passes data to the servers an older preferred-tools set up. The script finds what is behind and does
 the work; you paste what it prints and ask.
 
@@ -37,12 +36,14 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --check --data "${CLAUDE_PLUGIN_D
 ```
 
 Paste the output verbatim in a fenced block. It refreshes each marketplace the installed plugins come from
-(`claude plugin marketplace update <name>`), then lists, in tables: catalog plugins, other plugins, MCP servers as
-`current -> offered` with the release's age, language servers, key helpers (`mcp-headers.js` and `mcp-bridge.js` copies
+(`claude plugin marketplace update <name>`), then lists, in tables: plugins, MCP servers as
+`current -> offered` with the release's age, key helpers (`mcp-headers.js` and `mcp-bridge.js` copies
 older than this plugin's, as `helper N -> M` and `bridge N -> M`), and 'New ways to pass data', one line per server or
 folder as `<fix id>: <what it found>`. Below them: plugins whose marketplace lists no version
 (`claude plugin update` is the check for those, so each is offered on its own), releases held back, what was skipped (a hosted URL has no
-pin; a Docker image tag is not checked; a server on its own), what could not be checked, and the language servers on PATH.
+pin; a Docker image tag is not checked; a server on its own), and what could not be checked. Among the new ways to pass data,
+`retired-plugin` offers to uninstall a plugin the catalog no longer lists (typescript-lsp, csharp-lsp, claude-hud - they
+work in Claude Code alone), one offer per plugin and scope; one the user turned down before is not offered.
 
 Exit 3 with one line means the `claude` CLI is missing: say so and stop. When the last line is
 `preferred-tools: everything current`, say that and stop. When it is `preferred-tools: nothing to update - N wait(s) on
@@ -69,6 +70,11 @@ printed. 'Skip' ends the command. 'Pick which': ask each call in `pick` as print
 most four options) and collect the options picked. Each option's description is the offer id to pass on; a group of one
 offer carries 'None of these' (description `none`), which passes nothing.
 
+An uninstall offer (`upgrade:retired-plugin:<id>~<scope>`) shown under 'Pick which' and left unpicked is a decline, and
+so is one 'All of them' leaves out because alfred-code is set up (its label ends 'alfred-code also installs it, and this
+removes it for both'): pass each as `--input retired-declined=<id>~<scope>,...` in step 3, and it is not offered again.
+When nothing else was picked, step 3 runs with `none`. 'Skip' declines nothing.
+
 ## 3. Apply
 
 State what will change - each `current -> offered`, and each new way to pass data as its line says - and, for an MCP
@@ -76,13 +82,12 @@ server, that its registration is removed and added again, so the server is brief
 ids picked (comma-separated), or `all` for 'All of them':
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --apply <id,id | all> --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--input retired-declined=<id>~<scope>,...]
 ```
 
-Run it with the Bash tool's `timeout: 600000` (10 minutes, the most it allows by default): a plugin update clones its marketplace and
-a language server installs through npm, and the new MCP pins are downloaded after it, not inside it. `all` is every
+Run it with the Bash tool's `timeout: 600000` (10 minutes, the most it allows by default): a plugin update clones its marketplace, and the new MCP pins are downloaded after it, not inside it. `all` is every
 offer with a known newer version; an unchecked plugin runs only when its own id is given. Each update is read back: a
-plugin from the plugin list, an MCP pin from the file the CLI wrote, a language server from `--version`, a key helper
+plugin from the plugin list, an MCP pin from the file the CLI wrote, a key helper
 from its first line and digest, a new way to pass data by its detector run again. The new ways run first - a
 registration's, then a file's - and a pin moved after them starts from what they wrote, so both changes stay and the
 health check never starts a pin not fetched yet; their lines are fix's own, and one an earlier step already did reads
@@ -111,17 +116,6 @@ that only rewrote helpers needs no restart.
 
 A key helper that was edited by hand, or is newer than this plugin, is never rewritten here: the check names it, and
 `/preferred-tools:fix` (`helper-stale`) handles it.
-
-After claude-hud moves, the script re-runs its settings check and names any recommended key the new version's
-`dist/config.js` no longer mentions. It removes nothing from the user's config; pass the names on.
-
-## Language servers
-
-`--check` reports `typescript-language-server` and `csharp-ls` when they are on PATH. `typescript-language-server` is
-offered like the rest (`npm install -g typescript-language-server typescript@6`, TypeScript 7 ships no `tsserver.js`) and
-changes the machine only when picked. `csharp-ls` is reported with its version; for a copy installed with
-`dotnet tool` the update line is `dotnet tool update --global csharp-ls`; you run it only when the user asks, and a copy
-installed another way (Homebrew) is updated that way.
 
 ## Windows and serena
 

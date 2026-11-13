@@ -45,44 +45,6 @@ test('uvx and npx: found on the PATH, or the vendor page is named', () =>
     assert.strictEqual(one('npx', ctx(machine())).install.url, 'https://nodejs.org/en/download');
 });
 
-test('node-lsp: Node 22.22.2 or newer', () =>
-{
-    assert.strictEqual(one('node-lsp', ctx(machine({ node: '22.22.2' }))).ok, true);
-    assert.strictEqual(one('node-lsp', ctx(machine({ node: '24.0.0' }))).ok, true);
-    const old = one('node-lsp', ctx(machine({ node: '22.22.1' })));
-    assert.strictEqual(old.ok, false);
-    assert.match(old.install.note, /22\.22\.2/);
-    assert.strictEqual(one('node-lsp', ctx(machine({ node: '20.11.0' }))).ok, false);
-});
-
-test('ts-lsp: the server and TypeScript 6; TypeScript 7 or no server gets the recorded npm line', () =>
-{
-    const ls = (v) => ({ 'npm ls -g typescript --json --depth=0': { stdout: JSON.stringify({ dependencies: { typescript: { version: v } } }) } });
-    const bins = { 'typescript-language-server': '/usr/local/bin/typescript-language-server' };
-    assert.deepStrictEqual(one('ts-lsp', ctx(machine({ bins, out: ls('6.0.3') }))), { ok: true, found: 'typescript-language-server, typescript 6.0.3' });
-    for (const m of [machine({ bins, out: ls('7.0.2') }), machine({ out: ls('6.0.3') }), machine({ bins })])
-    {
-        const r = one('ts-lsp', ctx(m));
-        assert.strictEqual(r.ok, false);
-        assert.strictEqual(r.install.command, 'npm install -g typescript-language-server typescript@6');
-    }
-});
-
-test('csharp-ls: needs a .NET SDK 6+ first, then csharp-ls (brew on macOS, dotnet tool elsewhere)', () =>
-{
-    const dotnet = (v) => ({ 'dotnet --version': { stdout: `${v}\n` } });
-    const bins = { dotnet: '/usr/local/bin/dotnet', 'csharp-ls': '/x/csharp-ls' };
-    assert.strictEqual(one('csharp-ls', ctx(machine({ bins, out: dotnet('10.0.100') }))).ok, true);
-    const noSdk = one('csharp-ls', ctx(machine()));
-    assert.strictEqual(noSdk.found, 'no .NET SDK');
-    assert.strictEqual(noSdk.install.url, 'https://dotnet.microsoft.com/download');
-    const old = one('csharp-ls', ctx(machine({ bins: { dotnet: '/d' }, out: dotnet('5.0.408') })));
-    assert.match(old.found, /\.NET SDK 5\.0\.408/);
-    const mac = one('csharp-ls', ctx(machine({ bins: { dotnet: '/d' }, out: dotnet('9.0.100') })));
-    assert.strictEqual(mac.install.command, 'brew install csharp-ls');
-    assert.strictEqual(one('csharp-ls', ctx(machine({ bins: { dotnet: '/d' }, out: dotnet('9.0.100') }), { platform: 'linux' })).install.command, 'dotnet tool install --global csharp-ls');
-});
-
 test('browser-chrome and browser-msedge: where each OS installs them', () =>
 {
     assert.strictEqual(one('browser-chrome', ctx(machine({ files: ['/Applications/Google Chrome.app'] }))).ok, true);
@@ -120,9 +82,9 @@ test('android-sdk and jdk: looked up as the appium fix looks them up', () =>
 test('check: each pick on its own route; a remote route needs nothing; the machine facts come back for the plan', () =>
 {
     const m = machine({ bins: { npx: '/usr/bin/npx' } });
-    const res = prereq.check([{ row: 'context7', route: 'remote' }, { row: 'context7', route: 'local' }, { row: 'github', route: 'local' }, { row: 'claude-hud', route: null }], ctx(m), catalog);
+    const res = prereq.check([{ row: 'context7', route: 'remote' }, { row: 'context7', route: 'local' }, { row: 'github', route: 'local' }], ctx(m), catalog);
     assert.deepStrictEqual(res.tools.map((t) => [t.row, t.route, t.needs.map((n) => `${n.id}:${n.ok}`)]), [
-        ['context7', 'remote', []], ['context7', 'local', ['npx:true']], ['github', 'local', ['docker-or-github-binary:false']], ['claude-hud', null, []],
+        ['context7', 'remote', []], ['context7', 'local', ['npx:true']], ['github', 'local', ['docker-or-github-binary:false']],
     ]);
     assert.strictEqual(res.missing, 1);
     assert.deepStrictEqual(res.machine, { docker: true });

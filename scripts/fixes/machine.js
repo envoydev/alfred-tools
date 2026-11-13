@@ -1,5 +1,5 @@
 'use strict';
-// The machine fixes: a problem on this machine, not in a registration. The fix changes the machine (a global npm install,
+// The machine fixes: a problem on this machine, not in a registration. The fix changes the machine (a plugin uninstalled,
 // a data folder's .gitignore, a broken npx cache folder removed), so it runs only when the user picked it, and is read
 // back by running the detector again. A fix that changes nothing a running session uses returns `restart: false`; one
 // that leaves a package to download again returns its `fetch` step, which fix.js hands to fetch.js.
@@ -9,39 +9,49 @@ const path = require('node:path');
 const C = require('./common.js');
 const E = require('../entries.js');
 
-const MIN_NODE = '22.22.2'; // typescript-language-server 6.x (docs/sources.md 'LSP plugins')
+// ---- retired-plugin (spec D8, D9, 0.5.0) -------------------------------------------------------------------------------
+// typescript-lsp, csharp-lsp and claude-hud work in Claude Code alone, so the catalog no longer lists them. Each id the row
+// names, installed at a scope, is offered once for `claude plugin uninstall`: one finding per id and scope. A decline is
+// kept in <plugin data>/retired-declined.json (declines.js); a declined one is shown as advice, never applied. Where
+// alfred-code is set up it installs the same plugins, so fix.js keeps those out of 'Apply all found' (`alfred`).
 
-// The global `typescript` version, or null when npm or the package is absent. A project's own node_modules/typescript is
-// not looked at: the language server the plugin starts is the global one.
-function globalTypescript(machine)
+function retiredPluginDetect(ctx)
 {
-    const r = machine.run('npm', ['ls', '-g', 'typescript', '--json', '--depth=0']);
-    if (!r || !r.stdout) return null;
-    try { return JSON.parse(r.stdout).dependencies?.typescript?.version || null; }
-    catch { return null; }
+    const declines = require('../declines.js');
+    const ids = C.fixOf(ctx, 'retired-plugin').ids || [];
+    const declined = declines.read(ctx.data);
+    const alfred = Boolean(ctx.inv.alfredCodeEnabled);
+    return (ctx.inv.plugins || []).filter((p) => ids.includes(p.id)).map((p) =>
+    {
+        const base = {
+            id: 'retired-plugin', name: p.id, scope: p.scope, alfred,
+            found: `${p.id} is installed at ${p.scope} scope; preferred-tools no longer lists it - it works in Claude Code alone${alfred ? `; ${p.id} - alfred-code also installs it, and this removes it for both` : ''}`,
+            proposal: { command: `claude plugin uninstall ${p.id} --scope ${p.scope}` },
+        };
+        if (!declined.some((d) => declines.same(d, p))) return base;
+        return { ...base, declined: true, blocked: `${p.id} is kept at ${p.scope}; remove it with claude plugin uninstall ${p.id} --scope ${p.scope}` };
+    });
 }
 
-function typescriptLspTs7Detect(ctx)
+// `claude plugin uninstall <id> --scope <scope>`, read back from the plugin list. claude-hud's statusLine goes with the
+// last claude-hud: the account line is shared by every scope, so it stays while another scope still has the plugin.
+function retiredPluginFix(f, ctx)
 {
-    const lsp = ctx.inv.plugins.filter((p) => p.rowId === 'typescript-lsp' && !p.alfredRetired && p.enabled !== false);
-    if (!lsp.length) return [];
-    const version = globalTypescript(ctx.machine);
-    if (!version || parseInt(version, 10) < 7) return [];
-    const p = lsp[0];
-    return [{
-        id: 'typescript-lsp-ts7', row: 'typescript-lsp', name: p.id, scope: p.scope,
-        found: `the global typescript is ${version}; TypeScript 7 ships no tsserver.js, so the language server returns no diagnostics`,
-        proposal: { command: 'npm install -g typescript-language-server typescript@6' },
-        ...(C.compareVersions(ctx.machine.nodeVersion, MIN_NODE) === -1 ? { blocked: `typescript-language-server needs Node ${MIN_NODE} or newer; this is ${ctx.machine.nodeVersion}` } : {}),
-    }];
-}
-
-function typescriptLspTs7Fix(f, ctx)
-{
-    const r = ctx.machine.run('npm', ['install', '-g', 'typescript-language-server', 'typescript@6']);
-    if (!r || r.status !== 0) return { ok: false, detail: `npm install -g typescript-language-server typescript@6 failed: ${String((r && (r.stderr || r.stdout)) || 'no output').trim().split('\n').slice(-2).join(' | ')}` };
-    const v = globalTypescript(ctx.machine);
-    return v && parseInt(v, 10) < 7 ? { ok: true, detail: `global typescript is now ${v}` } : { ok: false, detail: `the global typescript still reads ${v || 'absent'} after the install` };
+    const cli = require('../claude-cli.js');
+    const inventory = require('../inventory.js');
+    const hud = require('../hud-statusline.js');
+    const command = `claude plugin uninstall ${f.name} --scope ${f.scope}`;
+    const r = cli.run(['plugin', 'uninstall', f.name, '--scope', f.scope], { cwd: ctx.inv.project, env: ctx.env });
+    if (r.error || r.status !== 0) return { ok: false, detail: `${command} failed - ${String(`${r.stderr || ''}${r.stdout || ''}` || (r.error && r.error.message) || 'no output').trim().split('\n').slice(-1)[0]}` };
+    const left = inventory.buildInventory({ project: ctx.inv.project, env: ctx.env, data: ctx.data }).plugins;
+    if (left.some((p) => p.id === f.name && p.scope === f.scope)) return { ok: false, detail: `${f.name} is still listed at ${f.scope} after ${command}` };
+    let detail = `uninstalled ${f.name} (${f.scope})`;
+    if (f.name.startsWith('claude-hud@'))
+    {
+        if (left.some((p) => p.id === f.name)) detail += `; claude-hud's statusLine is kept - claude-hud is still installed at ${left.filter((p) => p.id === f.name).map((p) => p.scope).join(', ')}`;
+        else detail += `; ${hud.removeHudStatusLine(hud.resolveConfigDir({ env: ctx.env }), { platform: ctx.platform, env: ctx.env }).detail}`;
+    }
+    return { ok: true, detail };
 }
 
 // ---- data-folder-ignore ---------------------------------------------------------------------------------------------
@@ -225,4 +235,4 @@ function npxCacheEntryFix(f, ctx)
     return { ok: true, detail: `removed ${folder} - npx installs ${f.proposal.what} into it again`, fetch: step ? { ...step, ...where } : null };
 }
 
-module.exports = { typescriptLspTs7Detect, typescriptLspTs7Fix, globalTypescript, MIN_NODE, dataFolderIgnoreDetect, dataFolderIgnoreFix, npxCacheEntryDetect, npxCacheEntryFix };
+module.exports = { retiredPluginDetect, retiredPluginFix, dataFolderIgnoreDetect, dataFolderIgnoreFix, npxCacheEntryDetect, npxCacheEntryFix };

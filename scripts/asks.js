@@ -163,7 +163,6 @@ function heldKey(entry, route)
 // who then picks OAuth or no key keeps the scope picked. A hosted route with no key: project.
 function recommendedScope(row, routeId)
 {
-    if (row.kind === 'plugin') return row.recommendedScope;
     // a bridge holds names only and connects in a child folder too (0.4.0 Ruling 6): this project's own server
     if (row.routes[routeId] && row.routes[routeId].runtime === 'bridge') return 'project';
     if (routeId !== 'remote') return 'local';
@@ -225,12 +224,11 @@ function packed(items, { id, question, none })
 // The install pick: the rows for this OS not installed in this project. A server installed only for every project (user
 // scope, even where Global is its recommended scope - a hosted keyed route) or inherited from a parent folder's .mcp.json
 // is offered too: picking it adds this project's own copy beside that one (the user's ruling, docs/build-prompt.md). A
-// server installed here, or a plugin at its recommended scope, is configure's.
+// server installed here is configure's.
 const offeredForInstall = (row, inv) =>
 {
     const at = installedOf(inv, row.id).map((h) => h.scope);
-    if (at.includes('local') || at.includes('project')) return false;
-    return row.kind === 'mcp' || !at.includes(recommendedScope(row, row.recommendedRoute));
+    return !at.includes('local') && !at.includes('project');
 };
 
 // Who else provides a row here (spec F4): a claude.ai connector this session has loaded, or an enabled plugin's server.
@@ -275,7 +273,7 @@ function pickQuestions(inv, catalog, existing = {}, connectors = null)
 
 const leftAlone = (inv, h) => h.kind === 'mcp' && inv.registrations.some((r) => r.name === h.name && r.scope === h.scope && r.choice === 'own');
 
-// Every catalog registration and plugin installed here, one item each (a row at two scopes is two), grouped. An
+// Every catalog registration installed here, one item each (a row at two scopes is two), grouped. An
 // inherited server is not here: it is changed by running the command in its own folder, and one left on its own is in
 // its own group (changeQuestions).
 function installedItems(inv, catalog, describe)
@@ -284,7 +282,7 @@ function installedItems(inv, catalog, describe)
     for (const g of catalog.groups)
         for (const row of catalog.tools.filter((r) => r.group === g.id))
             for (const h of installedOf(inv, row.id).filter((x) => x.scope !== 'inherited' && !leftAlone(inv, x)))
-                items.push({ group: g, row, h, label: h.kind === 'mcp' ? `${h.name} (${row.label}, ${h.scope})` : `${row.label} (${h.scope})`, description: describe(row, h) });
+                items.push({ group: g, row, h, label: `${h.name} (${row.label}, ${h.scope})`, description: describe(row, h) });
     return items;
 }
 
@@ -298,14 +296,12 @@ function rootInUse(inv, family, ctx = {})
 const ROOT_LABEL = { project: 'Project root folder', global: 'Global root folder' };
 const ROOT_MOVES = { project: "this project's keys, key helper and tool data", global: 'the keys, key helper and tool data for every project' };
 
-// The configure pick: one option per installed registration or plugin, then the servers left on their own, then one per
-// root folder in use (spec D7, R3). `keys` maps each label to the key the answers use (`mcp:<name>~<scope>`,
-// `plugin:<id>~<scope>`, `root:<family>`).
+// The configure pick: one option per installed registration, then the servers left on their own, then one per root
+// folder in use (spec D7, R3). `keys` maps each label to the key the answers use (`mcp:<name>~<scope>`, `root:<family>`).
 function changeQuestions(inv, catalog, ctx = {})
 {
     const describe = (row, h) =>
     {
-        if (h.kind === 'plugin') return `${h.version ? `version ${h.version}` : 'installed'}${h.enabled ? '' : ', disabled'}`;
         const pin = pinOf(row, h.route, h.entry);
         return `${ROUTE_WORD[h.route] || h.route} route${pin ? `, pin ${pin}` : ''}`;
     };
@@ -350,7 +346,6 @@ function routeQuestion(row, current = null)
 // space-free, and the committed file can only name it as ${USERPROFILE}\.serena.
 function scopesFor(row, routeId, ctx = null)
 {
-    if (row.kind === 'plugin') return ['project', 'local', 'user'];
     // a stdio route that needs a key holds it written in, which the .mcp.json in this folder never carries (spec D5)
     const route = row.routes && row.routes[routeId];
     // a bridge holds names only, never a key (0.4.0)
@@ -523,7 +518,6 @@ function toolAsk(row, inv, { route, scope = null, name = null, current = null, c
 {
     const routeId = route || (current && current.route) || row.recommendedRoute;
     const scopeQ = scopeQuestion(row, inv, { route: routeId, current, copyOf, ctx });
-    if (row.kind === 'plugin') return { first: null, questions: scopeQ ? [scopeQ] : [], answers: {}, only: null };
     const nameQ = nameQuestion(row, inv, { current, copyOf, ctx });
     const located = Boolean(row.locations && ctx);
     const qs = located ? [] : [scopeQ, nameQ].filter(Boolean);
@@ -591,11 +585,11 @@ function toolAsk(row, inv, { route, scope = null, name = null, current = null, c
 // The questions toolAsk gives after `first`: for a row without a data folder, its whole call.
 const toolQuestions = (row, inv, opts = {}) => toolAsk(row, inv, opts).questions;
 
-// Remove: one option per registration or plugin (a row at two scopes is two options), grouped; the description is the
-// exact command, which the walk reads the target from.
+// Remove: one option per registration (a row at two scopes is two options), grouped; the description is the exact
+// command, which the walk reads the target from.
 function removeQuestions(inv, catalog)
 {
-    const items = installedItems(inv, catalog, (row, h) => (h.kind === 'mcp' ? `claude mcp remove ${h.name} -s ${h.scope}` : `claude plugin uninstall ${h.name} --scope ${h.scope}`));
+    const items = installedItems(inv, catalog, (row, h) => `claude mcp remove ${h.name} -s ${h.scope}`);
     return packed(items, { id: 'remove', question: 'which do you want to remove?', none: 'remove nothing' });
 }
 
@@ -641,8 +635,7 @@ function targetClientsQuestion(key, name, current)
 const STATIC = {
     menu: { id: 'menu', header: 'Action', multiSelect: false, question: 'What do you want to change?', options: [
         { label: `Change tools${REC}`, description: 'pick installed tools, servers on their own or a root folder, then what to change' },
-        { label: 'Remove tools', description: 'choose the registrations and plugins to remove' },
-        { label: 'claude-hud settings', description: 'the status line and its recommended settings - only shown when claude-hud is installed' },
+        { label: 'Remove tools', description: 'choose the servers to remove' },
         { label: 'Done', description: 'nothing changes' } ] },
     settings: { id: 'settings', header: 'Settings', multiSelect: false, question: 'How do you want to set the tools up?', options: [
         { label: `Use the recommended settings for all${REC}`, description: 'route, scope, name and location as recommended' },
@@ -656,7 +649,7 @@ const STATIC = {
         { label: 'Change something', description: 'go back to the answers' },
         { label: 'Cancel', description: 'nothing is applied' } ] },
     removeFirst: { id: 'remove-first', header: 'Remove', multiSelect: false, question: 'Remove what?', options: [
-        { label: `Pick which${REC}`, description: 'choose the registrations and plugins to remove' },
+        { label: `Pick which${REC}`, description: 'choose the servers to remove' },
         { label: 'Cancel', description: 'nothing is removed' } ] },
     fixOffer: { id: 'fix-offer', header: 'Fix', multiSelect: false, question: 'Apply the fixes found?', options: [
         { label: `Apply all found${REC}`, description: 'apply every fix listed that can be applied' },
@@ -670,10 +663,6 @@ const STATIC = {
         { label: `Skip this tool${REC}`, description: 'leave it out of the plan' },
         { label: 'Install it now', description: 'run the install line shown, or install it yourself and re-check' },
         { label: 'Register anyway', description: 'register it; it will not start until the prerequisite is there' } ] }),
-    hud: (n, m, k) => ({ id: 'hud', header: 'claude-hud', multiSelect: false, question: `Apply the recommended claude-hud settings? ${n} missing, ${m} differing, ${k} matching.`, options: [
-        { label: `Apply recommended${REC}`, description: 'adds only the missing keys; every value already chosen is kept' },
-        { label: 'Apply and replace differing', description: 'adds the missing keys and overwrites the differing ones' },
-        { label: 'Skip', description: 'nothing changes' } ] }),
     clients: clientsQuestion(true).question,
     // a STATIC function whose labels hold placeholders names them, so tests/ask-blocks.js fills the block's own
     'cursor-name-taken': Object.assign((file, name) => cursorNameQuestion({ file, name, sameRow: true }).question, { placeholders: ['<file>', '<name>'] }),
@@ -745,7 +734,7 @@ function rootsBlock(inv, picks, catalog, ctx)
 function all(inv, picks, catalog, { env = {}, home = null, connectors = null } = {})
 {
     const out = {
-        static: { ...STATIC, hud: STATIC.hud(0, 0, 0), prereqMissing: STATIC.prereqMissing('<tool>', '<prerequisite>'), settingsOne: STATIC.settingsOne('<tool>'), 'cursor-name-taken': STATIC['cursor-name-taken']('<file>', '<name>') },
+        static: { ...STATIC, prereqMissing: STATIC.prereqMissing('<tool>', '<prerequisite>'), settingsOne: STATIC.settingsOne('<tool>'), 'cursor-name-taken': STATIC['cursor-name-taken']('<file>', '<name>') },
         pick: pickQuestions(inv, catalog, picks && picks.existing, connectors), change: null, remove: removeQuestions(inv, catalog), tools: {}, targets: {},
     };
     // `exists` reads the disk: alfred-code's .alfred/.gitignore and its 2.x data decide which folders are offered
@@ -887,7 +876,7 @@ function pickOrder(catalog, ids)
 // per tool its route, `first` (scope and name, for a tool with a data folder), its whole call (a tool without one), the
 // root of its family when this run has not answered it, its location and extras, its key name and settings. Configure:
 // per target, who looks after it, then the same - a root target is its root question, a server left on its own its own
-// question, a plugin its scope. A step with nothing to ask is passed over, but for one with a location to `set`. `picks`:
+// question. A step with nothing to ask is passed over, but for one with a location to `set`. `picks`:
 // install.md's and configure.md's picks.json - `done` the step ids answered, `walk` the settings answer, `tokens` the
 // API key answers. `built`: the all() output, when the caller has it.
 // -> { id, tool, call, answers, set? } | { id: 'done' }

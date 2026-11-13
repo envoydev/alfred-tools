@@ -9,23 +9,25 @@ const cat = load();
 const ROOT = path.join(__dirname, '..');
 
 const MCP_ROW = ['id', 'kind', 'group', 'label', 'summary', 'name', 'os', 'recommendedRoute', 'routes', 'dangerous'];
-const PLUGIN_ROW = ['id', 'kind', 'group', 'label', 'summary', 'plugin', 'marketplace', 'os', 'recommendedScope', 'prereqs'];
 const OSES = ['darwin', 'linux', 'win32'];
 const GROUPS = ['code', 'docs', 'browsers', 'machine'];
 const PLACEHOLDER = /\{(root|name|host|value|version|minor|contextFile)\}/g;
 
-test('the catalog has the 17 rows of the brief, each id once', () => {
+test('the catalog has 14 rows and no plugin kind', () => {
     const ids = cat.tools.map((r) => r.id);
-    assert.strictEqual(ids.length, 17);
-    assert.strictEqual(new Set(ids).size, 17);
-    assert.deepStrictEqual([...ids].sort(), ['appium', 'atlassian', 'claude-hud', 'context7', 'csharp-lsp', 'github', 'gitlab', 'macos-control',
-        'memory', 'playwright-chrome', 'playwright-firefox', 'playwright-msedge', 'playwright-webkit', 'sentry', 'serena', 'typescript-lsp', 'windows-control']);
+    assert.strictEqual(ids.length, 14);
+    assert.strictEqual(new Set(ids).size, 14);
+    assert.ok(cat.tools.every((t) => t.kind === 'mcp'));
+    assert.deepStrictEqual([...ids].sort(), ['appium', 'atlassian', 'context7', 'github', 'gitlab', 'macos-control',
+        'memory', 'playwright-chrome', 'playwright-firefox', 'playwright-msedge', 'playwright-webkit', 'sentry', 'serena', 'windows-control']);
+    // the rule for a later row (spec D8)
+    assert.match(require('../catalog/tools.json').note, /A plugin row is added only when it works in Claude Code and Cursor/);
 });
 
 test('every row has the fields its kind needs', () => {
     for (const row of cat.tools)
     {
-        const need = row.kind === 'mcp' ? MCP_ROW : row.kind === 'plugin' ? PLUGIN_ROW : null;
+        const need = row.kind === 'mcp' ? MCP_ROW : null;
         assert.ok(need, `${row.id}: kind ${row.kind}`);
         for (const key of need) assert.ok(key in row, `${row.id} lacks ${key}`);
         assert.ok(GROUPS.includes(row.group), `${row.id}: group ${row.group}`);
@@ -36,10 +38,10 @@ test('every row has the fields its kind needs', () => {
 test('the four groups are the brief\'s and hold the rows the brief lists', () => {
     assert.deepStrictEqual(cat.groups.map((g) => g.id), GROUPS);
     const of = (g) => cat.tools.filter((r) => r.group === g).map((r) => r.id).sort();
-    assert.deepStrictEqual(of('code'), ['csharp-lsp', 'memory', 'serena', 'typescript-lsp']);
+    assert.deepStrictEqual(of('code'), ['memory', 'serena']);
     assert.deepStrictEqual(of('docs'), ['atlassian', 'context7', 'github', 'gitlab']);
     assert.deepStrictEqual(of('browsers'), ['playwright-chrome', 'playwright-firefox', 'playwright-msedge', 'playwright-webkit']);
-    assert.deepStrictEqual(of('machine'), ['appium', 'claude-hud', 'macos-control', 'sentry', 'windows-control']);
+    assert.deepStrictEqual(of('machine'), ['appium', 'macos-control', 'sentry', 'windows-control']);
 });
 
 test('every MCP route carries what its transport needs', () => {
@@ -163,15 +165,10 @@ test('code-running tools are named per row', () => {
     assert.deepStrictEqual(danger('macos-control'), ['Shell']);
 });
 
-test('plugin rows name their marketplace and the settings row the brief ports', () => {
-    assert.deepStrictEqual(cat.byId.get('claude-hud').marketplace, { name: 'claude-hud', source: 'jarrodwatts/claude-hud' });
-    assert.strictEqual(cat.byId.get('claude-hud').recommendedScope, 'user');
-    assert.strictEqual(cat.byId.get('claude-hud').settingsRow, 'claude-hud');
-    for (const id of ['typescript-lsp', 'csharp-lsp'])
-    {
-        assert.deepStrictEqual(cat.byId.get(id).marketplace, { name: 'claude-plugins-official', source: 'anthropics/claude-plugins-official' });
-        assert.strictEqual(cat.byId.get(id).recommendedScope, 'project');
-    }
+test('retired-plugin names the three plugins the catalog dropped, and no row', () => {
+    const r = cat.fixes.find((f) => f.id === 'retired-plugin');
+    assert.deepStrictEqual(r.ids, ['typescript-lsp@claude-plugins-official', 'csharp-lsp@claude-plugins-official', 'claude-hud@claude-hud']);
+    assert.deepStrictEqual([r.kind, r.upgrade, r.tool], ['machine', '0.5.0', []]);
 });
 
 test('no catalog default name is in the reserved set, and the shipped set is the alfred-code one', (t) => {
@@ -193,7 +190,7 @@ test('every fix row has the fields the brief names and points at an existing row
     const FIX = ['id', 'tool', 'os', 'symptom', 'detect', 'fix', 'verifiedOn', 'source'];
     assert.strictEqual(new Set(cat.fixes.map((f) => f.id)).size, cat.fixes.length);
     assert.deepStrictEqual(cat.fixes.map((f) => f.id), ['serena-windows-home', 'serena-windows-ts-shim', 'uvx-python', 'windows-arm-python',
-        'windows-npx-cmd', 'playwright-webmcp', 'appium-sdk-env', 'serena-telemetry', 'token-sync', 'serena-context', 'serena-base-modes', 'list-import', 'read-guard', 'typescript-lsp-ts7', 'windows-mcp-one-per-desktop', 'data-folder-ignore', 'npx-cache-entry',
+        'windows-npx-cmd', 'playwright-webmcp', 'appium-sdk-env', 'serena-telemetry', 'token-sync', 'serena-context', 'serena-base-modes', 'list-import', 'read-guard', 'retired-plugin', 'windows-mcp-one-per-desktop', 'data-folder-ignore', 'npx-cache-entry',
         'key-to-helper', 'helper-missing', 'helper-stale', 'root-ignore', 'project-relative-path', 'mcp-order', 'helper-child-folder']);
     for (const f of cat.fixes)
     {

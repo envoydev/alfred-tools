@@ -33,6 +33,12 @@ Three rows look after what 0.2.0 wrote at Project scope:
 - `helper-child-folder` - advice only: a hosted server inherited from a parent folder's `.mcp.json` connects here
   without its key, since Claude Code does not run a parent folder's key helper in a child folder.
 
+`retired-plugin` offers to uninstall a plugin the catalog no longer lists - typescript-lsp, csharp-lsp or claude-hud,
+which work in Claude Code alone - once per plugin and scope (`claude plugin uninstall <id> --scope <scope>`; for the last
+claude-hud, its own statusLine goes too, any other line stays). One the user turned down before is listed as 'NOT
+APPLICABLE: <id> is kept at <scope>; remove it with ...': advice, never offered again. Where alfred-code is set up, the
+line ends '<id> - alfred-code also installs it, and this removes it for both'.
+
 A finding about a parent folder's `.mcp.json` ends 'NOT APPLICABLE: run /preferred-tools:fix in <folder>': that file
 is the parent's, and fix run there repairs it. `data-folder-ignore` also finds a 0.2.0 copy a session made in this
 folder (`.alfred/playwright-chrome`, say) that no server uses any more: its fix writes the copy's `.gitignore`, and its
@@ -50,10 +56,16 @@ that nothing was changed and stop - there is nothing to ask.
 
 Ask `choose` as one AskUserQuestion, exactly as printed:
 
-- 'Apply all found (Recommended)' - every fix that can be applied. Go to step 3 with `all`.
+- 'Apply all found (Recommended)' - every fix that can be applied. Go to step 3 with `all`. Where alfred-code is set
+  up, `all` leaves each `retired-plugin` finding marked for alfred-code: pass each of those as declined (below).
 - 'Pick which' - ask each call of `pick` as printed, one AskUserQuestion per call, and collect the labels picked
-  (a label is a fix id). Go to step 3 with those ids. Nothing picked means 'Skip'.
-- 'Skip' - say nothing was changed and stop.
+  (a label is a fix id). Go to step 3 with those ids. When `retired-plugin` was shown and not picked, each of its
+  plugins and scopes is declined (below). Nothing picked: go to step 3 with `none` when there is a decline to pass,
+  else it means 'Skip'.
+- 'Skip' - say nothing was changed and stop. Nothing is declined, so the uninstall offer comes back next time.
+
+A decline is passed as `--input retired-declined=<id>~<scope>,<id>~<scope>` - the plugin id and scope from each
+`retired-plugin` line - and recorded in the plugin's data folder.
 
 A finding that needs a folder from the user (the detect output says 'needs a folder from you') gets one more
 AskUserQuestion before it is applied: the suggested folder as '(Recommended)' listed first, and 'Skip this fix'. A
@@ -63,18 +75,18 @@ guess a folder.
 ## 3. Apply
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.js" --apply <id,id | all> --data "${CLAUDE_PLUGIN_DATA}" [--only "$ARGUMENTS"] [--input key=value]
+node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.js" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--only "$ARGUMENTS"] [--input key=value]
 ```
 
 Claude Code asks permission for this call itself - `--apply` is deliberately not in `allowed-tools`. It rewrites each registration through the `claude` CLI (remove, then add with the same name and scope) from the entry as
 it is now, so the user's pin, cut-off and added args stay. Several fixes on one registration are one rewrite. A key moved out of
 a registration (`key-to-helper`) first writes the root's files - its `.gitignore`, `mcp-headers.js` - then rewrites the
 registration to read its key through the helper. After a rewrite of a hosted server that takes a key, the script prints
-how it connects - with its key at the next session start, or 'fill <NAME> in <file>' first - relay it. A machine fix (a global npm install, a data folder's or a root's
+how it connects - with its key at the next session start, or 'fill <NAME> in <file>' first - relay it. A machine fix (a plugin uninstalled, a data folder's or a root's
 `.gitignore`, the key helper written or brought current, or a broken npx cache folder removed - also for a server a
 parent folder's `.mcp.json` gives this folder, since that cache is the machine's) runs after. Each fix is read back by running its detector again.
 
-Run it with the Bash tool's `timeout: 600000` (10 minutes, the most it allows by default); a global npm install is the slow part.
+Run it with the Bash tool's `timeout: 600000` (10 minutes, the most it allows by default).
 Paste the output verbatim. Report each fix as 'fixed' or 'STILL FOUND', each skipped one with its reason, and a failure
 with the line it printed - a failed rewrite prints a `RESTORE BY HAND` line, give it to the user as written.
 A key in it shows as `${PREFERRED_TOOLS_KEPT}`, never its value: the user puts their key back there.

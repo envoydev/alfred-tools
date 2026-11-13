@@ -4,8 +4,6 @@
   "cases": [
     { "name": "serena", "row": "serena", "os": ["darwin", "linux", "win32"], "answers": { "picks": { "serena": { "scope": "local" } } }, "expect": { "kind": "mcp", "scope": "local", "route": "local", "files": ".preferred-tools/serena" } },
     { "name": "memory", "row": "memory", "os": ["darwin", "linux", "win32"], "answers": { "picks": { "memory": {} } }, "expect": { "kind": "mcp", "scope": "local", "route": "local" } },
-    { "name": "typescript-lsp", "row": "typescript-lsp", "os": ["darwin", "linux", "win32"], "answers": { "picks": { "typescript-lsp": { "scope": "project" } } }, "expect": { "kind": "plugin", "scope": "project" }, "network": true },
-    { "name": "csharp-lsp", "row": "csharp-lsp", "os": ["darwin", "linux", "win32"], "answers": { "picks": { "csharp-lsp": { "scope": "project" } } }, "expect": { "kind": "plugin", "scope": "project" }, "network": true },
     { "name": "context7 remote", "row": "context7", "os": ["darwin", "linux", "win32"], "answers": { "picks": { "context7": { "route": "remote", "scope": "project" } } }, "expect": { "kind": "mcp", "scope": "project", "route": "remote" } },
     { "name": "context7 local", "row": "context7", "os": ["darwin", "linux", "win32"], "answers": { "picks": { "context7": { "route": "local", "scope": "local", "token": true } } }, "expect": { "kind": "mcp", "scope": "local", "route": "local" } },
     { "name": "github remote", "row": "github", "os": ["darwin", "linux", "win32"], "answers": { "picks": { "github": { "route": "remote", "scope": "project" } } }, "expect": { "kind": "mcp", "scope": "project", "route": "remote" } },
@@ -20,7 +18,6 @@
     { "name": "macos-control", "row": "macos-control", "os": ["darwin"], "answers": { "picks": { "macos-control": {} } }, "expect": { "kind": "mcp", "scope": "local", "route": "local" } },
     { "name": "windows-control", "row": "windows-control", "os": ["win32"], "answers": { "picks": { "windows-control": {} } }, "expect": { "kind": "mcp", "scope": "local", "route": "local" } },
     { "name": "sentry remote", "row": "sentry", "os": ["darwin", "linux", "win32"], "answers": { "picks": { "sentry": { "route": "remote", "scope": "project" } } }, "expect": { "kind": "mcp", "scope": "project", "route": "remote" } },
-    { "name": "sentry local", "row": "sentry", "os": ["darwin", "linux", "win32"], "answers": { "picks": { "sentry": { "route": "local", "scope": "user" } } }, "expect": { "kind": "mcp", "scope": "user", "route": "local" } },
-    { "name": "claude-hud", "row": "claude-hud", "os": ["darwin", "linux", "win32"], "answers": { "picks": { "claude-hud": { "scope": "user" } }, "hud": "defer" }, "expect": { "kind": "plugin", "scope": "user", "hudAfter": "skip" }, "network": true }
+    { "name": "sentry local", "row": "sentry", "os": ["darwin", "linux", "win32"], "answers": { "picks": { "sentry": { "route": "local", "scope": "user" } } }, "expect": { "kind": "mcp", "scope": "user", "route": "local" } }
   ]
 }

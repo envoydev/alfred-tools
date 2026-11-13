@@ -32,7 +32,7 @@ test('one numbered table of every row for this OS: nothing installed shows a das
     assert.ok(!/windows-control +mcp/.test(text));
     assert.match(rows.find((l) => /serena/.test(l)), /serena\s+mcp\s+local\s+-\s+-\s+-$/);
     assert.match(rows.find((l) => /\bcontext7\b/.test(l)), /context7\s+mcp\s+remote\/local/);
-    assert.match(rows.find((l) => /claude-hud/.test(l)), /claude-hud\s+plugin\s+-\s+-\s+-\s+-$/);
+    assert.ok(!rows.some((l) => /\splugin\s/.test(l)), 'no plugin row since 0.5.0');
     const win = table.render(inv({ os: 'win32' }), catalog);
     assert.ok(/windows-control\s+mcp/.test(win));
     assert.match(win, /Not offered on this OS \(win32\): macos-control\./);
@@ -51,7 +51,6 @@ test('what is installed shows by scope as name [route, pin], a custom name inclu
             reg('github', 'github', 'local', { command: 'docker', args: ['run', '-i', '--rm', '-e', 'GITHUB_PERSONAL_ACCESS_TOKEN', 'ghcr.io/github/github-mcp-server:v2.0.2', 'stdio'] }),
             reg('playwright-chrome', 'playwright-chrome', 'local', entryOf('playwright-chrome')),
         ],
-        plugins: [{ id: 'claude-hud@claude-hud', plugin: 'claude-hud', scope: 'user', version: '0.13.1', enabled: true, errors: [], rowId: 'claude-hud', alfredRetired: false }],
     }), catalog);
     const row = (re) => text.split('\n').find((l) => re.test(l));
     assert.match(row(/\bserena\s+mcp/), /proj-serena \[local, 2\.0\.0\]\s+-\s+serena \[local, 2\.1\.0\]$/, 'one row, two scopes, two pins');
@@ -59,7 +58,6 @@ test('what is installed shows by scope as name [route, pin], a custom name inclu
     assert.match(row(/\bcontext7\s+mcp/), /-\s+context7 \[remote\]\s+-$/);
     assert.match(row(/\bgithub\s+mcp/), /github \[local, v2\.0\.2\]/);
     assert.match(row(/playwright-chrome\s+mcp/), /playwright-chrome \[local, 0\.0\.84\]/);
-    assert.match(row(/claude-hud\s+plugin/), /0\.13\.1, enabled$/);
 });
 
 test('four Playwright engines are four rows, each with its own registration', () =>
@@ -69,21 +67,18 @@ test('four Playwright engines are four rows, each with its own registration', ()
     for (const e of ['chrome', 'msedge', 'firefox', 'webkit']) assert.match(text, new RegExp(`playwright-${e}\\s+mcp\\s+local\\s+playwright-${e} \\[local, 0\\.0\\.84\\]`));
 });
 
-test('the user\'s own servers, alfred-code leftovers, plugin errors and unreadable files are named under the table', () =>
+test('the user\'s own servers, alfred-code leftovers and unreadable files are named under the table', () =>
 {
     const text = table.render(inv({
         registrations: [
             { name: 'my-own-server', scope: 'user', entry: { command: 'node' }, rowId: null, route: null, own: true, alfredRetired: false },
             { name: 'alfred-navigation', scope: 'user', entry: { command: 'uvx' }, rowId: null, route: null, own: true, alfredRetired: true },
         ],
-        plugins: [{ id: 'csharp-lsp@claude-plugins-official', plugin: 'csharp-lsp', scope: 'project', version: '1.0.0', enabled: false, errors: ['cannot load'], rowId: 'csharp-lsp', alfredRetired: false }],
         unreadable: [{ scope: 'project', file: '/proj/.mcp.json', state: 'malformed', error: 'not valid JSON' }],
     }), catalog);
     assert.match(text, /Your own, not in this catalog and never touched: my-own-server \(user\)\./);
     assert.match(text, /Under names alfred-code once registered, left alone: alfred-navigation \(user\)\./);
-    assert.match(text, /csharp-lsp@claude-plugins-official \(project\) reports: cannot load/);
     assert.match(text, /\/proj\/\.mcp\.json is malformed \(not valid JSON\): the project scope is unreadable here, and nothing will be written to it\./);
-    assert.match(text, /csharp-lsp\s+plugin\s+-\s+-\s+1\.0\.0, disabled \(ERRORS\)/);
 });
 
 test('main reads the inventory file; a missing file exits 2', () =>

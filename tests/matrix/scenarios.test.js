@@ -4,7 +4,7 @@
 //
 //   npm run matrix
 //
-// A plugin case with no network is reported as skipped with the reason ('NOT RUN'). Windows behaviour is exercised by
+// A case with no network is reported as skipped with the reason ('NOT RUN'). Windows behaviour is exercised by
 // simulating the platform in the detectors and the plan (the CLI rewrite itself is the real one); it is proved on a real
 // Windows machine only in the user's own live check.
 const test = require('node:test');
@@ -19,7 +19,6 @@ const catalogLib = require('../../scripts/catalog.js');
 const E = require('../../scripts/entries.js');
 const fix = require('../../scripts/fix.js');
 const update = require('../../scripts/update.js');
-const psLib = require('../../scripts/plugin-settings.js');
 const { pinnedVersion } = require('../../scripts/fixes/common.js');
 const { Harness } = require('../harness.js');
 
@@ -322,57 +321,6 @@ test('fix windows-mcp-one-per-desktop: two real registrations on a simulated win
         h.claude(p, ['mcp', 'remove', 'wd-a', '-s', 'local']);
         h.claude(p, ['mcp', 'remove', 'wd-b', '-s', 'user']);
     }
-});
-
-// ---- claude-hud (needs the network for the plugin install) ---------------------------------------------------------
-
-test('claude-hud: recommended keeps the user\'s value; \'Apply and replace differing\' overwrites it and writes a settings.json backup', T, (t) =>
-{
-    const p = h.project('hud');
-    const r = h.run(p, { picks: { 'claude-hud': { scope: 'user' } }, hud: 'defer' });
-    if (r.report.failed && NETWORK.test(r.report.failed.detail)) return t.skip(`NOT RUN: no network (${r.report.failed.detail.slice(0, 100)})`);
-    assert.strictEqual(r.report.failed, null, r.text);
-    const script = path.join(__dirname, '..', '..', 'scripts', 'hud-statusline.js');
-    const cat = path.join(__dirname, '..', '..', 'catalog', 'plugin-settings.json');
-    const hud = (...flags) => spawnSync(process.execPath, [script, ...flags, '--catalog', cat, '--project', '.'], { cwd: p, env: h.env, encoding: 'utf8' });
-    const configFile = path.join(h.account, 'plugins', 'claude-hud', 'config.json');
-    const settingsFile = path.join(h.account, 'settings.json');
-    const readCfg = () => JSON.parse(fs.readFileSync(configFile, 'utf8'));
-
-    // the user's own value, different from the catalog's 'compact'
-    fs.mkdirSync(path.dirname(configFile), { recursive: true });
-    fs.writeFileSync(configFile, `${JSON.stringify({ lineLayout: 'expanded' }, null, 2)}\n`);
-    const rec = hud();
-    assert.strictEqual(rec.status, 0, rec.stdout + rec.stderr);
-    assert.strictEqual(readCfg().lineLayout, 'expanded', 'recommended keeps a value the user chose');
-    assert.strictEqual(readCfg().showSeparators, false, 'and adds the missing keys');
-    const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-    assert.strictEqual(settings.statusLine.type, 'command');
-    assert.strictEqual(settings.statusLine.refreshInterval, 5);
-
-    // now the user's refresh interval differs, and 'replace' overwrites both
-    settings.statusLine.refreshInterval = 30;
-    fs.writeFileSync(settingsFile, `${JSON.stringify(settings, null, 2)}\n`);
-    const check = hud('--check');
-    assert.match(check.stdout, /^hud-check: statusLine=current missing=0 differs=2 match=\d+$/m, check.stdout);
-    const rep = hud('--replace');
-    assert.strictEqual(rep.status, 0, rep.stdout + rep.stderr);
-    assert.strictEqual(readCfg().lineLayout, 'compact');
-    assert.strictEqual(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).statusLine.refreshInterval, 5);
-    // one copy per run before its first write: the earlier run's, and this run's holding the user's interval of 30
-    const baks = fs.readdirSync(h.account).filter((n) => /^settings\.json\.bak\./.test(n));
-    assert.ok(baks.some((n) => (JSON.parse(fs.readFileSync(path.join(h.account, n), 'utf8')).statusLine || {}).refreshInterval === 30), `no backup holds the user's file as it was: ${baks.join(', ')}\n${rep.stdout}`);
-    assert.ok(psLib.leaves, 'plugin-settings is the same module the install walk uses');
-
-    // the plugin runs: the statusLine command as written, fed a session's JSON on stdin as Claude Code feeds it. On
-    // Windows the shell Claude Code runs it in is not verified here, so that half is the Windows VM's.
-    if (process.platform === 'win32') return t.diagnostic('NOT RUN: running the statusLine on Windows is the Windows VM\'s check');
-    const line = JSON.parse(fs.readFileSync(settingsFile, 'utf8')).statusLine.command;
-    const input = JSON.stringify({ session_id: 'matrix', transcript_path: '', cwd: p, model: { id: 'claude-opus-5-5', display_name: 'Opus' }, workspace: { current_dir: p, project_dir: p }, version: '' });
-    const shown = spawnSync(line, { shell: true, cwd: p, env: h.env, input, encoding: 'utf8', timeout: 30000 });
-    assert.strictEqual(shown.status, 0, `${line}\n${shown.stdout}${shown.stderr}`);
-    assert.ok(shown.stdout.trim(), `claude-hud printed nothing for the status line: ${shown.stderr}`);
-    t.diagnostic(`claude-hud status line on ${process.platform}: ${shown.stdout.trim().split('\n')[0].slice(0, 120)}`);
 });
 
 // ---- the real account ----------------------------------------------------------------------------------------------

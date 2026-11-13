@@ -4,9 +4,9 @@
 //
 //   node table.js <inventory.json>
 //
-// Printed to the tool result, never written to a file. A cell holds, for each thing installed at that scope,
-// `<name> [<route>, <pin>]` for a server or `<version>, enabled|disabled` for a plugin. A registration that matches no
-// row is the user's: it is named under the table and nothing in this plugin touches it.
+// Printed to the tool result, never written to a file. A cell holds, for each server installed at that scope,
+// `<name> [<route>, <pin>]`. A registration that matches no row is the user's: it is named under the table and nothing
+// in this plugin touches it.
 const fs = require('node:fs');
 const catalogLib = require('./catalog.js');
 const { fromHere } = require('./inventory.js');
@@ -36,17 +36,13 @@ function render(inv, catalog = catalogLib.load())
     const body = rows.map((row, i) =>
     {
         const cells = Object.fromEntries(SCOPES.map((s) => [s, []]));
-        if (row.kind === 'mcp')
-            for (const r of inv.registrations.filter((x) => x.rowId === row.id && !x.alfredRetired && x.scope !== 'inherited'))
-            {
-                const pin = pinOf(row, r.route, r.entry);
-                cells[r.scope].push(`${r.name} [${r.route}${pin ? `, ${pin}` : ''}]`);
-            }
-        else
-            for (const p of inv.plugins.filter((x) => x.rowId === row.id && !x.alfredRetired))
-                if (cells[p.scope]) cells[p.scope].push(`${p.version || '?'}, ${p.enabled ? 'enabled' : 'disabled'}${p.errors && p.errors.length ? ' (ERRORS)' : ''}`);
+        for (const r of inv.registrations.filter((x) => x.rowId === row.id && !x.alfredRetired && x.scope !== 'inherited'))
+        {
+            const pin = pinOf(row, r.route, r.entry);
+            cells[r.scope].push(`${r.name} [${r.route}${pin ? `, ${pin}` : ''}]`);
+        }
         const group = catalog.groups.find((g) => g.id === row.group);
-        return [String(i + 1), group.label, row.label, row.kind === 'mcp' ? 'mcp' : 'plugin', row.kind === 'mcp' ? Object.keys(row.routes).join('/') : '-', ...SCOPES.map((s) => cellOf(cells[s]))];
+        return [String(i + 1), group.label, row.label, row.kind, Object.keys(row.routes).join('/'), ...SCOPES.map((s) => cellOf(cells[s]))];
     });
     const head = ['#', 'group', 'tool', 'kind', 'routes', ...SCOPES];
     const widths = head.map((h, c) => Math.max(h.length, ...body.map((r) => r[c].length)));
@@ -63,7 +59,6 @@ function render(inv, catalog = catalogLib.load())
     if (retired.length) notes.push(`Under names alfred-code once registered, left alone: ${retired.map((r) => `${r.name} (${r.scope})`).join(', ')}.`);
     const other = catalog.tools.filter((r) => !r.os.includes(inv.os));
     if (other.length) notes.push(`Not offered on this OS (${inv.os}): ${other.map((r) => r.label).join(', ')}.`);
-    for (const p of inv.plugins.filter((x) => x.errors && x.errors.length && x.rowId)) notes.push(`${p.id} (${p.scope}) reports: ${p.errors.join('; ')}`);
     for (const u of inv.unreadable || [])
         notes.push(`${u.file} is ${u.state}${u.error ? ` (${u.error})` : ''}: ${u.scope === 'inherited' ? "Claude Code skips that parent folder's servers; nothing here writes to it." : `the ${u.scope} scope is unreadable here, and nothing will be written to it.`}`);
     return [...out, ...(notes.length ? ['', ...notes] : [])].join('\n');

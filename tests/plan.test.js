@@ -254,8 +254,6 @@ test('every MCP route offers user, project and local: recommended first, then us
     assert.deepStrictEqual(scopes('serena', 'local'), ['local', 'user', 'project']);
     assert.deepStrictEqual(scopes('context7', 'remote'), ['user', 'project', 'local']);
     assert.deepStrictEqual(scopes('context7', 'local'), ['local', 'user', 'project']);
-    assert.deepStrictEqual(scopes('claude-hud'), ['user', 'project', 'local']);
-    assert.deepStrictEqual(scopes('typescript-lsp'), ['project', 'user', 'local']);
     assert.deepStrictEqual(scopes('serena', 'local', WIN, 'C:\\Users\\me'), ['local', 'user', 'project']);
     assert.deepStrictEqual(scopes('serena', 'local', WIN, 'C:\\Users\\Jo Doe'), ['local', 'user', 'project'], 'Project on Windows whatever the profile path');
 });
@@ -486,43 +484,6 @@ test('remove plans one remove per pick, at the scope shown', () => {
     assert.match(plan(inv(MAC), { remove: [{ kind: 'mcp', name: 'ghost', scope: 'local' }] }, opts('/h')).errors[0], /no registration/);
 });
 
-// ---- plugins ----------------------------------------------------------------------------------------------------------
-
-test('plugins: the marketplace is added when missing, the install is at the recommended scope, never over an installed plugin', () => {
-    const p = plan(inv(MAC), { picks: { 'claude-hud': {}, 'typescript-lsp': {}, 'csharp-lsp': {} } }, opts('/h'));
-    assert.deepStrictEqual(p.errors, []);
-    assert.deepStrictEqual(p.steps.map((s) => argvOf(s) && argvOf(s).join(' ')).filter(Boolean), [
-        'plugin marketplace add jarrodwatts/claude-hud', 'plugin install claude-hud@claude-hud --scope user',
-        'plugin marketplace add anthropics/claude-plugins-official', 'plugin install typescript-lsp@claude-plugins-official --scope project',
-        'plugin install csharp-lsp@claude-plugins-official --scope project']);
-    const known = [{ name: 'claude-hud', source: '' }, { name: 'claude-plugins-official', source: '' }];
-    const enabled = { rowId: 'claude-hud', id: 'claude-hud@claude-hud', scope: 'user', enabled: true, alfredRetired: false };
-    const same = plan(inv(MAC, { marketplaces: known, plugins: [enabled] }), pickOne('claude-hud'), opts('/h'));
-    assert.deepStrictEqual(same.steps.map((s) => s.op), ['hud'], 'installed and enabled: no install call, only the settings ask');
-    const disabled = plan(inv(MAC, { marketplaces: known, plugins: [{ ...enabled, enabled: false }] }), pickOne('claude-hud'), opts('/h'));
-    assert.deepStrictEqual(disabled.steps.map((s) => s.op), ['plugin-enable', 'hud']);
-    const lsp = plan(inv(MAC, { marketplaces: known, plugins: [{ rowId: 'typescript-lsp', id: 'typescript-lsp@claude-plugins-official', scope: 'project', enabled: true, alfredRetired: false }] }), pickOne('typescript-lsp'), opts('/h'));
-    assert.strictEqual(lsp.steps.length, 0);
-});
-
-test('plugins at another scope are moved: install first, then uninstall the old copy', () => {
-    const known = [{ name: 'claude-plugins-official', source: '' }];
-    const old = { rowId: 'csharp-lsp', id: 'csharp-lsp@claude-plugins-official', scope: 'user', enabled: true, alfredRetired: false };
-    const p = plan(inv(MAC, { marketplaces: known, plugins: [old] }), { change: { 'plugin:csharp-lsp@claude-plugins-official~user': { scope: 'project' } } }, opts('/h'));
-    assert.deepStrictEqual(p.steps.map((s) => argvOf(s).join(' ')), ['plugin install csharp-lsp@claude-plugins-official --scope project', 'plugin uninstall csharp-lsp@claude-plugins-official --scope user']);
-});
-
-test('plugins also managed by alfred-code are marked while it is enabled', () => {
-    const known = [{ name: 'claude-plugins-official', source: '' }];
-    const p = plan(inv(MAC, { marketplaces: known, alfredCodeEnabled: true }), pickOne('typescript-lsp'), opts('/h'));
-    assert.match(p.notes.join(' '), /alfred-code installs it too/);
-    const rem = plan(inv(MAC, { alfredCodeEnabled: true, plugins: [{ rowId: 'typescript-lsp', id: 'typescript-lsp@claude-plugins-official', scope: 'project', enabled: true, alfredRetired: false }] }), { remove: [{ kind: 'plugin', id: 'typescript-lsp@claude-plugins-official', scope: 'project' }] }, opts('/h'));
-    assert.match(rem.notes.join(' '), /alfred-code installs it too - its next update may add it back/);
-    // with alfred-code absent, nothing names it
-    const absent = plan(inv(MAC, { plugins: [{ rowId: 'typescript-lsp', id: 'typescript-lsp@claude-plugins-official', scope: 'project', enabled: true, alfredRetired: false }] }), { remove: [{ kind: 'plugin', id: 'typescript-lsp@claude-plugins-official', scope: 'project' }] }, opts('/h'));
-    assert.doesNotMatch(absent.notes.join(' '), /alfred-code/);
-});
-
 test('code-running tools are named in the plan', () => {
     const p = plan(inv(MAC), pickOne('playwright-chrome'), opts('/h'));
     assert.match(render(p), /browser_run_code_unsafe/);
@@ -609,10 +570,10 @@ test('no ask names git or remote state: alfred-code\'s stop guard reads such a w
     assert.deepStrictEqual(hits, []);
 });
 
-test('the grouping: Code, Docs and forges, Browsers, Machine and monitoring; three on Linux, windows-control only on Windows', () => {
+test('the grouping: Code, Docs and forges, Browsers, Machine and monitoring; two machine rows on Linux, windows-control only on Windows', () => {
     const calls = (b) => asks.pickQuestions(inv(b), catalog)[0];
-    assert.deepStrictEqual(calls(MAC).map((q) => q.options.length), [4, 4, 4, 4]);
-    assert.deepStrictEqual(calls(LINUX).map((q) => q.options.length), [4, 4, 4, 3]);
+    assert.deepStrictEqual(calls(MAC).map((q) => q.options.length), [2, 4, 4, 3]);
+    assert.deepStrictEqual(calls(LINUX).map((q) => q.options.length), [2, 4, 4, 2]);
     assert.match(calls(WIN)[3].options.map((o) => o.label).join(), /windows-control/);
     assert.doesNotMatch(calls(MAC)[3].options.map((o) => o.label).join(), /windows-control/);
     assert.match(calls(MAC)[3].options.map((o) => o.label).join(), /macos-control/);
@@ -621,15 +582,15 @@ test('the grouping: Code, Docs and forges, Browsers, Machine and monitoring; thr
 test('install offers only what is not installed; configure offers what is, one option per registration', () => {
     const i = inv(MAC, {
         registrations: [reg('shop-serena', 'local', { command: 'uvx', args: ['--from', 'serena-agent@2.1.0'] }, 'serena', 'local'), reg('serena', 'user', { command: 'uvx', args: ['--from', 'serena-agent@2.1.0'] }, 'serena', 'local'), reg('mine', 'user', { command: 'my-server' })],
-        plugins: [{ id: 'claude-hud@claude-hud', plugin: 'claude-hud', scope: 'user', version: '0.13.1', enabled: true, rowId: 'claude-hud', alfredRetired: false }],
+        plugins: [{ id: 'claude-hud@claude-hud', plugin: 'claude-hud', scope: 'user', version: '0.13.1', enabled: true, rowId: null, alfredRetired: false }],
     });
     const offered = asks.pickQuestions(i, catalog).flat().flatMap((q) => q.options.map((o) => o.label));
-    assert.ok(!offered.includes('serena') && !offered.includes('claude-hud'), 'installed rows are configure\'s');
-    assert.strictEqual(offered.length, catalog.tools.filter((r) => r.os.includes('darwin')).length - 2);
+    assert.ok(!offered.includes('serena') && !offered.some((l) => l.startsWith('claude-hud')), 'installed rows are configure\'s; an old plugin is no row');
+    assert.strictEqual(offered.length, catalog.tools.filter((r) => r.os.includes('darwin')).length - 1);
     const ch = asks.changeQuestions(i, catalog);
     const labels = ch.calls.flat().flatMap((q) => q.options.map((o) => o.label));
-    assert.deepStrictEqual(labels, ['shop-serena (serena, local)', 'serena (serena, user)', 'claude-hud (user)'], 'a row at two scopes is two options; the user\'s own server is not offered');
-    assert.deepStrictEqual(ch.keys, { 'shop-serena (serena, local)': 'mcp:shop-serena~local', 'serena (serena, user)': 'mcp:serena~user', 'claude-hud (user)': 'plugin:claude-hud@claude-hud~user' });
+    assert.deepStrictEqual(labels, ['shop-serena (serena, local)', 'serena (serena, user)'], 'a row at two scopes is two options; the user\'s own server and an old plugin are not offered');
+    assert.deepStrictEqual(ch.keys, { 'shop-serena (serena, local)': 'mcp:shop-serena~local', 'serena (serena, user)': 'mcp:serena~user' });
     assert.match(ch.calls[0][0].options[0].description, /^local route, pin 2\.1\.0$/);
 });
 
@@ -668,12 +629,6 @@ test('install only adds: a tool installed for every project gets this project\'s
     assert.match(again.unchanged.join(' '), /already installed at user scope - a change to it is \/preferred-tools:configure/);
     const renamed = plan(i, pickOne('memory', { scope: 'user', name: 'mem2' }), opts('/Users/me'));
     assert.deepStrictEqual(regSteps(renamed).map((s) => s.op).filter((o) => o !== 'ensure-dir' && o !== 'fetch'), ['mcp-add'], 'a second name at the same scope is a second copy, never a rename');
-    // plugins: a project copy beside the user-scope one, which stays
-    const known = [{ name: 'claude-plugins-official', source: '' }];
-    const ts = { rowId: 'typescript-lsp', id: 'typescript-lsp@claude-plugins-official', scope: 'user', enabled: true, alfredRetired: false };
-    const pp = plan(inv(MAC, { marketplaces: known, plugins: [ts] }), pickOne('typescript-lsp'), opts('/h'));
-    assert.deepStrictEqual(pp.steps.map((s) => argvOf(s).join(' ')), ['plugin install typescript-lsp@claude-plugins-official --scope project']);
-    assert.match(pp.notes.join(' '), /also installed at user scope - left as it is/);
 });
 
 test('a copy and a configure change on Windows and Linux: each OS\'s paths, the Windows cmd /c, the user-scope one untouched', () => {
@@ -705,20 +660,18 @@ test('a hosted row installed for every project at its recommended Global scope i
     const offered = asks.pickQuestions(i, catalog).flat().flatMap((q) => q.options.map((o) => o.label));
     assert.ok(offered.includes('github (installed for every project as github)'), offered.join('\n'));
     assert.ok(offered.includes('context7 (installed for every project as context7)'), offered.join('\n'));
-    // a plugin at its recommended scope is installed: configure's
-    const hud = inv(MAC, { plugins: [{ id: 'claude-hud@claude-hud', plugin: 'claude-hud', scope: 'user', version: '0.13.1', enabled: true, rowId: 'claude-hud', alfredRetired: false }] });
+    // an old plugin is no row, so it is never offered
+    const hud = inv(MAC, { plugins: [{ id: 'claude-hud@claude-hud', plugin: 'claude-hud', scope: 'user', version: '0.13.1', enabled: true, rowId: null, alfredRetired: false }] });
     assert.ok(!asks.pickQuestions(hud, catalog).flat().flatMap((q) => q.options.map((o) => o.label)).some((l) => l.startsWith('claude-hud')));
 });
 
 test('install questions for a copy: the taken scope is not offered, and an account-default folder becomes the project one', { skip: POSIX_FIXTURE }, () => {
-    const i = inv(MAC, { registrations: [reg('memory', 'user', { command: 'uvx', args: ['--from', 'mcp-memory-service[sqlite]==12.1.1'] }, 'memory', 'local')], plugins: [{ id: 'claude-hud@claude-hud', scope: 'user', enabled: true, rowId: 'claude-hud', alfredRetired: false }, { id: 'typescript-lsp@claude-plugins-official', scope: 'user', enabled: true, rowId: 'typescript-lsp', alfredRetired: false }] });
+    const i = inv(MAC, { registrations: [reg('memory', 'user', { command: 'uvx', args: ['--from', 'mcp-memory-service[sqlite]==12.1.1'] }, 'memory', 'local')] });
     const offered = asks.pickQuestions(i, catalog).flat().flatMap((q) => q.options);
     const mem = offered.find((o) => o.label.startsWith('memory'));
     assert.strictEqual(mem.label, 'memory (installed for every project as memory)');
     assert.match(mem.description, /adds this project's own copy; the one for every project stays/);
-    assert.ok(offered.some((o) => o.label === 'typescript-lsp (installed for every project)'), 'a plugin at user scope below its recommended project scope');
-    assert.ok(!offered.some((o) => o.label.startsWith('claude-hud')), 'installed at its recommended scope: configure\'s');
-    const q = asks.all(i, { rows: ['memory', 'typescript-lsp'] }, catalog);
+    const q = asks.all(i, { rows: ['memory'] }, catalog);
     // memory has a data folder: its scope and name come first, in a call of their own
     assert.deepStrictEqual(q.tools.memory.first.map((x) => x.id), ['scope-memory', 'name-memory']);
     assert.deepStrictEqual(q.tools.memory.first.find((x) => x.id === 'scope-memory').options.map((o) => o.label), ['Local (Recommended)', 'Project'], 'the copy\'s user scope is not offered again');
@@ -726,7 +679,6 @@ test('install questions for a copy: the taken scope is not offered, and an accou
     const loc = q.tools.memory.questions.find((x) => x.id === 'location-memory');
     assert.strictEqual(loc.options[0].label, "The project root's folder (Recommended)", 'a copy gets this project\'s own memory');
     assert.match(loc.options[0].description, /^\/work\/shop\/\.preferred-tools\/memory /);
-    assert.deepStrictEqual(q.tools['typescript-lsp'].questions[0].options.map((o) => o.label), ['Project (Recommended)', 'Local']);
     for (const t of Object.values(q.tools)) [...(t.first || []), ...t.questions].forEach(checkQuestion);
 });
 
@@ -745,13 +697,13 @@ test('configure: one of two registrations of a row is changed by its key, the ot
     assert.strictEqual(plan(i, { change: { 'mcp:serena~user': { row: 'serena' } } }, opts('/h')).noop, true, 'every answer kept: nothing to do');
 });
 
-test('configure: a plugin at another scope is a move, an unknown key or a user\'s own server is refused', () => {
+test('configure: a plugin is not changed here, and an unknown key or a user\'s own server is refused', () => {
     const known = [{ name: 'claude-plugins-official', source: '' }];
-    const old = { rowId: 'csharp-lsp', id: 'csharp-lsp@claude-plugins-official', scope: 'user', enabled: true, alfredRetired: false };
+    const old = { rowId: null, id: 'csharp-lsp@claude-plugins-official', scope: 'user', enabled: true, alfredRetired: false };
     const i = inv(MAC, { marketplaces: known, plugins: [old], registrations: [reg('mine', 'user', { command: 'my-server' })] });
-    const p = plan(i, { change: { 'plugin:csharp-lsp@claude-plugins-official~user': { row: 'csharp-lsp', scope: 'project' } } }, opts('/h'));
-    assert.deepStrictEqual(p.steps.map((s) => argvOf(s).join(' ')), ['plugin install csharp-lsp@claude-plugins-official --scope project', 'plugin uninstall csharp-lsp@claude-plugins-official --scope user']);
-    assert.strictEqual(plan(i, { change: { 'plugin:csharp-lsp@claude-plugins-official~user': {} } }, opts('/h')).noop, true);
+    const p = plan(i, { change: { 'plugin:csharp-lsp@claude-plugins-official~user': { scope: 'project' } } }, opts('/h'));
+    assert.deepStrictEqual(p.steps, []);
+    assert.match(p.errors.join(), /'plugin:csharp-lsp@claude-plugins-official~user' is a plugin - the catalog lists none since 0\.5\.0/);
     assert.match(plan(i, { change: { 'mcp:serena~local': {} } }, opts('/h')).errors.join(), /nothing is installed as 'mcp:serena~local'/);
     assert.match(plan(i, { change: { 'mcp:mine~user': { name: 'x' } } }, opts('/h')).errors.join(), /'mine' is your own .* left alone/);
     assert.match(plan(i, { change: { 'serena': {} } }, opts('/h')).errors.join(), /a key is mcp:<name>~<scope>/);
@@ -783,8 +735,6 @@ test('the scope question follows the route: its recommended scope first, then us
     assert.deepStrictEqual(scopes('serena', 'local'), ['local', 'user', 'project']);
     assert.deepStrictEqual(scopes('context7', 'remote'), ['user', 'project', 'local']);
     assert.deepStrictEqual(scopes('context7', 'local'), ['local', 'user', 'project']);
-    assert.deepStrictEqual(scopes('claude-hud'), ['user', 'project', 'local']);
-    assert.deepStrictEqual(scopes('typescript-lsp'), ['project', 'user', 'local']);
 });
 
 test('plan.js plans every route at project scope but a stdio route that needs a key (spec D5)', () => {
@@ -830,19 +780,6 @@ test('answers.machine from prereq.js reaches the plan: no docker picks the githu
     assert.strictEqual(entryOf({ ...github, machine: { docker: false } }, { docker: true }).command, 'docker', 'the option wins over the answers');
 });
 
-test("hud: 'defer' plans the install and leaves the settings ask for after it; an installed claude-hud keeps its step", () => {
-    const fresh = plan(inv(MAC), { picks: { 'claude-hud': {} }, hud: 'defer' }, opts('/h'));
-    assert.deepStrictEqual(fresh.steps.map((s) => s.op), ['plugin-marketplace-add', 'plugin-install']);
-    assert.strictEqual(fresh.hudAfter, true);
-    assert.strictEqual(fresh.hud, null);
-    assert.ok(fresh.notes.some((n) => /asked after the install/.test(n)));
-    const known = [{ name: 'claude-hud', source: '' }];
-    const enabled = { rowId: 'claude-hud', id: 'claude-hud@claude-hud', scope: 'user', enabled: true, alfredRetired: false };
-    const kept = plan(inv(MAC, { marketplaces: known, plugins: [enabled] }), { picks: { 'claude-hud': {} }, hud: 'replace' }, opts('/h'));
-    assert.deepStrictEqual(kept.steps.map((s) => [s.op, s.mode]), [['hud', 'replace']]);
-    assert.ok(!kept.hudAfter);
-});
-
 test('--questions takes the route answered so far: it decides the recommended scope', () => {
     const i = inv(MAC);
     const scopes = (route) => asks.all(i, { rows: ['context7'], routes: { context7: route } }, catalog).tools.context7.questions.find((q) => q.id === 'scope-context7').options.map((o) => asks.scopeOfLabel(o.label));
@@ -857,12 +794,12 @@ test('the remove asks carry what to remove in their descriptions, in a form the 
             { name: 'proj-serena', scope: 'local', entry: { command: 'uvx' }, rowId: 'serena', route: 'local', own: false, alfredRetired: false },
             { name: 'context7', scope: 'project', entry: { type: 'http' }, rowId: 'context7', route: 'remote', own: false, alfredRetired: false },
         ],
-        plugins: [{ id: 'claude-hud@claude-hud', plugin: 'claude-hud', scope: 'user', version: '0.13.1', enabled: true, errors: [], rowId: 'claude-hud', alfredRetired: false }],
+        plugins: [{ id: 'claude-hud@claude-hud', plugin: 'claude-hud', scope: 'user', version: '0.13.1', enabled: true, errors: [], rowId: null, alfredRetired: false }],
     });
     const options = asks.removeQuestions(i, catalog).flat().flatMap((q) => q.options);
-    assert.strictEqual(options.length, 3);
-    for (const o of options) assert.match(o.description, /^claude (mcp remove \S+ -s (local|project|user)|plugin uninstall \S+ --scope (local|project|user))$/);
-    assert.deepStrictEqual(options.map((o) => o.description), ['claude mcp remove proj-serena -s local', 'claude mcp remove context7 -s project', 'claude plugin uninstall claude-hud@claude-hud --scope user']);
+    assert.strictEqual(options.length, 2, 'an old plugin is not removed here');
+    for (const o of options) assert.match(o.description, /^claude mcp remove \S+ -s (local|project|user)$/);
+    assert.deepStrictEqual(options.map((o) => o.description), ['claude mcp remove proj-serena -s local', 'claude mcp remove context7 -s project']);
 });
 
 test('location: alfred-code data on disk is a second answer, not the recommended one, and absent without the folder', () => {

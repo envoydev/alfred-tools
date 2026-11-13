@@ -20,7 +20,7 @@ const ago = (days) => NOW - days * DAY;
 
 // a fake registry: { 'pypi:serena-agent': [{ version, time }] }
 const fakeRegistry = (table) => ({ versionsOf: async (reg, name) => { const v = table[`${reg}:${name}`]; if (!v) throw new Error(`no such package ${name}`); return v; } });
-// no language servers on this machine
+// a machine with no runtimes on it
 const noLsp = { which: () => null, run: () => ({ status: 1, stdout: '', stderr: '' }), nodeVersion: process.versions.node };
 
 const install = (w, answers) =>
@@ -236,27 +236,27 @@ function seed(w, { markets, installed })
     });
 }
 
-test('plugins: catalog and other plugins are two groups; the marketplace is refreshed; apply updates at the plugin\'s own scope and reads the version back', async () =>
+test('plugins: every installed plugin is offered under Other plugins; the marketplace is refreshed; apply updates at the plugin\'s own scope and reads the version back', async () =>
 {
     const w = world();
     try
     {
-        const official = marketplace(w, 'claude-plugins-official', [{ name: 'typescript-lsp', version: '1.1.0' }]);
+        const official = marketplace(w, 'claude-plugins-official', [{ name: 'pyright-lsp', version: '1.1.0' }]);
         const mine = marketplace(w, 'someone', [{ name: 'tidy', version: '0.5.0' }, { name: 'same', version: '1.0.0' }]);
-        seed(w, { markets: [['claude-plugins-official', official], ['someone', mine]], installed: [['typescript-lsp@claude-plugins-official', '1.0.0', 'project'], ['tidy@someone', '0.4.0', 'user'], ['same@someone', '1.0.0', 'user']] });
+        seed(w, { markets: [['claude-plugins-official', official], ['someone', mine]], installed: [['pyright-lsp@claude-plugins-official', '1.0.0', 'project'], ['tidy@someone', '0.4.0', 'user'], ['same@someone', '1.0.0', 'user']] });
         const c = await run(w, ['--check']);
-        assert.match(c.text, /Catalog plugins:\n\s+typescript-lsp@claude-plugins-official \(project\)\s+1\.0\.0 -> 1\.1\.0/);
-        assert.match(c.text, /Other plugins:\n\s+tidy@someone \(user\)\s+0\.4\.0 -> 0\.5\.0/);
+        assert.doesNotMatch(c.text, /Catalog plugins:/, 'the catalog lists no plugin');
+        assert.match(c.text, /Other plugins:\n\s+pyright-lsp@claude-plugins-official \(project\)\s+1\.0\.0 -> 1\.1\.0\n\s+tidy@someone \(user\)\s+0\.4\.0 -> 0\.5\.0/);
         assert.doesNotMatch(c.text, /same@someone/, 'a plugin at the listed version is not offered');
         assert.ok(w.calls().some((a) => a.join(' ') === 'plugin marketplace update someone'), 'each marketplace is refreshed');
 
-        const env = { ...w.env, FAKE_CLAUDE_VERSIONS: JSON.stringify({ 'typescript-lsp@claude-plugins-official': '1.1.0', 'tidy@someone': '0.5.0' }) };
+        const env = { ...w.env, FAKE_CLAUDE_VERSIONS: JSON.stringify({ 'pyright-lsp@claude-plugins-official': '1.1.0', 'tidy@someone': '0.5.0' }) };
         const a = await run(w, ['--apply', 'all', '--no-refresh'], { env });
         assert.strictEqual(a.code, 0, a.text);
-        assert.match(a.text, /ok\s+typescript-lsp@claude-plugins-official \(project\): 1\.0\.0 -> 1\.1\.0/);
+        assert.match(a.text, /ok\s+pyright-lsp@claude-plugins-official \(project\): 1\.0\.0 -> 1\.1\.0/);
         assert.match(a.text, /ok\s+tidy@someone \(user\): 0\.4\.0 -> 0\.5\.0/);
         const updates = w.calls().filter((x) => x[0] === 'plugin' && x[1] === 'update');
-        assert.deepStrictEqual(updates.map((x) => x.slice(2)), [['typescript-lsp@claude-plugins-official', '--scope', 'project'], ['tidy@someone', '--scope', 'user']]);
+        assert.deepStrictEqual(updates.map((x) => x.slice(2)), [['pyright-lsp@claude-plugins-official', '--scope', 'project'], ['tidy@someone', '--scope', 'user']]);
     }
     finally { w.clean(); }
 });
@@ -298,31 +298,88 @@ test('a marketplace that is not registered is skipped with a line, and a failed 
     finally { w.clean(); }
 });
 
-// ---- language servers ----------------------------------------------------------------------------------------------
+// ---- retired-plugin (spec D8, D9) -----------------------------------------------------------------------------------
 
-test('language servers on PATH are reported; typescript-language-server is offered when behind and updated only when picked', async () =>
+const HUD = 'claude-hud@claude-hud';
+const TSL = 'typescript-lsp@claude-plugins-official';
+
+test('retired-plugin at two scopes is two offers, and picking one uninstalls only that scope', async () =>
 {
     const w = world();
     try
     {
-        let ts = '4.0.0';
-        const calls = [];
-        const machine = {
-            nodeVersion: process.versions.node,
-            which: (n) => (['typescript-language-server', 'csharp-ls'].includes(n) ? `/bin/${n}` : null),
-            run: (cmd, args) => { calls.push([cmd, ...args]); if (cmd === 'npm') { ts = '4.1.0'; return { status: 0, stdout: '', stderr: '' }; } return { status: 0, stdout: cmd === 'csharp-ls' ? 'csharp-ls 0.20.0\n' : `${ts}\n`, stderr: '' }; },
-        };
-        const reg = fakeRegistry({ 'npm:typescript-language-server': [{ version: '4.0.0', time: ago(90) }, { version: '4.1.0', time: ago(30) }] });
-        const c = await run(w, ['--check', '--no-refresh'], { machine, registry: reg });
-        assert.match(c.text, /Language servers:\n\s+typescript-language-server \(global npm\)\s+4\.0\.0 -> 4\.1\.0/);
-        assert.match(c.text, /csharp-ls 0\.20\.0 \(latest not checked/);
-        assert.ok(!calls.some((x) => x[0] === 'npm'), 'a check installs nothing');
-        const a = await run(w, ['--apply', 'lsp:typescript', '--no-refresh'], { machine, registry: reg });
+        seed(w, { markets: [], installed: [[HUD, '0.15.0', 'user'], [HUD, '0.15.0', 'project']] });
+        const c = await run(w, ['--check', '--no-refresh', '--data', path.join(w.dir, 'data')]);
+        assert.match(c.text, /New ways to pass data:\n\s+claude-hud@claude-hud \(user\)\s+retired-plugin: /);
+        const q = update.questions(JSON.parse((await run(w, ['--check', '--json', '--no-refresh'])).text));
+        const ids = q.pick.flat().flatMap((i) => i.options.map((o) => o.description));
+        assert.deepStrictEqual(ids.filter((d) => d.startsWith('upgrade:retired-plugin')).sort(), [`upgrade:retired-plugin:${HUD}~project`, `upgrade:retired-plugin:${HUD}~user`]);
+        const a = await run(w, ['--apply', `upgrade:retired-plugin:${HUD}~project`, '--no-refresh']);
         assert.strictEqual(a.code, 0, a.text);
-        assert.deepStrictEqual(calls.find((x) => x[0] === 'npm'), ['npm', 'install', '-g', 'typescript-language-server', 'typescript@6']);
-        assert.match(a.text, /ok\s+typescript-language-server \(global npm\): 4\.0\.0 -> 4\.1\.0/);
+        assert.deepStrictEqual(w.calls().filter((x) => x[0] === 'plugin' && x[1] === 'uninstall').map((x) => x.slice(2)), [[HUD, '--scope', 'project']]);
+        assert.match(a.text, /ok +claude-hud@claude-hud \(project\): retired-plugin/);
+        assert.match(a.text, /claude-hud's statusLine is kept - claude-hud is still installed at user/);
     }
     finally { w.clean(); }
+});
+
+test('a declined id and scope lands in retired-declined.json and the next update does not offer it', async () =>
+{
+    const w = world();
+    const data = path.join(w.dir, 'data');
+    try
+    {
+        seed(w, { markets: [], installed: [[HUD, '0.15.0', 'user'], [TSL, '1.0.0', 'project']] });
+        // 'Pick which' with the typescript-lsp offer picked: claude-hud, shown and left unpicked, is passed as declined
+        const a = await run(w, ['--apply', `upgrade:retired-plugin:${TSL}~project`, '--input', `retired-declined=${HUD}~user`, '--no-refresh', '--data', data]);
+        assert.strictEqual(a.code, 0, a.text);
+        assert.deepStrictEqual(readJson(path.join(data, 'retired-declined.json')).declined, [{ id: HUD, scope: 'user' }]);
+        const c = await run(w, ['--check', '--json', '--no-refresh', '--data', data]);
+        const out = JSON.parse(c.text);
+        assert.ok(!out.offers.some((o) => o.fix === 'retired-plugin'), 'not offered again');
+        assert.ok(!out.offers.some((o) => o.kind === 'plugin' && o.plugin === HUD), 'nor updated in place of the uninstall it waits on');
+    }
+    finally { w.clean(); }
+});
+
+test('a declined retired-plugin adds no note and no waiting count to update', async () =>
+{
+    const w = world();
+    const data = path.join(w.dir, 'data');
+    try
+    {
+        seed(w, { markets: [], installed: [[HUD, '0.15.0', 'user']] });
+        require('../scripts/declines.js').add(data, [{ id: HUD, scope: 'user' }]);
+        const out = JSON.parse((await run(w, ['--check', '--json', '--no-refresh', '--data', data])).text);
+        assert.deepStrictEqual([out.offers.filter((o) => o.fix === 'retired-plugin').length, out.notes.filter((n) => n.includes('claude-hud')).length, out.waiting], [0, 0, 0]);
+    }
+    finally { w.clean(); }
+});
+
+test('where alfred-code is set up, All of them keeps the retired plugins out, names each and passes on the decline', async () =>
+{
+    const w = world();
+    const data = path.join(w.dir, 'data');
+    try
+    {
+        seed(w, { markets: [], installed: [[HUD, '0.15.0', 'user'], ['alfred-code@envoydev', '2.12.0', 'user']] });
+        const out = JSON.parse((await run(w, ['--check', '--json', '--no-refresh', '--data', data])).text);
+        const offer = out.offers.find((o) => o.fix === 'retired-plugin');
+        assert.strictEqual(offer.alfred, true);
+        assert.strictEqual(offer.label, `${HUD} - alfred-code also installs it, and this removes it for both`);
+        const a = await run(w, ['--apply', 'all', '--input', `retired-declined=${HUD}~user`, '--no-refresh', '--data', data]);
+        assert.match(a.text, /claude-hud@claude-hud kept - alfred-code installs it; fix lists it/);
+        assert.ok(!w.calls().some((x) => x[0] === 'plugin' && x[1] === 'uninstall'));
+        assert.deepStrictEqual(readJson(path.join(data, 'retired-declined.json')).declined, [{ id: HUD, scope: 'user' }]);
+    }
+    finally { w.clean(); }
+});
+
+test('update parseArgs takes repeated --input key=value and refuses one without =', () =>
+{
+    assert.deepStrictEqual(update.parseArgs(['--apply', 'all', '--input', 'a=1', '--input', 'retired-declined=x@y~user,z@y~local']).input, { a: '1', 'retired-declined': 'x@y~user,z@y~local' });
+    assert.throws(() => update.parseArgs(['--apply', 'all', '--input', 'novalue']), /--input needs key=value/);
+    assert.deepStrictEqual(update.parseArgs(['--check']).input, {});
 });
 
 // ---- the asks ------------------------------------------------------------------------------------------------------
@@ -340,7 +397,7 @@ test('the asks stay within the AskUserQuestion limits; every pick option carries
         for (const item of call)
         {
             assert.ok(item.options.length <= 4);
-            for (const o of item.options) assert.match(o.description, /^(plugin|mcp|lsp):/);
+            for (const o of item.options) assert.match(o.description, /^(plugin|mcp):/);
         }
     }
     const labels = q.pick.flat().flatMap((i) => i.options.map((o) => o.label));
@@ -539,7 +596,7 @@ const listed = (root, servers) => writeJson(path.join(root, 'mcps.json'), { vers
 test('the fix rows update applies are the ones marked upgrade, each with the version that brought its way', () =>
 {
     const catalog = require('../scripts/catalog.js').load();
-    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['list-import', '0.5.0'], ['read-guard', '0.5.0'], ['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
+    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['list-import', '0.5.0'], ['read-guard', '0.5.0'], ['retired-plugin', '0.5.0'], ['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
 });
 
 test('update offers the new ways to pass data that fix knows - a 0.1.x key header, a relative project path - and applies them after the pins, by registration', async () =>

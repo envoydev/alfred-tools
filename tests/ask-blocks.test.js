@@ -6,15 +6,16 @@ const path = require('node:path');
 const { parseAskBlocks, problemsOf } = require('./ask-blocks.js');
 
 const block = (body, id = 'menu') => parseAskBlocks(`\`\`\`ask${id ? ` ${id}` : ''}\n${body}\n\`\`\``)[0];
-const GOOD = "What do you want to change?\n- 'Change tools (Recommended)' - a\n- 'Remove tools' - b\n- 'claude-hud settings' - c\n- 'Done' - d";
+const GOOD = "What do you want to change?\n- 'Change tools (Recommended)' - a\n- 'Remove tools' - b\n- 'Done' - d";
 
 test('a sound block parses and has no problems; a block may omit an option the walk omits, never reorder one', () =>
 {
     const b = block(GOOD);
-    assert.strictEqual(b.options.length, 4);
+    assert.strictEqual(b.options.length, 3, 'the menu has no claude-hud item since 0.5.0');
     assert.strictEqual(b.question, 'What do you want to change?');
     assert.deepStrictEqual(problemsOf(b), []);
-    assert.deepStrictEqual(problemsOf(block("What do you want to change?\n- 'Change tools (Recommended)' - a\n- 'Remove tools' - b\n- 'Done' - d")), [], 'claude-hud settings left out when claude-hud is not installed');
+    assert.deepStrictEqual(problemsOf(block("What do you want to change?\n- 'Change tools (Recommended)' - a\n- 'Done' - d")), [], 'Remove tools left out when nothing is installed');
+    assert.match(problemsOf(block("What do you want to change?\n- 'Change tools (Recommended)' - a\n- 'claude-hud settings' - c\n- 'Done' - d")).join(), /do not match asks\.STATIC\.menu/, 'the configure menu has no claude-hud item');
     assert.match(problemsOf(block("What do you want to change?\n- 'Change tools (Recommended)' - a\n- 'Done' - d\n- 'Remove tools' - b")).join(), /do not match asks\.STATIC\.menu/);
 });
 
@@ -102,7 +103,7 @@ test('staticAsk fills a STATIC function\'s own placeholders', () => {
     assert.match(q.question, /^Cursor's <file> already has a server named <name> that preferred-tools did not write/);
     assert.deepStrictEqual(q.options.map((o) => o.label), ["Replace it with the plugin's (Recommended)", "Keep Cursor's own"]);
     // a function with no placeholders of its own still gets '<n>', '<m>', '<k>'
-    assert.match(staticAsk('hud').question, /<n> missing, <m> differing, <k> matching/);
+    assert.match(staticAsk('prereqMissing').question, /^<n> needs <m>, which is missing/);
     // install and configure both carry the block, and it is sound
     for (const cmd of ['install.md', 'configure.md'])
     {
