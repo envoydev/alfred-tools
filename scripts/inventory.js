@@ -244,6 +244,7 @@ function buildInventory({ project, env = process.env, platform = process.platfor
     // and each registration's choice - null when never answered or when its launch changed since
     const existing = require('./existing.js');
     out.lists = { project: listOf(out, 'project', rootCtx), global: listOf(out, 'global', rootCtx) };
+    out.cursor = cursorFiles(out, { platform, env, project: proj }, catalog);
     const fp = (entry) => existing.fingerprintOf(entry, catalog);
     for (const r of out.registrations)
     {
@@ -294,6 +295,22 @@ function listOf(inv, family, ctx)
         if (r) return { file: P.join(P.dirname(old), roots.FILES.list), servers: [], own: r.servers, old, ...(r.note ? { note: r.note, state: r.state } : {}) };
     }
     return null;
+}
+
+// Cursor's two files (spec D2): the project's for project and local scope, the home's for user scope. Each lists every
+// name it holds, and the entries of the names its family's list marks for Cursor, kept.
+function cursorFiles(inv, ctx, catalog)
+{
+    const cursorMcp = require('./cursor-mcp.js');
+    const marked = (family) =>
+    {
+        const l = inv.lists[family];
+        return l && !l.note ? (l.servers || []).filter((s) => (s.clients || []).includes('cursor')) : [];
+    };
+    return {
+        project: cursorMcp.cursorOf(cursorMcp.fileFor('project', ctx), marked('project'), catalog),
+        global: cursorMcp.cursorOf(cursorMcp.fileFor('global', ctx), marked('global'), catalog),
+    };
 }
 
 // A recorded choice that still holds: the entry found, its fingerprint the launch's now, its choice one of `allowed`.

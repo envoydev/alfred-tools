@@ -93,3 +93,21 @@ test('asks.js never requires plan.js: the shared readers (currentOf, logicalRoot
     assert.deepStrictEqual(E.logicalRoot('/work/shop/.preferred-tools/serena', { platform: 'darwin', project: '/work/shop', home: '/Users/me' }), { kind: 'project', rel: '.preferred-tools/serena' });
     assert.deepStrictEqual(E.logicalRoot('/Users/me/.preferred-tools/serena', { platform: 'darwin', project: '/work/shop', home: '/Users/me' }), { kind: 'home', rel: '.preferred-tools/serena' });
 });
+
+test('staticAsk fills a STATIC function\'s own placeholders', () => {
+    const { staticAsk } = require('./ask-blocks.js');
+    const asks = require('../scripts/asks.js');
+    assert.deepStrictEqual(asks.STATIC['cursor-name-taken'].placeholders, ['<file>', '<name>']);
+    const q = staticAsk('cursor-name-taken');
+    assert.match(q.question, /^Cursor's <file> already has a server named <name> that preferred-tools did not write/);
+    assert.deepStrictEqual(q.options.map((o) => o.label), ["Replace it with the plugin's (Recommended)", "Keep Cursor's own"]);
+    // a function with no placeholders of its own still gets '<n>', '<m>', '<k>'
+    assert.match(staticAsk('hud').question, /<n> missing, <m> differing, <k> matching/);
+    // install and configure both carry the block, and it is sound
+    for (const cmd of ['install.md', 'configure.md'])
+    {
+        const blocks = parseAskBlocks(fs.readFileSync(path.join(__dirname, '..', 'commands', cmd), 'utf8')).filter((b) => b.id === 'cursor-name-taken');
+        assert.strictEqual(blocks.length, 1, cmd);
+        assert.deepStrictEqual(problemsOf(blocks[0]), [], cmd);
+    }
+});

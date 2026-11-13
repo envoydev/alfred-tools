@@ -590,8 +590,13 @@ function plan(inv, answers, opts = {})
     if (out.hud) out.steps.push({ op: 'hud', mode: out.hud, why: `claude-hud: ${out.hud === 'skip' ? 'statusLine only' : out.hud === 'replace' ? 'statusLine plus recommended settings, replacing differing keys' : 'statusLine plus recommended settings, add-only'}` });
     // the file steps first, the records last (D8): a failed add leaves files a re-run finds in place
     const files = fileSteps(inv, ctx, out, out.steps);
+    out.steps = [...files.before, ...out.steps, ...files.after];
+    // Cursor's files from the lists, after the list-write steps they read (spec D2)
+    const cursor = planLists.cursorSteps(inv, { ...ctx, catalog }, out, answers);
+    // each name Cursor's file holds that no answer settles: its question, which the command asks before planning again
+    if (out.taken) { out.cursorNames = out.taken.map((t) => asks.cursorNameQuestion(t)); delete out.taken; }
     // .mcp.json in the catalog's order, last of all (spec F5, F8)
-    out.steps = mcpOrder.withOrderStep([...files.before, ...out.steps, ...files.after], inv.project, mcpOrder.ownProjectNames(inv, answers.existing));
+    out.steps = mcpOrder.withOrderStep([...out.steps, ...cursor], inv.project, mcpOrder.ownProjectNames(inv, answers.existing));
     out.noop = out.steps.length === 0 && out.errors.length === 0;
     return out;
 }
@@ -748,7 +753,7 @@ function render(p)
         else if (s.op === 'write-helper') lines.push(`   writes ${P.join(s.path, roots.FILES.helper)}  (this plugin's header helper)`, `   (and package.json, type commonjs, when absent)`);
         else if (s.op === 'write-bridge') lines.push(`   writes ${P.join(s.path, roots.FILES.bridge)}  (this plugin's URL bridge)`, `   (and package.json, type commonjs, when absent)`);
         else if (s.op === 'ensure-key-name') lines.push(`   writes ${s.file}  (names only: ${s.names.join(', ')} - you fill in each value)`);
-        else if (s.op === 'list-write' || s.op === 'retire-record') lines.push(planLists.renderLine(s));
+        else if (s.op === 'list-write' || s.op === 'retire-record' || s.op === 'cursor-write') lines.push(planLists.renderLine(s));
         else if (s.op === 'order-mcp-json') lines.push(`   reorders ${s.file}  (no value changes)`);
         else if (s.op === 'record-root') lines.push(`   writes ${roots.FILES.map} in the plugin's data folder  (the ${s.family} root: ${s.root})`);
         else if (s.op === 'fetch') lines.push(`   ${s.argv.map(shq).join(' ')}`, '   (after the apply, in the background: fills the cache only; if it fails the registration stays and the first start tries again)');

@@ -7,11 +7,13 @@
 // servers the user left on their own (`own`), with this run's answers applied - the 0.4.x record's rules (spec F4).
 // The first plan that writes a family with no list yet imports it, as list-import does: every managed registration of
 // the family joins the list as read, and the 0.4.x record's own entries move into it, the record itself moved aside.
+const fs = require('node:fs');
 const E = require('./entries.js');
 const catalogLib = require('./catalog.js');
 const roots = require('./roots.js');
 const keys = require('./keys.js');
 const lists = require('./mcps-list.js');
+const cursorMcp = require('./cursor-mcp.js');
 
 const REG_OPS = ['mcp-add', 'mcp-replace', 'mcp-move', 'mcp-remove'];
 
@@ -187,11 +189,128 @@ function listSteps(inv, ctx, out, regSteps = [])
     return [...steps, ...retire];
 }
 
-// The plan line of a list-write or retire-record step.
+// ---- Cursor's files (spec D2, D4, D4a) ------------------------------------------------------------------------------
+
+const forCursor = (s) => (s.clients || []).includes('cursor');
+const SCOPES = { project: ['local', 'project'], global: ['user'] };
+
+// A list's servers after a list-write step: its drops out, its upserts in, as apply's mergeList does.
+function afterWrite(servers, step)
+{
+    if (!step) return servers;
+    const drops = new Set((step.drops || []).map((d) => d.key));
+    const up = new Map((step.upserts || []).map((u) => [lists.serverKey(u.server), u.server]));
+    return [...servers.filter((x) => !drops.has(lists.serverKey(x)) && !up.has(lists.serverKey(x))), ...up.values()];
+}
+
+// The names a Cursor file already holds that its list does not mark for Cursor, among the upserts set up for Cursor:
+// each the user's own, or one from before this design. `sameRow`: the entry there is the upsert's row's server.
+// upserts: [{ server, cursorFile }] -> [{ file, name, sameRow }]
+function takenNames(inv, ctx, upserts)
+{
+    const catalog = ctx.catalog || catalogLib.load();
+    const reads = new Map();
+    const docOf = (file) => { if (!reads.has(file)) reads.set(file, cursorMcp.readCursor(file)); return reads.get(file); };
+    const out = [];
+    for (const u of upserts || [])
+    {
+        if (!forCursor(u.server)) continue;
+        const family = roots.familyOf(u.server.scope);
+        const file = u.cursorFile || cursorMcp.fileFor(family, ctx);
+        const read = docOf(file);
+        if (read.state !== 'ok' || !Object.hasOwn(read.doc.mcpServers, u.server.name)) continue;
+        const l = inv.lists && inv.lists[family];
+        if (l && !l.note && (l.servers || []).some((x) => x.name === u.server.name && forCursor(x))) continue;
+        if (out.some((t) => t.file === file && t.name === u.server.name)) continue;
+        out.push({ file, name: u.server.name, sameRow: cursorMcp.matchesRow(read.doc.mcpServers[u.server.name], catalog.byId.get(u.server.row)) });
+    }
+    return out;
+}
+
+const hasGit = (dir, P) => fs.existsSync(P.join(dir, '.git'));
+
+// D4a's 'No workspace' check: the project is a folder of a parent folder's git repo, or holds child git repos.
+function outsideItsRepo(project, P)
+{
+    if (!hasGit(project, P))
+        for (let dir = P.dirname(project); ; dir = P.dirname(dir))
+        {
+            if (hasGit(dir, P)) return true;
+            if (P.dirname(dir) === dir) break;
+        }
+    try { return fs.readdirSync(project, { withFileTypes: true }).some((d) => d.isDirectory() && hasGit(P.join(project, d.name), P)); }
+    catch { return false; }
+}
+
+// The cursor-write steps of a plan (spec D2): one per Cursor file whose managed set the plan's list-write steps change,
+// `before` from the lists as they stand. A name Cursor's file already holds as the user's is written only on an answer
+// (answers.cursorNames['<name>@<file>']: 'replace' | 'keep'); with none it is a plan error, and `out.taken` names it. A file Cursor's writer
+// refuses is a note: no step, and the entries new to Cursor are recorded without it. Reads `out.steps`' list-write
+// steps, and marks each upsert set up for Cursor with the file it waits on.
+function cursorSteps(inv, ctx, out, answers = {})
+{
+    const P = E.pathFor(ctx.platform);
+    const named = answers.cursorNames || {};
+    const steps = [];
+    for (const family of ['project', 'global'])
+    {
+        const writes = out.steps.filter((s) => s.op === 'list-write' && s.family === family);
+        if (!writes.length) continue;
+        const cur = inv.lists && inv.lists[family] && !inv.lists[family].note && !inv.lists[family].old ? inv.lists[family] : null;
+        const target = ctx.roots && ctx.roots[family] ? P.join(ctx.roots[family], roots.FILES.list) : cur ? cur.file : null;
+        if (!target) continue;
+        const scopes = SCOPES[family];
+        const beforeServers = cur ? cur.servers || [] : [];
+        const before = cursorMcp.managedSet([{ file: cur && cur.file, scopes, servers: beforeServers }]);
+        const wasForCursor = new Set(beforeServers.filter(forCursor).map(lists.serverKey));
+        const upserts = writes.flatMap((w) => w.upserts || []);
+        const file = cursorMcp.fileFor(family, ctx);
+        const strip = (u) => { u.server = { ...u.server, clients: (u.server.clients || []).filter((c) => c !== 'cursor') }; };
+
+        const why = cursorMcp.refusal(cursorMcp.readCursor(file));
+        if (why)
+        {
+            if (upserts.some((u) => forCursor(u.server))) out.notes.push(`Cursor: ${file} ${why} - not written; Claude Code is`);
+            for (const u of upserts) if (forCursor(u.server) && !wasForCursor.has(lists.serverKey(u.server))) strip(u);
+            continue;
+        }
+
+        const replace = [];
+        const fresh = upserts.filter((u) => forCursor(u.server) && !before.has(u.server.name)).map((u) => ({ ...u, cursorFile: file }));
+        for (const t of takenNames(inv, ctx, fresh))
+        {
+            const answer = named[`${t.name}@${t.file}`];
+            if (answer === 'keep') { for (const u of upserts) if (u.server.name === t.name && forCursor(u.server)) strip(u); }
+            else if (answer === 'replace') replace.push(t.name);
+            else
+            {
+                out.errors.push(`cursor: ${t.file} already has ${t.name} - answer cursor-name-${t.name}@${t.file}`);
+                out.taken = [...(out.taken || []), t];
+            }
+        }
+        for (const u of upserts) if (forCursor(u.server)) u.cursorFile = file;
+
+        const base = cur && cur.file === target ? beforeServers : ((foundList(inv, target, P) || {}).servers || []);
+        const after = cursorMcp.managedSet([{ file: target, scopes, servers: afterWrite(base, writes.find((w) => w.file === target)) }]);
+        const same = before.size === after.size && [...before.keys()].every((n) => after.has(n));
+        if (same && !upserts.some((u) => forCursor(u.server))) continue;
+        steps.push({ op: 'cursor-write', file, family, lists: [{ file: target, scopes }], before: [...before.keys()], skip: [], replace, why: `${file}: Cursor's servers from ${target}, the user's own kept as they are` });
+
+        if (family !== 'project' || !after.size) continue;
+        if ([...after.values()].some((v) => v.scope === 'local') && roots.gitIgnores(file) === false)
+            out.notes.push('.cursor/mcp.json now holds this machine\'s local servers; add it to .gitignore to keep them private');
+        if (outsideItsRepo(ctx.project, P))
+            out.notes.push(`Cursor reads .cursor/mcp.json only from the folder it opens (its git root for the CLI), never a parent's: open Cursor at ${ctx.project}, or install at Global scope for servers every folder needs`);
+    }
+    return steps;
+}
+
+// The plan line of a list-write, retire-record or cursor-write step.
 function renderLine(s)
 {
+    if (s.op === 'cursor-write') return [`   writes ${s.file}  (Cursor: the servers set up for it; your own entries kept)`, ...(s.replace || []).map((n) => `   replaces your own ${n} in ${s.file}`)].join('\n');
     if (s.op === 'retire-record') return `   moves ${s.file} aside as ${roots.FILES.record}.0.4.bak  (its entries are in mcps.json now)`;
     return s.empty ? `   removes ${s.file}  (no server is listed)` : `   writes ${s.file}  (the servers preferred-tools manages, and the ones left on their own)`;
 }
 
-module.exports = { listSteps, renderLine, foundList, importUnlisted };
+module.exports = { listSteps, renderLine, foundList, importUnlisted, cursorSteps, takenNames };

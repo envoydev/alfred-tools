@@ -152,3 +152,29 @@ test('fileFor: the project\'s .cursor/mcp.json, or the home\'s', () => {
     assert.strictEqual(C.fileFor('project', { project: '/work/shop', env: { HOME: '/Users/me' }, platform: 'darwin' }), '/work/shop/.cursor/mcp.json');
     assert.strictEqual(C.fileFor('global', { project: '/work/shop', env: { HOME: '/Users/me' }, platform: 'darwin' }), '/Users/me/.cursor/mcp.json');
 });
+
+test('matchesRow matches context7\'s bridge copy to the context7 row and an unrelated bridge to none', () => {
+    const bridge = (url, key = 'CONTEXT7_API_KEY') => ({ command: 'node', args: ['/r/.preferred-tools/mcp-bridge.js', url, key, 'Bearer', 'mcp-remote@0.1.37'] });
+    const rows = catalog.tools.filter((r) => r.kind === 'mcp');
+    const hits = (entry) => rows.filter((r) => C.matchesRow(entry, r)).map((r) => r.id);
+    assert.deepStrictEqual(hits(bridge('https://mcp.context7.com/mcp')), ['context7']);
+    assert.deepStrictEqual(hits(bridge('https://mcp.example.com/mcp', 'MINE')), []);
+    assert.deepStrictEqual(hits(C7), ['context7']);
+    assert.deepStrictEqual(hits(SERENA), ['serena']);
+    assert.deepStrictEqual(hits({ command: 'node', args: ['mine.js'] }), []);
+    assert.deepStrictEqual(hits(bridge('https://mcp.sentry.dev/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}', 'SENTRY_ACCESS_TOKEN')), ['sentry']);
+});
+
+test('cursor-mcp loads before and after inventory without a partial export', () => {
+    const { spawnSync } = require('node:child_process');
+    const root = path.join(__dirname, '..', 'scripts');
+    const probe = (first, second) => `const a = require(${JSON.stringify(path.join(root, first))}); const b = require(${JSON.stringify(path.join(root, second))});`
+        + ' const c = require(' + JSON.stringify(path.join(root, 'cursor-mcp.js')) + '); const i = require(' + JSON.stringify(path.join(root, 'inventory.js')) + ');'
+        + " if (typeof c.matchesRow !== 'function' || typeof c.readCursor !== 'function' || typeof i.buildInventory !== 'function' || typeof i.matchesFingerprint !== 'function') { process.exit(3); }"
+        + " if (!c.matchesRow({ type: 'http', url: 'https://mcp.context7.com/mcp' }, require(" + JSON.stringify(path.join(root, 'catalog.js')) + ").load().byId.get('context7'))) process.exit(4);";
+    for (const [a, b] of [['cursor-mcp.js', 'inventory.js'], ['inventory.js', 'cursor-mcp.js']])
+    {
+        const r = spawnSync(process.execPath, ['-e', probe(a, b)], { encoding: 'utf8' });
+        assert.strictEqual(r.status, 0, `${a} first: ${r.stderr}`);
+    }
+});

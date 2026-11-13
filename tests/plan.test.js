@@ -2688,6 +2688,19 @@ test('a plan writes list-write after the registration steps and before order-mcp
     assert.ok(render(p).includes(`   writes ${PFILE}  (the servers preferred-tools manages, and the ones left on their own)`), render(p));
 });
 
+test('a remove of a server set up for Cursor plans a cursor-write after the list-write, last of the plan', { skip: POSIX_FIXTURE }, () => {
+    const listed = { name: 'c7', scope: 'project', row: 'context7', route: 'remote', clients: ['claude', 'cursor'], entry: C7_URL, key: null };
+    const i = inv(MAC, { registrations: [reg('c7', 'project', C7_URL, 'context7', 'remote')], lists: { project: { file: PFILE, servers: [listed], own: [] }, global: null } });
+    const p = plan(i, { remove: [{ kind: 'mcp', name: 'c7', scope: 'project' }] }, opts('/Users/me'));
+    assert.deepStrictEqual(p.errors, []);
+    const ops = p.steps.map((s) => s.op);
+    assert.ok(ops.indexOf('cursor-write') > ops.indexOf('list-write'), ops.join());
+    assert.strictEqual(ops.at(-1), 'cursor-write', 'a remove writes no order-mcp-json; withOrderStep appends that after it');
+    const cw = p.steps.find((s) => s.op === 'cursor-write');
+    assert.deepStrictEqual([cw.file, cw.before, cw.lists], ['/work/shop/.cursor/mcp.json', ['c7'], [{ file: PFILE, scopes: ['local', 'project'] }]]);
+    assert.ok(render(p).includes('   writes /work/shop/.cursor/mcp.json  (Cursor: the servers set up for it; your own entries kept)'), render(p));
+});
+
 test('remove drops the entry from the list', { skip: POSIX_FIXTURE }, () => {
     const listed = { name: 'c7', scope: 'local', row: 'context7', route: 'remote', clients: ['claude'], entry: C7_URL, key: null };
     const i = inv(MAC, { registrations: [reg('c7', 'local', C7_URL, 'context7', 'remote')], lists: { project: { file: PFILE, servers: [listed], own: [] }, global: null } });

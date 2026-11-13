@@ -631,3 +631,24 @@ test('a bridge registration matches sentry route bridge; mcp-remote by hand and 
 test('fingerprintKey gives a bridge fingerprint its own key', () => {
     assert.strictEqual(catalogLib.fingerprintKey({ bridge: 'mcp.sentry.dev/mcp/' }), 'bridge:mcp.sentry.dev/mcp/');
 });
+
+test('inv.cursor reads both Cursor files; entries hold only the names a list marks for Cursor, kept', () => {
+    const w = world();
+    try
+    {
+        const S = { command: 'uvx', args: ['--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'] };
+        writeJson(path.join(w.project, '.preferred-tools', 'mcps.json'), { version: 1, own: [], servers: [
+            { name: 'serena', scope: 'project', row: 'serena', route: 'local', clients: ['claude', 'cursor'], entry: S, key: null },
+            { name: 'memory', scope: 'project', row: 'memory', route: 'local', clients: ['claude'], entry: { command: 'uvx', args: ['mcp-memory-service'] }, key: null },
+        ] });
+        writeJson(path.join(w.project, '.cursor', 'mcp.json'), { mcpServers: { serena: S, memory: { command: 'x' }, mine: { command: 'node', args: ['mine.js'] } } });
+        const i = build(w);
+        const file = path.join(w.project, '.cursor', 'mcp.json');
+        assert.deepStrictEqual([i.cursor.project.file, i.cursor.project.state, i.cursor.project.names], [file, 'ok', ['serena', 'memory', 'mine']]);
+        assert.deepStrictEqual(Object.keys(i.cursor.project.entries), ['serena']);
+        assert.deepStrictEqual(i.cursor.project.entries.serena, require('../scripts/kept.js').keep(S, catalog.byId.get('serena')));
+        assert.deepStrictEqual([i.cursor.global.state, i.cursor.global.names, i.cursor.global.entries], ['absent', [], {}]);
+        assert.strictEqual(i.cursor.global.file, path.join(account.homeDir(w.env), '.cursor', 'mcp.json'));
+    }
+    finally { w.clean(); }
+});

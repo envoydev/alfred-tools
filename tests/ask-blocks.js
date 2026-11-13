@@ -43,7 +43,8 @@ const staticAsk = (id) =>
 {
     const q = asks.STATIC[id];
     if (!q) return null;
-    return typeof q === 'function' ? q('<n>', '<m>', '<k>') : q;
+    // a function that names its own placeholders gets them (cursor-name-taken: '<file>', '<name>'), else '<n>', '<m>', '<k>'
+    return typeof q === 'function' ? q(...(q.placeholders || ['<n>', '<m>', '<k>'])) : q;
 }
 
 // -> problems as strings, empty when the block is sound

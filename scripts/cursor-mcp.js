@@ -9,6 +9,8 @@ const path = require('node:path');
 const account = require('./account.js');
 const lists = require('./mcps-list.js');
 const { stripBom, deepEqual } = require('./json-file.js');
+const E = require('./entries.js');
+const kept = require('./kept.js');
 
 const pathFor = (platform) => (platform === 'win32' ? path.win32 : path.posix);
 
@@ -114,4 +116,30 @@ function cursorWrite(step, ctx)
     return { ok: true, detail: `wrote ${step.file} (${managed.size - theirs.length} server${managed.size - theirs.length === 1 ? '' : 's'} from the list)${kept}` };
 }
 
-module.exports = { fileFor, readCursor, refusal, managedSet, compose, cursorWrite };
+// Is this Cursor entry the row's server? A bridge copy (D5) is matched by its URL, as a plain http entry, against the
+// row's fingerprints, and by itself against a `bridge` fingerprint: inventory.matchesFingerprint alone returns false for
+// every bridge entry against a host or path fingerprint. inventory.js requires this file, so it is required here, late.
+function matchesRow(entry, row)
+{
+    const { matchesFingerprint } = require('./inventory.js');
+    const fps = Object.values((row && row.routes) || {}).flatMap((r) => r.fingerprints || []);
+    const bridge = E.bridgeParts(entry);
+    if (!bridge) return fps.some((f) => matchesFingerprint(entry, f));
+    const asHttp = { type: 'http', url: bridge.template };
+    return fps.some((f) => (f.bridge ? matchesFingerprint(entry, f) : matchesFingerprint(asHttp, f)));
+}
+
+// The Cursor file of a family as the inventory gives it: its state, every name it holds, and the entries of the names
+// its list marks for Cursor, kept (every key value the marker) - what update and drift read Cursor's copy from.
+// `marked`: [{ name, row }] -> { file, state, names, entries }
+function cursorOf(file, marked, catalog)
+{
+    const read = readCursor(file);
+    const servers = read.state === 'ok' ? read.doc.mcpServers : {};
+    const entries = {};
+    for (const m of marked)
+        if (Object.hasOwn(servers, m.name) && !Object.hasOwn(entries, m.name)) entries[m.name] = kept.keep(servers[m.name], catalog.byId.get(m.row));
+    return { file, state: read.state, names: Object.keys(servers), entries };
+}
+
+module.exports = { fileFor, readCursor, refusal, managedSet, compose, cursorWrite, matchesRow, cursorOf };

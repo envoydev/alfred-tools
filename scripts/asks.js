@@ -599,6 +599,21 @@ function removeQuestions(inv, catalog)
     return packed(items, { id: 'remove', question: 'which do you want to remove?', none: 'remove nothing' });
 }
 
+// cursor-name-taken (spec D2): Cursor's file already holds a name the plan writes for Cursor, one the list does not mark
+// for it - the user's own, or one from before this design. 'Replace' is recommended when the entry there is the same
+// row's server (`sameRow`), 'Keep' when it is another server under that name. The id carries the file, since each
+// workspace member's file can hold the name. -> { question, answers: { <label>: 'replace' | 'keep' } }
+function cursorNameQuestion({ file, name, sameRow })
+{
+    const replace = { label: "Replace it with the plugin's", description: 'Cursor gets the same entry as Claude Code; the old one is dropped, not saved', value: 'replace' };
+    const keep = { label: "Keep Cursor's own", description: `${name} is set up for Claude Code only, and Cursor's entry stays as it is`, value: 'keep' };
+    const opts = (sameRow ? [replace, keep] : [keep, replace]).map((o, i) => ({ ...o, label: `${o.label}${i === 0 ? REC : ''}` }));
+    return {
+        question: { id: `cursor-name-${name}@${file}`, header: 'Cursor', multiSelect: false, question: `Cursor's ${file} already has a server named ${name} that preferred-tools did not write. What should happen?`, options: opts.map(({ label, description }) => ({ label, description })) },
+        answers: Object.fromEntries(opts.map((o) => [o.label, o.value])),
+    };
+}
+
 // The fixed asks of the commands, here so a test holds them to the limits.
 const STATIC = {
     menu: { id: 'menu', header: 'Action', multiSelect: false, question: 'What do you want to change?', options: [
@@ -636,6 +651,8 @@ const STATIC = {
         { label: `Apply recommended${REC}`, description: 'adds only the missing keys; every value already chosen is kept' },
         { label: 'Apply and replace differing', description: 'adds the missing keys and overwrites the differing ones' },
         { label: 'Skip', description: 'nothing changes' } ] }),
+    // a STATIC function whose labels hold placeholders names them, so tests/ask-blocks.js fills the block's own
+    'cursor-name-taken': Object.assign((file, name) => cursorNameQuestion({ file, name, sameRow: true }).question, { placeholders: ['<file>', '<name>'] }),
 };
 
 // ---- the root questions (spec D2) ----------------------------------------------------------------------------------
@@ -704,7 +721,7 @@ function rootsBlock(inv, picks, catalog, ctx)
 function all(inv, picks, catalog, { env = {}, home = null, connectors = null } = {})
 {
     const out = {
-        static: { ...STATIC, hud: STATIC.hud(0, 0, 0), prereqMissing: STATIC.prereqMissing('<tool>', '<prerequisite>'), settingsOne: STATIC.settingsOne('<tool>') },
+        static: { ...STATIC, hud: STATIC.hud(0, 0, 0), prereqMissing: STATIC.prereqMissing('<tool>', '<prerequisite>'), settingsOne: STATIC.settingsOne('<tool>'), 'cursor-name-taken': STATIC['cursor-name-taken']('<file>', '<name>') },
         pick: pickQuestions(inv, catalog, picks && picks.existing, connectors), change: null, remove: removeQuestions(inv, catalog), tools: {}, targets: {},
     };
     // `exists` reads the disk: alfred-code's .alfred/.gitignore and its 2.x data decide which folders are offered
@@ -923,4 +940,4 @@ function next(inv, picks, catalog, opts = {}, built = null)
     return steps.find((s) => !done.has(s.id)) || { id: 'done' };
 }
 
-module.exports = { PARENT_HELPER_IN_CHILD, ownStep, next, SCOPE_TEXT, keyNameQuestion, urlNameQuestions, settingsQuestion, liveReader, heldKey, SCOPE_LABEL, scopeOfLabel, needsRoot, rootFamilies, rootQuestion, REC, recommendedScope, keyStateOf, keyToSend, alsoProvided, pickQuestions, changeQuestions, routeQuestion, toolQuestions, toolAsk, scopeQuestion, nameQuestion, locationQuestion, removeQuestions, packed, STATIC, all, chunk, scopesFor };
+module.exports = { PARENT_HELPER_IN_CHILD, cursorNameQuestion, ownStep, next, SCOPE_TEXT, keyNameQuestion, urlNameQuestions, settingsQuestion, liveReader, heldKey, SCOPE_LABEL, scopeOfLabel, needsRoot, rootFamilies, rootQuestion, REC, recommendedScope, keyStateOf, keyToSend, alsoProvided, pickQuestions, changeQuestions, routeQuestion, toolQuestions, toolAsk, scopeQuestion, nameQuestion, locationQuestion, removeQuestions, packed, STATIC, all, chunk, scopesFor };

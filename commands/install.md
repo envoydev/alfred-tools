@@ -196,7 +196,23 @@ that can run code. Two kinds of step may read new:
   order, the user's own servers after them; no entry is changed.
 
 Exit 1 means the plan has errors; show them and go back to the ask that causes them, never around them. Add the audit
-and 'register anyway' lines from step 5. Then:
+and 'register anyway' lines from step 5.
+
+A `cursor: <file> already has <name> - answer cursor-name-<name>@<file>` error is not a wrong answer: Cursor's file
+already holds a server under a name this plan writes for Cursor, one preferred-tools did not write. `<tmp>/plan.json`
+`cursorNames` holds one question per such name, id `cursor-name-<name>@<file>`; ask them, four per call, as written -
+the recommended option follows whether the entry there is the same server:
+
+```ask cursor-name-taken
+Cursor's <file> already has a server named <name> that preferred-tools did not write. What should happen?
+- 'Replace it with the plugin's (Recommended)' - Cursor gets the same entry as Claude Code; the old one is dropped, not saved
+- 'Keep Cursor's own' - <name> is set up for Claude Code only, and Cursor's entry stays as it is
+```
+
+Record each answer's value (`replace` or `keep`) in `<tmp>/answers.json` under `"cursorNames"`, keyed `<name>@<file>`
+(the question id after `cursor-name-`), then run the plan again. Never edit Cursor's file by hand to get past it.
+
+Once the plan has no errors:
 
 ```ask apply
 Apply this plan?
