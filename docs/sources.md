@@ -1243,3 +1243,12 @@ Windows 11 ARM64.
   `Read(//**/mcp-remote-v1/**)` in the account settings. Started twice at once again with the token due for renewal:
   one `refresh_token` grant, both listed tools. A second `CLAUDE_CONFIG_DIR` under the same home: `claude mcp get`
   connected with no new `/authorize`. F13 holds.
+- Windows - 0.5.0 (measured 2026-11-14, Windows 11 on ARM64, `prlctl exec --current-user`; as SYSTEM the exec no longer
+  starts). `npm test` 643, 599 pass, 0 fail, 44 skip. Matrix: B1, the Cursor file (M1; M5 - the shared sign-in entry
+  starts through `cmd /c npx` with `MCP_REMOTE_CONFIG_DIR` set and reaches `/register`; M6 - a real 0.4.0 install
+  updated; M4), field-fixes and fresh-install pass, 0 fail; keys K1-K2 pass. NOT RUN: the rest of keys, scenarios,
+  starts and workspace - another workload's teardown killed every node process in the VM and stopped it (an idle
+  `node -e` probe died at the same instant, exit 0x40010004). NOT RUN: M3 (its stand-in browser replaces macOS's
+  `open`; on Windows mcp-remote opens the browser through PowerShell), so one sign-in for both apps is proved on macOS
+  only; M2 and M7 (no Cursor CLI). The first run's failures were the tests' own: expected paths joined with `/`, a
+  local entry looked up under the `\` key, and `sh` for unpacking 0.4.0 (29f48ec).
