@@ -107,4 +107,4 @@ function fill(file, name, value)
     fs.writeFileSync(file, re.test(text) ? text.replace(re, () => `${name}=${value}`) : `${text}${text && !text.endsWith('\n') ? '\n' : ''}${name}=${value}\n`);
 }
 
-module.exports = { stub, claude, authOnGet, stubCatalog, stubBridgeCatalog, trust, fill };
+module.exports = { stub, claude, authOnGet, catalogWith, stubCatalog, stubBridgeCatalog, trust, fill };

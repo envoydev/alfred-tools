@@ -94,7 +94,7 @@ test('configure: one of two registrations of a row is renamed by its key; the ot
     const r = h.run(p, { change: { 'mcp:cfg-memory-user~user': { row: 'memory', name: 'cfg-memory-2' } } });
     assert.deepStrictEqual(r.plan.errors, []);
     assert.strictEqual(r.report.failed, null, r.text);
-    assert.deepStrictEqual(r.plan.steps.map((s) => s.op), ['mcp-move']);
+    assert.deepStrictEqual(r.plan.steps.map((s) => s.op), ['mcp-move', 'list-write'], 'the move, then the list (0.5.0)');
     assert.strictEqual(reg(p, 'cfg-memory-user', 'user'), undefined, 'the old name is gone');
     assert.deepStrictEqual(reg(p, 'cfg-memory-2', 'user').entry, local.entry, 'built from the entry as read');
     assert.strictEqual(JSON.stringify(reg(p, 'cfg-memory', 'local').entry), keep, 'the registration not picked is left as it is');
@@ -306,7 +306,7 @@ test('fix windows-mcp-one-per-desktop: two real registrations on a simulated win
         assert.match(detected.found[0].found, /wd-a \(local\)/);
         assert.match(detected.found[0].found, /wd-b \(user\)/);
         assert.match(detected.found[0].blocked, /^keep one per Windows desktop - /);
-        assert.deepStrictEqual(fix.questions(detected), { choose: null, pick: [] });
+        assert.deepStrictEqual(fix.questions(detected), { choose: null, pick: [], drift: [] });
         const before = accountText();
         const lines = [];
         const res = fix.applyFixes(mk(), [only], { only, tmp: path.join(root, 'tmp'), log: (...a) => lines.push(a.join(' ')) });

@@ -214,13 +214,15 @@ test('K6 - update moves a 0.1.x key header to the helper and keeps the key file 
         fill(path.join(root, roots.FILES.secrets), G, KEY);
         const uctx = update.makeCtx({ inv: h.inventory(dir, { catalog }), project: dir, catalog, env: h.env, refresh: false, data: h.data });
         const out = await update.check(uctx);
-        // the project is a git work tree and the root a 0.1.x folder with no .gitignore: both ways are offered
+        // the project is a git work tree and the root a 0.1.x folder with no .gitignore: both ways are offered, beside
+        // 0.5.0's list-import (github is on no list yet) and read-guard (the key file is in the root)
         const ids = out.offers.filter((o) => o.kind === 'upgrade').map((o) => o.id);
-        assert.deepStrictEqual(ids, ['upgrade:key-to-helper:github~local', `upgrade:root-ignore:${root}`], update.render(out));
-        assert.match(update.render(out), /New ways to pass data:\n {2}github \(local\) +key-to-helper: /);
+        assert.deepStrictEqual([...ids].sort(), [`upgrade:list-import:${path.join(root, roots.FILES.list)}`, `upgrade:read-guard:${path.join(h.account, 'settings.json')}`, 'upgrade:key-to-helper:github~local', `upgrade:root-ignore:${root}`].sort(), update.render(out));
+        assert.match(update.render(out), /New ways to pass data:\n/);
+        assert.match(update.render(out), /\n {2}github \(local\) +key-to-helper: /);
         const lines = [];
         const res = update.applyUpdates(uctx, ids, out, { tmp: path.join(h.root, 'tmp', 'update'), log: (...a) => lines.push(a.join(' ')) });
-        assert.deepStrictEqual(res.applied, ids, lines.join('\n'));
+        assert.deepStrictEqual([...res.applied].sort(), [...ids].sort(), lines.join('\n'));
         const ignored = (f) => require('node:child_process').spawnSync('git', ['check-ignore', '-q', f], { cwd: dir }).status === 0;
         assert.ok(ignored(path.join(root, roots.FILES.secrets)), 'git ignores the key file');
         assert.ok(!ignored(path.join(root, roots.FILES.helper)), 'git keeps the helper a project-scope server would need');

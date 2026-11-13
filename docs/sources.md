@@ -1209,8 +1209,11 @@ Windows 11 ARM64.
   - Two processes for the same `<hash>` share one sign-in: `coordinateAuth` lets one run the browser leg while the
     other waits for its tokens, and a renewal takes the lease file (30 s lease, 200 ms poll), so only one process
     renews at a time.
-  - The browser is opened through the `open` package with `BROWSER` passed from the environment; the URL is also
-    logged ('Please authorize this client by visiting:').
+  - The browser is opened through the `open` package (10.x), which on macOS runs `open <url>` found on `PATH`;
+    `BROWSER` is only written to the debug log (corrected 2026-11-13, M3, from the first read). The URL is also logged
+    ('Please authorize this client by visiting:').
+  - A token is renewed 60 s before it ends (`TOKEN_EXPIRY_MARGIN_MS`), so a token living under a minute is renewed at
+    every read (seen in M3's first run, with a 5 s token).
 - **F14 - The hosted vendors let a client register itself** (measured 2026-11-13: an unauthenticated `POST` to each
   route's URL, then the public metadata it names). Atlassian (`https://mcp.atlassian.com/v2/mcp`), Sentry
   (`https://mcp.sentry.dev/mcp`) and GitLab (`https://gitlab.com/api/v4/mcp`) each answer 401 with a
@@ -1231,4 +1234,12 @@ Windows 11 ARM64.
     MCP server tools used by Agent cannot block access', and 'complete protection isn't guaranteed'. The page does not
     name the CLI.
 
-- M3 - one sign-in for both apps through mcp-remote: NOT RUN yet (Task 16).
+- M3 - one sign-in for both apps through mcp-remote (measured 2026-11-13, macOS arm64, Claude Code 2.1.325, the real mcp-remote 0.16.0 from
+  npm, a stub vendor on 127.0.0.1, `tests/fake-oauth-http.js`; `tests/matrix/cursor.test.js` M3). atlassian installed
+  keyless for both apps at project scope wrote the same shared sign-in entry to `.mcp.json` and `.cursor/mcp.json`,
+  `MCP_REMOTE_CONFIG_DIR` the project root. Started twice at once (two probe clients; no Cursor CLI on this machine),
+  the vendor saw one `/register`, one `/authorize` and one `authorization_code` grant, and both listed tools. The
+  tokens landed in `<root>/mcp-remote-v1/` (`*_tokens.json`, by name only), ignored by git, with
+  `Read(//**/mcp-remote-v1/**)` in the account settings. Started twice at once again with the token due for renewal:
+  one `refresh_token` grant, both listed tools. A second `CLAUDE_CONFIG_DIR` under the same home: `claude mcp get`
+  connected with no new `/authorize`. F13 holds.

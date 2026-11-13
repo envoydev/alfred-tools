@@ -60,8 +60,8 @@ function noValueInTmp(h, values)
 
 // The W1 steps on a parent and its child: the parent's project server is seen inherited from the child, the child gets
 // its own local copy beside it, configure offers no inherited option, and the parent's file never changes.
-// No key on either side: since 0.3.0 a key is recommended for every hosted route, and a key writes a root folder that
-// configure would list beside the registration; this case is about inheritance.
+// No key on either side: since 0.3.0 a key is recommended for every hosted route; this case is about inheritance. Since
+// 0.5.0 the list writes a root folder anyway, which configure lists as root:project; only the server keys are compared.
 function inheritSteps(h, parent, child)
 {
     const top = h.run(parent, { picks: { context7: { route: 'remote', scope: 'project', token: false } } });
@@ -80,7 +80,8 @@ function inheritSteps(h, parent, child)
     assert.ok(localOf(h, child).context7, "the child's own local copy");
     assert.ok(!localOf(h, parent).context7, "the parent's account entry is not written");
     assert.strictEqual(sha(file), before, "the parent's .mcp.json is byte-identical");
-    assert.deepStrictEqual(Object.values(asks.changeQuestions(h.inventory(child), catalog).keys), ['mcp:context7~local'], 'configure: no inherited option');
+    // the root folder (root:project) is listed too since 0.5.0: the child's list lives in it
+    assert.deepStrictEqual(Object.values(asks.changeQuestions(h.inventory(child), catalog).keys).filter((k) => k.startsWith('mcp:')), ['mcp:context7~local'], 'configure: no inherited option');
     const rm = h.run(child, { remove: [{ kind: 'mcp', name: 'context7', scope: 'local' }] });
     ok(rm);
     assert.ok(!localOf(h, child).context7);
