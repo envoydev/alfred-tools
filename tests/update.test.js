@@ -153,7 +153,7 @@ test('nothing behind: one line, and no write call', async () =>
         assert.match(c.text, /^preferred-tools: everything current$/m);
         const writesBefore = w.writes().length;
         const q = await run(w, ['--questions', '--no-refresh'], { registry: fakeRegistry(pypiSerena(['2.1.0', 60])) });
-        assert.deepStrictEqual(JSON.parse(q.text), { offer: null, pick: [] });
+        assert.deepStrictEqual(JSON.parse(q.text), { offer: null, pick: [], cursorOffers: [], cursorNameQuestions: [] });
         assert.strictEqual(w.writes().length, writesBefore);
     }
     finally { w.clean(); }
@@ -596,7 +596,7 @@ const listed = (root, servers) => writeJson(path.join(root, 'mcps.json'), { vers
 test('the fix rows update applies are the ones marked upgrade, each with the version that brought its way', () =>
 {
     const catalog = require('../scripts/catalog.js').load();
-    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['list-import', '0.5.0'], ['read-guard', '0.5.0'], ['retired-plugin', '0.5.0'], ['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
+    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['list-import', '0.5.0'], ['retired-plugin', '0.5.0'], ['read-guard', '0.5.0'], ['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
 });
 
 test('update offers the new ways to pass data that fix knows - a 0.1.x key header, a relative project path - and applies them after the pins, by registration', async () =>
@@ -876,4 +876,214 @@ test('update offers a lower serena-context.yml as context:<file> and rewrites it
         assert.ok(!fs.existsSync(path.join(pt, 'package.json')), 'a YAML file needs no package.json');
     }
     finally { w.clean(); }
+});
+
+// ---- 0.5.0: every pin move reaches the list and Cursor; update offers Cursor once per root (spec D1, D9) ------------
+const projectList = (w) => path.join(w.project, '.preferred-tools', 'mcps.json');
+const projectCursor = (w) => path.join(w.project, '.cursor', 'mcp.json');
+const listed0 = (w, name) => readJson(projectList(w)).servers.find((x) => x.name === name);
+const cursorCopy = (w, name, file = projectCursor(w)) => readJson(file).mcpServers[name];
+const localReg = (w, name) => inventory.buildInventory({ project: w.project, env: w.env }).registrations.find((r) => r.name === name && r.scope === 'local');
+const reAdd = (w, name, entry) =>
+{
+    cli.run(['mcp', 'remove', name, '-s', 'local'], { cwd: w.project, env: w.env });
+    assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+};
+const serenaPin = (e) => pinnedVersion(e, 'serena-agent');
+
+test('a registration whose pin is newer than its list entry is updated from the registration, never downgraded', async () =>
+{
+    const w = world();
+    try
+    {
+        install(w, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'local' } } });
+        assert.strictEqual(serenaPin(listed0(w, 'serena').entry), '2.1.0');
+        reAdd(w, 'serena', update.bumpEntry(localReg(w, 'serena').entry, 'serena-agent', '2.2.0', '2026-10-01T23:59:59Z'));
+        const reg = fakeRegistry(pypiSerena(['2.1.0', 90], ['2.2.0', 40], ['2.3.0', 20]));
+        const c = await run(w, ['--check', '--no-refresh'], { registry: reg });
+        assert.match(c.text, /serena was changed outside preferred-tools/);
+        assert.match(c.text, /serena \(local\)\s+2\.2\.0 -> 2\.3\.0/, 'the offer starts from the registration, not the list');
+        const a = await run(w, ['--apply', 'mcp:serena~local'], { registry: reg });
+        assert.strictEqual(a.code, 0, a.text);
+        assert.strictEqual(serenaPin(localReg(w, 'serena').entry), '2.3.0');
+        assert.strictEqual(serenaPin(listed0(w, 'serena').entry), '2.3.0', 'the list takes the registration as read');
+        assert.strictEqual(serenaPin(cursorCopy(w, 'serena')), '2.3.0', 'and Cursor takes the list');
+    }
+    finally { w.clean(); }
+});
+
+test('a Claude registration with a hand-added arg has its pin moved by update, keeps the arg, and the list and Cursor take it', async () =>
+{
+    const w = world();
+    try
+    {
+        install(w, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'local' } } });
+        const e = localReg(w, 'serena').entry;
+        reAdd(w, 'serena', { ...e, args: [...e.args, '--my-flag'] });
+        const reg = fakeRegistry(pypiSerena(['2.1.0', 60], ['2.2.0', 20]));
+        const a = await run(w, ['--apply', 'mcp:serena~local'], { registry: reg });
+        assert.strictEqual(a.code, 0, a.text);
+        for (const [where, entry] of [['Claude Code', localReg(w, 'serena').entry], ['the list', listed0(w, 'serena').entry], ['Cursor', cursorCopy(w, 'serena')]])
+        {
+            assert.strictEqual(serenaPin(entry), '2.2.0', where);
+            assert.ok(entry.args.includes('--my-flag'), `${where} keeps the hand-added arg`);
+        }
+    }
+    finally { w.clean(); }
+});
+
+test('update moves the shared sign-in form\'s mcp-remote pin, and the list and the Cursor copy follow', async () =>
+{
+    const w = world();
+    try
+    {
+        install(w, { clients: ['claude', 'cursor'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } });
+        const reg = fakeRegistry(npmRemote(['0.16.0', 60], ['0.17.0', 8]));
+        const a = await run(w, ['--apply', 'mcp:atlassian~user'], { registry: reg });
+        assert.strictEqual(a.code, 0, a.text);
+        const has = (e) => e.args.includes('mcp-remote@0.17.0');
+        assert.ok(has(accountOf(w).mcpServers.atlassian), 'Claude Code');
+        assert.ok(has(readJson(path.join(w.home, '.preferred-tools', 'mcps.json')).servers.find((x) => x.name === 'atlassian').entry), 'the list');
+        assert.ok(has(cursorCopy(w, 'atlassian', path.join(w.home, '.cursor', 'mcp.json'))), 'Cursor');
+    }
+    finally { w.clean(); }
+});
+
+test('a pin move that changes Cursor\'s copy prints the re-approval line in the plan and the update report', async () =>
+{
+    const planLists = require('../scripts/plan-lists.js');
+    const LINE = /Cursor asks you to approve atlassian again - it re-asks whenever an entry changes/;
+    const w = world();
+    try
+    {
+        install(w, { clients: ['claude', 'cursor'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } });
+        const inv = inventory.buildInventory({ project: w.project, env: w.env });
+        const r = inv.registrations.find((x) => x.name === 'atlassian');
+        const step = { op: 'mcp-replace', name: 'atlassian', scope: 'user', old: r.entry, entry: update.bumpEntry(r.entry, 'mcp-remote', '0.17.0', '2026-10-27T23:59:59Z'), row: 'atlassian', route: r.route };
+        const notes = [];
+        const tail = planLists.repairTail(inv, { platform: process.platform, project: w.project, home: w.home, env: w.env, notes }, [step]);
+        assert.deepStrictEqual(tail.map((s) => s.op), ['list-write', 'cursor-write']);
+        assert.deepStrictEqual(tail[1].reapprove, ['atlassian']);
+        assert.ok(notes.some((n) => LINE.test(n)), notes.join('\n'));
+        const a = await run(w, ['--apply', 'mcp:atlassian~user'], { registry: fakeRegistry(npmRemote(['0.16.0', 60], ['0.17.0', 8])) });
+        assert.match(a.text, LINE);
+    }
+    finally { w.clean(); }
+});
+
+test('an entry update does not write is named and its list entry left unchanged', async () =>
+{
+    const w = world();
+    try
+    {
+        install(w, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'local' }, memory: {} } });
+        const before = JSON.stringify(listed0(w, 'memory'));
+        const cursorBefore = JSON.stringify(cursorCopy(w, 'memory'));
+        const m = localReg(w, 'memory').entry;
+        reAdd(w, 'memory', { ...m, args: [...m.args, '--debug'] });
+        const reg = fakeRegistry(pypiSerena(['2.1.0', 60], ['2.2.0', 20]));
+        const c = await run(w, ['--check', '--no-refresh'], { registry: reg });
+        assert.match(c.text, /memory was changed outside preferred-tools/);
+        const a = await run(w, ['--apply', 'mcp:serena~local'], { registry: reg });
+        assert.strictEqual(a.code, 0, a.text);
+        assert.strictEqual(JSON.stringify(listed0(w, 'memory')), before, 'the list keeps memory as it was');
+        assert.strictEqual(JSON.stringify(cursorCopy(w, 'memory')), cursorBefore, 'and so does Cursor');
+        assert.ok(localReg(w, 'memory').entry.args.includes('--debug'), 'the registration is not touched');
+    }
+    finally { w.clean(); }
+});
+
+test('update neither re-adds a missing copy nor rewrites a drifted Cursor copy', async () =>
+{
+    const w = world();
+    try
+    {
+        install(w, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'local' }, memory: {}, 'playwright-chrome': {} } });
+        // memory gone from Claude Code, playwright-chrome gone from Cursor, serena edited in Cursor
+        cli.run(['mcp', 'remove', 'memory', '-s', 'local'], { cwd: w.project, env: w.env });
+        const doc = readJson(projectCursor(w));
+        delete doc.mcpServers['playwright-chrome'];
+        doc.mcpServers.serena.args.push('--extra');
+        writeJson(projectCursor(w), doc);
+        const reg = fakeRegistry(pypiSerena(['2.1.0', 60], ['2.2.0', 20]));
+        const c = await run(w, ['--check', '--no-refresh'], { registry: reg });
+        assert.match(c.text, /memory is on the list but not in Claude Code - run \/preferred-tools:fix/);
+        const a = await run(w, ['--apply', 'mcp:serena~local'], { registry: reg });
+        assert.strictEqual(a.code, 0, a.text);
+        assert.match(a.text, /serena: Cursor's copy was changed by hand - left; run \/preferred-tools:fix/);
+        assert.strictEqual(serenaPin(localReg(w, 'serena').entry), '2.2.0', 'Claude Code moves');
+        const copy = cursorCopy(w, 'serena');
+        assert.ok(copy.args.includes('--extra') && serenaPin(copy) === '2.1.0', 'the drifted Cursor copy is left as it is');
+        assert.strictEqual(localReg(w, 'memory'), undefined, 'memory is not re-added in Claude Code');
+        assert.ok(!Object.hasOwn(readJson(projectCursor(w)).mcpServers, 'playwright-chrome'), 'playwright-chrome is not re-added in Cursor');
+    }
+    finally { w.clean(); }
+});
+
+test('cursor-offer: two options, Set them up recommended and first; Not now is kept per root; Skip writes nothing', async () =>
+{
+    const w = world();
+    try
+    {
+        install(w, { clients: ['claude'], picks: { serena: { scope: 'local' } } });
+        fs.mkdirSync(path.join(w.home, '.cursor'), { recursive: true });
+        const root = path.join(w.project, '.preferred-tools');
+        const q = JSON.parse((await run(w, ['--questions', '--no-refresh'])).text);
+        assert.strictEqual(q.cursorOffers.length, 1);
+        const ask = q.cursorOffers[0];
+        assert.strictEqual(ask.id, `cursor-offer:${root}`);
+        assert.strictEqual(ask.question, `Cursor is on this machine, and the 1 servers in ${root} are set up for Claude Code only. Set them up for Cursor too?`);
+        assert.deepStrictEqual(ask.options.map((o) => o.label), ['Set them up for Cursor too (Recommended)', 'Not now']);
+        // Skip: nothing passed, nothing written
+        const listText = fs.readFileSync(projectList(w), 'utf8');
+        assert.strictEqual((await run(w, ['--apply', 'none'])).code, 0);
+        assert.strictEqual(fs.readFileSync(projectList(w), 'utf8'), listText);
+        assert.ok(!fs.existsSync(projectCursor(w)));
+        // Not now: kept in this root's list, and not asked again
+        const n = await run(w, ['--apply', 'none', '--input', `cursor-offer:${root}=declined`]);
+        assert.strictEqual(n.code, 0, n.text);
+        assert.strictEqual(readJson(projectList(w)).cursorOffer, 'declined');
+        assert.deepStrictEqual(JSON.parse((await run(w, ['--questions', '--no-refresh'])).text).cursorOffers, []);
+        assert.ok(!fs.existsSync(projectCursor(w)));
+        // Set them up: configure's apps change for each entry
+        const doc = readJson(projectList(w));
+        delete doc.cursorOffer;
+        writeJson(projectList(w), doc);
+        const s = await run(w, ['--apply', 'none', '--input', `cursor-offer:${root}=set`]);
+        assert.strictEqual(s.code, 0, s.text);
+        assert.deepStrictEqual(listed0(w, 'serena').clients, ['claude', 'cursor']);
+        assert.deepStrictEqual(cursorCopy(w, 'serena'), listed0(w, 'serena').entry);
+    }
+    finally { w.clean(); }
+});
+
+test('update\'s Cursor offer asks for a taken name, and an unanswered one is left Claude Code only', async () =>
+{
+    const w = world();
+    try
+    {
+        install(w, { clients: ['claude'], picks: { serena: { scope: 'local' }, memory: {} } });
+        fs.mkdirSync(path.join(w.home, '.cursor'), { recursive: true });
+        const mine = { command: 'my-memory' };
+        writeJson(projectCursor(w), { mcpServers: { memory: mine } });
+        const root = path.join(w.project, '.preferred-tools');
+        const q = JSON.parse((await run(w, ['--questions', '--no-refresh'])).text);
+        assert.deepStrictEqual(q.cursorNameQuestions.map((x) => x.question.id), [`cursor-name-memory@${projectCursor(w)}`]);
+        const a = await run(w, ['--apply', 'none', '--input', `cursor-offer:${root}=set`]);
+        assert.strictEqual(a.code, 0, a.text);
+        assert.match(a.text, /memory: Cursor's .*mcp\.json already has its own memory - left; run \/preferred-tools:configure to choose/);
+        assert.deepStrictEqual(cursorCopy(w, 'memory'), mine);
+        assert.deepStrictEqual(listed0(w, 'memory').clients, ['claude']);
+        assert.deepStrictEqual(listed0(w, 'serena').clients, ['claude', 'cursor'], 'the rest of the offer applies');
+        assert.ok(cursorCopy(w, 'serena'));
+    }
+    finally { w.clean(); }
+});
+
+test('the upgrade rows run in order: list-import, serena-context, serena-base-modes, retired-plugin, read-guard', () =>
+{
+    const catalog = require('../scripts/catalog.js').load();
+    const o = (fix, scope, fixKind) => ({ kind: 'upgrade', id: `upgrade:${fix}`, fix, scope, fixKind });
+    const offers = [o('read-guard', null, 'file'), o('retired-plugin', 'user', 'machine'), o('serena-base-modes', null, 'file'), o('serena-context', 'local', 'registration'), o('list-import', null, 'file'), { kind: 'mcp', id: 'mcp:serena~local' }];
+    assert.deepStrictEqual(update.ordered(offers, catalog).map((x) => x.fix || x.id), ['list-import', 'serena-context', 'serena-base-modes', 'retired-plugin', 'read-guard', 'mcp:serena~local']);
 });

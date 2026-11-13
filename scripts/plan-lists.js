@@ -15,6 +15,8 @@ const keys = require('./keys.js');
 const lists = require('./mcps-list.js');
 const cursorMcp = require('./cursor-mcp.js');
 const workspace = require('./workspace.js');
+const kept = require('./kept.js');
+const { deepEqual } = require('./json-file.js');
 
 const REG_OPS = ['mcp-add', 'mcp-replace', 'mcp-move', 'mcp-remove'];
 
@@ -370,7 +372,10 @@ function cursorSteps(inv, ctx, out, answers = {})
         const touched = upserts.some((u) => forCursor(u.server));
         if (sameKeys(before, after) && !touched) continue;
         const listsOf = family === 'project' ? afterSrc.lists : [{ file: target, scopes }];
-        steps.push({ op: 'cursor-write', file, family, lists: listsOf, before: [...before.keys()], skip: [], replace, why: `${file}: Cursor's servers from ${target}, the user's own kept as they are` });
+        // a copy Cursor lacks or one edited by hand is left as it is (spec D1): fix's client-drift settles it
+        const hold = heldCopies(file, before, after, ctx, out);
+        const reapprove = changedCopies(file, before, after, hold, upserts, ctx, out);
+        steps.push({ op: 'cursor-write', file, family, lists: listsOf, before: [...before.keys()], skip: hold, replace, reapprove, why: `${file}: Cursor's servers from ${target}, the user's own kept as they are` });
         // why a workspace record was read as none, said once (D4a)
         if (family === 'project' && ws && ws.notes) for (const n of ws.notes) if (!out.notes.includes(n)) out.notes.push(n);
 
@@ -410,7 +415,143 @@ function cursorSteps(inv, ctx, out, answers = {})
         else if (outsideItsRepo(ctx.project, P))
             out.notes.push(`Cursor reads .cursor/mcp.json only from the folder it opens (its git root for the CLI), never a parent's: open Cursor at ${ctx.project}, or install at Global scope for servers every folder needs`);
     }
+    const again = [...new Set(steps.flatMap((x) => x.reapprove || []))];
+    if (again.length) out.notes.push(reapproveLine(again));
     return steps;
+}
+
+const reapproveLine = (names) => `Cursor asks you to approve ${names.join(', ')} again - it re-asks whenever an entry changes`;
+const keepOf = (catalog, value, row) => kept.keep(value, catalog.byId.get(row));
+
+// The managed names a cursor-write leaves alone (spec D1, D9): each the file lacks (a hand removal) or holds with another
+// value than its list, compared after kept.keep. Named in the plan; the names this plan drops are not held.
+function heldCopies(file, before, after, ctx, out)
+{
+    const catalog = ctx.catalog || catalogLib.load();
+    const read = cursorMcp.readCursor(file);
+    if (read.state !== 'ok') return [];
+    const have = read.doc.mcpServers;
+    const hold = [];
+    for (const [name, m] of before)
+    {
+        if (!after.has(name)) continue;
+        if (!Object.hasOwn(have, name))
+        {
+            hold.push(name);
+            out.notes.push(`${name} is on the list for Cursor but not in ${file} - left; run /preferred-tools:fix`);
+        }
+        else if (!deepEqual(keepOf(catalog, have[name], m.row), keepOf(catalog, m.entry, m.row)))
+        {
+            hold.push(name);
+            out.notes.push(`${name}: Cursor's copy was changed by hand - left; run /preferred-tools:fix`);
+        }
+    }
+    return hold;
+}
+
+// The names Cursor already has whose value this write changes (spec Risks: Cursor asks to approve a changed entry
+// again). The value an upsert will hold: its entry when the plan has it, else the registration step's entry, as Cursor's
+// bridge copy when the entry has two forms.
+function changedCopies(file, before, after, hold, upserts, ctx, out)
+{
+    const catalog = ctx.catalog || catalogLib.load();
+    const read = cursorMcp.readCursor(file);
+    if (read.state !== 'ok') return [];
+    const have = read.doc.mcpServers;
+    const regOf = new Map((out.steps || []).filter((x) => REG_OPS.includes(x.op)).map((x) => [lists.regKey(x), x]));
+    const names = [];
+    for (const name of after.keys())
+    {
+        if (!before.has(name) || hold.includes(name) || !Object.hasOwn(have, name)) continue;
+        const u = upserts.find((x) => x.server.name === name && forCursor(x.server));
+        if (!u) continue;
+        const row = u.server.row;
+        let next = u.server.entry ? (u.server.cursorEntry || u.server.entry) : null;
+        if (!next && u.after && regOf.has(u.after))
+        {
+            const entry = regOf.get(u.after).entry || (regOf.get(u.after).to && regOf.get(u.after).entry);
+            const two = u.server.form === 'two' || (u.server.form === undefined && u.server.cursorEntry);
+            next = two ? cursorMcp.bridgeFormOf(entry, catalog, u.server.cursorEntry || null) || entry : entry;
+        }
+        if (next && !deepEqual(keepOf(catalog, have[name], row), keepOf(catalog, next, row))) names.push(name);
+    }
+    return names;
+}
+
+// ---- a repair's tail (spec D1, D9) -------------------------------------------------------------------------------------
+
+// What a fix or an update writes after its registration steps: each list the steps' servers sit in, from the
+// registrations as read back, and Cursor's files from those lists - a copy Cursor lacks or one changed by hand left out
+// and named. Only lists that exist are written: a family with none waits for list-import. `refresh`: [{ name, scope }]
+// whose Cursor copy is refilled from .mcps-secrets at apply with no list change (token-sync). Notes go to ctx.notes.
+// -> [step]
+function repairTail(inv, ctx, regSteps, { refresh = [] } = {})
+{
+    const catalog = ctx.catalog || catalogLib.load();
+    const notes = ctx.notes || [];
+    const usable = (fam) => { const l = inv.lists && inv.lists[fam]; return l && !l.note && !l.old ? l : null; };
+    // a two-form entry keeps two forms: apply builds Cursor's bridge again from the entry as read, its pin kept
+    const formFor = new Map();
+    for (const s of regSteps.filter((x) => REG_OPS.includes(x.op)))
+    {
+        const key = lists.regKey(s);
+        const l = usable(roots.familyOf(s.op === 'mcp-move' ? s.to.scope : s.scope));
+        const prior = l ? (l.servers || []).find((x) => lists.serverKey(x) === key) : null;
+        if (prior && prior.cursorEntry) formFor.set(key, 'two');
+    }
+    const tctx = { platform: ctx.platform, project: ctx.project || inv.project, home: ctx.home, env: ctx.env || {}, catalog, roots: null, uses: [], formFor, exists: ctx.exists };
+    const out = { steps: [], notes, errors: [] };
+    const listW = listSteps(inv, tctx, out, regSteps);
+    // the key's name, from the key files of the roots in use
+    const r = { project: inv.roots && inv.roots.project ? inv.roots.project.path : null, global: inv.roots && inv.roots.global ? inv.roots.global.path : null };
+    for (const w of listW)
+        for (const u of w.upserts || [])
+            if (!u.keyFiles)
+            {
+                const files = keys.stdioChain({ scope: u.server.scope, projectRoot: r.project, globalRoot: r.global });
+                if (files.length) u.keyFiles = files;
+            }
+    out.steps = [...regSteps, ...listW];
+    const cursor = cursorSteps(inv, tctx, out, {});
+    for (const e of out.errors) notes.push(`${e} - Cursor's file is left; run /preferred-tools:configure`);
+    const blocked = new Set(out.errors.length ? cursor.map((x) => x.file) : []);
+    const written = cursor.filter((x) => !blocked.has(x.file));
+    // a Cursor copy refilled from .mcps-secrets with the list as it is
+    for (const fam of [...new Set(refresh.map((x) => roots.familyOf(x.scope)))])
+    {
+        const l = usable(fam);
+        const file = cursorMcp.fileFor(fam, tctx);
+        if (!l || written.some((x) => x.file === file)) continue;
+        const why = cursorMcp.refusal(cursorMcp.readCursor(file));
+        if (why) { notes.push(`Cursor: ${file} ${why} - not written`); continue; }
+        const scopes = SCOPES[fam];
+        const before = cursorMcp.managedSet([{ file: l.file, scopes, servers: l.servers || [] }]);
+        const hold = heldCopies(file, before, before, tctx, out);
+        written.push({ op: 'cursor-write', file, family: fam, lists: [{ file: l.file, scopes }], before: [...before.keys()], skip: hold, replace: [], reapprove: refresh.filter((x) => roots.familyOf(x.scope) === fam && !hold.includes(x.name)).map((x) => x.name), why: `${file}: the key refilled from .mcps-secrets` });
+    }
+    return [...listW, ...written];
+}
+
+// What changed outside preferred-tools (spec D1): each list entry whose Claude registration differs after kept.keep,
+// then each the list names that Claude Code no longer has. Install, configure and update print these first; only fix
+// changes either. -> [line]
+function changedOutside(inv, catalog = catalogLib.load())
+{
+    const changed = [];
+    const missing = [];
+    for (const family of ['project', 'global'])
+    {
+        const l = inv.lists && inv.lists[family];
+        if (!l || l.note || l.old) continue;
+        for (const s of l.servers || [])
+        {
+            if (!(s.clients || ['claude']).includes('claude')) continue;
+            const reg = (inv.registrations || []).find((x) => x.name === s.name && x.scope === s.scope);
+            if (!reg) missing.push(`${s.name} is on the list but not in Claude Code - run /preferred-tools:fix`);
+            else if (!deepEqual(keepOf(catalog, reg.entry, s.row), s.entry)) changed.push(`${s.name} was changed outside preferred-tools`);
+        }
+    }
+    return [...changed, ...missing];
 }
 
 // The read guard (ruling 13): one deny-read for the plan, with the sign-in rule when it writes the shared sign-in form
@@ -469,4 +610,4 @@ function renderLine(s)
     return s.empty ? `   removes ${s.file}  (no server is listed)` : `   writes ${s.file}  (the servers preferred-tools manages, and the ones left on their own)`;
 }
 
-module.exports = { listSteps, renderLine, foundList, importUnlisted, cursorSteps, takenNames, denyReadSteps, readGuardOf, denyReadStep };
+module.exports = { listSteps, renderLine, foundList, importUnlisted, cursorSteps, takenNames, denyReadSteps, readGuardOf, denyReadStep, repairTail, changedOutside, reapproveLine };

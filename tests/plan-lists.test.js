@@ -619,3 +619,31 @@ test('at global scope the value goes in ~/.cursor/mcp.json from .mcps-secrets an
     assert.strictEqual(cursorDoc(cfile).github.env.GITHUB_PERSONAL_ACCESS_TOKEN, '');
     assert.match(again.detail, /WORK_GH for 'github' \(user\) is in none of .*\.mcps-secrets - written empty: fill WORK_GH in .*, then run \/preferred-tools:configure/);
 });
+
+// ---- 0.5.0: what changed outside preferred-tools (spec D1) -----------------------------------------------------------
+test('install names a listed server missing from Claude Code and re-adds nothing', () =>
+{
+    const { world } = require('./helpers.js');
+    const planLists = require('../scripts/plan-lists.js');
+    const inventoryLib = require('../scripts/inventory.js');
+    const { apply } = require('../scripts/apply.js');
+    const cli = require('../scripts/claude-cli.js');
+    const w = world();
+    try
+    {
+        const first = planLib.plan(inventoryLib.buildInventory({ project: w.project, env: w.env }), { clients: ['claude'], picks: { memory: {}, serena: { scope: 'local' } } }, { home: w.home, env: w.env });
+        assert.strictEqual(apply(first, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
+        cli.run(['mcp', 'remove', 'memory', '-s', 'local'], { cwd: w.project, env: w.env });
+        const s = inventoryLib.buildInventory({ project: w.project, env: w.env }).registrations.find((r) => r.name === 'serena');
+        cli.run(['mcp', 'remove', 'serena', '-s', 'local'], { cwd: w.project, env: w.env });
+        cli.run(['mcp', 'add-json', 'serena', JSON.stringify({ ...s.entry, args: [...s.entry.args, '--mine'] }), '-s', 'local'], { cwd: w.project, env: w.env });
+        const inv = inventoryLib.buildInventory({ project: w.project, env: w.env });
+        assert.deepStrictEqual(planLists.changedOutside(inv), ['serena was changed outside preferred-tools', 'memory is on the list but not in Claude Code - run /preferred-tools:fix']);
+        const p = planLib.plan(inv, { clients: ['claude'], picks: { context7: { route: 'remote', scope: 'local' } } }, { home: w.home, env: w.env });
+        assert.deepStrictEqual(p.errors, []);
+        assert.deepStrictEqual(p.outside, planLists.changedOutside(inv));
+        assert.ok(!p.steps.some((x) => x.name === 'memory' || x.name === 'serena'), 'neither is written');
+        assert.ok(planLib.render(p).startsWith('serena was changed outside preferred-tools\nmemory is on the list but not in Claude Code - run /preferred-tools:fix\n'), planLib.render(p));
+    }
+    finally { w.clean(); }
+});

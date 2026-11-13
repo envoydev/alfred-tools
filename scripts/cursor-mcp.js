@@ -65,7 +65,8 @@ function managedSet(sources)
 }
 
 // The file's document with the managed servers in place: a name in `before` the set no longer holds goes, a `skip` name
-// keeps the file's own value, the managed names come first in catalog.order and the user's after them in their order.
+// keeps the file's own value (or stays out when the file lacks it), the managed names come first in catalog.order and
+// the user's after them in their order.
 // Every other top-level key keeps its place and value.
 function compose(doc, managed, { before = [], skip = [], order = [] } = {})
 {
@@ -73,7 +74,12 @@ function compose(doc, managed, { before = [], skip = [], order = [] } = {})
     const at = (name) => { const i = order.indexOf((managed.get(name) || {}).row); return i < 0 ? order.length : i; };
     const names = [...managed.keys()].sort((a, b) => at(a) - at(b));
     const next = {};
-    for (const name of names) next[name] = skip.includes(name) && Object.hasOwn(servers, name) ? servers[name] : managed.get(name).entry;
+    for (const name of names)
+    {
+        // a skipped name keeps the file's own value, and one the file lacks stays out (spec D1: never re-added)
+        if (!skip.includes(name)) next[name] = managed.get(name).entry;
+        else if (Object.hasOwn(servers, name)) next[name] = servers[name];
+    }
     for (const [name, value] of Object.entries(servers))
     {
         if (Object.hasOwn(next, name)) continue;

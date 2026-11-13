@@ -280,14 +280,37 @@ function tokenSyncDetect(ctx)
             const at = keys.valueIn(chain, one[1]);
             return at ? C.finding('token-sync', reg, `the registration holds \${${one[1]}} while ${at.file} has the key`, { ...extra, keyName: one[1] }) : null;
         }
-        if (keys.nameOfValue(chain, key)) return null;
+        if (keys.nameOfValue(chain, key)) return cursorBehind(ctx, reg, route, chain, extra);
         const what = `the key in the registration matches no name in ${chain.join(', ')}`;
         return C.finding('token-sync', reg, what, keys.valueIn(chain, v) ? { ...extra, keyName: v } : { ...extra, blocked: PICK_NAME });
     });
 }
 
+// At user scope a server set up for Cursor holds its key in ~/.cursor/mcp.json too (spec D6): its copy is behind when
+// its value is not the one its list's key name has in the chain. The fix refills that copy alone, from .mcps-secrets
+// at apply (plan-lists.js repairTail), with Claude Code's registration as it is. -> finding | null
+function cursorBehind(ctx, reg, route, chain, extra)
+{
+    if (reg.scope !== 'user') return null;
+    const l = ctx.inv.lists && ctx.inv.lists.global;
+    const s = l && !l.note && !l.old ? (l.servers || []).find((x) => x.name === reg.name && x.scope === 'user' && (x.clients || []).includes('cursor')) : null;
+    if (!s || !s.key) return null;
+    const cursorMcp = require('../cursor-mcp.js');
+    const file = cursorMcp.fileFor('global', ctx);
+    const read = cursorMcp.readCursor(file);
+    const copy = read.state === 'ok' ? read.doc.mcpServers[reg.name] : null;
+    const fields = copy ? keys.tokenFields(copy, route) : [];
+    const at = keys.valueIn(chain, s.key);
+    if (!fields.length || !at) return null;
+    const held = keyIn(fields[0].at.reduce((o, k) => (o == null ? o : o[k]), copy), fields[0].template, route.tokenVar);
+    if (held === at.value) return null;
+    return C.finding('token-sync', reg, `Cursor's copy in ${file} holds a key other than ${s.key} in ${at.file}`, { ...extra, keyName: s.key, cursorOnly: true });
+}
+
 function tokenSyncFix(entry, f, ctx)
 {
+    // Cursor's copy alone: Claude Code's registration stays as it is
+    if (f.cursorOnly) return entry;
     const at = keys.valueIn(f.chain, f.keyName);
     if (!at) throw new Error(`${f.keyName} is filled in none of ${f.chain.join(', ')} any more - nothing written`);
     const row = C.rowOf(ctx, f.row);

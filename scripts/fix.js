@@ -35,6 +35,7 @@ const mcpOrder = require('./mcp-order.js');
 const keys = require('./keys.js');
 const roots = require('./roots.js');
 const declines = require('./declines.js');
+const planLists = require('./plan-lists.js');
 
 function makeCtx({ inv, catalog = catalogLib.load(), env = process.env, machine, platform, arch, data = null })
 {
@@ -205,7 +206,12 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
         if (E.contextArgAt(entry) >= 0 && fileCtx.roots) useRoots(fileCtx, reg.scope, { serenaContext: true });
     }
     res.steps = steps.length;
-    if (steps.length)
+    // each list the repaired servers sit in, and Cursor's files from them, in the same run (spec D1); a Cursor copy whose
+    // key token-sync found behind is refilled with the list as it is
+    const refresh = todo.filter((x) => x.id === 'token-sync' && x.cursorOnly).map((x) => ({ name: x.name, scope: x.scope }));
+    const tailNotes = [];
+    const tail = steps.length || refresh.length ? planLists.repairTail(ctx.inv, { platform: ctx.platform, project: ctx.inv.project, home: ctx.home, env: ctx.env, catalog: ctx.catalog, notes: tailNotes }, steps, { refresh }) : [];
+    if (steps.length || tail.length)
     {
         // a fix that changes what is fetched (a python request, a cut-off, cmd /c) is fetched once it is written
         const withFetch = steps.flatMap((s) =>
@@ -216,8 +222,8 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
         const fileNotes = [];
         const files = fileCtx.uses.length ? fileSteps(ctx.inv, fileCtx, { notes: fileNotes }) : { before: [] };
         for (const u of [...new Map(fileCtx.uses.map((x) => [x.root, x])).values()]) log(`the key helper goes in the ${u.family} root ${u.root}`);
-        for (const n of fileNotes) log(`note: ${n}`);
-        const plan = { version: 1, project: ctx.inv.project, os: ctx.platform, alfredCodeEnabled: Boolean(ctx.inv.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch], ctx.inv.project, mcpOrder.ownProjectNames(ctx.inv)), notes: [], errors: [], expect: steps.map((s) => ({ kind: 'mcp', name: s.name, scope: s.scope, route: ctx.inv.registrations.find((r) => r.name === s.name && r.scope === s.scope).route })) };
+        for (const n of [...fileNotes, ...tailNotes]) log(`note: ${n}`);
+        const plan = { version: 1, project: ctx.inv.project, os: ctx.platform, alfredCodeEnabled: Boolean(ctx.inv.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch, ...tail], ctx.inv.project, mcpOrder.ownProjectNames(ctx.inv)), notes: [], errors: [], expect: steps.map((s) => ({ kind: 'mcp', name: s.name, scope: s.scope, route: ctx.inv.registrations.find((r) => r.name === s.name && r.scope === s.scope).route })) };
         res.tmp = tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
         const report = apply(plan, { env: ctx.env, tmp: res.tmp, runCli, log, fetchFile });
         res.fetchFile = report.fetchFile;

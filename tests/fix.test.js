@@ -1897,3 +1897,84 @@ test('a root of the user\'s own files gets the advice to add !<file> for the bri
     }
     finally { w.clean(); }
 });
+
+// ---- 0.5.0: a repair reaches the list and Cursor in the same run (spec D1) --------------------------------------------
+const kept5 = require('../scripts/kept.js');
+const installBoth = (w, answers) =>
+{
+    const { plan } = require('../scripts/plan.js');
+    const { apply } = require('../scripts/apply.js');
+    const p = plan(inventory.buildInventory({ project: w.project, env: w.env }), { clients: ['claude', 'cursor'], ...answers }, { home: w.home, env: w.env });
+    assert.deepStrictEqual(p.errors, []);
+    assert.strictEqual(apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
+};
+const noPython = (e) => ({ ...e, args: e.args.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python') });
+
+test('a windows-npx-cmd repair on an entry with cursor ends with list-write and cursor-write, and a fix run after it finds no drift', () =>
+{
+    // windows-npx-cmd fires on win32 alone; uvx-python is the same registration repair on every OS (Task 13 ruling)
+    const w = world();
+    try
+    {
+        installBoth(w, { picks: { serena: { scope: 'local' } } });
+        const listFile = path.join(w.project, '.preferred-tools', 'mcps.json');
+        const cursorFile = path.join(w.project, '.cursor', 'mcp.json');
+        // an older install wrote serena with no --python in all three places
+        const e = noPython(localEntry(w, 'serena'));
+        cli.run(['mcp', 'remove', 'serena', '-s', 'local'], { cwd: w.project, env: w.env });
+        seed(w, 'serena', 'local', e);
+        const list = readJson(listFile);
+        list.servers[0].entry = noPython(list.servers[0].entry);
+        writeJson(listFile, list);
+        const doc = readJson(cursorFile);
+        doc.mcpServers.serena = noPython(doc.mcpServers.serena);
+        writeJson(cursorFile, doc);
+        assert.deepStrictEqual(ids(detect(ctxOf(w), 'uvx-python').found), ['uvx-python']);
+        const l = logged();
+        const res = fix.applyFixes(ctxOf(w), ['uvx-python'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.strictEqual(res.failed, null, l.text());
+        assert.match(l.text(), /wrote .*mcps\.json/);
+        assert.match(l.text(), /wrote .*\.cursor[\\/]mcp\.json/);
+        const now = localEntry(w, 'serena');
+        assert.ok(now.args.includes('--python'));
+        const row = catalog.byId.get('serena');
+        assert.deepStrictEqual(readJson(listFile).servers[0].entry, kept5.keep(now, row), 'the list holds the repaired registration');
+        assert.deepStrictEqual(readJson(cursorFile).mcpServers.serena, readJson(listFile).servers[0].entry, 'Cursor holds the list\'s entry');
+        assert.deepStrictEqual(detect(ctxOf(w), 'uvx-python').found, []);
+    }
+    finally { w.clean(); }
+});
+
+test('token-sync with a key changed in .mcps-secrets refills ~/.cursor/mcp.json as well as ~/.claude.json', () =>
+{
+    const w = world();
+    try
+    {
+        const [v1, v2] = [hexv('one'), hexv('two')];
+        secretsAt(homeRoot(w), { [SK]: v1 });
+        installBoth(w, { picks: { sentry: { route: 'local', scope: 'user', token: true } } });
+        const cursorFile = path.join(w.home, '.cursor', 'mcp.json');
+        assert.strictEqual(readJson(cursorFile).mcpServers.sentry.env[SK], v1, 'the install wrote the key into Cursor');
+        secretsAt(homeRoot(w), { [SK]: v2 });
+        const ts = () => detect(ctxOf(w), 'token-sync').found;
+        assert.deepStrictEqual(ts().map((f) => [f.name, f.scope, Boolean(f.blocked)]), [['sentry', 'user', false]]);
+        const l = logged();
+        assert.strictEqual(fix.applyFixes(ctxOf(w), ['token-sync'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(userEntry(w, 'sentry').env[SK], v2);
+        assert.strictEqual(readJson(cursorFile).mcpServers.sentry.env[SK], v2, 'Cursor\'s copy refilled');
+        assert.deepStrictEqual(ts(), []);
+        // Cursor's copy alone behind: found, and refilled with no claude call
+        const doc = readJson(cursorFile);
+        doc.mcpServers.sentry.env[SK] = v1;
+        writeJson(cursorFile, doc);
+        const [f] = ts();
+        assert.match(f.found, /Cursor's copy in .*mcp\.json holds a key/);
+        const calls = w.calls().length;
+        assert.strictEqual(fix.applyFixes(ctxOf(w), ['token-sync'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(readJson(cursorFile).mcpServers.sentry.env[SK], v2);
+        assert.strictEqual(w.calls().slice(calls).filter((a) => a[0] === 'mcp' && a[1] !== 'list' && a[1] !== 'get').length, 0, 'Claude Code is not touched');
+        assert.deepStrictEqual(ts(), []);
+        for (const v of [v1, v2]) assert.ok(!l.text().includes(v), 'no value printed');
+    }
+    finally { w.clean(); }
+});

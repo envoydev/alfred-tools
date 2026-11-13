@@ -608,6 +608,20 @@ function cursorNameQuestion({ file, name, sameRow })
     };
 }
 
+// cursor-offer (spec D9): update's offer, once per root, to set up for Cursor the servers its list has for Claude Code
+// only. The id names the root, so the answer goes back as --input cursor-offer:<root>=set|declined.
+function cursorOfferQuestion(root, n)
+{
+    const opts = [
+        { label: `Set them up for Cursor too${REC}`, description: "each server is written to Cursor's mcp.json, as configure's app change would do", value: 'set' },
+        { label: 'Not now', description: 'nothing changes, and update does not ask again for this root', value: 'declined' },
+    ];
+    return {
+        question: { id: `cursor-offer:${root}`, header: 'Cursor', multiSelect: false, question: `Cursor is on this machine, and the ${n} servers in ${root} are set up for Claude Code only. Set them up for Cursor too?`, options: opts.map(({ label, description }) => ({ label, description })) },
+        answers: Object.fromEntries(opts.map((o) => [o.label, o.value])),
+    };
+}
+
 // The apps a server is set up for (spec D3). Install asks once a run, 'Claude Code and Cursor' recommended when Cursor is
 // found; configure asks per server, what the list entry has now first. -> { question, answers: { <label>: clients } }
 const CLIENTS = [
@@ -666,6 +680,7 @@ const STATIC = {
     clients: clientsQuestion(true).question,
     // a STATIC function whose labels hold placeholders names them, so tests/ask-blocks.js fills the block's own
     'cursor-name-taken': Object.assign((file, name) => cursorNameQuestion({ file, name, sameRow: true }).question, { placeholders: ['<file>', '<name>'] }),
+    'cursor-offer': Object.assign((n, root) => cursorOfferQuestion(root, n).question, { placeholders: ['<n>', '<root>'] }),
 };
 
 // ---- the root questions (spec D2) ----------------------------------------------------------------------------------
@@ -967,4 +982,4 @@ function next(inv, picks, catalog, opts = {}, built = null)
     return steps.find((s) => !done.has(s.id)) || { id: 'done' };
 }
 
-module.exports = { PARENT_HELPER_IN_CHILD, cursorNameQuestion, clientsQuestion, targetClientsQuestion, ownStep, next, SCOPE_TEXT, keyNameQuestion, urlNameQuestions, settingsQuestion, liveReader, heldKey, SCOPE_LABEL, scopeOfLabel, needsRoot, rootFamilies, rootQuestion, REC, recommendedScope, keyStateOf, keyToSend, alsoProvided, pickQuestions, changeQuestions, routeQuestion, toolQuestions, toolAsk, scopeQuestion, nameQuestion, locationQuestion, removeQuestions, packed, STATIC, all, chunk, scopesFor };
+module.exports = { PARENT_HELPER_IN_CHILD, cursorNameQuestion, cursorOfferQuestion, clientsQuestion, targetClientsQuestion, ownStep, next, SCOPE_TEXT, keyNameQuestion, urlNameQuestions, settingsQuestion, liveReader, heldKey, SCOPE_LABEL, scopeOfLabel, needsRoot, rootFamilies, rootQuestion, REC, recommendedScope, keyStateOf, keyToSend, alsoProvided, pickQuestions, changeQuestions, routeQuestion, toolQuestions, toolAsk, scopeQuestion, nameQuestion, locationQuestion, removeQuestions, packed, STATIC, all, chunk, scopesFor };

@@ -45,8 +45,15 @@ pin; a Docker image tag is not checked; a server on its own), and what could not
 `retired-plugin` offers to uninstall a plugin the catalog no longer lists (typescript-lsp, csharp-lsp, claude-hud - they
 work in Claude Code alone), one offer per plugin and scope; one the user turned down before is not offered.
 
+Above the tables, a line per server changed since preferred-tools last wrote it: '<name> was changed outside
+preferred-tools' (an update starts from the registration as it is, and carries it into the list and Cursor), or
+'<name> is on the list but not in Claude Code - run /preferred-tools:fix' (update never adds it back). Last, under
+'Cursor (asked after the updates)', each root whose servers are set up for Claude Code only while Cursor is on this
+machine.
+
 Exit 3 with one line means the `claude` CLI is missing: say so and stop. When the last line is
-`preferred-tools: everything current`, say that and stop. When it is `preferred-tools: nothing to update - N wait(s) on
+`preferred-tools: everything current`, say that and stop. When it is `preferred-tools: nothing to update - Cursor can be
+set up (asked next)`, go to step 2 and ask only the Cursor offer. When it is `preferred-tools: nothing to update - N wait(s) on
 you first`, nothing can be offered yet: tell the user each note (a key to fill, a key file git would commit) and stop.
 A line under 'Could not check' is a registry that did not answer; it is never read as current - say so.
 
@@ -75,6 +82,22 @@ so is one 'All of them' leaves out because alfred-code is set up (its label ends
 removes it for both'): pass each as `--input retired-declined=<id>~<scope>,...` in step 3, and it is not offered again.
 When nothing else was picked, step 3 runs with `none`. 'Skip' declines nothing.
 
+Then, unless the user picked 'Skip', ask each question in `cursorOffers` as printed, one per root, after the updates:
+
+```ask cursor-offer
+Cursor is on this machine, and the <n> servers in <root> are set up for Claude Code only. Set them up for Cursor too?
+- 'Set them up for Cursor too (Recommended)' - each server is written to Cursor's mcp.json, as configure's app change would do
+- 'Not now' - nothing changes, and update does not ask again for this root
+```
+
+Pass the answer as `--input <the question's id>=<value>`: the id is `cursor-offer:<root>`, the value is the question's
+`answers` entry for the label picked (`set` or `declined`). 'Not now' is kept in that root's list and the offer is not
+put again; configure's per-server question still adds Cursor at any time. Right after 'Set them up for Cursor too', ask
+the questions in `cursorNameQuestions` whose id names a file of that root's servers, four per call - each is a name
+Cursor's file already holds as the user's own - and pass each answer as `--input cursor-name:<name>@<file>=<value>`,
+the id's part after `cursor-name-` and the value from its `answers`. A name with no answer stays Claude Code only and
+the report names it.
+
 ## 3. Apply
 
 State what will change - each `current -> offered`, and each new way to pass data as its line says - and, for an MCP
@@ -82,8 +105,14 @@ server, that its registration is removed and added again, so the server is brief
 ids picked (comma-separated), or `all` for 'All of them':
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--input retired-declined=<id>~<scope>,...]
+node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--input retired-declined=<id>~<scope>,...] [--input cursor-offer:<root>=set|declined] [--input cursor-name:<name>@<file>=replace|keep]
 ```
+
+Each pin moved, and each new way to pass data, is written to every app its list entry names in the same run: the
+list takes the registration as read back, and Cursor's `mcp.json` takes the list. A copy Cursor lacks, or one edited
+there by hand, is left as it is and named ('<name>: Cursor's copy was changed by hand - left; run /preferred-tools:fix').
+When Cursor's copy of a server changes, the report ends with 'Cursor asks you to approve <names> again - it re-asks
+whenever an entry changes': tell the user Cursor will ask.
 
 Run it with the Bash tool's `timeout: 600000` (10 minutes, the most it allows by default): a plugin update clones its marketplace, and the new MCP pins are downloaded after it, not inside it. `all` is every
 offer with a known newer version; an unchecked plugin runs only when its own id is given. Each update is read back: a

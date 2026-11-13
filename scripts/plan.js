@@ -628,6 +628,8 @@ function plan(inv, answers, opts = {})
     out.errors.push(...resolved.errors);
     ctx.roots = resolved.roots;
     out.roots = ctx.roots;
+    // what changed outside preferred-tools since its last write (spec D1): named first, only fix changes it
+    out.outside = planLists.changedOutside(inv, catalog);
 
     // the key's name and the settings (spec D9, R4): top-level maps keyed by row id (install) or target key (configure)
     const keyNames = answers.keyNames || {};
@@ -825,6 +827,7 @@ function render(p)
 {
     const lines = [];
     const P = E.pathFor(p.os);
+    if ((p.outside || []).length) lines.push(...p.outside, '');
     if (p.errors.length) lines.push('Cannot plan:', ...p.errors.map((e) => `  ! ${e}`), '');
     if (!p.steps.length && !p.errors.length) lines.push('Nothing to do: every answer already matches what is installed - no claude call, no file written.');
     // which apps (spec D3): stated once, with the Cursor file each scope writes

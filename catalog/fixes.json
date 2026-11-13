@@ -235,6 +235,27 @@
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D1, D9"
     },
     {
+      "id": "retired-plugin",
+      "upgrade": "0.5.0",
+      "tool": [],
+      "ids": [
+        "typescript-lsp@claude-plugins-official",
+        "csharp-lsp@claude-plugins-official",
+        "claude-hud@claude-hud"
+      ],
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "kind": "machine",
+      "symptom": "a plugin the catalog no longer lists - it works in Claude Code alone - is installed at a scope, and its uninstall was not declined there",
+      "detect": "retiredPluginDetect",
+      "fix": "retiredPluginFix",
+      "verifiedOn": "this build: tests/fix.test.js and tests/update.test.js retired-plugin (2026-11-13)",
+      "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D8, D9"
+    },
+    {
       "id": "read-guard",
       "upgrade": "0.5.0",
       "tool": [
@@ -265,27 +286,6 @@
       "steps": "readGuardSteps",
       "verifiedOn": "this build: tests/fix.test.js read-guard (2026-11-13)",
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md rulings 12, 13"
-    },
-    {
-      "id": "retired-plugin",
-      "upgrade": "0.5.0",
-      "tool": [],
-      "ids": [
-        "typescript-lsp@claude-plugins-official",
-        "csharp-lsp@claude-plugins-official",
-        "claude-hud@claude-hud"
-      ],
-      "os": [
-        "darwin",
-        "linux",
-        "win32"
-      ],
-      "kind": "machine",
-      "symptom": "a plugin the catalog no longer lists - it works in Claude Code alone - is installed at a scope, and its uninstall was not declined there",
-      "detect": "retiredPluginDetect",
-      "fix": "retiredPluginFix",
-      "verifiedOn": "this build: tests/fix.test.js and tests/update.test.js retired-plugin (2026-11-13)",
-      "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D8, D9"
     },
     {
       "id": "windows-mcp-one-per-desktop",
