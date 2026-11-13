@@ -1127,3 +1127,108 @@ https://github.com/geelen/mcp-remote; the published tarball of 0.16.0 (`npm pack
   (`stack/mcp/data-root.js:122-185`), so a file this plugin puts in an `.alfred` root - the key file, the helper, the
   record - is never committed, and the plugin writes no `.gitignore` there. A teammate's clone then lacks the helper a
   project-scope server names; fix row `helper-missing` writes it.
+
+## Cursor and Serena - one list, both apps (measured and read 2026-11-12 and 2026-11-13)
+
+The facts the 0.5.0 design rests on (`docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md`, F1-F15,
+machine-local). Measured under a throwaway `HOME` and `CLAUDE_CONFIG_DIR` unless a line says read. Versions: Claude
+Code 2.1.309-2.1.323, Cursor CLI 2026.11.11-b912975, Serena 2.1.0, mcp-remote 0.16.0; macOS arm64 unless a line names
+Windows 11 ARM64.
+
+- **F1 - Cursor's files** (read 2026-11-13, `https://cursor.com/docs/context/mcp`). Project `.cursor/mcp.json` and
+  global `~/.cursor/mcp.json`, both `{"mcpServers": {...}}`. The page names no other file, no `.mcp.json` and no
+  setting that points elsewhere.
+- **F2 - A symlinked `.mcp.json`** (measured 2026-11-13, Claude Code 2.1.323, macOS). `claude mcp list` reads through
+  it. `claude mcp add-json -s project` and `claude mcp remove -s project` fail with `SymlinkWriteRefusedError: Refusing
+  to write through symlink`, and the target is unchanged.
+- **F3 - A hard-linked `.mcp.json`** (same run). After `claude mcp add-json -s project` the file has a new inode and
+  one link, and the other name keeps the old content: the CLI writes a new file over the old.
+- **F4 - Windows links** (measured 2026-11-12, Windows 11 ARM64, Developer Mode off, a standard user). `fs.symlinkSync`
+  fails with EPERM, and `mklink` says 'You do not have sufficient privilege'.
+- **F5 - Cursor CLI reads Claude Code's entry shape** (measured 2026-11-12, Cursor CLI 2026.11.11, macOS and Windows 11
+  ARM64).
+  - Accepted as written: `type: "stdio"` with `command`, `args`, `env`, and `type: "http"` with `url`.
+  - Stdio servers start in the project folder.
+  - Expanded in `env`: `${HOME}`, `${USERPROFILE}`, `${env:NAME}` and `${NAME:-default}`. Not expanded:
+    `${workspaceFolder}`.
+  - Ignored with no error: `headersHelper`, so a hosted keyed entry connects with no key.
+  - Re-asked: a server's approval (`agent mcp enable`), whenever its entry changes.
+- **F6 - The bridge in both apps** (measured 2026-11-12, both OSes). One entry, `node <root>/mcp-bridge.js <url>
+  <KEY> <SCHEME> mcp-remote@0.16.0`, ran under Cursor CLI and Claude Code 2.1.309 and 2.1.322. The key from
+  `.mcps-secrets` reached a stub server on every `/mcp` request (24 of 24 under Cursor, 10 of 10 under Claude Code).
+  Only mcp-remote's OAuth discovery request (`/.well-known/...`) went without it. The URL there was a plain one with no
+  `{NAME}` segment.
+- **F7 - Serena 2.1.0 tool allow-list** (measured 2026-11-13, macOS, uvx with the catalog's cut-off). A context with
+  `fixed_tools: [initial_instructions, get_symbols_overview, find_symbol, find_referencing_symbols,
+  find_implementations, find_declaration]` exposes exactly those six. `find_referencing_symbols` on a TypeScript
+  function found its use in another file. The context template says `fixed_tools` cannot be combined with
+  `excluded_tools` or `included_optional_tools`.
+- **F8 - Serena delivers its instructions through a tool** (same run). Its MCP `initialize` answer carries one line,
+  telling the model to call `initial_instructions`. The context's `prompt` reaches the model only through that tool, so
+  an allow-list without it never delivers the prompt.
+- **F9 - Serena's base modes** (same run).
+  - `<SERENA_HOME>/serena_config.yml` lists `base_modes: [interactive, editing]`, and `--mode` overrides only
+    `default_modes`. So by default the manual describes edit tools the allow-list removed: `replace_symbol_body`,
+    `rename_symbol`.
+  - With `base_modes: []`, the manual (2,839 characters) names no tool outside the allow-list.
+  - Serena writes the file at its first start, and it holds a generated `auth_secret`.
+- **F10 - Cursor plugins** (read 2026-11-13, `https://cursor.com/docs/plugins`, `https://cursor.com/docs/reference/plugins`;
+  forum reports linked in part B). They use their own format (`.cursor-plugin/plugin.json`). A command is a prompt
+  file, with no documented way to run a script. Whether the CLI loads plugins is unclear. Nothing here depends on it;
+  it is why part B is separate.
+- **F11 - Cursor CLI has no add** (read 2026-11-13, `https://cursor.com/docs/cli/mcp`). `agent mcp` offers `list`,
+  `list-tools`, `login`, `enable` and `disable`; there is no command that adds a server to `mcp.json`. The page
+  documents `list` as an interactive menu.
+- **F12 - Which project file the Cursor CLI reads** (measured 2026-11-13, Cursor CLI 2026.11.11-b912975, macOS arm64,
+  a throwaway home). `agent mcp list` prints plain lines when no terminal is attached (`<name>: ready`, `<name>: not
+  loaded (needs approval)`). A tree `ws/.cursor/mcp.json`, `ws/a/src` with none, `ws/b/.cursor/mcp.json`, and a global
+  `~/.cursor/mcp.json`, listed from each folder:
+  - **Not in git:** each folder reads its own `.cursor/mcp.json` only. From `ws/a` and `ws/a/src` only the global server
+    loads; `ws`'s is not read.
+  - **`ws` a git repo:** every folder inside it reads `ws/.cursor/mcp.json` only. `ws/b`'s own file is not read.
+  - **`ws/a` a repo nested in the `ws` repo:** `ws/a` reads its own `.cursor/mcp.json` and not `ws`'s; with no file of
+    its own, only the global one. A plain subfolder `ws/b` of the `ws` repo reads `ws`'s file and not its own
+    (re-measured the same day with a file in each).
+  - The global file loads everywhere.
+  - So the CLI reads ONE project file, at the git root of the folder it runs in, or in that folder when it is not in
+    git, and never merges parents. Claude Code loads every `.mcp.json` from the folder up to `/`, git or not
+    (`docs/sources.md`, 'Claude Code - .mcp.json in parent folders'). Cursor staff call the CLI's git-root lookup a bug
+    and say the CLI should read the current folder, as the IDE does (forum, 2026-01-28,
+    `https://forum.cursor.com/t/agent-cli-doesnt-read-cursor-directory-from-current-working-directory-in-monorepo-subfolder/150169`).
+    The IDE was not measured. A multi-folder `.code-workspace` reportedly loads no project file at all
+    (`https://forum.cursor.com/t/project-cursor-mcp-json-not-loaded-in-multi-root-code-workspace/167648`).
+- **F13 - mcp-remote 0.16.0's sign-in store** (read 2026-11-13 in the npm tarball's `dist`, the catalog's pin).
+  - The folder is `path.join(process.env.MCP_REMOTE_CONFIG_DIR || ~/.mcp-auth, 'mcp-remote-v1')`; the `v1` is the
+    store's format version, added by mcp-remote and not settable.
+  - Each server's files are `<hash>_<file>` there: `tokens.json`, `client_info.json`, a renewal lease
+    `refresh_in_progress.json`, and short-lived `code_verifier_<state>.txt` and `discovery_state_<state>.json`, deleted
+    after 10 minutes when a sign-in is abandoned. They are written through a temporary file and a rename, with mode
+    `0600`.
+  - `<hash>` is an MD5 of the server URL, plus the authorize resource, the `--authorize-param`s, the custom headers, the
+    client metadata URL and the token endpoint when given. Not the mcp-remote version, and not the folder.
+  - Two processes for the same `<hash>` share one sign-in: `coordinateAuth` lets one run the browser leg while the
+    other waits for its tokens, and a renewal takes the lease file (30 s lease, 200 ms poll), so only one process
+    renews at a time.
+  - The browser is opened through the `open` package with `BROWSER` passed from the environment; the URL is also
+    logged ('Please authorize this client by visiting:').
+- **F14 - The hosted vendors let a client register itself** (measured 2026-11-13: an unauthenticated `POST` to each
+  route's URL, then the public metadata it names). Atlassian (`https://mcp.atlassian.com/v2/mcp`), Sentry
+  (`https://mcp.sentry.dev/mcp`) and GitLab (`https://gitlab.com/api/v4/mcp`) each answer 401 with a
+  `resource_metadata` link, and their authorization server's `/.well-known/oauth-authorization-server` lists a
+  `registration_endpoint` and PKCE `S256`. These are the three routes with `keyless: "oauth"`. A GitLab admin can turn
+  registration off (`docs/sources.md`, GitLab).
+- **F15 - What an AI session may read** (read 2026-11-13, `https://code.claude.com/docs/en/permissions.md`,
+  `https://cursor.com/docs/context/ignore-files`).
+  - Claude Code: file reads need no approval 'within the working directory and additional directories', and built-in
+    read-only commands (`cat`, `head`, `grep` and others) run without a prompt in every mode, outside those directories
+    too unless `permissions.blockReadsOutsideWorkingDirectories` is on. So a folder in the home is no safer than one in
+    the project from a `cat`.
+  - Claude Code: 'Read and Edit deny rules apply to Claude's built-in file tools, to file commands Claude Code
+    recognizes in Bash, such as `cat`, `head`, `tail`, `sed`, and `tee`, and to the targets of Bash redirections'; not
+    to 'a command that reads files without naming them, such as `grep -r pattern .`', nor to 'a Python or Node script
+    that opens files itself'. `Read(//**/.env)` blocks 'any `.env` anywhere on the filesystem'.
+  - Cursor: 'Cursor automatically ignores files in `.gitignore`' for the Agent and `@` mentions, but 'The terminal and
+    MCP server tools used by Agent cannot block access', and 'complete protection isn't guaranteed'. The page does not
+    name the CLI.
+
+- M3 - one sign-in for both apps through mcp-remote: NOT RUN yet (Task 16).
