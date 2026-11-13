@@ -11,6 +11,7 @@ const lists = require('./mcps-list.js');
 const { stripBom, deepEqual } = require('./json-file.js');
 const E = require('./entries.js');
 const kept = require('./kept.js');
+const keys = require('./keys.js');
 
 const pathFor = (platform) => (platform === 'win32' ? path.win32 : path.posix);
 
@@ -58,7 +59,7 @@ function managedSet(sources)
     {
         const rank = (s) => (s.scope === 'local' ? 0 : 1);
         const mine = (src.servers || []).filter((s) => (s.clients || []).includes('cursor') && (src.scopes || []).includes(s.scope)).sort((a, b) => rank(a) - rank(b));
-        for (const s of mine) if (!out.has(s.name)) out.set(s.name, { entry: s.cursorEntry || s.entry, scope: s.scope, list: src.file, row: s.row });
+        for (const s of mine) if (!out.has(s.name)) out.set(s.name, { entry: s.cursorEntry || s.entry, scope: s.scope, list: src.file, row: s.row, route: s.route, key: s.key || null });
     }
     return out;
 }
@@ -97,6 +98,7 @@ function cursorWrite(step, ctx)
     if (why) return { ok: false, detail: `${step.file} ${why} - left as it is` };
     const sources = (step.lists || []).map((l) => ({ file: l.file, scopes: l.scopes, servers: ((l.file && lists.readList(l.file)) || { servers: [] }).servers }));
     const managed = managedSet(sources);
+    const notes = fillStdioKeys(managed, ctx);
     const servers = read.doc.mcpServers;
     const before = step.before || [];
     const theirs = [...managed.keys()].filter((n) => Object.hasOwn(servers, n) && !before.includes(n) && !(step.replace || []).includes(n));
@@ -104,7 +106,8 @@ function cursorWrite(step, ctx)
     const order = (ctx && ctx.catalog && ctx.catalog.order) || [];
     const doc = compose(read.doc, managed, { before, skip, order });
     const text = textOf(doc, read.eol);
-    if (read.state === 'ok' && read.text === text) return { ok: true, detail: `${step.file} already holds these servers - left as it is` };
+    const said = notes.length ? `; ${notes.join('; ')}` : '';
+    if (read.state === 'ok' && read.text === text) return { ok: true, detail: `${step.file} already holds these servers - left as it is${said}` };
     fs.mkdirSync(path.dirname(step.file), { recursive: true });
     const tmp = `${step.file}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, text);
@@ -113,7 +116,38 @@ function cursorWrite(step, ctx)
     const wrong = back.state !== 'ok' ? [...managed.keys()] : [...managed.keys()].filter((n) => !skip.includes(n) && !deepEqual(back.doc.mcpServers[n], managed.get(n).entry));
     if (wrong.length) return { ok: false, detail: `${step.file}: ${wrong.join(', ')} did not read back as written` };
     const kept = theirs.length ? ` - ${theirs.join(', ')} left as your own` : '';
-    return { ok: true, detail: `wrote ${step.file} (${managed.size - theirs.length} server${managed.size - theirs.length === 1 ? '' : 's'} from the list)${kept}` };
+    return { ok: true, detail: `wrote ${step.file} (${managed.size - theirs.length} server${managed.size - theirs.length === 1 ? '' : 's'} from the list)${kept}${said}` };
+}
+
+// ---- stdio routes that hold their key (spec D6) -----------------------------------------------------------------------
+
+// Does this entry carry its key in the registration? The rule, not a list: the route has a tokenVar and the entry holds
+// a field keys.tokenFields reads (github's Docker route, sentry's npm route, context7 local with --api-key).
+function stdioKeyed(entry, row, routeId)
+{
+    const route = row && row.routes ? row.routes[routeId] : null;
+    return Boolean(route && route.tokenVar && keys.tokenFields(entry, route).length);
+}
+
+// At user scope a stdio keyed entry goes into ~/.cursor/mcp.json with its value, from the global root's .mcps-secrets
+// (the list's own folder) under the list's key name, as apply's fillStep writes ~/.claude.json's copy; the list keeps
+// kept.MARKER. An unfilled name is written empty, with fillStep's note. Changes `managed` in place. -> [note]
+function fillStdioKeys(managed, ctx)
+{
+    const catalog = (ctx && ctx.catalog) || require('./catalog.js').load();
+    const notes = [];
+    for (const [name, m] of managed)
+    {
+        if (m.scope !== 'user' || !m.key || !m.list) continue;
+        const row = catalog.byId.get(m.row);
+        if (!stdioKeyed(m.entry, row, m.route)) continue;
+        const files = keys.stdioChain({ scope: 'user', globalRoot: path.dirname(m.list) });
+        const found = keys.valueIn(files, m.key);
+        const route = row.routes[m.route];
+        managed.set(name, { ...m, entry: keys.fillKeys(m.entry, row, m.route, 'user', { [route.tokenVar]: found ? found.value : '' }) });
+        if (!found) notes.push(`${m.key} for '${name}' (user) is in none of ${files.join(', ')} - written empty: fill ${m.key} in ${files[0]}, then run /preferred-tools:configure and keep ${m.key} as the key's name - it writes the key in`);
+    }
+    return notes;
 }
 
 // Is this Cursor entry the row's server? A bridge copy (D5) is matched by its URL, as a plain http entry, against the
@@ -185,4 +219,4 @@ function cursorFound(ctx, inv)
     return ['project', 'global'].some((f) => { const l = inv && inv.lists && inv.lists[f]; return Boolean(l) && (l.servers || []).some((x) => (x.clients || []).includes('cursor')); });
 }
 
-module.exports = { fileFor, readCursor, refusal, managedSet, compose, cursorWrite, matchesRow, cursorOf, cursorFound, bridgeFormOf, otherHeaders };
+module.exports = { fileFor, readCursor, refusal, managedSet, compose, cursorWrite, matchesRow, cursorOf, cursorFound, bridgeFormOf, otherHeaders, stdioKeyed };

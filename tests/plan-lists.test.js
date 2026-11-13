@@ -554,3 +554,68 @@ test('workspace: a record read as no workspace is named once in a plan that writ
     cursorSteps(w.inv, w.ctx, quiet, {});
     assert.deepStrictEqual(quiet.notes, []);
 });
+
+// ---- stdio keyed routes (spec D6) --------------------------------------------------------------------------------------
+const D6_NOTE = 'Cursor: not written - this route keeps its key in the registration, and .cursor/mcp.json may be committed; pick the hosted route for Cursor';
+// context7 local holds its key only once the name is filled (its --api-key arg): a real project with a filled key file
+function keyedProject()
+{
+    const w = cursorWorld();
+    const root = path.join(w.project, '.preferred-tools');
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(path.join(root, '.mcps-secrets'), `CONTEXT7_API_KEY=ctx7sk-${'z'.repeat(32)}\n`);
+    return { inv: hinv({ project: w.project, roots: { map: null, project: { path: root, from: 'secrets' }, global: null } }), opts: { env: { HOME: w.home }, home: w.home } };
+}
+for (const id of ['github', 'sentry', 'context7'])
+{
+    test(`${id} local, keyed, at local scope: no Cursor write and the note`, { skip: POSIX_FIXTURE }, () => {
+        const k = id === 'context7' ? keyedProject() : { inv: hinv(), opts: HOPTS };
+        const p = planLib.plan(k.inv, { clients: ['claude', 'cursor'], picks: { [id]: { route: 'local', scope: 'local', token: true } } }, k.opts);
+        assert.ok(cursorMcp.stdioKeyed(p.steps.find((s) => s.op === 'mcp-add').entry, catalogAll.byId.get(id), 'local'), 'the entry holds its key field');
+        assert.deepStrictEqual(p.errors, []);
+        assert.ok(p.notes.includes(D6_NOTE), p.notes.join('\n'));
+        assert.deepStrictEqual(upsertsOf(p).map((u) => u.server.clients), [['claude']]);
+        assert.deepStrictEqual(p.steps.filter((s) => s.op === 'cursor-write'), []);
+    });
+}
+
+test('context7 local with no key is written to Cursor', { skip: POSIX_FIXTURE }, () => {
+    const p = planLib.plan(hinv(), { clients: ['claude', 'cursor'], picks: { context7: { route: 'local', scope: 'local', token: false } } }, HOPTS);
+    assert.deepStrictEqual(p.errors, []);
+    assert.ok(!p.notes.includes(D6_NOTE));
+    assert.deepStrictEqual(upsertsOf(p).map((u) => u.server.clients), [['claude', 'cursor']]);
+    assert.strictEqual(p.steps.filter((s) => s.op === 'cursor-write').length, 1);
+});
+
+test('stdioKeyed is the rule: a route with a tokenVar whose entry holds a token field', () => {
+    const gh = catalogAll.byId.get('github');
+    const c7 = catalogAll.byId.get('context7');
+    assert.strictEqual(cursorMcp.stdioKeyed({ command: 'docker', env: { GITHUB_PERSONAL_ACCESS_TOKEN: 'x' } }, gh, 'local'), true);
+    assert.strictEqual(cursorMcp.stdioKeyed({ command: 'npx', args: ['-y', '@upstash/context7-mcp', '--api-key', 'x'] }, c7, 'local'), true);
+    assert.strictEqual(cursorMcp.stdioKeyed({ command: 'npx', args: ['-y', '@upstash/context7-mcp'] }, c7, 'local'), false);
+    assert.strictEqual(cursorMcp.stdioKeyed({ type: 'http', url: 'https://mcp.context7.com/mcp' }, c7, 'remote'), false);
+});
+
+test('at global scope the value goes in ~/.cursor/mcp.json from .mcps-secrets and none in the list', () => {
+    const w = cursorWorld();
+    const groot = path.join(w.home, '.preferred-tools');
+    const glist = path.join(groot, 'mcps.json');
+    const secret = `ghp_${'q'.repeat(36)}`;
+    fs.mkdirSync(groot, { recursive: true });
+    fs.writeFileSync(path.join(groot, '.mcps-secrets'), `WORK_GH=${secret}\n`);
+    const kept = require('../scripts/kept.js');
+    const GH = { command: 'docker', args: ['run', '-i', '--rm', '-e', 'GITHUB_PERSONAL_ACCESS_TOKEN', 'ghcr.io/github/github-mcp-server:v1.0.0'], env: { GITHUB_PERSONAL_ACCESS_TOKEN: kept.MARKER } };
+    fs.writeFileSync(glist, JSON.stringify({ version: 1, own: [], servers: [{ name: 'github', scope: 'user', row: 'github', route: 'local', clients: ['claude', 'cursor'], entry: GH, key: 'WORK_GH' }] }));
+    const cfile = path.join(w.home, '.cursor', 'mcp.json');
+    const r = cursorMcp.cursorWrite({ file: cfile, family: 'global', lists: [{ file: glist, scopes: ['user'] }], before: [], skip: [], replace: [] }, { catalog: catalogAll });
+    assert.strictEqual(r.ok, true, r.detail);
+    assert.strictEqual(cursorDoc(cfile).github.env.GITHUB_PERSONAL_ACCESS_TOKEN, secret);
+    assert.ok(!fs.readFileSync(glist, 'utf8').includes(secret), 'the list holds no key');
+    assert.ok(!r.detail.includes(secret), 'the detail names no key');
+    // an unfilled name is written empty, with fillStep's note
+    fs.writeFileSync(path.join(groot, '.mcps-secrets'), 'WORK_GH=\n');
+    const again = cursorMcp.cursorWrite({ file: cfile, family: 'global', lists: [{ file: glist, scopes: ['user'] }], before: ['github'], skip: [], replace: [] }, { catalog: catalogAll });
+    assert.strictEqual(again.ok, true, again.detail);
+    assert.strictEqual(cursorDoc(cfile).github.env.GITHUB_PERSONAL_ACCESS_TOKEN, '');
+    assert.match(again.detail, /WORK_GH for 'github' \(user\) is in none of .*\.mcps-secrets - written empty: fill WORK_GH in .*, then run \/preferred-tools:configure/);
+});

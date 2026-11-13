@@ -365,6 +365,14 @@ function planMcp(row, pick, inv, ctx, catalog, out)
         else form = 'two';
     }
 
+    // a stdio route holding its key in the registration (D6) reaches Cursor at global scope only: .cursor/mcp.json may be
+    // committed, and project scope is closed to it already
+    if (scope === 'local' && clients.includes('cursor') && cursorMcp.stdioKeyed(entry, row, routeId))
+    {
+        out.notes.push('Cursor: not written - this route keeps its key in the registration, and .cursor/mcp.json may be committed; pick the hosted route for Cursor');
+        clients = clients.filter((c) => c !== 'cursor');
+    }
+
     if (pick.settings) entry = E.mergeSettings(entry, route, pick.settings);
 
     // .mcp.json is committed: a move into it never carries a credential the route's own token field does not take - a
