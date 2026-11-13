@@ -288,6 +288,68 @@
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md rulings 12, 13"
     },
     {
+      "id": "client-drift",
+      "tool": [
+        "atlassian",
+        "github",
+        "gitlab",
+        "context7",
+        "sentry",
+        "memory",
+        "serena",
+        "windows-control",
+        "macos-control",
+        "appium",
+        "playwright-chrome",
+        "playwright-msedge",
+        "playwright-firefox",
+        "playwright-webkit"
+      ],
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "kind": "file",
+      "symptom": "a list entry whose copy in Claude Code or Cursor was edited or removed by hand - compared after kept.keep, each app with its own form; asked per entry, never in Apply all found",
+      "detect": "clientDriftDetect",
+      "fix": null,
+      "steps": "clientDriftSteps",
+      "verifiedOn": "this build: tests/drift.test.js (2026-11-13)",
+      "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D9"
+    },
+    {
+      "id": "cursor-file",
+      "tool": [
+        "atlassian",
+        "github",
+        "gitlab",
+        "context7",
+        "sentry",
+        "memory",
+        "serena",
+        "windows-control",
+        "macos-control",
+        "appium",
+        "playwright-chrome",
+        "playwright-msedge",
+        "playwright-firefox",
+        "playwright-webkit"
+      ],
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "kind": "file",
+      "advice": true,
+      "symptom": "Cursor's .cursor/mcp.json or ~/.cursor/mcp.json is a symbolic link, is not JSON (comments or trailing commas), or has no mcpServers object - preferred-tools writes no such file",
+      "detect": "cursorFileDetect",
+      "fix": null,
+      "verifiedOn": "this build: tests/drift.test.js cursor-file (2026-11-13)",
+      "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D9"
+    },
+    {
       "id": "windows-mcp-one-per-desktop",
       "tool": [
         "windows-control"

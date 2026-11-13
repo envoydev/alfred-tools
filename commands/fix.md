@@ -44,6 +44,12 @@ is the parent's, and fix run there repairs it. `data-folder-ignore` also finds a
 folder (`.alfred/playwright-chrome`, say) that no server uses any more: its fix writes the copy's `.gitignore`, and its
 data is left, never moved or deleted.
 
+`client-drift` finds a server on the plugin's list whose copy in Claude Code or in Cursor was edited or removed by
+hand (compared with each key value masked, so a key filled in Cursor is not drift). It is never in 'Apply all found' or
+'Pick which': each is its own question in step 2. `cursor-file` is advice: a Cursor `mcp.json` that is a symbolic
+link, holds comments or trailing commas, or has no `mcpServers` - preferred-tools writes no such file; its line says
+what to do.
+
 If it says 'No known problem found.', say so in one line and stop.
 
 ## 2. Ask
@@ -51,8 +57,9 @@ If it says 'No known problem found.', say so in one line and stop.
 Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.js" --questions --data "${CLAUDE_PLUGIN_DATA}"` (with the same `--only`). It prints the asks as data:
 `choose` and, for 'Pick which', `pick` - a list of calls, each at most four questions of at most four options.
 
-When `choose` is null, nothing found can be applied: every line is NOT APPLICABLE, and its reason is the advice. Say
-that nothing was changed and stop - there is nothing to ask.
+When `choose` is null and `drift` is empty, nothing found can be applied: every line is NOT APPLICABLE, and its
+reason is the advice. Say that nothing was changed and stop - there is nothing to ask. When `choose` is null and `drift`
+is not, ask only the drift questions below and go to step 3 with `none`.
 
 Ask `choose` as one AskUserQuestion, exactly as printed:
 
@@ -67,6 +74,30 @@ Ask `choose` as one AskUserQuestion, exactly as printed:
 A decline is passed as `--input retired-declined=<id>~<scope>,<id>~<scope>` - the plugin id and scope from each
 `retired-plugin` line - and recorded in the plugin's data folder.
 
+Then ask the questions in `drift` as printed, one AskUserQuestion per call (at most four questions) - whatever the
+answer to `choose`, except 'Skip'. Each is one server whose copy in one app changed by hand:
+
+```ask drift
+<name> in <app> differs from the plugin's list. Which should stay?
+- 'Keep the change in <app> (Recommended)' - the list and the other app take the edited entry
+- 'Restore from the list' - <app> gets the list's entry back
+```
+
+```ask drift-missing
+<name> is on the plugin's list for <app> but <app> no longer has it. What should happen?
+- 'Take <app> off its list entry (Recommended)' - the server stays in the other app; with no app left, the entry leaves the list
+- 'Restore from the list' - <app> gets the list's entry back
+```
+
+A copy holding what looks like a key outside its key field (a token pasted into Cursor's `headers`, say) is asked with
+'Restore from the list (Recommended)' and 'Leave <app>'s copy as it is' - it is copied nowhere. A copy a workspace
+member got from a folder above is asked with 'Restore from <folder> (Recommended)' and 'Leave it as it is'; Leave is not
+recorded, so the next run asks again. A question carrying `askAfter` is put only when the question it names was
+answered with one of its `answers` (Cursor's, after a Restore or Leave in Claude Code - a Keep there carries the kept
+entry into Cursor). Pass each answer as `--input drift:<app>:<name>~<scope>=<value>`: the question's id is
+`drift-<app>-<name>~<scope>`, and the value is its `answers` entry for the label picked (`keep`, `restore`, `leave` or
+`drop`). A drift question left unanswered is skipped and named in the report.
+
 A finding that needs a folder from the user (the detect output says 'needs a folder from you') gets one more
 AskUserQuestion before it is applied: the suggested folder as '(Recommended)' listed first, and 'Skip this fix'. A
 folder the user typed as the Other answer is taken the same way. Pass the answer as `--input serenaHome=<folder>`. Never
@@ -75,8 +106,13 @@ guess a folder.
 ## 3. Apply
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.js" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--only "$ARGUMENTS"] [--input key=value]
+node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.js" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--only "$ARGUMENTS"] [--input key=value] [--input drift:<app>:<name>~<scope>=<value>]
 ```
+
+A drift answer runs after the registration and file rows: 'Keep' writes the edited entry into the list and the other
+app (Cursor's file, or Claude Code through the `claude` CLI); 'Restore' writes the list's entry back into that app;
+'Take <app> off' changes the list only. Every registration a fix rewrites is carried into the list and Cursor in the
+same run, and a Cursor copy changed by hand is left for its own question.
 
 Claude Code asks permission for this call itself - `--apply` is deliberately not in `allowed-tools`. It rewrites each registration through the `claude` CLI (remove, then add with the same name and scope) from the entry as
 it is now, so the user's pin, cut-off and added args stay. Several fixes on one registration are one rewrite. A key moved out of

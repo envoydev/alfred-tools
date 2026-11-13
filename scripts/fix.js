@@ -36,6 +36,7 @@ const keys = require('./keys.js');
 const roots = require('./roots.js');
 const declines = require('./declines.js');
 const planLists = require('./plan-lists.js');
+const asksLib = require('./asks.js');
 
 function makeCtx({ inv, catalog = catalogLib.load(), env = process.env, machine, platform, arch, data = null })
 {
@@ -91,7 +92,7 @@ function detectAll(ctx, { only } = {})
     return out;
 }
 
-const where = (f) => (f.kind === 'registration' ? `${f.name} (${f.scope})` : f.name);
+const where = (f) => (f.kind === 'registration' || f.id === 'client-drift' ? `${f.name} (${f.scope})` : f.name);
 
 function render(detected)
 {
@@ -120,9 +121,20 @@ function render(detected)
 // The asks as data: the three-way choice, then, for 'Pick which', one multi-select per four fixes (grouped shape).
 function questions(detected)
 {
-    const applicable = detected.found.filter((f) => !f.blocked);
+    // a drifted copy is never in 'Apply all found' or 'Pick which': each is its own question, four a call (spec D9);
+    // when both apps drifted, Cursor's is put only after a Restore or Leave in Claude Code
+    const drifted = detected.found.filter((f) => f.id === 'client-drift' && !f.blocked);
+    const driftQs = drifted.map((f) =>
+    {
+        const q = asksLib.driftQuestion(f);
+        const first = f.app === 'cursor' && drifted.find((x) => x.app === 'claude' && x.name === f.name && x.scope === f.scope);
+        return { ...q.question, answers: q.answers, ...(first ? { askAfter: { id: `drift-claude-${f.name}~${f.scope}`, answers: ['restore', 'leave'] } } : {}) };
+    });
+    const drift = [];
+    for (let i = 0; i < driftQs.length; i += 4) drift.push(driftQs.slice(i, i + 4));
+    const applicable = detected.found.filter((f) => !f.blocked && f.id !== 'client-drift');
     const ids = [...new Set(applicable.map((f) => f.id))];
-    if (!ids.length) return { choose: null, pick: [] }; // nothing can be applied: the NOT APPLICABLE lines are the advice
+    if (!ids.length) return { choose: null, pick: [], drift }; // nothing can be applied: the NOT APPLICABLE lines are the advice
     const pick = [];
     for (let i = 0; i < ids.length; i += 4)
         pick.push({
@@ -139,10 +151,24 @@ function questions(detected)
     };
     const calls = [];
     for (let i = 0; i < pick.length; i += 4) calls.push(pick.slice(i, i + 4));
-    return { choose, pick: calls };
+    return { choose, pick: calls, drift };
 }
 
 // ---- apply ----------------------------------------------------------------------------------------------------------
+
+// Why an answered or unanswered drift finding is not applied: null applies it, 'left' is the user's Leave.
+function driftSkip(f, picked, input)
+{
+    const answer = input[f.driftKey];
+    if (answer === undefined) return `needs --input ${f.driftKey}=<answer>`;
+    const allowed = f.inherited ? ['restore', 'leave'] : f.change === 'missing' ? ['drop', 'restore'] : f.keyGuard ? ['restore', 'leave'] : ['keep', 'restore', 'leave'];
+    if (answer === 'keep' && f.keyGuard) return 'the copy holds what looks like a key outside its key field, so Keep is not offered - answer restore or leave';
+    if (!allowed.includes(answer)) return `'${answer}' is not an answer here - ${allowed.join(', ')}`;
+    if (answer === 'leave') return 'left';
+    const claude = f.app === 'cursor' && picked.find((x) => x.id === 'client-drift' && x.app === 'claude' && x.name === f.name && x.scope === f.scope);
+    if (claude && input[claude.driftKey] === 'keep') return "Cursor's answer is not used - Claude Code's copy was kept, and Cursor takes it";
+    return null;
+}
 
 // `name` and `scope` narrow the findings to one registration, by its exact name (`only` also matches a row id, so two
 // servers of one row would both match) - update applies one at a time; `fetchFile: false` writes no fetch file and
@@ -162,6 +188,9 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
     catch (e) { res.failed = e.message; log(res.failed); return res; }
     const detected = detectAll(ctx, { only });
     let picked = ids.includes('none') ? [] : detected.found.filter((f) => (ids.includes('all') || ids.includes(f.id)) && (!name || f.name === name) && (!scope || f.scope === scope));
+    // a drifted copy with its answer is applied whatever else was picked (spec D9)
+    const answered = detected.found.filter((f) => f.id === 'client-drift' && input[f.driftKey] !== undefined && !picked.includes(f));
+    picked = [...picked, ...answered];
     // where alfred-code is set up it installs the retired plugins too: 'Apply all found' leaves them, only a pick reaches them
     if (ids.includes('all') && !ids.includes('retired-plugin'))
     {
@@ -170,13 +199,21 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
         picked = picked.filter((f) => !kept.includes(f));
     }
     if (turnedDown.length) log(declines.add(ctx.data, turnedDown).detail);
-    if (ids.includes('none')) { log('Nothing picked to apply.'); return res; }
+    if (ids.includes('none') && !answered.length) { log('Nothing picked to apply.'); return res; }
     if (!picked.length) { res.gone = true; log('Nothing to apply: no picked problem is found any more.'); return res; }
 
     for (const f of picked.filter((x) => x.blocked || (x.input && !input[x.input.id])))
     {
         res.skipped.push(f);
         log(`skipped ${f.id} on ${where(f)}: ${f.blocked || `needs --input ${f.input.id}=<value> (${f.input.prompt})`}`);
+    }
+    for (const f of picked.filter((x) => x.id === 'client-drift' && !x.blocked))
+    {
+        const why = driftSkip(f, picked, input);
+        if (!why) continue;
+        if (why === 'left') { res.skipped.push(f); log(`left    client-drift on ${where(f)}: ${f.app === 'cursor' ? 'Cursor' : 'Claude Code'}'s copy as it is`); continue; }
+        res.skipped.push(f);
+        log(`skipped client-drift on ${where(f)}: ${why}`);
     }
     const todo = picked.filter((x) => !res.skipped.includes(x));
 
@@ -239,10 +276,14 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
     if (filePicked.length)
     {
         const fctx = steps.length ? { ...ctx, inv: inventory.buildInventory({ project: ctx.inv.project, env: ctx.env, data: ctx.data }) } : ctx;
-        const now = detectAll(fctx, { only }).found.filter((f) => f.kind === 'file' && !f.blocked && filePicked.some((p) => p.id === f.id && p.name === f.name && p.scope === f.scope));
+        const now = detectAll(fctx, { only }).found.filter((f) => f.kind === 'file' && !f.blocked && filePicked.some((p) => p.id === f.id && p.name === f.name && p.scope === f.scope && p.app === f.app));
         const planned = [];
         for (const row of ctx.catalog.fixes.filter((x) => x.kind === 'file'))
-            for (const f of now.filter((x) => x.id === row.id)) planned.push(...F[row.steps](f, fctx, input));
+            for (const f of now.filter((x) => x.id === row.id))
+            {
+                try { planned.push(...F[row.steps](f, fctx, input)); }
+                catch (e) { res.failed = e.message; log(`FAILED ${f.id} on ${where(f)}: ${e.message}`); return res; }
+            }
         if (planned.length)
         {
             const plan = { version: 1, project: ctx.inv.project, os: ctx.platform, alfredCodeEnabled: Boolean(ctx.inv.alfredCodeEnabled), steps: planned, notes: [], errors: [], expect: [] };
@@ -276,7 +317,7 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
     const after = detectAll({ ...ctx, inv: inventory.buildInventory({ project: ctx.inv.project, env: ctx.env, data: ctx.data }) }, { only });
     for (const f of todo)
     {
-        const left = after.found.some((a) => a.id === f.id && a.name === f.name && a.scope === f.scope);
+        const left = after.found.some((a) => a.id === f.id && a.name === f.name && a.scope === f.scope && a.app === f.app);
         (left ? res.remaining : res.applied).push(f);
         log(`${left ? 'STILL FOUND' : 'fixed      '} ${f.id} on ${where(f)}`);
     }

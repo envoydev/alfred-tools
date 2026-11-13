@@ -608,6 +608,35 @@ function cursorNameQuestion({ file, name, sameRow })
     };
 }
 
+// drift and drift-missing (spec D9): a list entry whose copy in one app was edited or removed by hand. Keeping the edit
+// is recommended - a hand edit is deliberate - unless the copy holds a key-shaped string outside its key field: then
+// Restore or Leave. An inherited copy (a workspace member's, D4a) is the folder above's: Restore from it or Leave.
+// f: { name, scope, app, change, keyGuard, rowGone, inherited } -> { question, answers: { <label>: value } }
+function driftQuestion(f)
+{
+    const app = f.appLabel || (f.app === 'cursor' ? 'Cursor' : 'Claude Code');
+    const restore = { label: 'Restore from the list', description: `${app} gets the list's entry back`, value: 'restore' };
+    let text = `${f.name} in ${app} differs from the plugin's list. Which should stay?`;
+    let opts;
+    if (f.inherited)
+    {
+        text = f.change === 'missing' ? `${f.name} from ${f.inherited} is no longer in Cursor's file here. What should happen?` : `${f.name} in Cursor differs from ${f.inherited}'s list. Which should stay?`;
+        opts = [{ label: `Restore from ${f.inherited}`, description: `Cursor gets ${f.inherited}'s entry back`, value: 'restore' }, { label: 'Leave it as it is', description: `nothing changes; configure in ${f.inherited} changes it there`, value: 'leave' }];
+    }
+    else if (f.change === 'missing')
+    {
+        text = `${f.name} is on the plugin's list for ${app} but ${app} no longer has it. What should happen?`;
+        opts = [{ label: `Take ${app} off its list entry`, description: 'the server stays in the other app; with no app left, the entry leaves the list', value: 'drop' }, restore];
+    }
+    else if (f.keyGuard) opts = [restore, { label: `Leave ${app}'s copy as it is`, description: 'the copy holds what looks like a key outside its key field, so it is copied nowhere; fix asks again next run', value: 'leave' }];
+    else opts = [{ label: `Keep the change in ${app}`, description: f.rowGone ? 'the list lets go of it - it is no longer the plugin\'s server' : 'the list and the other app take the edited entry', value: 'keep' }, restore];
+    const marked = opts.map((o, i) => ({ ...o, label: `${o.label}${i === 0 ? REC : ''}` }));
+    return {
+        question: { id: `drift-${f.app}-${f.name}~${f.scope}`, header: 'Drift', multiSelect: false, question: text, options: marked.map(({ label, description }) => ({ label, description })) },
+        answers: Object.fromEntries(marked.map((o) => [o.label, o.value])),
+    };
+}
+
 // cursor-offer (spec D9): update's offer, once per root, to set up for Cursor the servers its list has for Claude Code
 // only. The id names the root, so the answer goes back as --input cursor-offer:<root>=set|declined.
 function cursorOfferQuestion(root, n)
@@ -681,6 +710,8 @@ const STATIC = {
     // a STATIC function whose labels hold placeholders names them, so tests/ask-blocks.js fills the block's own
     'cursor-name-taken': Object.assign((file, name) => cursorNameQuestion({ file, name, sameRow: true }).question, { placeholders: ['<file>', '<name>'] }),
     'cursor-offer': Object.assign((n, root) => cursorOfferQuestion(root, n).question, { placeholders: ['<n>', '<root>'] }),
+    drift: Object.assign((name, app) => driftQuestion({ name, scope: 'local', app: 'claude', appLabel: app, change: 'differs' }).question, { placeholders: ['<name>', '<app>'] }),
+    'drift-missing': Object.assign((name, app) => driftQuestion({ name, scope: 'local', app: 'claude', appLabel: app, change: 'missing' }).question, { placeholders: ['<name>', '<app>'] }),
 };
 
 // ---- the root questions (spec D2) ----------------------------------------------------------------------------------
@@ -982,4 +1013,4 @@ function next(inv, picks, catalog, opts = {}, built = null)
     return steps.find((s) => !done.has(s.id)) || { id: 'done' };
 }
 
-module.exports = { PARENT_HELPER_IN_CHILD, cursorNameQuestion, cursorOfferQuestion, clientsQuestion, targetClientsQuestion, ownStep, next, SCOPE_TEXT, keyNameQuestion, urlNameQuestions, settingsQuestion, liveReader, heldKey, SCOPE_LABEL, scopeOfLabel, needsRoot, rootFamilies, rootQuestion, REC, recommendedScope, keyStateOf, keyToSend, alsoProvided, pickQuestions, changeQuestions, routeQuestion, toolQuestions, toolAsk, scopeQuestion, nameQuestion, locationQuestion, removeQuestions, packed, STATIC, all, chunk, scopesFor };
+module.exports = { PARENT_HELPER_IN_CHILD, cursorNameQuestion, cursorOfferQuestion, driftQuestion, clientsQuestion, targetClientsQuestion, ownStep, next, SCOPE_TEXT, keyNameQuestion, urlNameQuestions, settingsQuestion, liveReader, heldKey, SCOPE_LABEL, scopeOfLabel, needsRoot, rootFamilies, rootQuestion, REC, recommendedScope, keyStateOf, keyToSend, alsoProvided, pickQuestions, changeQuestions, routeQuestion, toolQuestions, toolAsk, scopeQuestion, nameQuestion, locationQuestion, removeQuestions, packed, STATIC, all, chunk, scopesFor };

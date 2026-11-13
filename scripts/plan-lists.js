@@ -610,4 +610,4 @@ function renderLine(s)
     return s.empty ? `   removes ${s.file}  (no server is listed)` : `   writes ${s.file}  (the servers preferred-tools manages, and the ones left on their own)`;
 }
 
-module.exports = { listSteps, renderLine, foundList, importUnlisted, cursorSteps, takenNames, denyReadSteps, readGuardOf, denyReadStep, repairTail, changedOutside, reapproveLine };
+module.exports = { listSteps, renderLine, foundList, importUnlisted, cursorSteps, takenNames, denyReadSteps, readGuardOf, denyReadStep, repairTail, changedOutside, reapproveLine, folderList, SCOPES };

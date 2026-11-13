@@ -95,7 +95,7 @@ function compose(doc, managed, { before = [], skip = [], order = [] } = {})
 const textOf = (doc, eol) => `${JSON.stringify(doc, null, 2)}\n`.replace(/\n/g, eol);
 
 // The cursor-write step: the managed set from its lists, composed into the file, written, read back.
-// step: { file, family, lists: [{ file, scopes }], before, skip, replace }. A name the file holds as the user's own
+// step: { file, family, lists: [{ file, scopes }], before, skip, replace, only? }. A name the file holds as the user's own
 // (not in `before`) is replaced only when `replace` names it.
 function cursorWrite(step, ctx)
 {
@@ -108,7 +108,9 @@ function cursorWrite(step, ctx)
     const servers = read.doc.mcpServers;
     const before = step.before || [];
     const theirs = [...managed.keys()].filter((n) => Object.hasOwn(servers, n) && !before.includes(n) && !(step.replace || []).includes(n));
-    const skip = [...new Set([...(step.skip || []), ...theirs])];
+    // `only`: the names this write may change (fix's client-drift); every other managed name keeps the file's value
+    const others = step.only ? [...managed.keys()].filter((n) => !step.only.includes(n)) : [];
+    const skip = [...new Set([...(step.skip || []), ...theirs, ...others])];
     const order = (ctx && ctx.catalog && ctx.catalog.order) || [];
     const doc = compose(read.doc, managed, { before, skip, order });
     const text = textOf(doc, read.eol);

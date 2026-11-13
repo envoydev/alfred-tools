@@ -553,8 +553,8 @@ test("windows-mcp-one-per-desktop: each owner's own drop line", () =>
 test('questions: only NOT APPLICABLE findings give no apply ask', () =>
 {
     const advice = { id: 'windows-mcp-one-per-desktop', name: 'windows-desktop', scope: 'local', kind: 'registration', found: 'x', blocked: 'y' };
-    assert.deepStrictEqual(fix.questions({ found: [advice], held: [] }), { choose: null, pick: [] });
-    assert.deepStrictEqual(fix.questions({ found: [], held: [] }), { choose: null, pick: [] });
+    assert.deepStrictEqual(fix.questions({ found: [advice], held: [] }), { choose: null, pick: [], drift: [] });
+    assert.deepStrictEqual(fix.questions({ found: [], held: [] }), { choose: null, pick: [], drift: [] });
     const q = fix.questions({ found: [advice, { id: 'uvx-python', name: 'memory', scope: 'local', kind: 'registration', found: 'z' }], held: [] });
     assert.strictEqual(q.choose.question, '1 known problem found. Apply?');
 });
@@ -727,7 +727,7 @@ test('an advice row never reaches a fix: a finding it returns unblocked is block
         const ctx = { ...ctxOf(w), catalog: { ...catalog, fixes: [advice] } };
         const found = fix.detectAll(ctx).found;
         assert.deepStrictEqual(found.map((f) => [f.id, f.blocked]), [['serena-telemetry', 'advice only - nothing here is applied']]);
-        assert.deepStrictEqual(fix.questions(fix.detectAll(ctx)), { choose: null, pick: [] });
+        assert.deepStrictEqual(fix.questions(fix.detectAll(ctx)), { choose: null, pick: [], drift: [] });
         const before = w.writes().length;
         const lines = [];
         const res = fix.applyFixes(ctx, ['all'], { log: (...a) => lines.push(a.join(' ')) });
