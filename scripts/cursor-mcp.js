@@ -118,7 +118,11 @@ function cursorWrite(step, ctx)
     if (read.state === 'ok' && read.text === text) return { ok: true, detail: `${step.file} already holds these servers - left as it is${said}` };
     fs.mkdirSync(path.dirname(step.file), { recursive: true });
     const tmp = `${step.file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, text);
+    // the file's own mode is kept: ~/.cursor/mcp.json can hold a stdio route's key (D6), and a user's 0600 stays 0600
+    let mode;
+    try { mode = fs.statSync(step.file).mode & 0o777; } catch { /* a new file takes the default */ }
+    fs.writeFileSync(tmp, text, mode === undefined ? undefined : { mode });
+    if (mode !== undefined) fs.chmodSync(tmp, mode);
     fs.renameSync(tmp, step.file);
     const back = readCursor(step.file);
     const wrong = back.state !== 'ok' ? [...managed.keys()] : [...managed.keys()].filter((n) => !skip.includes(n) && !deepEqual(back.doc.mcpServers[n], managed.get(n).entry));
@@ -139,7 +143,9 @@ function stdioKeyed(entry, row, routeId)
 
 // At user scope a stdio keyed entry goes into ~/.cursor/mcp.json with its value, from the global root's .mcps-secrets
 // (the list's own folder) under the list's key name, as apply's fillStep writes ~/.claude.json's copy; the list keeps
-// kept.MARKER. An unfilled name is written empty, with fillStep's note. Changes `managed` in place. -> [note]
+// kept.MARKER. When the key files lack it - a 0.2.x/0.3.x key kept in the registration, the old key files read for
+// names only - the value comes from Claude Code's registration as read, beside which Cursor's copy sits (D6). With
+// neither, the name is written empty, with fillStep's note. Changes `managed` in place. -> [note]
 function fillStdioKeys(managed, ctx)
 {
     const catalog = (ctx && ctx.catalog) || require('./catalog.js').load();
@@ -152,6 +158,13 @@ function fillStdioKeys(managed, ctx)
         const files = keys.stdioChain({ scope: 'user', globalRoot: path.dirname(m.list) });
         const found = keys.valueIn(files, m.key);
         const route = row.routes[m.route];
+        if (!found)
+        {
+            const reg = ctx && ctx.env ? account.readRegistration(name, 'user', ctx.project || process.cwd(), ctx.env) : undefined;
+            const back = reg ? kept.restore(m.entry, reg, row) : null;
+            const filled = back && !back.error ? keys.tokenFields(back.entry, route).map((f) => keys.valueAt(back.entry, f.at)) : [];
+            if (filled.length && filled.every((v) => typeof v === 'string' && v.trim() && !v.includes(kept.MARKER))) { managed.set(name, { ...m, entry: back.entry }); continue; }
+        }
         managed.set(name, { ...m, entry: keys.fillKeys(m.entry, row, m.route, 'user', { [route.tokenVar]: found ? found.value : '' }) });
         if (!found) notes.push(`${m.key} for '${name}' (user) is in none of ${files.join(', ')} - written empty: fill ${m.key} in ${files[0]}, then run /preferred-tools:configure and keep ${m.key} as the key's name - it writes the key in`);
     }

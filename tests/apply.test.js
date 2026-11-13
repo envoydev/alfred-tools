@@ -111,6 +111,22 @@ test('a re-run with the same answers makes no CLI call and says so', () => {
     finally { w.clean(); }
 });
 
+test('a step that throws is a failed step: the list takes Cursor off the entry it never reached', () => {
+    const w = world();
+    try
+    {
+        fs.writeFileSync(path.join(w.project, '.cursor'), 'a file where Cursor\'s folder goes\n');
+        let r;
+        assert.doesNotThrow(() => { r = walk(w, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'local' } } }); });
+        assert.ok(r.report.failed, r.text);
+        assert.strictEqual(r.report.failed.op, 'cursor-write');
+        assert.match(r.text, /FAILED/);
+        const list = readJson(path.join(w.project, '.preferred-tools', 'mcps.json'));
+        assert.deepStrictEqual(list.servers.find((s) => s.name === 'serena').clients, ['claude'], 'Cursor taken off the entry');
+    }
+    finally { w.clean(); }
+});
+
 test('a failure mid-apply stops there, leaves the earlier steps in place and names them', () => {
     const w = world();
     try

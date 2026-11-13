@@ -121,6 +121,57 @@ test('a stdio keyed route at global scope picked for Cursor is not drift', () =>
     finally { w.clean(); }
 });
 
+// A 0.2.x/0.3.x key: the value lives in ~/.claude.json's registration, and the global root's .mcps-secrets holds only
+// the name (the old key files are read for names only). Cursor's copy is filled from the registration as read.
+function keyInRegistrationOnly(w)
+{
+    const root = path.join(w.home, '.preferred-tools');
+    fs.mkdirSync(root, { recursive: true });
+    const value = `sntryu_${'0b'.repeat(16)}`;
+    fs.writeFileSync(path.join(root, '.mcps-secrets'), `SENTRY_ACCESS_TOKEN=${value}\n`);
+    install(w, { picks: { sentry: { route: 'local', scope: 'user', token: true } } });
+    fs.writeFileSync(path.join(root, '.mcps-secrets'), 'SENTRY_ACCESS_TOKEN=\n');
+    return value;
+}
+const sentryKey = (e) => e.env.SENTRY_ACCESS_TOKEN;
+
+test('a stdio keyed copy restored in Cursor takes the value from the registration when the key files lack it', () =>
+{
+    const w = world();
+    try
+    {
+        const value = keyInRegistrationOnly(w);
+        editCursor(globalCursor(w), 'sentry', null);
+        const r = run(w, ['none'], { 'drift:cursor:sentry~user': 'restore' });
+        assert.strictEqual(r.res.failed, null, r.text);
+        assert.strictEqual(sentryKey(copyOf(globalCursor(w), 'sentry')), value, 'the registration\'s value, not an empty one');
+        assert.ok(!r.text.includes(value), 'no key printed');
+        assert.deepStrictEqual(drifts(w), []);
+    }
+    finally { w.clean(); }
+});
+
+test('a Cursor copy whose key field is empty where the list holds the key offers Restore and Leave, never Keep', () =>
+{
+    const w = world();
+    try
+    {
+        const value = keyInRegistrationOnly(w);
+        editCursor(globalCursor(w), 'sentry', (e) => { e.env.SENTRY_ACCESS_TOKEN = ''; });
+        const found = drifts(w);
+        assert.deepStrictEqual(found.map((f) => [f.app, f.change, f.keyEmpty]), [['cursor', 'differs', true]]);
+        const [q] = driftQs(w);
+        assert.deepStrictEqual(labels(q), ['Restore from the list (Recommended)', 'Leave Cursor\'s copy as it is']);
+        const keep = run(w, ['none'], { 'drift:cursor:sentry~user': 'keep' });
+        assert.match(keep.text, /its key field is empty, so Keep is not offered - answer restore or leave/);
+        assert.strictEqual(sentryKey(readJson(require('../scripts/account.js').accountFile(w.env)).mcpServers.sentry), value, 'Claude Code keeps its key');
+        const r = run(w, ['none'], { 'drift:cursor:sentry~user': 'restore' });
+        assert.strictEqual(r.res.failed, null, r.text);
+        assert.strictEqual(sentryKey(copyOf(globalCursor(w), 'sentry')), value);
+    }
+    finally { w.clean(); }
+});
+
 test('a kept edit that fails the fingerprint leaves the list', () =>
 {
     const w = world();

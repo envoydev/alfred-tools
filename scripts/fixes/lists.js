@@ -146,12 +146,26 @@ function keyGuardOf(copy, row, routeId)
     return hit;
 }
 
-function driftOf(s, app, change, { list, family, file = null, inherited = null, keyGuard = false, rowGone = false })
+function driftOf(s, app, change, { list, family, file = null, inherited = null, keyGuard = false, keyEmpty = false, rowGone = false })
 {
     const found = inherited
         ? (change === 'missing' ? `${s.name} from ${inherited} is no longer in Cursor's ${file}` : `Cursor's copy in ${file} differs from ${inherited}'s list`)
         : (change === 'missing' ? `on ${list} for ${APP[app]}, which no longer has it` : `${APP[app]}'s copy differs from ${list}`);
-    return { id: 'client-drift', name: s.name, scope: s.scope, row: s.row, route: s.route, app, change, inherited, keyGuard, rowGone, family, list, file, driftKey: `drift:${app}:${s.name}~${s.scope}`, found };
+    return { id: 'client-drift', name: s.name, scope: s.scope, row: s.row, route: s.route, app, change, inherited, keyGuard, keyEmpty, rowGone, family, list, file, driftKey: `drift:${app}:${s.name}~${s.scope}`, found };
+}
+
+// Is the copy's key field empty where the list holds the key (kept.MARKER)? A copy written before its value was found -
+// Keeping it would blank the other app's working key, so only Restore and Leave are offered.
+function keyEmptyOf(copy, want, row, routeId)
+{
+    const route = row && row.routes ? row.routes[routeId] : null;
+    const fields = keys.tokenFields(copy, route);
+    return fields.length > 0 && fields.every((f) =>
+    {
+        const v = keys.valueAt(copy, f.at);
+        const w = keys.valueAt(want, f.at);
+        return typeof v === 'string' && !v.trim() && typeof w === 'string' && w.includes(kept.MARKER);
+    });
 }
 
 // -> [finding], each entry's Claude Code finding before its Cursor one
@@ -167,7 +181,7 @@ function clientDriftDetect(ctx)
         const row = catalog.byId.get(s.row);
         if (copy === undefined) return out.push(driftOf(s, app, 'missing', where));
         if (same(kept.keep(copy, row), kept.keep(want, row))) return undefined;
-        return out.push(driftOf(s, app, 'differs', { ...where, keyGuard: keyGuardOf(copy, row, s.route), rowGone: !cursorMcp.matchesRow(copy, row) }));
+        return out.push(driftOf(s, app, 'differs', { ...where, keyGuard: keyGuardOf(copy, row, s.route), keyEmpty: keyEmptyOf(copy, want, row, s.route), rowGone: !cursorMcp.matchesRow(copy, row) }));
     };
     for (const family of ['project', 'global'])
     {

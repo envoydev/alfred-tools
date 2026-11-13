@@ -171,5 +171,5 @@ const credentialName = (n) => /TOKEN|SECRET|PASSWORD|KEY|AUTH/i.test(String(n));
 
 module.exports = {
     readDotenv, tokenFields, fillKeys, PLACEHOLDER, SECRETS, NAME_RULE, hostedChain, stdioChain, valueIn, filledNames, namesIn, oldFiles, oldHolding,
-    offeredName, nameOfValue, credentialName,
+    offeredName, nameOfValue, credentialName, valueAt,
 };

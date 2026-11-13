@@ -396,7 +396,11 @@ function cursorSteps(inv, ctx, out, answers = {})
                 const mskip = [];
                 const mfresh = upserts.filter((u) => forCursor(u.server) && u.server.scope === 'project' && !mbefore.has(u.server.name)).map((u) => ({ ...u, cursorFile: mfile }));
                 settle(takenNames(inv, ctx, mfresh), mreplace, (t) => mskip.push(t.name));
-                steps.push({ op: 'cursor-write', file: mfile, family, lists: msrc.lists, before: [...mbefore.keys()], skip: mskip, replace: mreplace, why: `${mfile}: the workspace member's servers, with ${ctx.project}'s project servers` });
+                // a member's copy edited or removed by hand is left as it is, as in the project's own file (spec D1, D4a)
+                const mafter = cursorMcp.managedSet(msrc.sources);
+                const mhold = heldCopies(mfile, mbefore, mafter, ctx, out);
+                const mreapprove = changedCopies(mfile, mbefore, mafter, mhold, upserts, ctx, out);
+                steps.push({ op: 'cursor-write', file: mfile, family, lists: msrc.lists, before: [...mbefore.keys()], skip: [...new Set([...mskip, ...mhold])], replace: mreplace, reapprove: mreapprove, why: `${mfile}: the workspace member's servers, with ${ctx.project}'s project servers` });
             }
 
         if (!after.size) continue;

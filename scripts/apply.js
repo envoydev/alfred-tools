@@ -481,7 +481,11 @@ function apply(plan, { env = process.env, tmp, runCli = cli.run, log = console.l
         if (step.op === 'fetch') { report.toFetch.push(step); log(`${i + 1}. later  ${step.why} (fetch.js, after the read-back)`); continue; }
         const ready = restoreStep(step, ctx);
         const filled = ready.error ? null : fillStep(ready.step, ctx);
-        const r = ready.error ? { ok: false, detail: ready.error } : runStep(filled.step, ctx);
+        // a step that throws (a .cursor that is a file, a read-only target) is a failed step, so the failure path below
+        // still takes Cursor off the list entries it never reached (spec D1)
+        let r;
+        try { r = ready.error ? { ok: false, detail: ready.error } : runStep(filled.step, ctx); }
+        catch (e) { r = { ok: false, detail: `${step.op}: ${e.message}` }; }
         log(`${i + 1}. ${r.ok ? 'ok    ' : 'FAILED'} ${r.detail}`);
         if (filled && filled.note) { report.keys.push(filled.note); log(`   key: ${filled.note}`); }
         if (r.ok)

@@ -611,7 +611,7 @@ function cursorNameQuestion({ file, name, sameRow })
 // drift and drift-missing (spec D9): a list entry whose copy in one app was edited or removed by hand. Keeping the edit
 // is recommended - a hand edit is deliberate - unless the copy holds a key-shaped string outside its key field: then
 // Restore or Leave. An inherited copy (a workspace member's, D4a) is the folder above's: Restore from it or Leave.
-// f: { name, scope, app, change, keyGuard, rowGone, inherited } -> { question, answers: { <label>: value } }
+// f: { name, scope, app, change, keyGuard, keyEmpty, rowGone, inherited } -> { question, answers: { <label>: value } }
 function driftQuestion(f)
 {
     const app = f.appLabel || (f.app === 'cursor' ? 'Cursor' : 'Claude Code');
@@ -629,6 +629,7 @@ function driftQuestion(f)
         opts = [{ label: `Take ${app} off its list entry`, description: 'the server stays in the other app; with no app left, the entry leaves the list', value: 'drop' }, restore];
     }
     else if (f.keyGuard) opts = [restore, { label: `Leave ${app}'s copy as it is`, description: 'the copy holds what looks like a key outside its key field, so it is copied nowhere; fix asks again next run', value: 'leave' }];
+    else if (f.keyEmpty) opts = [restore, { label: `Leave ${app}'s copy as it is`, description: 'its key field is empty - keeping it would blank the key in the other app; fix asks again next run', value: 'leave' }];
     else opts = [{ label: `Keep the change in ${app}`, description: f.rowGone ? 'the list lets go of it - it is no longer the plugin\'s server' : 'the list and the other app take the edited entry', value: 'keep' }, restore];
     const marked = opts.map((o, i) => ({ ...o, label: `${o.label}${i === 0 ? REC : ''}` }));
     return {

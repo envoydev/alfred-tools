@@ -161,8 +161,9 @@ function driftSkip(f, picked, input)
 {
     const answer = input[f.driftKey];
     if (answer === undefined) return `needs --input ${f.driftKey}=<answer>`;
-    const allowed = f.inherited ? ['restore', 'leave'] : f.change === 'missing' ? ['drop', 'restore'] : f.keyGuard ? ['restore', 'leave'] : ['keep', 'restore', 'leave'];
+    const allowed = f.inherited ? ['restore', 'leave'] : f.change === 'missing' ? ['drop', 'restore'] : f.keyGuard || f.keyEmpty ? ['restore', 'leave'] : ['keep', 'restore', 'leave'];
     if (answer === 'keep' && f.keyGuard) return 'the copy holds what looks like a key outside its key field, so Keep is not offered - answer restore or leave';
+    if (answer === 'keep' && f.keyEmpty) return 'its key field is empty, so Keep is not offered - answer restore or leave';
     if (!allowed.includes(answer)) return `'${answer}' is not an answer here - ${allowed.join(', ')}`;
     if (answer === 'leave') return 'left';
     const claude = f.app === 'cursor' && picked.find((x) => x.id === 'client-drift' && x.app === 'claude' && x.name === f.name && x.scope === f.scope);

@@ -90,7 +90,8 @@ answer to `choose`, except 'Skip'. Each is one server whose copy in one app chan
 ```
 
 A copy holding what looks like a key outside its key field (a token pasted into Cursor's `headers`, say) is asked with
-'Restore from the list (Recommended)' and 'Leave <app>'s copy as it is' - it is copied nowhere. A copy a workspace
+'Restore from the list (Recommended)' and 'Leave <app>'s copy as it is' - it is copied nowhere. So is a copy whose key
+field is empty where the list holds the key: keeping it would blank the other app's key. A copy a workspace
 member got from a folder above is asked with 'Restore from <folder> (Recommended)' and 'Leave it as it is'; Leave is not
 recorded, so the next run asks again. A question carrying `askAfter` is put only when the question it names was
 answered with one of its `answers` (Cursor's, after a Restore or Leave in Claude Code - a Keep there carries the kept

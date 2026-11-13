@@ -37,6 +37,17 @@ test('cursor-mcp keeps the user\'s entries and their order', () => {
     assert.strictEqual(JSON.stringify(doc.mcpServers.mine), JSON.stringify(mine), 'the user\'s entry, its key order kept');
 });
 
+test('cursor-mcp keeps the file\'s own mode: a 0600 Cursor file stays 0600', { skip: process.platform === 'win32' && 'NOT RUN: POSIX modes' }, () => {
+    const d = fresh();
+    const file = path.join(d, '.cursor', 'mcp.json');
+    write(file, JSON.stringify({ mcpServers: { mine: { command: 'node' } } }, null, 2));
+    fs.chmodSync(file, 0o600);
+    const lists = [{ file: listFile(d, [srv('serena', 'local', SERENA)]), scopes: ['local', 'project'] }];
+    const r = C.cursorWrite(step(file, lists), ctx);
+    assert.strictEqual(r.ok, true, r.detail);
+    assert.strictEqual(fs.statSync(file).mode & 0o777, 0o600);
+});
+
 test('cursor-mcp removes a managed name the list dropped', () => {
     const d = fresh();
     const file = path.join(d, '.cursor', 'mcp.json');

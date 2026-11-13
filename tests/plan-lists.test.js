@@ -494,6 +494,29 @@ test('workspace: removing a root entry removes it from each member, and no membe
     for (const c of ['a', 'b', 'c']) assert.ok(!fs.existsSync(path.join(w.m[c], '.preferred-tools')), `${c} gets no root`);
 });
 
+test('workspace: a member copy edited or removed by hand is left as it is when the root changes, and named', () => {
+    const w = wsWorld();
+    const first = outOf(listWriteOf(w, [srv('serena'), srv('memory')]));
+    runFiles(w, first, cursorSteps(w.inv, w.ctx, first, {}));
+    // a's serena edited by hand, b's memory removed by hand
+    const aDoc = JSON.parse(fs.readFileSync(w.cf(w.m.a), 'utf8'));
+    aDoc.mcpServers.serena = { ...aDoc.mcpServers.serena, args: [...aDoc.mcpServers.serena.args, '--mine'] };
+    fs.writeFileSync(w.cf(w.m.a), JSON.stringify(aDoc, null, 2));
+    const bDoc = JSON.parse(fs.readFileSync(w.cf(w.m.b), 'utf8'));
+    delete bDoc.mcpServers.memory;
+    fs.writeFileSync(w.cf(w.m.b), JSON.stringify(bDoc, null, 2));
+    const editedA = fs.readFileSync(w.cf(w.m.a), 'utf8');
+    // the next run at the root drops memory's root entry and keeps serena
+    w.inv.lists.project = { file: w.listFile, servers: readList(w).servers, own: [] };
+    const out = outOf({ ...listWriteOf(w, [srv('serena')]), drops: [{ key: 'mcp:memory~project', after: null }] });
+    const steps = cursorSteps(w.inv, w.ctx, out, {});
+    assert.deepStrictEqual(steps.find((s) => s.file === w.cf(w.m.a)).skip, ['serena']);
+    assert.ok(out.notes.includes(`serena: Cursor's copy was changed by hand - left; run /preferred-tools:fix`), out.notes.join('\n'));
+    runFiles(w, out, steps);
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(w.cf(w.m.a), 'utf8')).mcpServers.serena, JSON.parse(editedA).mcpServers.serena, 'the hand edit stays');
+    assert.ok(!cursorNames(w.cf(w.m.a)).includes('memory'), 'the dropped root entry still leaves');
+});
+
 test('workspace: a plan at a member writes its own file with the root\'s project entries after its own', () => {
     const w = wsWorld({ at: null });
     // the root lists serena for Cursor already
