@@ -142,6 +142,35 @@ function cursorOf(file, marked, catalog)
     return { file, state: read.state, names: Object.keys(servers), entries };
 }
 
+// ---- hosted keyed routes: two forms (spec D5) -------------------------------------------------------------------------
+
+// The headers an entry sends besides the helper's: Cursor's bridge has no place for them.
+const otherHeaders = (entry) => Object.keys((entry && entry.headers) || {});
+
+// Cursor's copy of a hosted keyed entry: Cursor runs no headersHelper (F5), so it gets the bridge, which sends the key
+// (F6) - `node <root>/mcp-bridge.js <url> <NAME> <SCHEME> mcp-remote@<pin> [<global root>]`, the object buildEntry makes
+// for sentry's bridge route. The URL, the helper's arguments and the bridge path come from `entry`; a `prior` bridge
+// copy (the list's cursorEntry, or Cursor's copy as read) keeps its pin, its cut-off and every env pair and argument the
+// form does not set, so a pin update moved or an edit the user kept survives a Claude-side rewrite. -> entry | null
+function bridgeFormOf(entry, catalog, prior = null)
+{
+    if (!entry || typeof entry.headersHelper !== 'string' || otherHeaders(entry).length) return null;
+    const h = E.helperParts(entry.headersHelper);
+    if (!h || h.args.length < 2) return null;
+    const P = /^(?:[A-Za-z]:[\\/]|\\\\)/.test(h.path) ? path.win32 : path.posix;
+    const own = [P.join(P.dirname(h.path), 'mcp-bridge.js'), entry.url, h.args[0], h.args[1]];
+    const globalRoot = h.args[2] ? [h.args[2]] : [];
+    const pp = prior ? E.bridgeParts(prior) : null;
+    if (pp && pp.pkg)
+    {
+        const at = prior.args.findIndex((a) => String(a) === pp.path);
+        const rest = pp.globalRoot !== null ? prior.args.slice(at + 6) : [];
+        return { ...prior, command: 'node', args: [...prior.args.slice(0, at), ...own, pp.pkg, ...globalRoot, ...rest], env: { ...(prior.env || {}) } };
+    }
+    const p = catalog.byId.get('sentry').routes.bridge.package;
+    return { command: 'node', args: [...own, `${p.name}@${p.version}`, ...globalRoot], env: { npm_config_before: p.cutoff } };
+}
+
 // Is Cursor on this machine (spec D3)? `~/.cursor` exists, `cursor-agent` or `cursor` is on PATH (with .exe or .cmd on
 // Windows), or a list already sets a server up for Cursor. Bare `agent` does not count: the name is too common.
 function cursorFound(ctx, inv)
@@ -156,4 +185,4 @@ function cursorFound(ctx, inv)
     return ['project', 'global'].some((f) => { const l = inv && inv.lists && inv.lists[f]; return Boolean(l) && (l.servers || []).some((x) => (x.clients || []).includes('cursor')); });
 }
 
-module.exports = { fileFor, readCursor, refusal, managedSet, compose, cursorWrite, matchesRow, cursorOf, cursorFound };
+module.exports = { fileFor, readCursor, refusal, managedSet, compose, cursorWrite, matchesRow, cursorOf, cursorFound, bridgeFormOf, otherHeaders };

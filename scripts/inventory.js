@@ -61,14 +61,19 @@ function matchesFingerprint(entry, f)
     const bridge = E.bridgeParts(entry);
     if (f.bridge) return Boolean(bridge) && bridge.template.replace(/^https?:\/\//i, '').toLowerCase().startsWith(f.bridge);
     if (bridge) return false;
-    if (entry.url || entry.type === 'http' || entry.type === 'sse')
+    const byUrl = (url) =>
     {
         if (f.pkg || f.command) return false;
         let u;
-        try { u = new URL(String(entry.url)); } catch { return false; }
+        try { u = new URL(String(url)); } catch { return false; }
         if (f.host && u.hostname.toLowerCase() !== f.host) return false;
         return u.pathname.startsWith(f.pathPrefix || '/');
-    }
+    };
+    // the shared sign-in form (0.5.0, D5): mcp-remote with MCP_REMOTE_CONFIG_DIR, matched by its URL as an http entry, so
+    // it is the row's remote route; a hand-made mcp-remote entry has no parts and matches no row below
+    const signIn = E.signInParts(entry);
+    if (signIn) return byUrl(signIn.url);
+    if (entry.url || entry.type === 'http' || entry.type === 'sse') return byUrl(entry.url);
     const { command, args } = launchTokens(entry);
     if (f.command) return path.basename(command).replace(/\.(exe|cmd)$/i, '') === f.command;
     if (!f.pkg) return false;

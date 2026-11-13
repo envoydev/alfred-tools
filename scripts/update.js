@@ -125,10 +125,12 @@ async function mcpOffers(ctx, out)
         const row = ctx.catalog.byId.get(r.rowId);
         const def = row.routes[r.route];
         const at = `${r.name} (${r.scope})`;
-        if (r.route === 'remote') { out.skipped.push(`${at}: a hosted URL has no pin`); continue; }
+        // the shared sign-in form (0.5.0, D5) runs mcp-remote at a pin, the bridge route's package
+        const signIn = r.route === 'remote' && E.signInParts(r.entry);
+        if (r.route === 'remote' && !signIn) { out.skipped.push(`${at}: a hosted URL has no pin`); continue; }
         if (def.runtime === 'docker') { out.skipped.push(`${at}: the Docker image tag is not checked - change it with /preferred-tools:configure`); continue; }
-        if (!def.package) continue;
-        const pkg = def.package;
+        const pkg = signIn ? ctx.catalog.byId.get('sentry').routes.bridge.package : def.package;
+        if (!pkg) continue;
         const from = pinnedVersion(r.entry, pkg.name);
         if (!from) { out.skipped.push(`${at}: ${pkg.name} is launched with no version, so it follows the registry already`); continue; }
         let versions;
@@ -140,6 +142,44 @@ async function mcpOffers(ctx, out)
         const entry = bumpEntry(r.entry, pkg.name, pick.offer.version, registryLib.cutoffOf(ctx.now));
         if (!entry) { out.errors.push(`${at}: could not move the pin of ${pkg.name} in the registration as it is written - change it with /preferred-tools:configure`); continue; }
         out.offers.push({ kind: 'mcp', id: `mcp:${r.name}~${r.scope}`, name: r.name, scope: r.scope, row: r.rowId, route: r.route, package: pkg.name, from, to: pick.offer.version, ageDays: pick.offer.ageDays, cutoff: registryLib.cutoffOf(ctx.now), old: r.entry, entry, group: 'mcp', label: `${r.name} (${r.scope})` });
+    }
+}
+
+// Cursor's bridge copy of a two-form entry (D5): its mcp-remote pin, which mcpOffers never sees (Claude Code's side is a
+// hosted URL). One offer per list server with a cursorEntry, from Cursor's copy as read; a copy that is missing or drifted
+// from the list is named and left to fix.
+async function cursorPinOffers(ctx, out)
+{
+    const kept = require('./kept.js');
+    const pkg = ctx.catalog.byId.get('sentry').routes.bridge.package;
+    let versions = null;
+    for (const family of ['project', 'global'])
+    {
+        const l = ctx.inv.lists && ctx.inv.lists[family];
+        if (!l || l.note || l.old) continue;
+        const seen = (ctx.inv.cursor && ctx.inv.cursor[family]) || { entries: {} };
+        for (const s of l.servers || [])
+        {
+            if (!s.cursorEntry || !(s.clients || []).includes('cursor')) continue;
+            const at = `${s.name} (${s.scope})`;
+            const copy = seen.entries[s.name];
+            if (!copy) { out.skipped.push(`${at}: Cursor's copy is not in ${seen.file} - not checked; /preferred-tools:fix settles it`); continue; }
+            const row = ctx.catalog.byId.get(s.row);
+            if (JSON.stringify(copy) !== JSON.stringify(kept.keep(s.cursorEntry, row))) { out.skipped.push(`${at}: Cursor's copy in ${seen.file} differs from the list - not checked; /preferred-tools:fix settles it`); continue; }
+            const from = pinnedVersion(s.cursorEntry, pkg.name);
+            if (!from) continue;
+            if (!versions)
+            {
+                try { versions = await ctx.registry.versionsOf(pkg.registry, pkg.name); }
+                catch (e) { out.errors.push(`${at} in Cursor: ${pkg.registry} lookup for ${pkg.name} failed - ${e.message}`); return; }
+            }
+            const pick = registryLib.choose(versions, { registry: pkg.registry, now: ctx.now, current: from });
+            if (pick.held.length) out.held.push(`${at} in Cursor: ${registryLib.heldLine(pkg.name, pick.held)}`);
+            if (!pick.offer) continue;
+            const entry = bumpEntry(s.cursorEntry, pkg.name, pick.offer.version, registryLib.cutoffOf(ctx.now));
+            if (!entry) continue;
+            out.offers.push({ kind: 'cursor-pin', id: `cursor-pin:${s.name}~${s.scope}`, name: s.name, scope: s.scope, row: s.row, family, list: l.file, file: seen.file, server: s, package: pkg.name, from, to: pick.offer.version, ageDays: pick.offer.ageDays, cutoff: registryLib.cutoffOf(ctx.now), old: s.cursorEntry, entry, group: 'mcp', label: `${s.name} (${s.scope}, Cursor)` });
+        }
     }
 }
 
@@ -253,6 +293,7 @@ async function check(ctx)
     const out = { offers: [], unchecked: [], skipped: [], held: [], errors: [], lsp: [], notes: [], waiting: 0 };
     pluginOffers(ctx, out);
     await mcpOffers(ctx, out);
+    await cursorPinOffers(ctx, out);
     await lspOffers(ctx, out);
     helperOffers(ctx, out);
     upgradeOffers(ctx, out);
@@ -273,7 +314,7 @@ function render(out)
     };
     table('Catalog plugins:', out.offers.filter((o) => o.kind === 'plugin' && o.group === 'catalog'));
     table('Other plugins:', out.offers.filter((o) => o.kind === 'plugin' && o.group === 'other'));
-    table('MCP servers (pin -> newest release at least 7 days old):', out.offers.filter((o) => o.kind === 'mcp'));
+    table('MCP servers (pin -> newest release at least 7 days old):', out.offers.filter((o) => o.kind === 'mcp' || o.kind === 'cursor-pin'));
     table('Language servers:', out.offers.filter((o) => o.kind === 'lsp'));
     table('Key helpers:', out.offers.filter((o) => o.kind === 'helper' || o.kind === 'bridge'));
     const ups = out.offers.filter((o) => o.kind === 'upgrade');
@@ -387,6 +428,24 @@ function updateMcp(ctx, offer, tmp, log)
     return pin === offer.to;
 }
 
+// Cursor's bridge copy with its pin moved: the list's cursorEntry and Cursor's file, read back. No claude call - Claude
+// Code's entry is a hosted URL with its helper.
+function updateCursorPin(ctx, offer, tmp, log)
+{
+    const scopes = offer.family === 'global' ? ['user'] : ['local', 'project'];
+    const before = ((ctx.inv.lists[offer.family] || {}).servers || []).filter((x) => (x.clients || []).includes('cursor')).map((x) => x.name);
+    const steps = [
+        { op: 'list-write', file: offer.list, family: offer.family, upserts: [{ server: { ...offer.server, cursorEntry: offer.entry }, after: null, cursorFile: offer.file }], drops: [], own: null, why: `${offer.list}: Cursor's copy of ${offer.name} at ${offer.package} ${offer.to}` },
+        { op: 'cursor-write', file: offer.file, family: offer.family, lists: [{ file: offer.list, scopes }], before, skip: [], replace: [], why: `${offer.file}: ${offer.name} at ${offer.package} ${offer.to}` },
+    ];
+    const report = apply({ project: ctx.project, steps }, { env: ctx.env, tmp, runCli: ctx.runCli, fetchFile: false, log: (...a) => log(a.join(' ')) });
+    if (report.failed) return false;
+    const got = require('./cursor-mcp.js').readCursor(offer.file);
+    const pin = got.state === 'ok' ? pinnedVersion(got.doc.mcpServers[offer.name] || {}, offer.package) : null;
+    log(`${pin === offer.to ? 'ok    ' : 'CHECK '} ${offer.label}: ${offer.package} ${offer.from} -> ${pin || '?'} (read back from ${offer.file}), cut-off ${offer.cutoff}`);
+    return pin === offer.to;
+}
+
 // A helper or bridge copy rewritten with this plugin's, if it is still the lower one the check offered; read back. The
 // root's package.json says CommonJS when it has none (apply.js ensureCommonjs).
 function updateHelper(offer, log)
@@ -437,7 +496,7 @@ function applyUpdates(ctx, ids, out, { tmp, log = console.log } = {})
     for (const c of chosen)
     {
         if (typeof c === 'string') { res.unknown.push(c); log(`NOT OFFERED ${c}: nothing is behind under that id`); continue; }
-        const ok = c.kind === 'plugin' ? updatePlugin(ctx, c, log) : c.kind === 'lsp' ? updateLsp(ctx, c, log) : c.kind === 'helper' || c.kind === 'bridge' ? updateHelper(c, log) : c.kind === 'upgrade' ? updateUpgrade(ctx, c, dir, log) : updateMcp(ctx, c, dir, log);
+        const ok = c.kind === 'plugin' ? updatePlugin(ctx, c, log) : c.kind === 'lsp' ? updateLsp(ctx, c, log) : c.kind === 'helper' || c.kind === 'bridge' ? updateHelper(c, log) : c.kind === 'upgrade' ? updateUpgrade(ctx, c, dir, log) : c.kind === 'cursor-pin' ? updateCursorPin(ctx, c, dir, log) : updateMcp(ctx, c, dir, log);
         (ok ? res.applied : res.failed).push(c.id);
     }
     // every rewritten server in one fetch file, for fetch.js in the background (apply.js says why); a server rewritten

@@ -168,6 +168,14 @@ async function run(j, { env = process.env, runFetch = realFetch, start = realSta
             log(`${n}. skip   ${line}`);
             continue;
         }
+        // the shared sign-in form (D5): its first start opens a browser to sign in, which is the user's to do in an app
+        if (E.signInParts(entry))
+        {
+            const line = `'${step.name}' not started: its first start opens the sign-in, which belongs to Claude Code or Cursor`;
+            res.skipped.push(line);
+            log(`${n}. skip   ${line}`);
+            continue;
+        }
         const missing = unsetVar(entry, env);
         if (missing)
         {

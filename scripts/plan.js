@@ -36,6 +36,7 @@ const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join('
 const mcpOrder = require('./mcp-order.js');
 const planLists = require('./plan-lists.js');
 const mcpsList = require('./mcps-list.js');
+const cursorMcp = require('./cursor-mcp.js');
 const { installedOf, keyOf, targetOf, fromHere, otherWindowsMcp } = require('./inventory.js');
 const { blockingStdio, deepEqual } = require('./json-file.js');
 
@@ -124,6 +125,13 @@ function wantedRoot(row, pick, cur, name, scope, ctx)
     return { root, existing };
 }
 
+// The list entry of a registration, or null.
+function listedOf(inv, reg)
+{
+    const l = inv.lists && inv.lists[roots.familyOf(reg.scope)];
+    return l && !l.note && !l.old ? (l.servers || []).find((x) => x.name === reg.name && x.scope === reg.scope) || null : null;
+}
+
 function planMcp(row, pick, inv, ctx, catalog, out)
 {
     if (!row.os.includes(ctx.platform)) return out.errors.push(`${row.id}: not offered on ${ctx.platform}`);
@@ -131,6 +139,11 @@ function planMcp(row, pick, inv, ctx, catalog, out)
     const here = inv.registrations.filter((r) => r.rowId === row.id && !r.alfredRetired);
     const target = pick.target ? here.find((r) => r.name === pick.target.name && r.scope === pick.target.scope) : null;
     const cur = target ? E.currentOf(row, target) : null;
+
+    // which apps (D3): the answer, else what the list holds for the target, else Claude Code only
+    const listedEntry = target ? listedOf(inv, target) : null;
+    const listedClients = listedEntry ? listedEntry.clients || ['claude'] : ['claude'];
+    let clients = pick.clients || listedClients;
 
     const routeId = pick.route || (cur ? cur.route : row.recommendedRoute);
     const route = row.routes[routeId];
@@ -309,6 +322,49 @@ function planMcp(row, pick, inv, ctx, catalog, out)
         if (row.params && cur.host && params.host !== cur.host) entry.url = E.subst(route.url, params);
     }
 
+    // Cursor's form of a hosted route (D5): a keyless OAuth route for both apps is the shared mcp-remote sign-in in the
+    // family's root, for Claude Code only the http form; a keyed one keeps its helper for Claude Code and gets the bridge
+    // for Cursor (the list's cursorEntry), unless it sends a header of its own the bridge has no place for
+    let form = null;
+    if (routeId === 'remote' && route.keyless === 'oauth' && !wantToken)
+    {
+        const family = roots.familyOf(scope);
+        const root = (ctx.roots || {})[family];
+        const P = E.pathFor(ctx.platform);
+        const was = E.signInParts(entry);
+        const httpUrl = row.params && params.host ? E.subst(route.url, params) : (was ? was.url : entry.url);
+        const exists = ctx.exists || ((x) => fs.existsSync(x));
+        if (clients.includes('cursor') && root && (exists(root) || P.basename(root) === '.alfred') && roots.gitIgnores(P.join(root, roots.FILES.signIns, 'tokens')) === false)
+        {
+            out.notes.push(`${root}: git would commit ${roots.FILES.signIns}/ - ${name} is set up for Claude Code only; /preferred-tools:fix (root-ignore) covers it, then configure adds Cursor`);
+            clients = clients.filter((c) => c !== 'cursor');
+        }
+        if (clients.includes('cursor') && root)
+        {
+            entry = was
+                ? { ...entry, args: entry.args.map((a) => (a === was.url ? httpUrl : a)), env: { ...(entry.env || {}), MCP_REMOTE_CONFIG_DIR: root } }
+                : E.signInFormOf(httpUrl, root, catalog, ctx);
+            delete entry.url;
+            form = 'signin';
+            if (cur && !E.signInParts(cur.entry)) out.notes.push(`${name}: sign in once more - the sign-in now lives in ${P.join(root, roots.FILES.signIns)}/ and serves both apps`);
+        }
+        else
+        {
+            if (was) entry = { type: 'http', url: httpUrl };
+            if (cur && E.signInParts(cur.entry)) out.notes.push(`${name}: Claude Code signs in on its own again (/mcp)`);
+        }
+    }
+    else if (routeId === 'remote' && entry.headersHelper && clients.includes('cursor'))
+    {
+        const other = cursorMcp.otherHeaders(entry);
+        if (other.length)
+        {
+            out.notes.push(`${name}: set up for Claude Code only - its ${other.join(', ')} header${other.length > 1 ? 's have' : ' has'} no bridge equivalent`);
+            clients = clients.filter((c) => c !== 'cursor');
+        }
+        else form = 'two';
+    }
+
     if (pick.settings) entry = E.mergeSettings(entry, route, pick.settings);
 
     // .mcp.json is committed: a move into it never carries a credential the route's own token field does not take - a
@@ -377,20 +433,26 @@ function planMcp(row, pick, inv, ctx, catalog, out)
     const reconnect = keyed && keyed.kind === 'helper' && entry.headersHelper
         ? { row: row.id, name, variable: keyName, file: keyed.files[0], filled: keys.filledNames(keyed.files).some((f) => f.names.includes(keyName)), anonymous: route.authMode === 'optional-token' && !route.keyless, hint: route.helper.hint || null, untrusted: scope !== 'user' && inv.trusted === false }
         : null;
-    if (route.authMode === 'oauth' || (route.keyless === 'oauth' && !wantToken)) out.oauth.push({ row: row.id, name, scope });
+    if (route.authMode === 'oauth' || (route.keyless === 'oauth' && !wantToken)) out.oauth.push({ row: row.id, name, scope, ...(form === 'signin' ? { signin: true, root: ctx.roots[roots.familyOf(scope)] } : {}) });
     if (row.dangerous && row.dangerous.length) out.dangerous.push({ row: row.id, name, tools: row.dangerous });
     out.expect.push({ kind: 'mcp', row: row.id, name, scope, route: routeId });
 
     // a launch the cache may not hold yet is fetched once it is written (entries.js fetchStep says why); a change that
     // keeps the package, such as a location or a name, fetches nothing
     const fetch = E.fetchStep(name, entry, row.id, cur && cur.entry);
-    const uses = { helper: Boolean(entry.headersHelper) || Boolean(bridge), bridge: Boolean(bridge), keyFile, keyName, keyNames, data: dataAbs };
+    const uses = { helper: Boolean(entry.headersHelper) || Boolean(bridge), bridge: Boolean(bridge) || form === 'two', keyFile, keyName, keyNames, data: dataAbs };
+    // the shared sign-in's folder sits in the family's root: the root is written (its .gitignore) like any other
+    const signInRoot = () => { if (form === 'signin') ctx.uses.push({ family: roots.familyOf(scope), root: ctx.roots[roots.familyOf(scope)] }); };
+    // the apps and the form this registration is listed with (plan-lists.js)
+    const record = () => { const k = keyOf('mcp', name, scope); if (ctx.clientsFor) ctx.clientsFor.set(k, clients); if (ctx.formFor) ctx.formFor.set(k, form); };
     // a bridge step says whether its names are filled: the apply's background start skips one that cannot start yet
     const withFilled = bridge ? { filled: Boolean(bridgeFilled) } : {};
     if (!cur)
     {
         if (reconnect) out.reconnect.push(reconnect);
         useRoots(ctx, scope, uses);
+        signInRoot();
+        record();
         if (ensure) out.steps.push({ op: 'ensure-dir', path: ensure, why: `${row.id}: data folder, with a .gitignore holding * so the project's own .gitignore is never edited` });
         out.steps.push({ op: 'mcp-add', name, scope, entry, row: row.id, route: routeId, ...withKey, ...withFilled, why: `${row.id}: add (${routeId}) at ${scope} scope` });
         if (fetch) out.steps.push(fetch);
@@ -398,9 +460,20 @@ function planMcp(row, pick, inv, ctx, catalog, out)
     }
     const moved = cur.name !== name || cur.scope !== scope;
     const edited = !deepEqual(entry, cur.entry);
-    if (!moved && !edited && !fresh && !staleKey) return out.unchanged.push(`${row.id}: '${name}' at ${scope} scope already as answered`);
+    if (!moved && !edited && !fresh && !staleKey)
+    {
+        // the apps alone changed (D3): the list entry and Cursor's file, no claude call; a two-form entry's bridge is
+        // written into the root for Cursor's copy
+        const sameApps = [...clients].sort().join() === [...listedClients].sort().join();
+        if (sameApps || !ctx.clientsOnly) return out.unchanged.push(`${row.id}: '${name}' at ${scope} scope already as answered`);
+        ctx.clientsOnly.push({ key: keyOf('mcp', name, scope), clients, form });
+        if (form === 'two') useRoots(ctx, scope, { helper: true, bridge: true });
+        return undefined;
+    }
     if (reconnect) out.reconnect.push(reconnect);
     useRoots(ctx, scope, uses);
+    signInRoot();
+    record();
     if (row.locations && cur.rootStr && rootStr !== cur.rootStr && E.formatRoot(E.logicalRoot(cur.rootStr, ctx), 'local', ctx).value !== ensure)
         out.notes.push(`${row.id}: the old data stays at ${cur.rootStr}; moving a location moves no data`);
     if (ensure && (!cur.rootStr || rootStr !== cur.rootStr)) out.steps.push({ op: 'ensure-dir', path: ensure, why: `${row.id}: new data folder` });
@@ -565,26 +638,20 @@ function plan(inv, answers, opts = {})
     const connectors = opts.connectors === undefined ? null : opts.connectors;
     // which apps (spec D3): install's one answer for every pick, configure's per target. The registration steps a pick
     // plans carry it into the list (ctx.clientsFor); a configure change of the apps alone is a list entry, no CLI call.
+    // planMcp decides each registration's clients and Cursor form (D5) and records them here
     ctx.clientsFor = new Map();
+    ctx.formFor = new Map();
     ctx.clientsOnly = [];
-    const tagClients = (from, clients) =>
-    {
-        const keys = out.steps.slice(from).filter((x) => ['mcp-add', 'mcp-replace', 'mcp-move'].includes(x.op)).map(mcpsList.regKey).filter(Boolean);
-        for (const k of keys) ctx.clientsFor.set(k, clients);
-        return keys.length;
-    };
     if (answers.clients && Object.keys(answers.picks || {}).length) out.apps = answers.clients;
     for (const [rowId, pick] of Object.entries(answers.picks || {}))
     {
         const row = catalog.byId.get(rowId);
         if (!row) { out.errors.push(`unknown tool '${rowId}'`); continue; }
-        const from = out.steps.length;
         if (row.kind === 'mcp')
         {
-            planMcp(row, { ...(pick || {}), keyName: keyNames[rowId], settings: settings[rowId], urlNames: urlNamesOf[rowId] || (pick || {}).urlNames }, inv, ctx, catalog, out);
+            planMcp(row, { ...(pick || {}), clients: answers.clients, keyName: keyNames[rowId], settings: settings[rowId], urlNames: urlNamesOf[rowId] || (pick || {}).urlNames }, inv, ctx, catalog, out);
             // a claude.ai connector or an enabled plugin's server provides it too (spec F4)
             for (const a of asks.alsoProvided(inv, rowId, connectors)) out.notes.push(existing.twoServers(row.label, a.owner));
-            if (answers.clients) tagClients(from, answers.clients);
         }
         else planPlugin(row, pick || {}, inv, ctx, catalog, out);
     }
@@ -593,10 +660,7 @@ function plan(inv, answers, opts = {})
     for (const [key, pick] of Object.entries(answers.change || {}))
     {
         if (leftNow.has(key)) { out.unchanged.push(`${key}: left on its own`); continue; }
-        const { clients, ...rest } = pick || {};
-        const from = out.steps.length;
-        planChange(key, { ...rest, keyName: keyNames[key], settings: settings[key], urlNames: urlNamesOf[key] || rest.urlNames }, inv, ctx, catalog, out);
-        if (clients && !tagClients(from, clients)) ctx.clientsOnly.push({ key, clients });
+        planChange(key, { ...(pick || {}), keyName: keyNames[key], settings: settings[key], urlNames: urlNamesOf[key] || (pick || {}).urlNames }, inv, ctx, catalog, out);
     }
     for (const r of answers.remove || []) planRemove(r, inv, catalog, out);
     planExisting(answers, inv, ctx, catalog, out, connectors);
@@ -610,6 +674,9 @@ function plan(inv, answers, opts = {})
     out.steps = [...files.before, ...out.steps, ...files.after];
     // Cursor's files from the lists, after the list-write steps they read (spec D2)
     const cursor = planLists.cursorSteps(inv, { ...ctx, catalog }, out, answers);
+    // the read guard (ruling 13): one deny-read, last before the list-write steps
+    const deny = planLists.denyReadSteps(out.steps, ctx, out);
+    if (deny.length) { const at = out.steps.findIndex((x) => x.op === 'list-write'); out.steps.splice(at < 0 ? out.steps.length : at, 0, ...deny); }
     // each name Cursor's file holds that no answer settles: its question, which the command asks before planning again
     if (out.taken) { out.cursorNames = out.taken.map((t) => asks.cursorNameQuestion(t)); delete out.taken; }
     // .mcp.json in the catalog's order, last of all (spec F5, F8)
@@ -777,7 +844,7 @@ function render(p)
         else if (s.op === 'write-helper') lines.push(`   writes ${P.join(s.path, roots.FILES.helper)}  (this plugin's header helper)`, `   (and package.json, type commonjs, when absent)`);
         else if (s.op === 'write-bridge') lines.push(`   writes ${P.join(s.path, roots.FILES.bridge)}  (this plugin's URL bridge)`, `   (and package.json, type commonjs, when absent)`);
         else if (s.op === 'ensure-key-name') lines.push(`   writes ${s.file}  (names only: ${s.names.join(', ')} - you fill in each value)`);
-        else if (s.op === 'list-write' || s.op === 'retire-record' || s.op === 'cursor-write') lines.push(planLists.renderLine(s));
+        else if (s.op === 'list-write' || s.op === 'retire-record' || s.op === 'cursor-write' || s.op === 'deny-read') lines.push(planLists.renderLine(s));
         else if (s.op === 'order-mcp-json') lines.push(`   reorders ${s.file}  (no value changes)`);
         else if (s.op === 'record-root') lines.push(`   writes ${roots.FILES.map} in the plugin's data folder  (the ${s.family} root: ${s.root})`);
         else if (s.op === 'fetch') lines.push(`   ${s.argv.map(shq).join(' ')}`, '   (after the apply, in the background: fills the cache only; if it fails the registration stays and the first start tries again)');
@@ -785,7 +852,10 @@ function render(p)
     });
     if (p.keys.length) lines.push('', ...p.keys.map(keyLine));
     if ((p.reconnect || []).length) lines.push('', ...p.reconnect.map(reconnectLine));
-    if (p.oauth.length) lines.push('', `OAuth: run /mcp once in a session to log in to ${p.oauth.map((o) => o.name).join(', ')}.`);
+    // the shared sign-in (D5) opens the browser at the first start in either app; the rest sign in through /mcp
+    for (const o of p.oauth.filter((x) => x.signin)) lines.push('', `OAuth: ${o.name}: your browser opens to sign in the first time it starts, in Claude Code or Cursor; the sign-in is kept in ${P.join(o.root, roots.FILES.signIns)}/ and serves both.`);
+    const viaMcp = p.oauth.filter((x) => !x.signin);
+    if (viaMcp.length) lines.push('', `OAuth: run /mcp once in a session to log in to ${viaMcp.map((o) => o.name).join(', ')}.`);
     if (p.dangerous.length) lines.push('', ...p.dangerous.map((d) => `Code-running tool on '${d.name}': ${d.tools.map((t) => `${t.tool} (${t.why})`).join('; ')}. This plugin adds no guard.`));
     if (p.notes.length) lines.push('', ...p.notes.map((n) => `Note: ${n}`));
     if (p.unchanged.length) lines.push('', ...p.unchanged.map((n) => `Unchanged: ${n}`));

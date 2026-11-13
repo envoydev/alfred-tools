@@ -152,7 +152,7 @@ function helperStaleFix(f)
 
 // ---- root-ignore ----------------------------------------------------------------------------------------------------
 // A root in use inside a git work tree where git would commit its key file, or - a project root other than .alfred -
-// would ignore the helper a project-scope server needs committed (R13). The fix appends what rootIgnore writes; a gap no
+// would ignore the helper a project-scope server needs committed (R13), or would commit mcp-remote's sign-in folder (0.5.0). The fix appends what rootIgnore writes; a gap no
 // appended line can close is blocked and named.
 function rootIgnoreDetect(ctx)
 {
@@ -169,17 +169,20 @@ function rootIgnoreDetect(ctx)
         const helper = path.join(root, roots.FILES.helper);
         const secretsGap = roots.gitIgnores(secrets) === false;
         const helperGap = family === 'project' && path.basename(root) !== '.alfred' && roots.gitIgnores(helper) === true;
-        const found = [secretsGap && `git would commit ${secrets}`, helperGap && `git ignores ${helper}, which a project-scope server needs committed`].filter(Boolean).join('; ');
+        const signIns = path.join(root, roots.FILES.signIns);
+        const signInsGap = roots.gitIgnores(path.join(signIns, 'tokens')) === false;
+        const found = [secretsGap && `git would commit ${secrets}`, signInsGap && `git would commit ${signIns}/`, helperGap && `git ignores ${helper}, which a project-scope server needs committed`].filter(Boolean).join('; ');
         const base = { id: 'root-ignore', row: null, name: root, scope: family, found, path: root, family };
-        if (path.basename(root) === '.alfred') { out.push({ ...base, blocked: `${root} is alfred-code's - add ${roots.FILES.secrets} to its .gitignore yourself` }); continue; }
+        if (path.basename(root) === '.alfred') { out.push({ ...base, blocked: `${root} is alfred-code's - add ${[secretsGap && roots.FILES.secrets, signInsGap && `${roots.FILES.signIns}/`].filter(Boolean).join(' and ')} to its .gitignore yourself` }); continue; }
         if (gap.excluded) { out.push({ ...base, blocked: `a .gitignore above excludes ${root} - remove that line (git check-ignore -v ${root} names it): git never re-includes a file inside an excluded folder` }); continue; }
         const lines = rootIgnoreLines(root);
-        const fixes = { secrets: secretsGap && lines.lack.includes(lines.mine ? '*' : roots.FILES.secrets), helper: helperGap && lines.mine && lines.lack.includes(`!${roots.FILES.helper}`) };
+        const fixes = { secrets: secretsGap && lines.lack.includes(lines.mine ? '*' : roots.FILES.secrets), helper: helperGap && lines.mine && lines.lack.includes(`!${roots.FILES.helper}`), signIns: signInsGap && lines.lack.includes(lines.mine ? '*' : `${roots.FILES.signIns}/`) };
         const left = [
             secretsGap && !fixes.secrets && `every line preferred-tools writes is in ${lines.file}, yet git would still commit ${secrets}: a later line re-includes ${roots.FILES.secrets}, or git tracks it already (git rm --cached -- ${secrets})`,
+            signInsGap && !fixes.signIns && `every line preferred-tools writes is in ${lines.file}, yet git would still commit ${signIns}/: a later line re-includes it, or git tracks it already (git rm -r --cached -- ${signIns})`,
             helperGap && !fixes.helper && `git ignores ${helper} through lines of your own - add !${roots.FILES.helper} at the end of ${lines.file}`,
         ].filter(Boolean).join('; ');
-        if (!fixes.secrets && !fixes.helper) out.push({ ...base, blocked: left });
+        if (!fixes.secrets && !fixes.helper && !fixes.signIns) out.push({ ...base, blocked: left });
         else out.push({ ...base, fixes, ...(left ? { note: left } : {}) });
     }
     return out;
@@ -191,6 +194,7 @@ function rootIgnoreFix(f)
     const still = [
         f.fixes.secrets && roots.gitIgnores(path.join(f.path, roots.FILES.secrets)) === false && `git would still commit ${path.join(f.path, roots.FILES.secrets)}`,
         f.fixes.helper && roots.gitIgnores(path.join(f.path, roots.FILES.helper)) === true && `git still ignores ${path.join(f.path, roots.FILES.helper)}`,
+        f.fixes.signIns && roots.gitIgnores(path.join(f.path, roots.FILES.signIns, 'tokens')) === false && `git would still commit ${path.join(f.path, roots.FILES.signIns)}/`,
     ].filter(Boolean);
     return { ok: !still.length, detail: still.length ? `${r.detail}; ${still.join('; ')}` : r.detail, restart: false };
 }

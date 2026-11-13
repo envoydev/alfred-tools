@@ -883,12 +883,12 @@ test('root-ignore: written once, left when present, never under .alfred', () => 
         fs.writeFileSync(file, '*\n');
         runSteps(w, [{ op: 'root-ignore', path: root }]);
         assert.strictEqual(fs.readFileSync(file, 'utf8'), '*\n!.gitignore\n!mcp-headers.js\n');
-        // a folder holding the user's own files: only the key file, the record and the list, never *
+        // a folder holding the user's own files: only the key file, the record, the list and the sign-in folder, never *
         const named = path.join(w.project, 'tools');
         fs.mkdirSync(named, { recursive: true });
         fs.writeFileSync(path.join(named, 'notes.txt'), 'mine');
         runSteps(w, [{ op: 'root-ignore', path: named }]);
-        assert.strictEqual(fs.readFileSync(path.join(named, '.gitignore'), 'utf8'), '.mcps-secrets\npreferred-tools.json\nmcps.json\n');
+        assert.strictEqual(fs.readFileSync(path.join(named, '.gitignore'), 'utf8'), '.mcps-secrets\npreferred-tools.json\nmcps.json\nmcp-remote-v1/\n');
         // .alfred is alfred-code's: nothing written
         const alfred = path.join(w.project, '.alfred');
         r = runSteps(w, [{ op: 'root-ignore', path: alfred }]);
@@ -1111,7 +1111,7 @@ test('a re-run after a failed add writes no file again', () => {
     {
         const inv = inventory.buildInventory({ project: w.project, env: w.env });
         const p = plan(inv, { picks: { github: { route: 'remote', scope: 'local' } } }, { home: w.home, env: w.env });
-        assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'write-helper', 'ensure-key-name', 'mcp-add', 'list-write', 'record-root']);
+        assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'write-helper', 'ensure-key-name', 'mcp-add', 'deny-read', 'list-write', 'record-root']);
         const data = path.join(w.dir, 'data');
         const root = path.join(w.project, '.preferred-tools');
         const first = apply(p, { env: { ...w.env, FAKE_CLAUDE_FAIL: 'add-json github' }, tmp: path.join(w.dir, 'tmp'), log: () => {}, data });
@@ -1268,7 +1268,7 @@ test('rootIgnoreLines puts mcps.json in a user-files root\'s short list', () => 
         const { rootIgnoreLines } = require('../scripts/apply.js');
         const r = rootIgnoreLines(dir);
         assert.strictEqual(r.mine, false);
-        assert.deepStrictEqual(r.want, ['.mcps-secrets', 'preferred-tools.json', 'mcps.json']);
+        assert.deepStrictEqual(r.want, ['.mcps-secrets', 'preferred-tools.json', 'mcps.json', 'mcp-remote-v1/']);
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
@@ -1372,4 +1372,97 @@ test('cursor-write runs after the registration steps and before order-mcp-json',
         assert.deepStrictEqual(readJson(file).servers[0].clients, ['claude', 'cursor'], 'the cursor-write applied: cursor stays');
     }
     finally { w.clean(); }
+});
+
+// ---- the sign-in folder and the read guard (0.5.0, spec D5, ruling 13) ----------------------------------------------
+
+test('rootIgnoreLines lists mcp-remote-v1/ for a root of the user\'s own files, and root-ignore appends it', () => {
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'pt-ignore-')));
+    try
+    {
+        const { rootIgnoreLines, rootIgnore } = require('../scripts/apply.js');
+        fs.writeFileSync(path.join(dir, 'notes.md'), 'mine\n');
+        fs.writeFileSync(path.join(dir, '.gitignore'), '.mcps-secrets\npreferred-tools.json\nmcps.json\n');
+        assert.deepStrictEqual(rootIgnoreLines(dir).lack, ['mcp-remote-v1/']);
+        assert.strictEqual(rootIgnore(dir).detail, `appended mcp-remote-v1/ to ${path.join(dir, '.gitignore')}`);
+        assert.strictEqual(fs.readFileSync(path.join(dir, '.gitignore'), 'utf8'), '.mcps-secrets\npreferred-tools.json\nmcps.json\nmcp-remote-v1/\n');
+        // a root holding only what the plugin and mcp-remote write is still the plugin's: '*' covers the folder
+        const own = path.join(dir, 'own');
+        fs.mkdirSync(path.join(own, 'mcp-remote-v1'), { recursive: true });
+        fs.writeFileSync(path.join(own, '.mcps-secrets'), '');
+        assert.strictEqual(rootIgnoreLines(own).mine, true);
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('deny-read adds only the lacking rules and keeps every other settings key and order', () => {
+    const w = world();
+    try
+    {
+        const { READ_GUARD } = require('../scripts/roots.js');
+        const file = path.join(w.dir, 'account', 'settings.json');
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, '\ufeff' + JSON.stringify({ model: 'x', permissions: { allow: ['Bash(ls)'], deny: [READ_GUARD.secrets], ask: [] }, z: 1 }, null, 2));
+        const r = runSteps(w, [{ op: 'deny-read', file, rules: [READ_GUARD.signIns, READ_GUARD.secrets], why: 'x' }]);
+        assert.strictEqual(r.report.failed, null, r.text);
+        const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+        assert.deepStrictEqual(Object.keys(doc), ['model', 'permissions', 'z']);
+        assert.deepStrictEqual(Object.keys(doc.permissions), ['allow', 'deny', 'ask']);
+        assert.deepStrictEqual(doc.permissions.deny, [READ_GUARD.secrets, READ_GUARD.signIns]);
+        assert.deepStrictEqual(doc.permissions.allow, ['Bash(ls)']);
+        const again = require('../scripts/apply.js').denyRead(file, [READ_GUARD.signIns]);
+        assert.deepStrictEqual([again.ok, again.unchanged], [true, true]);
+        // an absent file: both keys made
+        const fresh = path.join(w.dir, 'account', 'fresh', 'settings.json');
+        assert.strictEqual(require('../scripts/apply.js').denyRead(fresh, [READ_GUARD.signIns]).ok, true);
+        assert.deepStrictEqual(JSON.parse(fs.readFileSync(fresh, 'utf8')), { permissions: { deny: [READ_GUARD.signIns] } });
+    }
+    finally { w.clean(); }
+});
+
+test('deny-read writes nothing to a settings file that is not JSON, and the plan carries the note', () => {
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'pt-deny-')));
+    try
+    {
+        const { denyRead } = require('../scripts/apply.js');
+        for (const text of ['{ nope', '[]', '{"permissions": []}'])
+        {
+            const file = path.join(dir, 'settings.json');
+            fs.writeFileSync(file, text);
+            const r = denyRead(file, ['Read(//**/mcp-remote-v1/**)']);
+            assert.strictEqual(r.ok, false, text);
+            assert.match(r.detail, /settings\.json/);
+            assert.strictEqual(fs.readFileSync(file, 'utf8'), text);
+        }
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a Claude-side rewrite keeps Cursor\'s moved pin and its added env pair', () => {
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'pt-two-')));
+    try
+    {
+        const { listWrite } = require('../scripts/apply.js');
+        const cursorMcp = require('../scripts/cursor-mcp.js');
+        const file = path.join(dir, 'mcps.json');
+        const helper = (root) => ({ type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: `node ${root}/mcp-headers.js CONTEXT7_API_KEY Bearer` });
+        const moved = { command: 'node', args: [`${dir}/mcp-bridge.js`, 'https://mcp.context7.com/mcp', 'CONTEXT7_API_KEY', 'Bearer', 'mcp-remote@0.17.0'], env: { npm_config_before: '2026-12-01T00:00:00Z', MINE: '1' } };
+        const ctx = { report: { appliedKeys: new Set(), cursorFiles: new Set() } };
+        // a new two-form entry: the catalog's pin
+        let r = listWrite({ op: 'list-write', file, family: 'global', upserts: [{ server: { name: 'context7', scope: 'user', row: 'context7', route: 'remote', clients: ['claude', 'cursor'], entry: helper(dir), key: null, form: 'two' }, after: null, cursorFile: null }], drops: [], own: null }, ctx);
+        assert.strictEqual(r.ok, true, r.detail);
+        let s = JSON.parse(fs.readFileSync(file, 'utf8')).servers[0];
+        assert.deepStrictEqual(s.cursorEntry, cursorMcp.bridgeFormOf(helper(dir), require('../scripts/catalog.js').load()));
+        assert.ok(!('form' in s), 'the form is a plan field, never stored');
+        // a rename carries the prior cursorEntry (its pin moved, an env pair added): kept
+        const other = path.join(dir, 'other');
+        r = listWrite({ op: 'list-write', file, family: 'global', upserts: [{ server: { name: 'docs', scope: 'user', row: 'context7', route: 'remote', clients: ['claude', 'cursor'], entry: helper(other), cursorEntry: moved, key: null, form: 'two' }, after: null, cursorFile: null }], drops: [{ key: 'mcp:context7~user', after: null }], own: null }, ctx);
+        s = JSON.parse(fs.readFileSync(file, 'utf8')).servers.find((x) => x.name === 'docs');
+        assert.deepStrictEqual(s.cursorEntry.args, [`${other}/mcp-bridge.js`, 'https://mcp.context7.com/mcp', 'CONTEXT7_API_KEY', 'Bearer', 'mcp-remote@0.17.0']);
+        assert.deepStrictEqual(s.cursorEntry.env, { npm_config_before: '2026-12-01T00:00:00Z', MINE: '1' });
+        // Cursor taken off: no cursorEntry
+        r = listWrite({ op: 'list-write', file, family: 'global', upserts: [{ server: { ...s, clients: ['claude'], form: 'two' }, after: null, cursorFile: null }], drops: [], own: null }, ctx);
+        assert.ok(!('cursorEntry' in JSON.parse(fs.readFileSync(file, 'utf8')).servers.find((x) => x.name === 'docs')));
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

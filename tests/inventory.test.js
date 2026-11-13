@@ -652,3 +652,11 @@ test('inv.cursor reads both Cursor files; entries hold only the names a list mar
     }
     finally { w.clean(); }
 });
+
+test('inventory matches the shared sign-in form to its row\'s remote route, and a hand-made mcp-remote entry to no row', () => {
+    const E = require('../scripts/entries.js');
+    for (const [id, url] of [['gitlab', 'https://gitlab.com/api/v4/mcp'], ['atlassian', 'https://mcp.atlassian.com/v2/mcp'], ['sentry', 'https://mcp.sentry.dev/mcp']])
+        assert.deepStrictEqual(inv.matchEntry(E.signInFormOf(url, '/r', catalog, { platform: 'darwin' }), catalog), { rowId: id, route: 'remote' }, id);
+    assert.strictEqual(inv.matchEntry({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0', 'https://mcp.atlassian.com/v2/mcp'] }, catalog), null);
+    assert.strictEqual(inv.matchEntry({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0', 'https://mcp.example.com/mcp'], env: { MCP_REMOTE_CONFIG_DIR: '/r' } }, catalog), null);
+});

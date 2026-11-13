@@ -278,3 +278,154 @@ test('a member file holding the name asks for that file, keyed <name>@<file>', (
     const marked = cursorWorld({ cursor: '{"mcpServers":{"serena":{"command":"x"}}}', servers: [srv('serena')] });
     assert.deepStrictEqual(takenNames(marked.inv, marked.ctx, [{ server: srv('serena'), cursorFile: marked.cursorFile }]), []);
 });
+
+// ---- hosted routes in both apps (spec D5, ruling 12, ruling 13) -----------------------------------------------------
+const planLib = require('../scripts/plan.js');
+const E = require('../scripts/entries.js');
+const { READ_GUARD } = require('../scripts/roots.js');
+const MR = catalogAll.byId.get('sentry').routes.bridge.package;
+const hinv = (extra = {}) => ({ version: 1, os: 'darwin', arch: 'arm64', project: '/work/shop', cli: { ok: true }, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, roots: { map: null }, lists: { project: null, global: null }, ...extra });
+const HOPTS = { env: {}, home: '/Users/me' };
+const GROOT = '/Users/me/.preferred-tools';
+const GLIST = `${GROOT}/mcps.json`;
+const hreg = (name, rowId, entry, scope = 'user', route = 'remote') => ({ name, scope, entry, rowId, route, own: false, alfredRetired: false, choice: null });
+const hlisted = (name, row, entry, clients, scope = 'user', extra = {}) => ({ name, scope, row, route: 'remote', clients, entry, key: null, ...extra });
+const ops = (p) => p.steps.map((s) => s.op);
+const upsertsOf = (p) => p.steps.filter((s) => s.op === 'list-write').flatMap((s) => s.upserts);
+const HELPER_C7 = { type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: `node ${GROOT}/mcp-headers.js CONTEXT7_API_KEY Bearer` };
+const ATL_URL = 'https://mcp.atlassian.com/v2/mcp';
+
+for (const [id, url] of [['gitlab', 'https://gitlab.com/api/v4/mcp'], ['atlassian', ATL_URL], ['sentry', 'https://mcp.sentry.dev/mcp']])
+{
+    test(`${id} with no key, for both apps: both get the same mcp-remote entry with the root as MCP_REMOTE_CONFIG_DIR`, { skip: POSIX_FIXTURE }, () => {
+        const p = planLib.plan(hinv(), { clients: ['claude', 'cursor'], picks: { [id]: { route: 'remote', scope: 'user', token: false } } }, HOPTS);
+        assert.deepStrictEqual(p.errors, []);
+        const add = p.steps.find((s) => s.op === 'mcp-add');
+        assert.deepStrictEqual(add.entry, { type: 'stdio', command: 'npx', args: ['-y', `mcp-remote@${MR.version}`, url], env: { npm_config_before: MR.cutoff, MCP_REMOTE_CONFIG_DIR: GROOT } });
+        const [u] = upsertsOf(p);
+        assert.deepStrictEqual([u.server.clients, u.server.form, u.server.cursorEntry], [['claude', 'cursor'], 'signin', undefined]);
+        assert.deepStrictEqual(p.steps.filter((s) => s.op === 'cursor-write').map((s) => s.file), ['/Users/me/.cursor/mcp.json']);
+        assert.deepStrictEqual(p.oauth.map((o) => [o.name, o.signin]), [[id, true]]);
+        assert.ok(planLib.render(p).includes(`OAuth: ${id}: your browser opens to sign in the first time it starts, in Claude Code or Cursor; the sign-in is kept in ${GROOT}/mcp-remote-v1/ and serves both.`), planLib.render(p));
+    });
+}
+
+test('a keyless OAuth entry for Claude Code only is the http form', { skip: POSIX_FIXTURE }, () => {
+    const p = planLib.plan(hinv(), { clients: ['claude'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } }, HOPTS);
+    assert.deepStrictEqual(p.steps.find((s) => s.op === 'mcp-add').entry, { type: 'http', url: ATL_URL });
+    assert.match(planLib.render(p), /OAuth: run \/mcp once in a session to log in to atlassian\./);
+    assert.ok(!ops(p).includes('deny-read'), 'no sign-in form, no key name: no rule');
+});
+
+test('context7 with no key stays http in both apps', { skip: POSIX_FIXTURE }, () => {
+    const p = planLib.plan(hinv(), { clients: ['claude', 'cursor'], picks: { context7: { route: 'remote', scope: 'user', token: false } } }, HOPTS);
+    assert.deepStrictEqual(p.steps.find((s) => s.op === 'mcp-add').entry, { type: 'http', url: 'https://mcp.context7.com/mcp' });
+    const [u] = upsertsOf(p);
+    assert.deepStrictEqual([u.server.clients, u.server.form], [['claude', 'cursor'], null]);
+});
+
+test('sentry\'s bridge route has no cursorEntry and both apps get the same entry', { skip: POSIX_FIXTURE }, () => {
+    const p = planLib.plan(hinv(), { clients: ['claude', 'cursor'], picks: { sentry: { route: 'bridge', scope: 'user' } } }, HOPTS);
+    assert.deepStrictEqual(p.errors, []);
+    const [u] = upsertsOf(p);
+    assert.deepStrictEqual([u.server.clients, u.server.form], [['claude', 'cursor'], null], 'no Cursor form: the list-write keeps no cursorEntry');
+});
+
+test('a keyed hosted entry for both apps is two forms: Claude keeps the helper, the plan writes the bridge into the root', { skip: POSIX_FIXTURE }, () => {
+    const p = planLib.plan(hinv(), { clients: ['claude', 'cursor'], picks: { context7: { route: 'remote', scope: 'user', token: true } } }, HOPTS);
+    assert.deepStrictEqual(p.errors, []);
+    assert.ok(p.steps.find((s) => s.op === 'mcp-add').entry.headersHelper);
+    assert.strictEqual(upsertsOf(p)[0].server.form, 'two');
+    assert.ok(ops(p).includes('write-bridge'), ops(p).join());
+});
+
+test('adding Cursor to a 0.4.x helper-form context7 writes mcp-bridge.js into the root and makes no Claude call', { skip: POSIX_FIXTURE }, () => {
+    const i = hinv({ registrations: [hreg('context7', 'context7', HELPER_C7)], lists: { project: null, global: { file: GLIST, servers: [hlisted('context7', 'context7', HELPER_C7, ['claude'])], own: [] } } });
+    const p = planLib.plan(i, { change: { 'mcp:context7~user': { row: 'context7', clients: ['claude', 'cursor'] } } }, HOPTS);
+    assert.deepStrictEqual(p.errors, []);
+    assert.deepStrictEqual(ops(p).filter((o) => o.startsWith('mcp-')), []);
+    assert.ok(ops(p).includes('write-bridge'), ops(p).join());
+    assert.ok(ops(p).indexOf('cursor-write') > ops(p).indexOf('list-write'));
+    const [u] = upsertsOf(p);
+    assert.deepStrictEqual([u.server.clients, u.server.form, u.after], [['claude', 'cursor'], 'two', null]);
+});
+
+test('an entry with other headers is Claude Code only, with the reason', { skip: POSIX_FIXTURE }, () => {
+    const e = { ...HELPER_C7, headers: { 'X-Team': 'docs' } };
+    const i = hinv({ registrations: [hreg('context7', 'context7', e)], lists: { project: null, global: { file: GLIST, servers: [hlisted('context7', 'context7', e, ['claude'])], own: [] } } });
+    const p = planLib.plan(i, { change: { 'mcp:context7~user': { row: 'context7', clients: ['claude', 'cursor'] } } }, HOPTS);
+    assert.ok(p.notes.includes('context7: set up for Claude Code only - its X-Team header has no bridge equivalent'), p.notes.join('\n'));
+    assert.ok(!ops(p).includes('cursor-write'), ops(p).join());
+    assert.ok(upsertsOf(p).every((u) => !u.server.clients.includes('cursor')));
+});
+
+test('adding Cursor to an http atlassian entry plans mcp-replace, list-write and cursor-write, with the sign-in line', { skip: POSIX_FIXTURE }, () => {
+    const http = { type: 'http', url: ATL_URL };
+    const i = hinv({ registrations: [hreg('atlassian', 'atlassian', http)], lists: { project: null, global: { file: GLIST, servers: [hlisted('atlassian', 'atlassian', http, ['claude'])], own: [] } } });
+    const p = planLib.plan(i, { change: { 'mcp:atlassian~user': { row: 'atlassian', clients: ['claude', 'cursor'] } } }, HOPTS);
+    assert.deepStrictEqual(p.errors, []);
+    const rep = p.steps.find((s) => s.op === 'mcp-replace');
+    assert.ok(E.signInParts(rep.entry), JSON.stringify(rep.entry));
+    for (const op of ['list-write', 'cursor-write']) assert.ok(ops(p).includes(op), ops(p).join());
+    assert.ok(p.notes.includes(`atlassian: sign in once more - the sign-in now lives in ${GROOT}/mcp-remote-v1/ and serves both apps`), p.notes.join('\n'));
+});
+
+test('taking Cursor off a shared entry plans mcp-replace back to http, with the /mcp line', { skip: POSIX_FIXTURE }, () => {
+    const shared = E.signInFormOf(ATL_URL, GROOT, catalogAll, { platform: 'darwin' });
+    const i = hinv({ registrations: [hreg('atlassian', 'atlassian', shared)], lists: { project: null, global: { file: GLIST, servers: [hlisted('atlassian', 'atlassian', shared, ['claude', 'cursor'])], own: [] } } });
+    const p = planLib.plan(i, { change: { 'mcp:atlassian~user': { row: 'atlassian', clients: ['claude'] } } }, HOPTS);
+    assert.deepStrictEqual(p.errors, []);
+    assert.deepStrictEqual(p.steps.find((s) => s.op === 'mcp-replace').entry, { type: 'http', url: ATL_URL });
+    assert.ok(p.notes.includes('atlassian: Claude Code signs in on its own again (/mcp)'), p.notes.join('\n'));
+    assert.deepStrictEqual(p.steps.filter((s) => s.op === 'cursor-write').map((s) => s.before), [['atlassian']]);
+});
+
+test('a root where git would commit mcp-remote-v1/ gets the Claude-only http form and the note', { skip: (!GIT && 'NOT RUN: git is not on PATH') || POSIX_FIXTURE }, () => {
+    const w = cursorWorld();
+    gitInit(w.project);
+    const root = path.join(w.project, 'tools');
+    fs.mkdirSync(root);
+    fs.writeFileSync(path.join(root, 'notes.md'), 'mine\n');
+    fs.writeFileSync(path.join(root, '.gitignore'), '.mcps-secrets\npreferred-tools.json\nmcps.json\n');
+    const i = hinv({ project: w.project });
+    const p = planLib.plan(i, { clients: ['claude', 'cursor'], roots: { project: { id: 'named', path: 'tools' } }, picks: { atlassian: { route: 'remote', scope: 'project', token: false } } }, { env: {}, home: w.home });
+    assert.deepStrictEqual(p.errors, []);
+    assert.deepStrictEqual(p.steps.find((s) => s.op === 'mcp-add').entry, { type: 'http', url: ATL_URL });
+    assert.ok(p.notes.includes(`${root}: git would commit mcp-remote-v1/ - atlassian is set up for Claude Code only; /preferred-tools:fix (root-ignore) covers it, then configure adds Cursor`), p.notes.join('\n'));
+    assert.deepStrictEqual(upsertsOf(p).map((u) => u.server.clients), [['claude']]);
+});
+
+test('a plan writing a shared sign-in entry adds the sign-in rule; one with ensure-key-name adds the key-file rule', { skip: POSIX_FIXTURE }, () => {
+    const p = planLib.plan(hinv(), { clients: ['claude', 'cursor'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } }, HOPTS);
+    const d = p.steps.find((s) => s.op === 'deny-read');
+    assert.deepStrictEqual([d.file, d.rules], ['/Users/me/.claude/settings.json', [READ_GUARD.signIns]]);
+    assert.strictEqual(ops(p).indexOf('deny-read'), ops(p).indexOf('list-write') - 1, 'last before list-write');
+    assert.ok(planLib.render(p).includes(`   adds ${READ_GUARD.signIns} to permissions.deny in /Users/me/.claude/settings.json  (keeps AI sessions out of the sign-in tokens and the key file)`), planLib.render(p));
+    const k = planLib.plan(hinv(), { picks: { context7: { route: 'remote', scope: 'user', token: true } } }, HOPTS);
+    assert.ok(ops(k).includes('ensure-key-name'), ops(k).join());
+    assert.deepStrictEqual(k.steps.find((s) => s.op === 'deny-read').rules, [READ_GUARD.secrets]);
+});
+
+test('a second plan with the rules present plans no deny-read', () => {
+    const w = cursorWorld();
+    const conf = path.join(w.dir, 'claude-config');
+    fs.mkdirSync(conf);
+    fs.writeFileSync(path.join(conf, 'settings.json'), JSON.stringify({ permissions: { deny: [READ_GUARD.secrets, READ_GUARD.signIns] } }));
+    const p = planLib.plan(hinv({ project: w.project, os: process.platform }), { clients: ['claude', 'cursor'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } }, { env: { CLAUDE_CONFIG_DIR: conf }, home: w.home });
+    assert.deepStrictEqual(p.errors, []);
+    assert.ok(!ops(p).includes('deny-read'), ops(p).join());
+});
+
+test('deny-read\'s file sits under the isolated CLAUDE_CONFIG_DIR, never the real config folder', () => {
+    const w = cursorWorld();
+    const conf = path.join(w.dir, 'claude-config');
+    const p = planLib.plan(hinv({ project: w.project, os: process.platform }), { clients: ['claude', 'cursor'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } }, { env: { CLAUDE_CONFIG_DIR: conf }, home: w.home });
+    assert.strictEqual(p.steps.find((s) => s.op === 'deny-read').file, path.join(conf, 'settings.json'));
+    // a settings file that is not JSON: a note, no step, and Claude Code and Cursor are still written
+    fs.mkdirSync(conf, { recursive: true });
+    fs.writeFileSync(path.join(conf, 'settings.json'), '{ nope');
+    const bad = planLib.plan(hinv({ project: w.project, os: process.platform }), { clients: ['claude', 'cursor'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } }, { env: { CLAUDE_CONFIG_DIR: conf }, home: w.home });
+    assert.ok(!ops(bad).includes('deny-read'));
+    assert.ok(ops(bad).includes('mcp-add') && ops(bad).includes('cursor-write'), ops(bad).join());
+    assert.ok(bad.notes.some((n) => n.startsWith(`${path.join(conf, 'settings.json')} is not a settings object`)), bad.notes.join('\n'));
+});

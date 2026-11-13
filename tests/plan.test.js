@@ -37,7 +37,7 @@ const inv = (base, extra = {}) => ({ version: 1, ...base, cli: { ok: true }, unr
 const opts = (home, extra = {}) => ({ home, env: {}, exists: () => false, machine: { docker: true }, ...extra });
 const pickOne = (id, pick = {}) => ({ picks: { [id]: pick } });
 // the steps that change a registration, without the root's file steps and the records (spec D8)
-const FILE_OPS = ['root-ignore', 'write-helper', 'write-bridge', 'ensure-key-name', 'list-write', 'record-root'];
+const FILE_OPS = ['root-ignore', 'write-helper', 'write-bridge', 'ensure-key-name', 'deny-read', 'list-write', 'record-root'];
 const regSteps = (p) => p.steps.filter((s) => !FILE_OPS.includes(s.op));
 const addStep = (p, i = 0) => p.steps.filter((s) => s.op === 'mcp-add')[i];
 const reg = (name, scope, entry, rowId = null, route = null, flags = {}) => ({ name, scope, entry, rowId, route, own: !rowId, alfredRetired: false, ...flags });
@@ -451,7 +451,7 @@ test('a scope change moves the registration and rewrites its paths for the new s
 test('changing the route rebuilds from the catalog; changing only the key adds the helper to the entry as read', { skip: POSIX_FIXTURE }, () => {
     const r = installed('context7', { route: 'remote', scope: 'project', token: false });
     const key = plan(inv(MAC, { registrations: [r] }), changeOf(r, { token: true }), opts('/h'));
-    assert.deepStrictEqual(key.steps.map((s) => s.op), ['root-ignore', 'write-helper', 'ensure-key-name', 'mcp-replace', 'list-write', 'record-root', 'order-mcp-json']);
+    assert.deepStrictEqual(key.steps.map((s) => s.op), ['root-ignore', 'write-helper', 'ensure-key-name', 'mcp-replace', 'deny-read', 'list-write', 'record-root', 'order-mcp-json']);
     assert.deepStrictEqual(key.steps[3].entry, { type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: 'node /work/shop/.preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' });
     // remote at project scope becomes local there: the local launch replaces it in the committed file
     const toLocal = plan(inv(MAC, { registrations: [r] }), changeOf(r, { route: 'local' }), opts('/h'));
@@ -2080,7 +2080,7 @@ test('change the root: each managed registration of the family is re-added with 
     assert.deepStrictEqual(p.errors, []);
     assert.deepStrictEqual(p.steps.map((s) => [s.op, s.path || s.file || s.name || s.root]), [
         ['root-ignore', '/work/shop/tools'], ['write-helper', '/work/shop/tools'], ['ensure-key-name', '/work/shop/tools/.mcps-secrets'],
-        ['ensure-dir', '/work/shop/tools/playwright-chrome'], ['mcp-replace', 'playwright-chrome'], ['mcp-replace', 'github'], ['list-write', '/work/shop/tools/mcps.json'], ['record-root', '/work/shop/tools'],
+        ['ensure-dir', '/work/shop/tools/playwright-chrome'], ['mcp-replace', 'playwright-chrome'], ['mcp-replace', 'github'], ['deny-read', '/Users/me/.claude/settings.json'], ['list-write', '/work/shop/tools/mcps.json'], ['record-root', '/work/shop/tools'],
     ]);
     assert.deepStrictEqual(p.steps[2].names, [G], 'the names in use');
     const e = p.steps[4].entry;

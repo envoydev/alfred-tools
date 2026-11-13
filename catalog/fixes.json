@@ -198,6 +198,38 @@
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D1, D9"
     },
     {
+      "id": "read-guard",
+      "upgrade": "0.5.0",
+      "tool": [
+        "atlassian",
+        "github",
+        "gitlab",
+        "context7",
+        "sentry",
+        "memory",
+        "serena",
+        "windows-control",
+        "macos-control",
+        "appium",
+        "playwright-chrome",
+        "playwright-msedge",
+        "playwright-firefox",
+        "playwright-webkit"
+      ],
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "kind": "file",
+      "symptom": "a root folder holds .mcps-secrets or mcp-remote-v1/, and Claude Code's settings do not deny an AI session's Read tool there (Read(//**/.mcps-secrets), Read(//**/mcp-remote-v1/**))",
+      "detect": "readGuardDetect",
+      "fix": null,
+      "steps": "readGuardSteps",
+      "verifiedOn": "this build: tests/fix.test.js read-guard (2026-11-13)",
+      "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md rulings 12, 13"
+    },
+    {
       "id": "typescript-lsp-ts7",
       "tool": [
         "typescript-lsp"

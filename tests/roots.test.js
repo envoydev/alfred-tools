@@ -239,3 +239,21 @@ test('registrationRoots finds a root holding only mcps.json', { skip: POSIX_FIXT
     assert.deepStrictEqual(roots.registrationRoots(inv({ registrations: [serena] }), 'project', ctxOf([])), [], 'no root file there: not a root');
     assert.strictEqual(roots.FILES.list, 'mcps.json');
 });
+
+test('ignoreGap names mcp-remote-v1/ when git would commit it, after the key file, and READ_GUARD holds the two rules', { skip: spawnSync('git', ['--version']).status !== 0 && 'NOT RUN: git is not on PATH' }, () => {
+    assert.deepStrictEqual(roots.READ_GUARD, { signIns: 'Read(//**/mcp-remote-v1/**)', secrets: 'Read(//**/.mcps-secrets)' });
+    assert.strictEqual(roots.FILES.signIns, 'mcp-remote-v1');
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-gap-')));
+    try
+    {
+        assert.strictEqual(spawnSync('git', ['init', '-q', dir]).status, 0);
+        const root = path.join(dir, 'tools');
+        fs.mkdirSync(root);
+        fs.writeFileSync(path.join(root, '.gitignore'), '.mcps-secrets\n');
+        const gap = roots.ignoreGap(root, 'global');
+        assert.deepStrictEqual(gap, { reason: `git would commit ${path.join(root, 'mcp-remote-v1')}/`, signIns: true });
+        fs.appendFileSync(path.join(root, '.gitignore'), 'mcp-remote-v1/\n');
+        assert.strictEqual(roots.ignoreGap(root, 'global'), null);
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

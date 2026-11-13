@@ -108,7 +108,8 @@ function listSteps(inv, ctx, out, regSteps = [])
         if (!file) continue;
         const { entry: _entry, ...was } = prior || {};
         const clients = (ctx.clientsFor && ctx.clientsFor.get(after)) || was.clients || ['claude'];
-        const server = { ...was, name: to.name, scope: to.scope, row: s.row || was.row || null, route: s.route || was.route || null, clients, entry: null, key: was.key === undefined ? null : was.key };
+        const form = ctx.formFor ? ctx.formFor.get(after) : undefined;
+        const server = { ...was, name: to.name, scope: to.scope, row: s.row || was.row || null, route: s.route || was.route || null, clients, entry: null, key: was.key === undefined ? null : was.key, ...(form !== undefined ? { form } : {}) };
         const keyFiles = keys.stdioChain({ scope: to.scope, projectRoot: ctx.roots && ctx.roots.project, globalRoot: ctx.roots && ctx.roots.global });
         at(file, fam).upserts.push({ server, after, cursorFile: null, ...(keyFiles.length ? { keyFiles } : {}) });
         if (!found.has(file)) found.set(file, { rec: foundList(inv, file, P), family: fam });
@@ -116,7 +117,7 @@ function listSteps(inv, ctx, out, regSteps = [])
 
     // a configure change of the apps alone (spec D3): the list entry with its new clients, no registration step - the
     // entry as listed, or the registration as read when the list does not hold it yet
-    for (const { key, clients } of ctx.clientsOnly || [])
+    for (const { key, clients, form } of ctx.clientsOnly || [])
     {
         const cut = key.lastIndexOf('~');
         if (!key.startsWith('mcp:') || cut < 0) continue;
@@ -135,6 +136,7 @@ function listSteps(inv, ctx, out, regSteps = [])
             if (!reg) continue;
             server = lists.fromRegistration(reg, catalog.byId.get(reg.rowId), clients, keys.stdioChain({ scope, projectRoot: ctx.roots && ctx.roots.project, globalRoot: ctx.roots && ctx.roots.global }));
         }
+        if (form !== undefined) server.form = form;
         at(file, fam).upserts.push({ server, after: null, cursorFile: null });
         if (!found.has(file)) found.set(file, { rec: foundList(inv, file, P), family: fam });
     }
@@ -331,12 +333,60 @@ function cursorSteps(inv, ctx, out, answers = {})
     return steps;
 }
 
-// The plan line of a list-write, retire-record or cursor-write step.
+// The read guard (ruling 13): one deny-read for the plan, with the sign-in rule when it writes the shared sign-in form
+// and the key-file rule when it writes a key name - each only when Claude Code's settings file lacks it. A settings file
+// that is not a JSON object is a note: the rest of the plan is still written. -> [deny-read step]
+// The settings file the deny rules go in, and which of `want` it lacks: { file, rules } | { file, bad: true }. Shared by
+// install and configure (denyReadSteps) and fix's read-guard row. Claude Code's own settings: CLAUDE_CONFIG_DIR, else
+// ~/.claude - from ctx.home, so a test never reads the real one.
+function readGuardOf(ctx, want)
+{
+    const P = E.pathFor(ctx.platform);
+    const env = ctx.env || {};
+    const file = env.CLAUDE_CONFIG_DIR ? P.resolve(env.CLAUDE_CONFIG_DIR, 'settings.json') : P.join(ctx.home, '.claude', 'settings.json');
+    let text = null;
+    try { text = fs.readFileSync(file, 'utf8'); } catch { /* absent: {} */ }
+    let deny = [];
+    if (text !== null)
+    {
+        let doc = null;
+        try { doc = JSON.parse(text.replace(/^\uFEFF/, '')); } catch { /* below */ }
+        const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
+        if (!isObject(doc) || (doc.permissions !== undefined && !isObject(doc.permissions)) || (doc.permissions && doc.permissions.deny !== undefined && !Array.isArray(doc.permissions.deny))) return { file, bad: true };
+        deny = (doc.permissions && doc.permissions.deny) || [];
+    }
+    return { file, rules: want.filter((r) => !deny.includes(r)) };
+}
+
+// The deny-read step as one plan line - or none when the file has every rule.
+function denyReadStep(file, rules)
+{
+    return { op: 'deny-read', file, rules, why: `${file}: keeps an AI session's Read tool out of ${rules.map((r) => (r === roots.READ_GUARD.signIns ? 'the sign-in tokens' : 'the key file')).join(' and ')}` };
+}
+
+function denyReadSteps(steps, ctx, out)
+{
+    const want = [
+        steps.some((x) => ['mcp-add', 'mcp-replace', 'mcp-move'].includes(x.op) && E.signInParts(x.entry)) && roots.READ_GUARD.signIns,
+        steps.some((x) => x.op === 'ensure-key-name') && roots.READ_GUARD.secrets,
+    ].filter(Boolean);
+    if (!want.length) return [];
+    const g = readGuardOf(ctx, want);
+    if (g.bad)
+    {
+        out.notes.push(`${g.file} is not a settings object preferred-tools can read - add ${want.join(' and ')} to permissions.deny yourself`);
+        return [];
+    }
+    return g.rules.length ? [denyReadStep(g.file, g.rules)] : [];
+}
+
+// The plan line of a list-write, retire-record, cursor-write or deny-read step.
 function renderLine(s)
 {
+    if (s.op === 'deny-read') return `   adds ${s.rules.join(' and ')} to permissions.deny in ${s.file}  (keeps AI sessions out of the sign-in tokens and the key file)`;
     if (s.op === 'cursor-write') return [`   writes ${s.file}  (Cursor: the servers set up for it; your own entries kept)`, ...(s.replace || []).map((n) => `   replaces your own ${n} in ${s.file}`)].join('\n');
     if (s.op === 'retire-record') return `   moves ${s.file} aside as ${roots.FILES.record}.0.4.bak  (its entries are in mcps.json now)`;
     return s.empty ? `   removes ${s.file}  (no server is listed)` : `   writes ${s.file}  (the servers preferred-tools manages, and the ones left on their own)`;
 }
 
-module.exports = { listSteps, renderLine, foundList, importUnlisted, cursorSteps, takenNames };
+module.exports = { listSteps, renderLine, foundList, importUnlisted, cursorSteps, takenNames, denyReadSteps, readGuardOf, denyReadStep };

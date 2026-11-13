@@ -233,3 +233,26 @@ test('the fetch job fetches a bridge\'s mcp-remote but never starts the bridge',
     }
     finally { w.clean(); }
 });
+
+test('fetch fetches mcp-remote for a shared sign-in entry and does not start it', async () => {
+    const w = world();
+    try
+    {
+        const SIGNIN = { type: 'stdio', command: 'npx', args: ['-y', 'mcp-remote@0.16.0', 'https://mcp.atlassian.com/v1/mcp'], env: { npm_config_before: '2026-11-11T23:59:59Z', MCP_REMOTE_CONFIG_DIR: path.join(w.project, '.preferred-tools') } };
+        writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { atlassian: SIGNIN } });
+        const step = E.fetchStep('atlassian', SIGNIN, 'atlassian');
+        assert.strictEqual(step.what, 'mcp-remote@0.16.0');
+        const file = fetchLib.writeJob(path.join(w.dir, 'tmp', 'fetch.json'), fetchLib.job(w.project, [{ ...step, scope: 'project' }], []));
+        const started = [];
+        const res = await fetchLib.run(JSON.parse(fs.readFileSync(file, 'utf8')), {
+            env: w.env,
+            runFetch: () => ({ status: 0 }),
+            start: async (entry) => { started.push(entry); return { ok: true, ms: 1 }; },
+            log: () => {},
+        });
+        assert.deepStrictEqual(res.fetched, ['mcp-remote@0.16.0']);
+        assert.deepStrictEqual(started, []);
+        assert.deepStrictEqual(res.skipped, ["'atlassian' not started: its first start opens the sign-in, which belongs to Claude Code or Cursor"]);
+    }
+    finally { w.clean(); }
+});

@@ -539,7 +539,7 @@ const listed = (root, servers) => writeJson(path.join(root, 'mcps.json'), { vers
 test('the fix rows update applies are the ones marked upgrade, each with the version that brought its way', () =>
 {
     const catalog = require('../scripts/catalog.js').load();
-    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['list-import', '0.5.0'], ['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
+    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['list-import', '0.5.0'], ['read-guard', '0.5.0'], ['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
 });
 
 test('update offers the new ways to pass data that fix knows - a 0.1.x key header, a relative project path - and applies them after the pins, by registration', async () =>
@@ -571,7 +571,9 @@ test('update offers the new ways to pass data that fix knows - a 0.1.x key heade
         const q = JSON.parse((await run(w, ['--questions', '--no-refresh'], { registry })).text);
         const group = q.pick.flat().find((x) => x.id === 'update-upgrade');
         assert.ok(group.header.length <= 12, group.header);
-        assert.deepStrictEqual(group.options.map((o) => o.description).sort(), ['upgrade:key-to-helper:github~local', 'upgrade:key-to-helper:github~user', 'upgrade:project-relative-path:memory~project']);
+        // the key file in the project root, with no deny rule for it yet: read-guard (0.5.0) is offered beside them
+        const settings = path.join(w.env.CLAUDE_CONFIG_DIR, 'settings.json');
+        assert.deepStrictEqual(group.options.map((o) => o.description).sort(), ['upgrade:key-to-helper:github~local', 'upgrade:key-to-helper:github~user', 'upgrade:project-relative-path:memory~project', `upgrade:read-guard:${settings}`]);
         assert.ok(group.options.some((o) => o.label === 'github (local): key-to-helper'), group.options.map((o) => o.label).join('\n'));
 
         // an upgrade picked before the pin still runs after it, on the registration as it is then: both changes stay
@@ -715,6 +717,83 @@ test('a 0.4.x own server is skipped before list-import: update all leaves it byt
         const a = await run(w, ['--apply', 'all', '--no-refresh'], { registry: C7_AHEAD() });
         assert.doesNotMatch(a.text, /2\.0\.0 -> 9\.0\.0/, a.text);
         assert.strictEqual(JSON.stringify(require('../scripts/account.js').readAccount(w.env, w.project).local.context7), before, 'byte-identical');
+    }
+    finally { w.clean(); }
+});
+
+// ---- 0.5.0: mcp-remote's pin in Cursor's bridge copy and in the shared sign-in form (spec D5) -------------------------
+const npmRemote = (...v) => ({ 'npm:mcp-remote': v.map(([version, days]) => ({ version, time: ago(days) })) });
+const accountOf = (w) => readJson(require('../scripts/account.js').accountFile(w.env));
+
+function bothContext7(w)
+{
+    install(w, { clients: ['claude', 'cursor'], picks: { context7: { route: 'remote', scope: 'user', token: true } } });
+    const listFile = path.join(w.home, '.preferred-tools', 'mcps.json');
+    const cursorFile = path.join(w.home, '.cursor', 'mcp.json');
+    // an env pair the user kept in Cursor's copy ('Keep the change in Cursor'): in the list and in the file alike
+    const list = readJson(listFile);
+    const s = list.servers.find((x) => x.name === 'context7');
+    assert.ok(s.cursorEntry, 'the install listed Cursor\'s bridge copy');
+    s.cursorEntry.env.MINE = '1';
+    writeJson(listFile, list);
+    const doc = readJson(cursorFile);
+    doc.mcpServers.context7.env.MINE = '1';
+    writeJson(cursorFile, doc);
+    return { listFile, cursorFile };
+}
+
+test('update moves cursorEntry\'s mcp-remote pin from Cursor\'s copy as read', async () =>
+{
+    const w = world();
+    try
+    {
+        const { listFile, cursorFile } = bothContext7(w);
+        const claudeBefore = JSON.stringify(accountOf(w).mcpServers.context7);
+        const reg = fakeRegistry(npmRemote(['0.16.0', 60], ['0.17.0', 8]));
+        const c = await run(w, ['--check', '--no-refresh'], { registry: reg });
+        assert.match(c.text, /context7 \(user, Cursor\)\s+0\.16\.0 -> 0\.17\.0/);
+        const a = await run(w, ['--apply', 'cursor-pin:context7~user'], { registry: reg });
+        assert.strictEqual(a.code, 0, a.text);
+        const copy = readJson(cursorFile).mcpServers.context7;
+        assert.strictEqual(copy.args[4], 'mcp-remote@0.17.0');
+        assert.strictEqual(copy.env.MINE, '1', 'the kept pair survives');
+        assert.strictEqual(copy.env.npm_config_before, '2026-10-27T23:59:59Z');
+        assert.deepStrictEqual(readJson(listFile).servers.find((x) => x.name === 'context7').cursorEntry, copy);
+        assert.strictEqual(JSON.stringify(accountOf(w).mcpServers.context7), claudeBefore, 'Claude Code\'s helper entry byte-identical');
+    }
+    finally { w.clean(); }
+});
+
+test('a drifted Cursor copy gets no cursor-pin offer and is named', async () =>
+{
+    const w = world();
+    try
+    {
+        const { cursorFile } = bothContext7(w);
+        const doc = readJson(cursorFile);
+        doc.mcpServers.context7.args.push('--extra');
+        writeJson(cursorFile, doc);
+        const c = await run(w, ['--check', '--no-refresh'], { registry: fakeRegistry(npmRemote(['0.16.0', 60], ['0.17.0', 8])) });
+        assert.doesNotMatch(c.text, /cursor-pin|\(user, Cursor\)\s+0\.16\.0/);
+        assert.match(c.text, /context7 \(user\): Cursor's copy in .*mcp\.json differs from the list - not checked; \/preferred-tools:fix settles it/);
+    }
+    finally { w.clean(); }
+});
+
+test('update moves the shared form\'s mcp-remote pin in Claude Code', async () =>
+{
+    const w = world();
+    try
+    {
+        install(w, { clients: ['claude', 'cursor'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } });
+        const reg = fakeRegistry(npmRemote(['0.16.0', 60], ['0.17.0', 8]));
+        const c = await run(w, ['--check', '--no-refresh'], { registry: reg });
+        assert.match(c.text, /atlassian \(user\)\s+0\.16\.0 -> 0\.17\.0/);
+        const a = await run(w, ['--apply', 'mcp:atlassian~user'], { registry: reg });
+        assert.strictEqual(a.code, 0, a.text);
+        const e = accountOf(w).mcpServers.atlassian;
+        assert.ok(e.args.includes('mcp-remote@0.17.0'), JSON.stringify(e));
+        assert.strictEqual(e.env.MCP_REMOTE_CONFIG_DIR, path.join(w.home, '.preferred-tools'));
     }
     finally { w.clean(); }
 });

@@ -1053,6 +1053,26 @@ test('root-ignore covers a project or global root inside a git work tree: append
     finally { w.clean(); }
 });
 
+test('root-ignore appends mcp-remote-v1/ to a root of the user\'s own files where git would commit it', () =>
+{
+    const w = world();
+    try
+    {
+        gitInit(w.home);
+        secretsAt(homeRoot(w), { B: '' });
+        put(path.join(homeRoot(w), 'notes.md'), 'mine\n');
+        put(path.join(homeRoot(w), '.gitignore'), '.mcps-secrets\npreferred-tools.json\nmcps.json\n');
+        const found = detect(ctxOf(w)).found.filter((x) => x.id === 'root-ignore');
+        assert.deepStrictEqual(found.map((f) => [f.name, Boolean(f.blocked)]), [[homeRoot(w), false]]);
+        assert.match(found[0].found, /git would commit .*mcp-remote-v1\//);
+        const l = logged();
+        assert.strictEqual(fix.applyFixes(ctxOf(w), ['root-ignore'], { log: l.log }).failed, null, l.text());
+        assert.ok(fsx.readFileSync(path.join(homeRoot(w), '.gitignore'), 'utf8').endsWith('mcps.json\nmcp-remote-v1/\n'));
+        assert.deepStrictEqual(detect(ctxOf(w)).found.filter((x) => x.id === 'root-ignore'), []);
+    }
+    finally { w.clean(); }
+});
+
 test('root-ignore blocks a helper gap no appended line can close - a .gitignore above excludes the root - and names the line to remove', () =>
 {
     const w = world();
@@ -1083,7 +1103,7 @@ test('root-ignore finds nothing for a root outside a git work tree', () =>
     finally { w.clean(); }
 });
 
-test('root-ignore in a named root holding the user\'s files appends .mcps-secrets, preferred-tools.json and mcps.json, never *', () =>
+test('root-ignore in a named root holding the user\'s files appends .mcps-secrets, preferred-tools.json, mcps.json and mcp-remote-v1/, never *', () =>
 {
     const w = world();
     try
@@ -1098,7 +1118,7 @@ test('root-ignore in a named root holding the user\'s files appends .mcps-secret
         assert.strictEqual(f.name, named);
         const l = logged();
         assert.strictEqual(fix.applyFixes(ctxData(w, data), ['root-ignore'], { log: l.log }).failed, null, l.text());
-        assert.strictEqual(fsx.readFileSync(path.join(named, '.gitignore'), 'utf8'), '.mcps-secrets\npreferred-tools.json\nmcps.json\n');
+        assert.strictEqual(fsx.readFileSync(path.join(named, '.gitignore'), 'utf8'), '.mcps-secrets\npreferred-tools.json\nmcps.json\nmcp-remote-v1/\n');
         assert.strictEqual(rootsLib.gitIgnores(path.join(named, 'notes.md')), false, 'the user\'s files stay visible to git');
         assert.strictEqual(rootsLib.gitIgnores(path.join(named, '.mcps-secrets')), true);
     }
@@ -1635,4 +1655,51 @@ test("install's first touch retires the old record, and a configure 'manage' ans
         assert.deepStrictEqual(listAt(proot).servers.map((s) => s.name), ['context7']);
     }
     finally { w.clean(); }
+});
+
+// ---- 0.5.0: read-guard (rulings 12, 13) --------------------------------------------------------------------------------
+const settingsOf = (w) => path.join(w.env.CLAUDE_CONFIG_DIR || path.join(w.home, '.claude'), 'settings.json');
+
+test('read-guard finds a root with .mcps-secrets and no rule, applies deny-read, then finds nothing', () =>
+{
+    const w = world();
+    try
+    {
+        const proot = path.join(w.project, '.preferred-tools');
+        put(path.join(proot, '.mcps-secrets'), '');
+        put(settingsOf(w), JSON.stringify({ permissions: { deny: ['Bash(rm:*)'] }, theme: 'dark' }));
+        const found = fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard');
+        assert.deepStrictEqual(found.map((f) => [f.name, f.rules]), [[settingsOf(w), ['Read(//**/.mcps-secrets)']]]);
+        assert.match(found[0].found, /\.mcps-secrets/);
+        const l = logged();
+        const res = fix.applyFixes(ctxOf(w), ['read-guard'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.strictEqual(res.failed, null, l.text());
+        assert.deepStrictEqual(readJson(settingsOf(w)), { permissions: { deny: ['Bash(rm:*)', 'Read(//**/.mcps-secrets)'] }, theme: 'dark' });
+        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard'), []);
+        // the sign-in folder adds its own rule
+        fsx.mkdirSync(path.join(proot, 'mcp-remote-v1'));
+        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard').map((f) => f.rules), [['Read(//**/mcp-remote-v1/**)']]);
+    }
+    finally { w.clean(); }
+});
+
+test('read-guard never opens a file in mcp-remote-v1 or .mcps-secrets', () =>
+{
+    const w = world();
+    const opened = [];
+    const spy = (name) => { const orig = fsx[name]; fsx[name] = function (p, ...rest) { opened.push(String(p)); return orig.call(this, p, ...rest); }; return () => { fsx[name] = orig; }; };
+    let undo = [];
+    try
+    {
+        const proot = path.join(w.project, '.preferred-tools');
+        put(path.join(proot, '.mcps-secrets'), '');
+        put(path.join(proot, 'mcp-remote-v1', 'tokens.json'), '{}');
+        const ctx = ctxOf(w);
+        undo = ['openSync', 'readFileSync', 'createReadStream', 'readdirSync'].map(spy);
+        const found = F.readGuardDetect(ctx);
+        undo.forEach((u) => u()); undo = [];
+        assert.deepStrictEqual(found.map((f) => f.rules), [['Read(//**/.mcps-secrets)', 'Read(//**/mcp-remote-v1/**)']]);
+        assert.deepStrictEqual(opened.filter((p) => p.includes('mcp-remote-v1') || p.endsWith('.mcps-secrets')), []);
+    }
+    finally { undo.forEach((u) => u()); w.clean(); }
 });

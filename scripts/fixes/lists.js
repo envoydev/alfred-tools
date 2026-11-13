@@ -69,4 +69,28 @@ function listImportSteps(f, ctx)
     return steps;
 }
 
-module.exports = { listImportDetect, listImportSteps };
+// read-guard (0.5.0): a root that holds the key file or mcp-remote's sign-in folder, and Claude Code's settings that do
+// not deny an AI session's Read tool there (rulings 12 and 13). Both are checked by name only - fs.existsSync, never
+// opened. One finding per settings file, naming every rule it lacks; its plan is one deny-read.
+function readGuardDetect(ctx)
+{
+    const P = pathOf(ctx);
+    const r = rootsOf(ctx);
+    const seen = [...new Set([r.project, r.global].filter(Boolean))];
+    const why = [];
+    const want = [];
+    const has = (name) => seen.find((root) => fs.existsSync(P.join(root, name)));
+    const secrets = has(roots.FILES.secrets);
+    if (secrets) { want.push(roots.READ_GUARD.secrets); why.push(`${P.join(secrets, roots.FILES.secrets)}`); }
+    const signIns = has(roots.FILES.signIns);
+    if (signIns) { want.push(roots.READ_GUARD.signIns); why.push(`${P.join(signIns, roots.FILES.signIns)}/`); }
+    if (!want.length) return [];
+    const g = planLists.readGuardOf(ctx, want);
+    if (g.bad) return [{ id: 'read-guard', name: g.file, scope: null, rules: want, found: `${g.file}: not a settings object preferred-tools can read`, blocked: `add ${want.join(' and ')} to permissions.deny yourself` }];
+    if (!g.rules.length) return [];
+    return [{ id: 'read-guard', name: g.file, scope: null, rules: g.rules, found: `${g.file} does not deny ${g.rules.join(' or ')} - an AI session's Read tool can open ${why.join(' and ')}` }];
+}
+
+const readGuardSteps = (f) => [planLists.denyReadStep(f.name, f.rules)];
+
+module.exports = { listImportDetect, listImportSteps, readGuardDetect, readGuardSteps };

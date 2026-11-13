@@ -27,7 +27,7 @@ const account = require('./account.js');
 const inventory = require('./inventory.js');
 const fetchLib = require('./fetch.js');
 const { argvOf, deepEqual, reconnectLine } = require('./plan.js');
-const { blockingStdio } = require('./json-file.js');
+const { blockingStdio, stripBom } = require('./json-file.js');
 const kept = require('./kept.js');
 const keys = require('./keys.js');
 const catalogLib = require('./catalog.js');
@@ -156,7 +156,7 @@ function rootIgnoreLines(root)
     let names = [];
     try { names = fs.readdirSync(root); } catch { /* a new root */ }
     const mine = names.every((n) => pluginWritten(root, n));
-    const want = mine ? roots.GITIGNORE.trim().split('\n') : [roots.FILES.secrets, roots.FILES.record, roots.FILES.list];
+    const want = mine ? roots.GITIGNORE.trim().split('\n') : [roots.FILES.secrets, roots.FILES.record, roots.FILES.list, `${roots.FILES.signIns}/`];
     const file = path.join(root, '.gitignore');
     let text = null;
     try { text = fs.readFileSync(file, 'utf8'); } catch { /* absent */ }
@@ -295,11 +295,47 @@ function listWrite(step, ctx, { failure = false } = {})
             server = { ...server, ...lists.fromRegistration({ name: server.name, scope: server.scope, route: server.route, entry: got }, rowOf(ctx, server), server.clients || ['claude'], u.keyFiles || []) };
         }
         if (failure && u.cursorFile && !cursorDone.has(u.cursorFile)) server.clients = (server.clients || []).filter((c) => c !== 'cursor');
+        // Cursor's copy of a two-form entry (D5): the bridge built from Claude's entry as read back, keeping the prior
+        // copy's pin and the pairs it does not set; the form itself is the plan's, never stored
+        const { form } = server;
+        delete server.form;
+        const forCursor = (server.clients || []).includes('cursor');
+        if (form === 'two' && forCursor)
+        {
+            const prior = server.cursorEntry || (((base && base.servers) || []).find((x) => lists.serverKey(x) === lists.serverKey(server)) || {}).cursorEntry || null;
+            const copy = cursorMcp.bridgeFormOf(server.entry, ctx.catalog || catalogLib.load(), prior);
+            if (copy) server.cursorEntry = copy;
+            else delete server.cursorEntry;
+        }
+        else if (form !== undefined || !forCursor) delete server.cursorEntry;
         upserts.push(server);
     }
     const drops = (step.drops || []).filter((d) => !d.after || applied.has(d.after)).map((d) => d.key);
     const doc = lists.mergeList(base, { upserts, drops, own: step.own ? lists.ownOf(step.own) : undefined, cursorOffer: step.cursorOffer });
     return lists.writeList(step.file, doc, read);
+}
+
+// The read guard (ruling 13): each rule permissions.deny lacks, appended in Claude Code's settings file - every other key,
+// value and order kept, written through a temporary file and a rename. An absent file reads as {}; one that is not a JSON
+// object is left as it is. -> { ok, detail, unchanged? }
+function denyRead(file, rules)
+{
+    let text = null;
+    try { text = fs.readFileSync(file, 'utf8'); } catch (err) { if (err.code !== 'ENOENT') return { ok: false, detail: `${file} cannot be read (${err.code}) - left as it is` }; }
+    let doc = {};
+    if (text !== null)
+    {
+        try { doc = JSON.parse(stripBom(text)); } catch { doc = null; }
+        const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
+        if (!isObject(doc) || (doc.permissions !== undefined && !isObject(doc.permissions)) || (doc.permissions && doc.permissions.deny !== undefined && !Array.isArray(doc.permissions.deny)))
+            return { ok: false, detail: `${file} is not a settings object preferred-tools can read - left as it is; add ${rules.join(' and ')} to permissions.deny yourself` };
+    }
+    const deny = (doc.permissions && doc.permissions.deny) || [];
+    const lack = rules.filter((r) => !deny.includes(r));
+    if (!lack.length) return { ok: true, unchanged: true, detail: `${file} already denies ${rules.join(' and ')} - left as it is` };
+    const next = { ...doc, permissions: { ...(doc.permissions || {}), deny: [...deny, ...lack] } };
+    writeJson(file, next, null);
+    return { ok: true, detail: `added ${lack.join(' and ')} to permissions.deny in ${file}` };
 }
 
 // A 0.4.x preferred-tools.json whose entries the list holds now: moved aside as <file>.0.4.bak, or .0.4.bak.2 and on
@@ -362,6 +398,7 @@ function runStep(step, ctx)
         case 'list-write': return listWrite(step, ctx);
         case 'retire-record': return retireRecord(step.file);
         case 'cursor-write': return cursorMcp.cursorWrite(step, ctx);
+        case 'deny-read': return denyRead(step.file, step.rules || []);
         // never fails the apply: a warning, and the file as it was (spec F8)
         case 'order-mcp-json': return mcpOrder.orderFile(step.file, ctx.catalog, new Set(step.own || []));
         case 'record-root': return recordRoot(step, ctx.data);
@@ -542,4 +579,4 @@ function main(argv)
 }
 
 if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { REFUSED, refusedLine, reconnectLines, apply, runStep, listWrite, failureLists, restoreStep, fillStep, readRegistration, restoreLine, rootIgnore, rootIgnoreLines, writeHelper, writeShipped, ensureCommonjs, ensureKeyName };
+module.exports = { REFUSED, refusedLine, reconnectLines, apply, runStep, listWrite, failureLists, denyRead, restoreStep, fillStep, readRegistration, restoreLine, rootIgnore, rootIgnoreLines, writeHelper, writeShipped, ensureCommonjs, ensureKeyName };

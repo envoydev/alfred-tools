@@ -13,7 +13,10 @@ const account = require('./account.js');
 const E = require('./entries.js');
 const helper = require('./mcp-headers.js');
 
-const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json' };
+const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json', signIns: 'mcp-remote-v1' };
+// The read guard (0.5.0, ruling 13): two deny rules in Claude Code's settings that keep a session's Read tool out of
+// mcp-remote's sign-in tokens and the key file, wherever a root sits.
+const READ_GUARD = { signIns: 'Read(//**/mcp-remote-v1/**)', secrets: 'Read(//**/.mcps-secrets)' };
 const GITIGNORE = '*\n!.gitignore\n!mcp-headers.js\n';
 const MAP_VERSION = 1;
 
@@ -316,10 +319,12 @@ function ignoreGap(root, family)
     const s = gitIgnores(secrets);
     if (s === false) return { reason: `git would commit ${secrets}`, secrets: true };
     if (s === null) return null;
+    // mcp-remote's sign-in folder (0.5.0, D5): its tokens are as private as the key file
+    const signIns = gitIgnores(path.join(root, FILES.signIns, 'tokens')) === false;
     const file = path.join(root, FILES.helper);
     if (family === 'project' && path.basename(root) !== '.alfred' && gitIgnores(file) === true)
-        return { reason: `git ignores ${file}, which a project-scope server needs committed`, helper: true, excluded: gitIgnores(root) === true };
-    return null;
+        return { reason: `git ignores ${file}, which a project-scope server needs committed`, helper: true, excluded: gitIgnores(root) === true, ...(signIns ? { signIns: true } : {}) };
+    return signIns ? { reason: `git would commit ${path.join(root, FILES.signIns)}/`, signIns: true } : null;
 }
 
 // The two files this plugin copies into a root: the key helper (D4) and the URL bridge (0.4.0). Each carries its version
@@ -350,6 +355,7 @@ function shippedState(kind, file, exists = (p) => fs.existsSync(p))
 const helperState = (file, exists) => shippedState('helper', file, exists);
 
 module.exports = {
+    READ_GUARD,
     FILES, GITIGNORE, familyOf, readMap, mapKey, withRoot, inUse, options, resolveNamed, resolve, rootStrFor,
     helperPathOf, registrationRoots, standard, pointsIntoRoot, absOf, recordKey, recordFamily, ownOnly, gitIgnores, ignoreGap, helperState, helperSource,
     shippedState, shippedSource,
