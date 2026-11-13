@@ -126,7 +126,7 @@ test('X4 - fix on a 0.2.0 project file: relative paths and helper written absolu
     assert.ok(!left.includes('project-relative-path') && !left.includes('mcp-order'), left.join(', '));
 });
 
-test('X5 - a 0.2.0 record of managed servers: the install plan cleans it, and the file is gone after the apply', T, () =>
+test('X5 - a 0.2.0 record of managed servers: the install plan drops them from the list\'s own', T, () =>
 {
     const h = world('x5');
     const dir = h.project('p');
@@ -137,21 +137,22 @@ test('X5 - a 0.2.0 record of managed servers: the install plan cleans it, and th
     fs.writeFileSync(record, JSON.stringify({ version: 1, servers: [{ name: 'context7', scope: 'project', fingerprint: existing.fingerprintOf(c7, catalog), choice: 'manage' }] }, null, 2));
     const r = h.run(dir, { picks: { 'playwright-chrome': { scope: 'project' } } });
     ok(r);
-    const clean = r.plan.steps.find((x) => x.op === 'record-clean' && x.file === record);
-    assert.ok(clean, r.rendered);
-    assert.deepStrictEqual([clean.entries, clean.keep], [[], []]);
-    assert.ok(!fs.existsSync(record), 'the record is gone');
+    const list = path.join(dir, '.preferred-tools', roots.FILES.list);
+    const clean = r.plan.steps.find((x) => x.op === 'list-write' && x.file === list);
+    assert.ok(clean && clean.own, r.rendered);
+    assert.deepStrictEqual([clean.own.entries, clean.own.keep], [[], []]);
+    assert.deepStrictEqual(readJson(list).own, [], 'no managed server in own');
 });
 
-test('X6 - configure answered \'Leave it on its own\': one record in the family root; update and fix list it as not checked', T, async () =>
+test('X6 - configure answered \'Leave it on its own\': one own entry in the family root\'s list; update and fix list it as not checked', T, async () =>
 {
     const h = world('x6');
     const dir = h.project('p');
     ok(h.run(dir, { picks: { context7: { scope: 'project', token: false } } }));
     ok(h.run(dir, { existing: { 'mcp:context7~project': 'own' } }));
-    const record = path.join(dir, '.preferred-tools', roots.FILES.record);
-    assert.deepStrictEqual(readJson(record).servers.map((e) => [e.name, e.scope, e.choice]), [['context7', 'project', 'own']]);
-    assert.ok(!fs.existsSync(path.join(h.home, '.preferred-tools', roots.FILES.record)), 'no record in the global root');
+    const list = path.join(dir, '.preferred-tools', roots.FILES.list);
+    assert.deepStrictEqual(readJson(list).own.map((e) => [e.name, e.scope, e.choice]), [['context7', 'project', 'own']]);
+    assert.ok(!fs.existsSync(path.join(h.home, '.preferred-tools', roots.FILES.list)), 'no list in the global root');
     const inv = h.inventory(dir);
     const d = fix.detectAll(fix.makeCtx({ inv, env: h.env, data: h.data }));
     assert.ok(fix.render(d).includes('context7 (project): on its own - not checked'), fix.render(d));

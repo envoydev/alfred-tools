@@ -19,7 +19,7 @@ const HOME = '/Users/me';
 const ctx = { home: HOME, exists: () => false };
 const invOf = (extra = {}) => ({
     version: 1, project: '/work/shop', os: 'darwin', arch: 'arm64', registrations: [], plugins: [], pluginServers: [],
-    records: { project: null, global: null }, roots: { map: { version: 1, global: null, projects: {} } }, ...extra,
+    lists: { project: null, global: null }, roots: { map: { version: 1, global: null, projects: {} } }, ...extra,
 });
 const regOf = (name, scope, entry, rowId, route, extra = {}) => ({ name, scope, entry, rowId, route, own: !rowId, alfredRetired: false, choice: null, ...extra });
 const register = (w, name, entry, scope) => assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
@@ -100,7 +100,7 @@ test("a helper file of the user's own - no preferred-tools number line, or not t
     finally { w.clean(); }
 });
 
-test('the record round-trips: a server left on its own is recorded in its family root, a managed one is not', () => {
+test('own round-trips: a server left on its own is listed in its family root\'s own, a managed one is not', () => {
     const w = world();
     try
     {
@@ -114,21 +114,21 @@ test('the record round-trips: a server left on its own is recorded in its family
         const proot = path.join(w.project, '.preferred-tools');
         const groot = path.join(w.home, '.preferred-tools');
         assert.deepStrictEqual(p.steps.map((s) => [s.op, s.file || s.path || s.root]), [
-            ['root-ignore', groot], ['record-clean', path.join(groot, 'preferred-tools.json')], ['record-root', groot],
+            ['root-ignore', groot], ['list-write', path.join(groot, 'mcps.json')], ['record-root', groot],
         ]);
         const r = apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {}, data });
         assert.strictEqual(r.failed, null);
-        assert.ok(!fs.existsSync(path.join(proot, 'preferred-tools.json')), 'a managed server has no record');
-        assert.deepStrictEqual(readJson(path.join(groot, 'preferred-tools.json')), { version: 1, servers: [{ name: 'github', scope: 'user', fingerprint: 'url:api.githubcopilot.com/mcp', choice: 'own' }, { connector: 'Atlassian', choice: 'own' }] });
+        assert.ok(!fs.existsSync(path.join(proot, 'mcps.json')), 'a managed server the plan did not write is not listed');
+        assert.deepStrictEqual(readJson(path.join(groot, 'mcps.json')), { version: 1, servers: [], own: [{ name: 'github', scope: 'user', fingerprint: 'url:api.githubcopilot.com/mcp', choice: 'own' }, { connector: 'Atlassian', choice: 'own' }] });
         inv = inventory.buildInventory({ project: w.project, env: w.env, data });
         assert.deepStrictEqual(inv.registrations.map((x) => [x.name, x.choice]), [['c7', null], ['github', 'own']]);
         // the same plan again: nothing to write
         const again = plan(inv, {}, { home: w.home, env: w.env, connectors: ['Atlassian'] });
-        assert.deepStrictEqual(again.steps.filter((s) => s.op === 'record-clean'), []);
+        assert.deepStrictEqual(again.steps.filter((s) => s.op === 'list-write'), []);
         // handing github back removes its entry; the connector's stays
         const back = plan(inv, { existing: { 'mcp:github~user': 'manage' } }, { home: w.home, env: w.env, connectors: ['Atlassian'] });
         assert.strictEqual(apply(back, { env: w.env, tmp: path.join(w.dir, 'tmp2'), log: () => {}, data }).failed, null);
-        assert.deepStrictEqual(readJson(path.join(groot, 'preferred-tools.json')).servers, [{ connector: 'Atlassian', choice: 'own' }]);
+        assert.deepStrictEqual(readJson(path.join(groot, 'mcps.json')).own, [{ connector: 'Atlassian', choice: 'own' }]);
         // a launch that changed since is no longer on its own
         assert.strictEqual(cli.run(['mcp', 'remove', 'github', '-s', 'user'], { cwd: w.project, env: w.env }).status, 0);
         register(w, 'github', { command: 'docker', args: ['run', '-i', '--rm', 'ghcr.io/github/github-mcp-server'] }, 'user');
@@ -138,7 +138,7 @@ test('the record round-trips: a server left on its own is recorded in its family
     finally { w.clean(); }
 });
 
-test('a record in a named root no registration points into is found through the roots map', () => {
+test('a 0.4.x record in a named root no registration points into is found through the roots map, beside the list it becomes', () => {
     const w = world();
     try
     {
@@ -150,7 +150,7 @@ test('a record in a named root no registration points into is found through the 
         writeJson(path.join(data, 'roots.json'), { version: 1, global: named, projects: {} });
         const inv = inventory.buildInventory({ project: w.project, env: w.env, data });
         assert.strictEqual(inv.registrations[0].choice, 'own');
-        assert.strictEqual(inv.records.global.file, path.join(named, 'preferred-tools.json'));
+        assert.deepStrictEqual([inv.lists.global.file, inv.lists.global.old], [path.join(named, 'mcps.json'), path.join(named, 'preferred-tools.json')]);
     }
     finally { w.clean(); }
 });

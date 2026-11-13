@@ -107,7 +107,7 @@ const alfredWorld = () =>
 // every file alfred-code wrote into a folder: its .claude/ and .alfred/ trees, without the files preferred-tools puts in
 // an .alfred root (spec D2: the key file, the helper, the record; 0.4.0: the bridge and package.json, type commonjs),
 // which alfred-code never wrote
-const PT_FILES = new Set([roots.FILES.secrets, roots.FILES.helper, roots.FILES.record, roots.FILES.bridge, 'package.json']);
+const PT_FILES = new Set([roots.FILES.secrets, roots.FILES.helper, roots.FILES.record, roots.FILES.list, roots.FILES.bridge, 'package.json']);
 function alfredOwn(dir)
 {
     const h = crypto.createHash('sha256');

@@ -806,12 +806,12 @@ function all(inv, picks, catalog, { env = {}, home = null, connectors = null } =
 
 // ---- the walk (spec F1) ---------------------------------------------------------------------------------------------
 
-// configure's first question for a registration (spec F4): who looks after it. `root`: the folder its family's record
+// configure's first question for a registration (spec F4): who looks after it. `root`: the folder its family's list
 // would sit in. -> { question, answers: { <label as shown>: { key, choice } } }
 function ownStep(item, root)
 {
     const P = /^(?:[A-Za-z]:[\\/]|\\\\)/.test(String(root)) ? path.win32 : path.posix;
-    const file = P.join(root, roots.FILES.record);
+    const file = P.join(root, roots.FILES.list);
     const where = item.scope === 'project' ? '; in .mcp.json it sits with your own servers, after the managed ones' : '';
     const opts = [
         { label: `preferred-tools${REC}`, description: 'configure, update and fix look after it', choice: 'manage' },

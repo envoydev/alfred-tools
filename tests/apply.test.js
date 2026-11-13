@@ -119,8 +119,11 @@ test('a failure mid-apply stops there, leaves the earlier steps in place and nam
         assert.ok(r.report.failed);
         assert.strictEqual(r.report.failed.op, 'mcp-add');
         assert.deepStrictEqual(Object.keys(mcpJson(w).mcpServers), ['context7'], 'the first add stays, the failed one and the one after it are absent');
-        assert.match(r.text, /Stopped at step 2\. Already applied and left in place: 1 \(added 'context7' at project scope\)/);
-        assert.match(r.text, /Not run: 3 mcp-add/);
+        assert.match(r.text, /Stopped at step 3\. Already applied and left in place: 1 \(wrote .*\.gitignore .*\); 2 \(added 'context7' at project scope\)/);
+        assert.match(r.text, /Not run: 4 mcp-add, 5 list-write/);
+        // the list holds what was applied before the stop, and nothing after it
+        assert.match(r.text, /^ {3}list: wrote .*mcps\.json \(1 server\)$/m);
+        assert.deepStrictEqual(readJson(path.join(w.project, '.preferred-tools', 'mcps.json')).servers.map((s) => s.name), ['context7']);
         assert.ok(!w.calls().some((a) => a.includes('atlassian') && a[1] === 'add-json'), 'nothing after the failure ran');
     }
     finally { w.clean(); }
@@ -919,12 +922,12 @@ test('record-root: the entry written, a second project beside it, the key normal
     finally { w.clean(); }
 });
 
-test('record-clean writes the own entries live still has, in order; a key in keep and in entries takes the entries one', () => {
+test('list-write keeps the own entries record-clean kept: those live still has, in order; a key in keep and in entries takes the entries one', () => {
     const w = world();
     try
     {
         const roots = require('../scripts/roots.js');
-        const file = path.join(w.project, '.preferred-tools', 'preferred-tools.json');
+        const file = path.join(w.project, '.preferred-tools', 'mcps.json');
         const a = { name: 'a', scope: 'local', fingerprint: { pkg: 'x' }, choice: 'own' };
         const gone = { name: 'gone', scope: 'local', fingerprint: { pkg: 'y' }, choice: 'own' };
         const moved = { name: 'moved', scope: 'local', fingerprint: { pkg: 'old' }, choice: 'own' };
@@ -932,90 +935,90 @@ test('record-clean writes the own entries live still has, in order; a key in kee
         const conn = { connector: 'Notion', choice: 'own' };
         const b = { name: 'b', scope: 'user', fingerprint: { pkg: 'z' }, choice: 'manage' };
         const live = { servers: { 'mcp:a~local': { pkg: 'x' }, 'mcp:b~user': { pkg: 'z' }, 'mcp:moved~local': { pkg: 'new' }, 'plugin-mcp:p@m/s': { host: 'h' } }, connectors: null };
-        let r = runSteps(w, [{ op: 'record-clean', file, entries: [a, gone, moved, 'junk', plug, conn, b], keep: [], live }]);
+        let r = runSteps(w, [{ op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [a, gone, moved, 'junk', plug, conn, b], keep: [], live: live } }]);
         assert.strictEqual(r.report.failed, null, r.text);
-        assert.deepStrictEqual(readJson(file), { version: 1, servers: [a, conn] }, 'gone, moved, junk, add and manage dropped; the connector kept with no list');
+        assert.deepStrictEqual(readJson(file), { version: 1, servers: [], own: [a, conn] }, 'gone, moved, junk, add and manage dropped; the connector kept with no list');
         // a run that passed the connectors drops one it lacks (R14)
-        runSteps(w, [{ op: 'record-clean', file, entries: [a, conn], keep: [], live: { ...live, connectors: ['Linear'] } }]);
-        assert.deepStrictEqual(readJson(file).servers.map(roots.recordKey), ['mcp:a~local']);
+        runSteps(w, [{ op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [a, conn], keep: [], live: { ...live, connectors: ['Linear'] } } }]);
+        assert.deepStrictEqual(readJson(file).own.map(roots.recordKey), ['mcp:a~local']);
         // keep is written as it is, before the entries; a key in both takes the entries one
         const x = { name: 'x', scope: 'project', fingerprint: { pkg: 'q' }, choice: 'own' };
-        runSteps(w, [{ op: 'record-clean', file, entries: [a], keep: [x, { ...a, fingerprint: { pkg: 'stale' } }], live }]);
-        assert.deepStrictEqual(readJson(file).servers, [x, a]);
+        runSteps(w, [{ op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [a], keep: [x, { ...a, fingerprint: { pkg: 'stale' } }], live: live } }]);
+        assert.deepStrictEqual(readJson(file).own, [x, a]);
         assert.deepStrictEqual([roots.recordKey(a), roots.recordKey(plug), roots.recordKey(conn), roots.recordKey({ x: 1 })], ['mcp:a~local', 'plugin-mcp:p@m/s', 'connector:Notion', null]);
     }
     finally { w.clean(); }
 });
 
-test('record-clean writes own entries only, deletes an empty record, and never touches a file that is not this plugin\'s record', () => {
+test('list-write writes own entries only, deletes an empty list, and never touches a file that is not this plugin\'s list', () => {
     const w = world();
     try
     {
-        const file = path.join(w.project, '.preferred-tools', 'preferred-tools.json');
+        const file = path.join(w.project, '.preferred-tools', 'mcps.json');
         const manage = { name: 'm', scope: 'local', fingerprint: 'pkg:m', choice: 'manage' };
         const add = { plugin: 'p@m', server: 's', fingerprint: 'url:h', choice: 'add' };
         const own = { name: 'o', scope: 'local', fingerprint: 'pkg:o', choice: 'own' };
         const live = { servers: { 'mcp:m~local': 'pkg:m', 'plugin-mcp:p@m/s': 'url:h', 'mcp:o~local': 'pkg:o' }, connectors: null };
-        writeJson(file, { version: 1, servers: [manage, add] });
-        let r = runSteps(w, [{ op: 'record-clean', file, entries: [], keep: [], live }]);
+        writeJson(file, { version: 1, servers: [], own: [manage, add] });
+        let r = runSteps(w, [{ op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [], keep: [], live: live } }]);
         assert.strictEqual(r.report.failed, null, r.text);
-        assert.ok(!fs.existsSync(file), 'a record left with nothing is deleted');
-        assert.ok(r.text.includes(`removed ${file} - no server is left on its own`), r.text);
+        assert.ok(!fs.existsSync(file), 'a list left with nothing is deleted');
+        assert.ok(r.text.includes(`removed ${file} - no server is listed`), r.text);
         // not there: nothing to write
-        r = runSteps(w, [{ op: 'record-clean', file, entries: [], keep: [], live }]);
+        r = runSteps(w, [{ op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [], keep: [], live: live } }]);
         assert.strictEqual(r.report.failed, null, r.text);
         assert.ok(!fs.existsSync(file));
         // another tool's JSON under this name: byte-identical afterwards
         fs.writeFileSync(file, '{"foo":1}');
-        r = runSteps(w, [{ op: 'record-clean', file, entries: [], keep: [], live }]);
+        r = runSteps(w, [{ op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [], keep: [], live: live } }]);
         assert.strictEqual(r.report.failed, null, r.text);
         assert.strictEqual(fs.readFileSync(file, 'utf8'), '{"foo":1}');
         // a newer record: left as it is
         const newer = '{ "version": 2, "servers": [] }\n';
         fs.writeFileSync(file, newer);
-        r = runSteps(w, [{ op: 'record-clean', file, entries: [own], keep: [], live }]);
+        r = runSteps(w, [{ op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [own], keep: [], live: live } }]);
         assert.strictEqual(fs.readFileSync(file, 'utf8'), newer);
         assert.match(r.text, /is version 2, newer than this plugin's 1 - left as it is; update preferred-tools/);
         // an own entry: the file holds exactly it (Review Focus 5)
         fs.rmSync(file);
-        r = runSteps(w, [{ op: 'record-clean', file, entries: [own, manage], keep: [], live }]);
+        r = runSteps(w, [{ op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [own, manage], keep: [], live: live } }]);
         assert.strictEqual(r.report.failed, null, r.text);
-        assert.deepStrictEqual(readJson(file), { version: 1, servers: [own] });
+        assert.deepStrictEqual(readJson(file), { version: 1, servers: [], own: [own] });
     }
     finally { w.clean(); }
 });
 
-test('a failed order step warns and the apply still succeeds, its records written', () => {
+test('a failed order step warns and the apply still succeeds, its list written', () => {
     const w = world();
     try
     {
-        const file = path.join(w.project, '.preferred-tools', 'preferred-tools.json');
+        const file = path.join(w.project, '.preferred-tools', 'mcps.json');
         const own = { name: 'o', scope: 'local', fingerprint: 'pkg:o', choice: 'own' };
         const mcp = path.join(w.project, '.mcp.json');
         fs.writeFileSync(mcp, '{ "mcpServers": { "a": { "command": "a" }, } }');
         const r = runSteps(w, [
-            { op: 'record-clean', file, entries: [own], keep: [], live: { servers: { 'mcp:o~local': 'pkg:o' }, connectors: null } },
+            { op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [own], keep: [], live: { servers: { 'mcp:o~local': 'pkg:o' }, connectors: null } } },
             { op: 'order-mcp-json', file: mcp, own: [] },
         ]);
         assert.strictEqual(r.report.failed, null, r.text);
-        assert.deepStrictEqual(readJson(file).servers, [own]);
+        assert.deepStrictEqual(readJson(file).own, [own]);
         assert.match(r.text, /2\. ok +warning: .*\.mcp\.json.* left as it is - \/preferred-tools:fix \(mcp-order\) orders it/);
         assert.strictEqual(fs.readFileSync(mcp, 'utf8'), '{ "mcpServers": { "a": { "command": "a" }, } }');
     }
     finally { w.clean(); }
 });
 
-test("record-clean keeps another project's own entry that live does not list (Ruling 10)", () => {
+test("list-write keeps another project's own entry that live does not list (Ruling 10)", () => {
     const w = world();
     try
     {
-        const file = path.join(w.home, '.preferred-tools', 'preferred-tools.json');
+        const file = path.join(w.home, '.preferred-tools', 'mcps.json');
         const x = { name: 'x', scope: 'project', fingerprint: 'pkg:x', choice: 'own' };
         const y = { name: 'y', scope: 'user', fingerprint: 'pkg:y', choice: 'manage' };
-        writeJson(file, { version: 1, servers: [x, y] });
-        const r = runSteps(w, [{ op: 'record-clean', file, entries: [], keep: [x], live: { servers: {}, connectors: null } }]);
+        writeJson(file, { version: 1, servers: [], own: [x, y] });
+        const r = runSteps(w, [{ op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [], keep: [x], live: { servers: {}, connectors: null } } }]);
         assert.strictEqual(r.report.failed, null, r.text);
-        assert.deepStrictEqual(readJson(file), { version: 1, servers: [x] });
+        assert.deepStrictEqual(readJson(file), { version: 1, servers: [], own: [x] });
     }
     finally { w.clean(); }
 });
@@ -1037,31 +1040,31 @@ test('ensure-key-name: a UTF-16 key file is left as it is and the apply goes on'
     finally { w.clean(); }
 });
 
-test('record-clean and record-root: a newer version is left as it is, an unreadable file is kept as .bak before the write replaces it, and an unchanged record writes nothing', () => {
+test('list-write and record-root: a newer version is left as it is, an unreadable file is kept as .bak before the write replaces it, and an unchanged list writes nothing', () => {
     const w = world();
     try
     {
-        const file = path.join(w.project, '.preferred-tools', 'preferred-tools.json');
+        const file = path.join(w.project, '.preferred-tools', 'mcps.json');
         fs.mkdirSync(path.dirname(file), { recursive: true });
         const b = { name: 'b', scope: 'user', fingerprint: { pkg: 'z' }, choice: 'own' };
         const live = { servers: { 'mcp:b~user': { pkg: 'z' } }, connectors: null };
         // a newer record: never replaced
         const newer = '{ "version": 2, "servers": [], "more": true }\n';
         fs.writeFileSync(file, newer);
-        let r = runSteps(w, [{ op: 'record-clean', file, entries: [b], keep: [], live }]);
+        let r = runSteps(w, [{ op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [b], keep: [], live: live } }]);
         assert.strictEqual(r.report.failed, null, r.text);
         assert.strictEqual(fs.readFileSync(file, 'utf8'), newer);
         assert.match(r.text, /is version 2, newer than this plugin's 1 - left as it is; update preferred-tools/);
         // not JSON: the old bytes kept beside it, then the merge written
         fs.writeFileSync(file, '{oops');
-        r = runSteps(w, [{ op: 'record-clean', file, entries: [b], keep: [], live }]);
+        r = runSteps(w, [{ op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [b], keep: [], live: live } }]);
         assert.strictEqual(fs.readFileSync(`${file}.bak`, 'utf8'), '{oops');
-        assert.deepStrictEqual(readJson(file), { version: 1, servers: [b] });
-        assert.match(r.text, /the old file kept as .*preferred-tools\.json\.bak/);
+        assert.deepStrictEqual(readJson(file), { version: 1, servers: [], own: [b] });
+        assert.match(r.text, /the old file kept as .*mcps\.json\.bak/);
         // the same answers again: nothing written
         const before = fs.statSync(file).mtimeMs;
         fs.utimesSync(file, new Date(0), new Date(0));
-        r = runSteps(w, [{ op: 'record-clean', file, entries: [b], keep: [], live }]);
+        r = runSteps(w, [{ op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [b], keep: [], live: live } }]);
         assert.match(r.text, /already holds these servers - left as it is/);
         assert.strictEqual(fs.statSync(file).mtimeMs, 0, `not rewritten (was ${before})`);
         assert.deepStrictEqual(fs.readdirSync(path.dirname(file)).filter((f) => f.endsWith('.tmp')), [], 'no temporary file left');
@@ -1108,7 +1111,7 @@ test('a re-run after a failed add writes no file again', () => {
     {
         const inv = inventory.buildInventory({ project: w.project, env: w.env });
         const p = plan(inv, { picks: { github: { route: 'remote', scope: 'local' } } }, { home: w.home, env: w.env });
-        assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'write-helper', 'ensure-key-name', 'mcp-add', 'record-root']);
+        assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'write-helper', 'ensure-key-name', 'mcp-add', 'list-write', 'record-root']);
         const data = path.join(w.dir, 'data');
         const root = path.join(w.project, '.preferred-tools');
         const first = apply(p, { env: { ...w.env, FAKE_CLAUDE_FAIL: 'add-json github' }, tmp: path.join(w.dir, 'tmp'), log: () => {}, data });
@@ -1268,4 +1271,84 @@ test('rootIgnoreLines puts mcps.json in a user-files root\'s short list', () => 
         assert.deepStrictEqual(r.want, ['.mcps-secrets', 'preferred-tools.json', 'mcps.json']);
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- list-write (0.5.0, spec D1) -------------------------------------------------------------------------------------
+
+const listOf = (file) => require('../scripts/mcps-list.js').readList(file);
+const memEntry = (pkg) => ({ type: 'stdio', command: 'uvx', args: [pkg], env: {} });
+const upsert = (name, scope, extra = {}) => ({ server: { name, scope, row: 'memory', route: 'local', clients: ['claude'], entry: null, key: null, ...extra }, after: `mcp:${name}~${scope}`, cursorFile: null });
+
+test('list-write records an upsert only after its registration step succeeded', () => {
+    const w = world();
+    try
+    {
+        const file = path.join(w.project, '.preferred-tools', 'mcps.json');
+        const r = runSteps(w, [
+            { op: 'mcp-add', name: 'a', scope: 'local', entry: memEntry('mcp-memory-service'), row: 'memory', route: 'local' },
+            { op: 'mcp-add', name: 'b', scope: 'local', entry: memEntry('mcp-memory-service'), row: 'memory', route: 'local' },
+            { op: 'list-write', file, family: 'project', upserts: [upsert('a', 'local'), upsert('b', 'local')], drops: [], own: null },
+        ], { env: { ...w.env, FAKE_CLAUDE_FAIL: 'add-json b' } });
+        assert.strictEqual(r.report.failed.op, 'mcp-add', r.text);
+        assert.deepStrictEqual(listOf(file).servers.map((s) => s.name), ['a'], r.text);
+        assert.match(r.text, /list: wrote .*mcps\.json/);
+    }
+    finally { w.clean(); }
+});
+
+test('list-write takes the entry from the registration as read back', () => {
+    const w = world();
+    try
+    {
+        const file = path.join(w.project, '.preferred-tools', 'mcps.json');
+        const r = runSteps(w, [
+            { op: 'mcp-add', name: 'a', scope: 'local', entry: memEntry('mcp-memory-service'), row: 'memory', route: 'local' },
+            { op: 'list-write', file, family: 'project', upserts: [upsert('a', 'local', { entry: { command: 'stale' } })], drops: [], own: null },
+        ]);
+        assert.strictEqual(r.report.failed, null, r.text);
+        const s = listOf(file).servers[0];
+        assert.deepStrictEqual(s.entry.args, ['mcp-memory-service']);
+        assert.strictEqual(s.entry.command, 'uvx');
+    }
+    finally { w.clean(); }
+});
+
+test('a failed cursor-write leaves no list entry naming cursor for that file', { skip: process.platform === 'win32' && 'NOT RUN: a symlink needs Developer Mode on Windows' }, () => {
+    const w = world();
+    try
+    {
+        const file = path.join(w.project, '.preferred-tools', 'mcps.json');
+        const cursorFile = path.join(w.project, '.cursor', 'mcp.json');
+        fs.mkdirSync(path.dirname(cursorFile), { recursive: true });
+        fs.writeFileSync(path.join(w.dir, 'elsewhere.json'), '{"mcpServers":{}}');
+        fs.symlinkSync(path.join(w.dir, 'elsewhere.json'), cursorFile);
+        const r = runSteps(w, [
+            { op: 'mcp-add', name: 'a', scope: 'local', entry: memEntry('mcp-memory-service'), row: 'memory', route: 'local' },
+            { op: 'list-write', file, family: 'project', upserts: [{ ...upsert('a', 'local', { clients: ['claude', 'cursor'] }), cursorFile }], drops: [], own: null },
+            { op: 'cursor-write', file: cursorFile, family: 'project', lists: [{ file, scopes: ['local', 'project'] }], before: [], skip: [], replace: [] },
+        ]);
+        assert.strictEqual(r.report.failed.op, 'cursor-write', r.text);
+        assert.deepStrictEqual(listOf(file).servers[0].clients, ['claude']);
+    }
+    finally { w.clean(); }
+});
+
+test('a remove drops the list entry once the removal succeeded', () => {
+    const w = world();
+    try
+    {
+        const file = path.join(w.project, '.preferred-tools', 'mcps.json');
+        runSteps(w, [
+            { op: 'mcp-add', name: 'a', scope: 'local', entry: memEntry('mcp-memory-service'), row: 'memory', route: 'local' },
+            { op: 'list-write', file, family: 'project', upserts: [upsert('a', 'local')], drops: [], own: null },
+        ]);
+        assert.strictEqual(listOf(file).servers.length, 1);
+        const r = runSteps(w, [
+            { op: 'mcp-remove', name: 'a', scope: 'local' },
+            { op: 'list-write', file, family: 'project', upserts: [], drops: [{ key: 'mcp:a~local', after: 'mcp:a~local' }], own: null },
+        ]);
+        assert.strictEqual(r.report.failed, null, r.text);
+        assert.strictEqual(listOf(file), null, 'the empty list is deleted');
+    }
+    finally { w.clean(); }
 });

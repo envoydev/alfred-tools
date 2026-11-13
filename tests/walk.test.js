@@ -13,7 +13,7 @@ const MAC = { os: 'darwin', arch: 'arm64', project: '/work/shop' };
 const LINUX = { os: 'linux', arch: 'x64', project: '/work/shop' };
 const WIN = { os: 'win32', arch: 'x64', project: 'C:\\work\\shop' };
 const HOME = { darwin: '/Users/me', linux: '/home/me', win32: 'C:\\Users\\me' };
-const inv = (base, extra = {}) => ({ version: 1, ...base, cli: { ok: true }, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, records: { project: null, global: null }, ...extra });
+const inv = (base, extra = {}) => ({ version: 1, ...base, cli: { ok: true }, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, lists: { project: null, global: null }, ...extra });
 const OPTS = (base) => ({ env: {}, home: HOME[base.os] });
 
 // one answer: the first option of each question, recorded as install.md and configure.md record it
@@ -127,12 +127,12 @@ test("configure: a registration target starts with its own question; 'Leave it o
     assert.strictEqual(q.question, 'Who looks after gitlab?');
     assert.deepStrictEqual(q.options.map((o) => [o.label, o.description]), [
         ['preferred-tools (Recommended)', 'configure, update and fix look after it'],
-        ['Leave it on its own', 'nothing in this plugin changes its entry again; in .mcp.json it sits with your own servers, after the managed ones; saved in /work/shop/.preferred-tools/preferred-tools.json'],
+        ['Leave it on its own', 'nothing in this plugin changes its entry again; in .mcp.json it sits with your own servers, after the managed ones; saved in /work/shop/.preferred-tools/mcps.json'],
     ]);
     assert.deepStrictEqual(Object.values(first.answers[q.id]), [{ key: 'mcp:gitlab~project', choice: 'manage' }, { key: 'mcp:gitlab~project', choice: 'own' }]);
     // a local target: no .mcp.json line
     const local = asks.ownStep({ key: 'mcp:context7~local', name: 'context7', scope: 'local' }, '/work/shop/.preferred-tools');
-    assert.strictEqual(local.question.options[1].description, 'nothing in this plugin changes its entry again; saved in /work/shop/.preferred-tools/preferred-tools.json');
+    assert.strictEqual(local.question.options[1].description, 'nothing in this plugin changes its entry again; saved in /work/shop/.preferred-tools/mcps.json');
     // 'Leave it on its own': the next step is the next target's
     const left = asks.next(i, { targets: ['mcp:gitlab~project', 'mcp:context7~local'], existing: { 'mcp:gitlab~project': 'own' }, done: ['mcp:gitlab~project:own'] }, catalog, OPTS(MAC));
     assert.strictEqual(left.id, 'mcp:context7~local:own');

@@ -34,6 +34,7 @@ const catalogLib = require('./catalog.js');
 const tmpdir = require('./tmpdir.js');
 const roots = require('./roots.js');
 const mcpOrder = require('./mcp-order.js');
+const lists = require('./mcps-list.js');
 
 const SCRIPTS = __dirname;
 const quote = (s) => (/^[A-Za-z0-9_\-./:=@,+]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`);
@@ -265,28 +266,55 @@ function writeJson(file, doc, read)
 }
 const readNote = (read, bak) => (read && read.note ? ` - ${read.note}${bak ? `; the old file kept as ${bak}` : ''}` : '');
 
-// <root>/preferred-tools.json as the plan computed it (spec F4): `keep` as it is, then the `entries` a server still has
-// (a key in both takes the entries one), the servers left on their own only. Nothing left: the file goes, but only one
-// that parses as this plugin's record. An unchanged record writes nothing (D8: each step skips what is in place).
-function recordClean(file, entries, keep, live)
+// <root>/mcps.json as the plan computed it (spec D1): each upsert whose registration step was applied (`after` in
+// report.appliedKeys, or none), its entry the registration as read back through kept.keep; each drop whose step was
+// applied; the own entries by the 0.4.x record's rules (mcpsList.ownOf), or the list's own as it is. A family with no list
+// yet carries its 0.4.x record's own entries. After a failure (`failure`), cursor comes off a server whose Cursor file
+// was not written. Never names a key value: a stdio key field holds kept.MARKER.
+function listWrite(step, ctx, { failure = false } = {})
 {
-    const record = roots.readRecord(file);
-    const kept = keepAsIs(record);
-    if (kept) return kept;
-    const fresh = roots.ownOnly(roots.mergeRecord({ servers: [] }, entries, live).servers);
-    const keys = new Set(fresh.map(roots.recordKey));
-    const servers = [...roots.ownOnly(keep).filter((e) => !keys.has(roots.recordKey(e))), ...fresh];
-    if (!servers.length)
+    const read = lists.readList(step.file);
+    let base = read;
+    if (!read)
     {
-        if (!record) return { ok: true, detail: `${file}: no server is left on its own - nothing to write` };
-        if (record.state) return { ok: true, detail: `${record.note.replace(/ - read as empty$/, '')} - not this plugin's record, left as it is` };
-        fs.rmSync(file, { force: true });
-        return { ok: true, detail: `removed ${file} - no server is left on its own` };
+        const old = lists.readOldRecord(path.join(path.dirname(step.file), roots.FILES.record));
+        base = old && !old.state ? { servers: [], own: roots.ownOnly(old.servers) } : null;
     }
-    const doc = { version: roots.RECORD_VERSION, servers };
-    if (record && !record.state && JSON.stringify(doc) === JSON.stringify({ version: record.version, servers: record.servers })) return { ok: true, detail: `${file} already holds these servers - left as it is` };
-    const bak = writeJson(file, doc, record);
-    return { ok: true, detail: `wrote ${file} (${servers.length} server${servers.length === 1 ? '' : 's'} left on ${servers.length === 1 ? 'its' : 'their'} own)${readNote(record, bak)}` };
+    const applied = (ctx.report && ctx.report.appliedKeys) || new Set();
+    const cursorDone = (ctx.report && ctx.report.cursorFiles) || new Set();
+    const upserts = [];
+    for (const u of step.upserts || [])
+    {
+        if (u.after && !applied.has(u.after)) continue;
+        let server = { ...u.server };
+        if (u.after)
+        {
+            const got = readRegistration(server.name, server.scope, ctx.project, ctx.env);
+            if (!got) continue;
+            server = { ...server, ...lists.fromRegistration({ name: server.name, scope: server.scope, route: server.route, entry: got }, rowOf(ctx, server), server.clients || ['claude'], u.keyFiles || []) };
+        }
+        if (failure && u.cursorFile && !cursorDone.has(u.cursorFile)) server.clients = (server.clients || []).filter((c) => c !== 'cursor');
+        upserts.push(server);
+    }
+    const drops = (step.drops || []).filter((d) => !d.after || applied.has(d.after)).map((d) => d.key);
+    const doc = lists.mergeList(base, { upserts, drops, own: step.own ? lists.ownOf(step.own) : undefined, cursorOffer: step.cursorOffer });
+    return lists.writeList(step.file, doc, read);
+}
+
+// After a stop: every list-write of the plan again, so each list holds what was applied before the stop and nothing
+// after it. A failure here is reported and never masks the stop's. -> [{ ok, detail }]
+function failureLists(plan, report, ctx, log = () => {})
+{
+    const out = [];
+    for (const step of plan.steps.filter((s) => s.op === 'list-write'))
+    {
+        let r;
+        try { r = listWrite(step, { ...ctx, report }, { failure: true }); }
+        catch (err) { r = { ok: false, detail: `${step.file}: ${err.message}` }; }
+        log(`   list: ${r.detail}`);
+        out.push(r);
+    }
+    return out;
 }
 
 // <data>/roots.json: the family's root for this project (D2). No data folder given: nothing to write (R8).
@@ -319,7 +347,7 @@ function runStep(step, ctx)
         case 'write-helper': return writeHelper(step.path);
         case 'write-bridge': return writeShipped('bridge', step.path);
         case 'ensure-key-name': return ensureKeyName(step.file, step.names);
-        case 'record-clean': return recordClean(step.file, step.entries, step.keep, step.live);
+        case 'list-write': return listWrite(step, ctx);
         // never fails the apply: a warning, and the file as it was (spec F8)
         case 'order-mcp-json': return mcpOrder.orderFile(step.file, ctx.catalog, new Set(step.own || []));
         case 'record-root': return recordRoot(step, ctx.data);
@@ -379,7 +407,7 @@ function runStep(step, ctx)
 function apply(plan, { env = process.env, tmp, runCli = cli.run, log = console.log, fetchFile, data = null } = {})
 {
     const project = plan.project;
-    const report = { applied: [], failed: null, notRun: [], readback: [], keys: [], noop: false, toFetch: [], fetch: null, fetchFile: null, tmp: tmp || null };
+    const report = { applied: [], failed: null, notRun: [], readback: [], keys: [], noop: false, toFetch: [], fetch: null, fetchFile: null, tmp: tmp || null, appliedKeys: new Set(), cursorFiles: new Set(), lists: [] };
     if (!plan.steps.length)
     {
         report.noop = true;
@@ -388,6 +416,7 @@ function apply(plan, { env = process.env, tmp, runCli = cli.run, log = console.l
     }
     const ctx = { project, env, tmp: tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-')), runCli, catalog: catalogLib.load(), alfredEnabled: Boolean(plan.alfredCodeEnabled), data };
     ctx.call = makeRunner(ctx);
+    ctx.report = report;
     report.tmp = ctx.tmp;
     for (let i = 0; i < plan.steps.length; i++)
     {
@@ -398,7 +427,14 @@ function apply(plan, { env = process.env, tmp, runCli = cli.run, log = console.l
         const r = ready.error ? { ok: false, detail: ready.error } : runStep(filled.step, ctx);
         log(`${i + 1}. ${r.ok ? 'ok    ' : 'FAILED'} ${r.detail}`);
         if (filled && filled.note) { report.keys.push(filled.note); log(`   key: ${filled.note}`); }
-        if (r.ok) { report.applied.push({ i: i + 1, op: step.op, detail: r.detail }); continue; }
+        if (r.ok)
+        {
+            report.applied.push({ i: i + 1, op: step.op, detail: r.detail });
+            const key = lists.regKey(step);
+            if (key) report.appliedKeys.add(key);
+            if (step.op === 'cursor-write') report.cursorFiles.add(step.file);
+            continue;
+        }
         report.failed = { i: i + 1, op: step.op, detail: r.detail };
         report.notRun = plan.steps.slice(i + 1).map((s, k) => ({ i: i + 2 + k, op: s.op, why: s.why }));
         break;
@@ -407,6 +443,7 @@ function apply(plan, { env = process.env, tmp, runCli = cli.run, log = console.l
     {
         log('', `Stopped at step ${report.failed.i}. Already applied and left in place: ${report.applied.length ? report.applied.map((a) => `${a.i} (${a.detail})`).join('; ') : 'nothing'}.`);
         if (report.notRun.length) log(`Not run: ${report.notRun.map((n) => `${n.i} ${n.op}`).join(', ')}.`);
+        report.lists = failureLists(plan, report, ctx, log);
     }
     // read it back: each picked tool as the files and the CLI now report it
     const inv = inventory.buildInventory({ project, env });
@@ -491,4 +528,4 @@ function main(argv)
 }
 
 if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { REFUSED, refusedLine, reconnectLines, apply, runStep, restoreStep, fillStep, readRegistration, restoreLine, rootIgnore, rootIgnoreLines, writeHelper, writeShipped, ensureCommonjs, ensureKeyName };
+module.exports = { REFUSED, refusedLine, reconnectLines, apply, runStep, listWrite, failureLists, restoreStep, fillStep, readRegistration, restoreLine, rootIgnore, rootIgnoreLines, writeHelper, writeShipped, ensureCommonjs, ensureKeyName };

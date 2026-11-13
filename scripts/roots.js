@@ -16,7 +16,6 @@ const helper = require('./mcp-headers.js');
 const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json' };
 const GITIGNORE = '*\n!.gitignore\n!mcp-headers.js\n';
 const MAP_VERSION = 1;
-const RECORD_VERSION = 1;
 
 const pathFor = (platform) => (platform === 'win32' ? path.win32 : path.posix);
 const familyOf = (scope) => (scope === 'user' ? 'global' : 'project');
@@ -270,35 +269,6 @@ function pointsIntoRoot(reg, inv, ctx)
     return known.includes(parent) || [FILES.secrets, FILES.helper, FILES.record, FILES.list].some((f) => exists(P.join(parent, f))) ? parent : null;
 }
 
-// Where the commands look for the record (D6): the mapped root, the two standard folders, then every root a managed
-// registration points into.
-function recordFiles(inv, family, ctx)
-{
-    const P = pathFor(ctx.platform);
-    const map = (inv.roots && inv.roots.map) || emptyMap();
-    const mapped = family === 'global' ? map.global : (Object.keys(map.projects || {}).length ? map.projects[mapKey(ctx.project)] : null);
-    const order = family === 'global' ? standard('global', ctx) : [...standard('project', ctx)].reverse();
-    const dirs = [mapped, ...order.map((s) => s.root), ...registrationRoots(inv, family, ctx)].filter(Boolean);
-    return [...new Set(dirs)].map((d) => P.join(d, FILES.record));
-}
-
-// The record file. Missing: null. Malformed or another version: empty with a note and its state (see readMap). Never
-// throws.
-function readRecord(file)
-{
-    let text;
-    try { text = fs.readFileSync(file, 'utf8'); }
-    catch (err) { return err.code === 'ENOENT' || err.code === 'ENOTDIR' ? null : { version: RECORD_VERSION, servers: [], note: `${file} cannot be read (${err.code}) - read as empty`, state: 'unreadable' }; }
-    let doc;
-    try { doc = JSON.parse(text); }
-    catch { return { version: RECORD_VERSION, servers: [], note: `${file} is not JSON - read as empty`, state: 'bad' }; }
-    if (doc && typeof doc === 'object' && doc.version !== RECORD_VERSION && newerOrBad(doc.version, RECORD_VERSION) === 'newer')
-        return { version: RECORD_VERSION, servers: [], note: `${versionNote(file, doc.version, RECORD_VERSION)} - read as empty`, state: 'newer' };
-    if (!doc || typeof doc !== 'object' || doc.version !== RECORD_VERSION || !Array.isArray(doc.servers))
-        return { version: RECORD_VERSION, servers: [], note: `${file} is version ${JSON.stringify(doc && doc.version)} or has no servers list - read as empty`, state: 'bad' };
-    return { version: RECORD_VERSION, servers: doc.servers.filter((s) => s && typeof s === 'object') };
-}
-
 // The record's key for one entry (R6): `mcp:<name>~<scope>`, `plugin-mcp:<plugin>/<server>`, `connector:<Name>`; null
 // for an entry of none of those shapes.
 function recordKey(e)
@@ -308,42 +278,6 @@ function recordKey(e)
     if (typeof e.plugin === 'string' && typeof e.server === 'string') return `plugin-mcp:${e.plugin}/${e.server}`;
     if (typeof e.connector === 'string') return `connector:${e.connector}`;
     return null;
-}
-
-const sameFingerprint = (a, b) => JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
-function sortKeys(v)
-{
-    if (Array.isArray(v)) return v.map(sortKeys);
-    if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])]));
-    return v;
-}
-
-// The record with this run's entries merged in (D6). An entry replaces the one with its key, in place; a new key is
-// appended. Then an entry is dropped when its server is gone: a server's key missing from `live.servers`, or there with
-// another fingerprint (null: present, not compared); a connector only when `live.connectors` is a list that lacks it -
-// a run that did not pass the connectors keeps every one (R14). An entry of no known shape is dropped.
-// live: { servers: { <key>: fingerprint | null }, connectors: string[] | null }
-function mergeRecord(record, entries, live)
-{
-    const out = [];
-    const at = new Map();
-    for (const e of [...((record && record.servers) || []), ...(entries || [])])
-    {
-        const key = recordKey(e);
-        if (!key) continue;
-        if (at.has(key)) out[at.get(key)] = e;
-        else { at.set(key, out.length); out.push(e); }
-    }
-    const servers = (live && live.servers) || {};
-    const connectors = live && Array.isArray(live.connectors) ? live.connectors : null;
-    const kept = out.filter((e) =>
-    {
-        if (typeof e.connector === 'string') return !connectors || connectors.includes(e.connector);
-        const key = recordKey(e);
-        if (!Object.hasOwn(servers, key)) return false;
-        return servers[key] === null || sameFingerprint(servers[key], e.fingerprint);
-    });
-    return { version: RECORD_VERSION, servers: kept };
 }
 
 // The scope family whose root holds an entry's record (spec F4): a user registration and a connector the global root's, a
@@ -416,7 +350,7 @@ function shippedState(kind, file, exists = (p) => fs.existsSync(p))
 const helperState = (file, exists) => shippedState('helper', file, exists);
 
 module.exports = {
-    FILES, GITIGNORE, RECORD_VERSION, familyOf, readMap, mapKey, withRoot, inUse, options, resolveNamed, resolve, rootStrFor, recordFiles, readRecord,
-    helperPathOf, registrationRoots, standard, pointsIntoRoot, absOf, recordKey, mergeRecord, recordFamily, ownOnly, gitIgnores, ignoreGap, helperState, helperSource,
+    FILES, GITIGNORE, familyOf, readMap, mapKey, withRoot, inUse, options, resolveNamed, resolve, rootStrFor,
+    helperPathOf, registrationRoots, standard, pointsIntoRoot, absOf, recordKey, recordFamily, ownOnly, gitIgnores, ignoreGap, helperState, helperSource,
     shippedState, shippedSource,
 };

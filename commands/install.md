@@ -190,8 +190,8 @@ line of each route that uses a key (the name, the files it is read from, filled 
 under it that says how the server connects once the key is there, the sign-in a remote route will ask for, and the tools
 that can run code. Two kinds of step may read new:
 
-- `writes` or `removes <root>/preferred-tools.json` - the servers left on their own; a managed server has no entry, so
-  the file is removed once none is left.
+- `writes` or `removes <root>/mcps.json` - the list: each server preferred-tools manages, as written and read back, and
+  the servers left on their own; the file is removed once it lists none.
 - `reorders <project>/.mcp.json (no value changes)` - after a change at Project scope, the catalog servers in the user's
   order, the user's own servers after them; no entry is changed.
 

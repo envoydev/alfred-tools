@@ -34,17 +34,11 @@ const { templateNames } = require('./mcp-bridge.js');
 // 'A', 'A and B', 'A, B and C'
 const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const mcpOrder = require('./mcp-order.js');
+const planLists = require('./plan-lists.js');
 const { installedOf, keyOf, targetOf, fromHere, otherWindowsMcp } = require('./inventory.js');
-const { blockingStdio } = require('./json-file.js');
+const { blockingStdio, deepEqual } = require('./json-file.js');
 
 const SCOPES = ['local', 'project', 'user'];
-const deepEqual = (a, b) => JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
-function sortKeys(v)
-{
-    if (Array.isArray(v)) return v.map(sortKeys);
-    if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])]));
-    return v;
-}
 
 function makeCtx(inv, opts = {})
 {
@@ -434,93 +428,15 @@ function useRoots(ctx, scope, { helper, bridge, keyFile, keyName, keyNames, data
     if (df) ctx.uses.push({ family: df, root: r[df] });
 }
 
-// A record as found: the inventory's read for its file, else the disk's. -> null | { servers, state? }
-function foundRecord(inv, file)
-{
-    for (const family of ['project', 'global'])
-    {
-        const r = inv.records && inv.records[family];
-        if (r && r.file === file) return r.note ? { servers: [], state: 'noted' } : { servers: r.servers || [] };
-    }
-    return roots.readRecord(file);
-}
-
-// The records (spec F4): each holds only the servers left on their own, in its scope family's record in the root this run
-// uses. Every record found here is read; its own entries, with this run's answers applied, go to their family's record,
-// and a record left with nothing is removed. A project entry in a record that is not this project's own stays where it
-// is, named in a note (Ruling 10). Runs only for a plan that read the answers (`ctx.recordLive`): fix.js has none.
-function recordSteps(inv, ctx, out)
-{
-    if (!ctx.recordLive) return [];
-    const P = E.pathFor(ctx.platform);
-    const fileIn = (dir) => P.join(dir, roots.FILES.record);
-    const map = (inv.roots && inv.roots.map) || null;
-    const mapped = map && map.projects ? map.projects[roots.mapKey(ctx.project)] : null;
-    const inUse = inv.roots && inv.roots.project ? inv.roots.project.path : null;
-    const mine = new Set([mapped, inUse, ctx.roots && ctx.roots.project, ...roots.standard('project', ctx).map((x) => x.root)].filter(Boolean).map(fileIn));
-    const targets = { project: null, global: null };
-    for (const family of Object.keys(targets)) if (ctx.roots && ctx.roots[family]) targets[family] = fileIn(ctx.roots[family]);
-    const found = new Map();
-    const candidates = [targets.project, targets.global, ...['project', 'global'].flatMap((f) => [inv.records && inv.records[f] && inv.records[f].file, ...roots.recordFiles(inv, f, ctx)])];
-    for (const file of candidates.filter(Boolean)) if (!found.has(file)) found.set(file, foundRecord(inv, file));
-
-    const entries = new Map();
-    const keep = new Map();
-    for (const [file, rec] of found)
-    {
-        if (!rec || rec.state) continue;
-        for (const e of roots.ownOnly(rec.servers))
-        {
-            const key = roots.recordKey(e);
-            if (!key) continue;
-            if (roots.recordFamily(e) === 'project' && !mine.has(file))
-            {
-                keep.set(file, [...(keep.get(file) || []), e]);
-                out.notes.push(`${file} holds ${e.name || `${e.plugin}/${e.server}`} (${e.scope || 'a plugin'}), left on its own in another project - it stays there; remove it there to hand it back`);
-                continue;
-            }
-            entries.set(key, { e, from: file });
-        }
-    }
-    for (const family of ['project', 'global'])
-        for (const e of (ctx.recordEntries && ctx.recordEntries[family]) || [])
-        {
-            const key = roots.recordKey(e);
-            if (e.choice === 'own') entries.set(key, { e, from: null });
-            else entries.delete(key);
-        }
-
-    const planned = new Map([...found.keys()].map((f) => [f, { entries: [], keep: keep.get(f) || [] }]));
-    for (const { e, from } of entries.values())
-    {
-        // a family with no root this run (the roots answer's error is in the plan): the entry stays in its file
-        const file = targets[roots.recordFamily(e)] || from;
-        if (file) planned.get(file).entries.push(e);
-    }
-    const steps = [];
-    for (const [file, want] of planned)
-    {
-        const fresh = roots.ownOnly(roots.mergeRecord({ servers: [] }, want.entries, ctx.recordLive).servers);
-        const keys = new Set(fresh.map(roots.recordKey));
-        const next = [...roots.ownOnly(want.keep).filter((e) => !keys.has(roots.recordKey(e))), ...fresh];
-        const family = Object.keys(targets).find((f) => targets[f] === file);
-        if (family && next.length) ctx.uses.push({ family, root: ctx.roots[family] });
-        const rec = found.get(file);
-        const changes = !rec || rec.state ? next.length > 0 : JSON.stringify(next) !== JSON.stringify(rec.servers);
-        if (changes) steps.push({ op: 'record-clean', file, entries: want.entries, keep: want.keep, live: ctx.recordLive, why: `${file}: the servers you left on their own; configure, update and fix skip them. Remove an entry, or the file, to hand them back.` });
-    }
-    return steps;
-}
-
 // The file steps of the roots the plan writes into, in D8's order - each root's .gitignore, the helpers, the key names -
-// and the records that go last. A root this apply creates gets its .gitignore (R13), never one named .alfred; a root that
+// and the lists (plan-lists.js) and the roots map that go last. A root this apply creates gets its .gitignore (R13), never one named .alfred; a root that
 // exists is asked of git, and with a gap gets no key file and a note naming the fix.
-function fileSteps(inv, ctx, out)
+function fileSteps(inv, ctx, out, regSteps = [])
 {
     const P = E.pathFor(ctx.platform);
     const exists = ctx.exists || ((p) => fs.existsSync(p));
-    // first: a record's family root joins the roots this run writes into
-    const cleans = recordSteps(inv, ctx, out);
+    // first: a list's family root joins the roots this run writes into
+    const lists = planLists.listSteps(inv, ctx, out, regSteps);
     const byRoot = new Map();
     for (const family of ['project', 'global'])
         for (const u of ctx.uses.filter((x) => x.family === family))
@@ -575,7 +491,7 @@ function fileSteps(inv, ctx, out)
         if (mapped !== r.root)
             records.push({ op: 'record-root', family: r.family, project: ctx.project, root: r.root, why: `the ${r.family} root ${r.root}: written to the roots map, so the commands find it again` });
     }
-    return { before: [...ignore, ...helpers, ...names], after: [...cleans, ...records] };
+    return { before: [...ignore, ...helpers, ...names], after: [...lists, ...records] };
 }
 
 // ---- one plugin pick ------------------------------------------------------------------------------------------------
@@ -673,7 +589,7 @@ function plan(inv, answers, opts = {})
     if (out.hud === 'defer') { out.hud = null; out.hudAfter = true; out.notes.push('claude-hud: its statusLine and recommended settings are asked after the install'); }
     if (out.hud) out.steps.push({ op: 'hud', mode: out.hud, why: `claude-hud: ${out.hud === 'skip' ? 'statusLine only' : out.hud === 'replace' ? 'statusLine plus recommended settings, replacing differing keys' : 'statusLine plus recommended settings, add-only'}` });
     // the file steps first, the records last (D8): a failed add leaves files a re-run finds in place
-    const files = fileSteps(inv, ctx, out);
+    const files = fileSteps(inv, ctx, out, out.steps);
     // .mcp.json in the catalog's order, last of all (spec F5, F8)
     out.steps = mcpOrder.withOrderStep([...files.before, ...out.steps, ...files.after], inv.project, mcpOrder.ownProjectNames(inv, answers.existing));
     out.noop = out.steps.length === 0 && out.errors.length === 0;
@@ -740,7 +656,7 @@ function planRootChange(answers, inv, ctx, catalog, out)
 }
 
 // The answers about the servers already set up (spec D6, F4), from configure: 'own' puts the server in its family's
-// record, 'manage' or 'add' takes it out (recordSteps). What is here now, so a record drops a server gone since.
+// list's own, 'manage' or 'add' takes it out (plan-lists.js). What is here now, so a list drops a server gone since.
 function planExisting(answers, inv, ctx, catalog, out, connectors)
 {
     ctx.recordEntries = { project: [], global: [] };
@@ -832,7 +748,7 @@ function render(p)
         else if (s.op === 'write-helper') lines.push(`   writes ${P.join(s.path, roots.FILES.helper)}  (this plugin's header helper)`, `   (and package.json, type commonjs, when absent)`);
         else if (s.op === 'write-bridge') lines.push(`   writes ${P.join(s.path, roots.FILES.bridge)}  (this plugin's URL bridge)`, `   (and package.json, type commonjs, when absent)`);
         else if (s.op === 'ensure-key-name') lines.push(`   writes ${s.file}  (names only: ${s.names.join(', ')} - you fill in each value)`);
-        else if (s.op === 'record-clean') lines.push(s.entries.length || s.keep.length ? `   writes ${s.file}  (the servers left on their own)` : `   removes ${s.file}  (no server is left on its own)`);
+        else if (s.op === 'list-write') lines.push(planLists.renderLine(s));
         else if (s.op === 'order-mcp-json') lines.push(`   reorders ${s.file}  (no value changes)`);
         else if (s.op === 'record-root') lines.push(`   writes ${roots.FILES.map} in the plugin's data folder  (the ${s.family} root: ${s.root})`);
         else if (s.op === 'fetch') lines.push(`   ${s.argv.map(shq).join(' ')}`, '   (after the apply, in the background: fills the cache only; if it fails the registration stays and the first start tries again)');

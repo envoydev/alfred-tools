@@ -1077,7 +1077,7 @@ test('root-ignore finds nothing for a root outside a git work tree', () =>
     finally { w.clean(); }
 });
 
-test('root-ignore in a named root holding the user\'s files appends .mcps-secrets and preferred-tools.json, never *', () =>
+test('root-ignore in a named root holding the user\'s files appends .mcps-secrets, preferred-tools.json and mcps.json, never *', () =>
 {
     const w = world();
     try
@@ -1092,7 +1092,7 @@ test('root-ignore in a named root holding the user\'s files appends .mcps-secret
         assert.strictEqual(f.name, named);
         const l = logged();
         assert.strictEqual(fix.applyFixes(ctxData(w, data), ['root-ignore'], { log: l.log }).failed, null, l.text());
-        assert.strictEqual(fsx.readFileSync(path.join(named, '.gitignore'), 'utf8'), '.mcps-secrets\npreferred-tools.json\n');
+        assert.strictEqual(fsx.readFileSync(path.join(named, '.gitignore'), 'utf8'), '.mcps-secrets\npreferred-tools.json\nmcps.json\n');
         assert.strictEqual(rootsLib.gitIgnores(path.join(named, 'notes.md')), false, 'the user\'s files stay visible to git');
         assert.strictEqual(rootsLib.gitIgnores(path.join(named, '.mcps-secrets')), true);
     }
@@ -1478,6 +1478,32 @@ test("npx-cache-entry finds a bridge registration's mcp-remote folder without pa
         fsx.mkdirSync(path.join(folder, 'node_modules'), { recursive: true });
         const [f] = found();
         assert.deepStrictEqual([f.id, f.name, f.proposal], ['npx-cache-entry', 'sentry', { path: folder, what: 'mcp-remote@0.16.0' }]);
+    }
+    finally { w.clean(); }
+});
+
+// ---- 0.5.0: a 0.4.x server left on its own, before list-import (spec D1) ----------------------------------------------
+test('a 0.4.x own server is skipped before list-import: fix all leaves it byte-identical', () =>
+{
+    const fs = require('node:fs');
+    const X = require('../scripts/existing.js');
+    const w = world();
+    try
+    {
+        // two rows would fire on it: no python request, no telemetry setting
+        const entry = fresh('serena', process.platform, process.arch);
+        const theirs = { command: 'uvx', args: entry.args.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python'), env: { SERENA_HOME: entry.env.SERENA_HOME } };
+        seed(w, 'serena', 'local', theirs);
+        const root = path.join(w.project, '.preferred-tools');
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(path.join(root, 'preferred-tools.json'), JSON.stringify({ version: 1, servers: [{ name: 'serena', scope: 'local', fingerprint: X.fingerprintOf(theirs, catalog), choice: 'own' }] }));
+        const before = account.readAccount(w.env, w.project).local.serena;
+        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).own, [{ name: 'serena', scope: 'local' }]);
+        const lines = [];
+        const res = fix.applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
+        assert.strictEqual(res.failed, null, lines.join('\n'));
+        assert.deepStrictEqual(account.readAccount(w.env, w.project).local.serena, before, 'byte-identical');
+        assert.ok(!fs.existsSync(path.join(root, 'mcps.json')), 'no list written');
     }
     finally { w.clean(); }
 });

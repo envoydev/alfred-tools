@@ -1,8 +1,8 @@
 'use strict';
 // SERVERS ALREADY SET UP (spec D6, F4) - a registration that matches a catalog row, an MCP server an enabled plugin
 // provides, and a claude.ai connector this session has loaded. A matching registration is managed by configure, update
-// and fix with no record; one the user leaves on its own in configure is saved in the root's preferred-tools.json by the
-// apply's record-clean step, the only entries that file holds. Nothing here writes, and no server is started to find one.
+// and fix; one the user leaves on its own in configure is saved in the root's mcps.json, in its `own`, by the apply's
+// list-write step (a 0.4.x root's preferred-tools.json is read until list-import moves it). Nothing here writes, and no server is started to find one.
 const fs = require('node:fs');
 const path = require('node:path');
 const account = require('./account.js');
@@ -86,7 +86,7 @@ function connectorItem(name, inv, catalog)
 {
     const rowId = matchConnector(name);
     if (!rowId) return null;
-    const recorded = ((inv.records && inv.records.global && inv.records.global.servers) || []).find((e) => e.connector === name);
+    const recorded = ((inv.lists && inv.lists.global && inv.lists.global.own) || []).find((e) => e.connector === name);
     return { key: `connector:${name}`, kind: 'connector', rowId, label: labelOf(catalog, rowId), family: 'global', fingerprint: null, choice: (recorded && recorded.choice) || null, connector: name };
 }
 const asked = (r) => r.rowId && !r.alfredRetired && ['project', 'local', 'user'].includes(r.scope);
@@ -135,7 +135,7 @@ function recordEntry(item, choice)
     return { connector: item.connector, choice };
 }
 
-// What is here now, for the record-clean step to drop what is gone (roots.mergeRecord). `connectors`: the list this run
+// What is here now, for the list-write step to drop what is gone (mcpsList.mergeOwn). `connectors`: the list this run
 // passed, or null - a run without one keeps every connector entry (R14).
 function liveOf(inv, catalog, connectors = null)
 {
@@ -152,7 +152,7 @@ function offerRule(inv, catalog, answers = {})
     const byKey = new Map();
     for (const r of (inv.registrations || []).filter((x) => asked(x) && x.choice)) byKey.set(`mcp:${r.name}~${r.scope}`, r.choice);
     for (const s of (inv.pluginServers || []).filter((x) => x.rowId && x.choice)) byKey.set(`plugin-mcp:${s.plugin}/${s.server}`, s.choice);
-    for (const e of (inv.records && inv.records.global && inv.records.global.servers) || []) if (typeof e.connector === 'string' && e.choice) byKey.set(`connector:${e.connector}`, e.choice);
+    for (const e of (inv.lists && inv.lists.global && inv.lists.global.own) || []) if (typeof e.connector === 'string' && e.choice) byKey.set(`connector:${e.connector}`, e.choice);
     for (const [key, choice] of Object.entries(answers || {})) byKey.set(key, choice);
     const own = new Set();
     const add = new Map();
@@ -173,13 +173,13 @@ function ownItems(inv, catalog)
     return [
         ...(inv.registrations || []).filter((r) => asked(r) && r.choice === 'own').map((r) => regItem(r, catalog)),
         ...(inv.pluginServers || []).filter((s) => s.rowId && s.choice === 'own').map((s) => pluginItem(s, catalog)),
-        ...((inv.records && inv.records.global && inv.records.global.servers) || []).filter((e) => typeof e.connector === 'string' && e.choice === 'own')
+        ...((inv.lists && inv.lists.global && inv.lists.global.own) || []).filter((e) => typeof e.connector === 'string' && e.choice === 'own')
             .map((e) => connectorItem(e.connector, inv, catalog)).filter(Boolean),
     ];
 }
 
 // configure's question for one of them: keep it so, or hand it over - a registration to preferred-tools, a plugin's
-// server or a connector to install's offer beside it. The answer is a record-clean step only.
+// server or a connector to install's offer beside it. The answer is a list-write step only.
 function ownQuestion(item)
 {
     const reg = item.kind === 'mcp';

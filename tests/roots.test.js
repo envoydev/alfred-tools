@@ -143,24 +143,25 @@ test('roots map: missing or malformed reads empty with a note; a second project 
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('a record file: missing is null, malformed or another version reads empty with a note', { skip: POSIX_FIXTURE }, () => {
+test('a 0.4.x record file: missing is null, malformed or another version reads empty with a note', { skip: POSIX_FIXTURE }, () => {
+    const lists = require('../scripts/mcps-list.js');
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-record-')));
     try
     {
         const file = path.join(dir, roots.FILES.record);
-        assert.strictEqual(roots.readRecord(file), null);
+        assert.strictEqual(lists.readOldRecord(file), null);
         fs.writeFileSync(file, 'nope');
-        assert.deepStrictEqual([roots.readRecord(file).servers, Boolean(roots.readRecord(file).note)], [[], true]);
+        assert.deepStrictEqual([lists.readOldRecord(file).servers, Boolean(lists.readOldRecord(file).note)], [[], true]);
         fs.writeFileSync(file, JSON.stringify({ version: 3, servers: [{ name: 'x' }] }));
-        assert.deepStrictEqual([roots.readRecord(file).servers, /version/.test(roots.readRecord(file).note)], [[], true]);
+        assert.deepStrictEqual([lists.readOldRecord(file).servers, /version/.test(lists.readOldRecord(file).note)], [[], true]);
         const good = { version: 1, servers: [{ name: 'gh', scope: 'local', fingerprint: 'api.githubcopilot.com/mcp/', choice: 'own' }] };
         fs.writeFileSync(file, JSON.stringify(good));
-        assert.deepStrictEqual(roots.readRecord(file), good);
+        assert.deepStrictEqual(lists.readOldRecord(file), good);
         // where the commands look: the mapped root, the two standard folders, every root a managed registration points into
         const helper = reg('gh', 'local', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: 'node "/work/shop/kit/mcp-headers.js" GITHUB_PERSONAL_ACCESS_TOKEN Bearer' }, 'github', 'remote');
-        const files = roots.recordFiles(inv({ roots: { map: { version: 1, global: null, projects: { '/work/shop': '/work/shop/tools/keys' } } }, registrations: [helper] }), 'project', ctxOf(['/work/shop/tools/keys']));
+        const files = lists.oldRecordFiles(inv({ roots: { map: { version: 1, global: null, projects: { '/work/shop': '/work/shop/tools/keys' } } }, registrations: [helper] }), 'project', ctxOf(['/work/shop/tools/keys']));
         assert.deepStrictEqual(files, ['/work/shop/tools/keys', '/work/shop/.preferred-tools', '/work/shop/.alfred', '/work/shop/kit'].map((d) => `${d}/preferred-tools.json`));
-        assert.deepStrictEqual(roots.recordFiles(inv(), 'global', ctxOf()), ['/Users/me/.preferred-tools/preferred-tools.json', '/Users/me/.alfred/preferred-tools.json']);
+        assert.deepStrictEqual(lists.oldRecordFiles(inv(), 'global', ctxOf()), ['/Users/me/.preferred-tools/preferred-tools.json', '/Users/me/.alfred/preferred-tools.json']);
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

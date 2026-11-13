@@ -130,14 +130,18 @@ function projectRelativePathFix(entry, f, ctx)
 
 // ---- the parents' registrations ---------------------------------------------------------------------------------------
 
-// The servers a parent folder left on its own at project scope: read from the records in its standard roots.
+// The servers a parent folder left on its own at project scope: read from the lists in its standard roots, or a 0.4.x
+// record where a root has no list yet.
 function parentOwn(ctx, dir)
 {
+    const lists = require('../mcps-list.js');
     const names = new Set();
     for (const s of roots.standard('project', { project: dir, home: ctx.home, platform: ctx.platform }))
     {
-        const rec = roots.readRecord(pathOf(ctx).join(s.root, roots.FILES.record));
-        for (const e of (rec && rec.servers) || []) if (e.scope === 'project' && e.choice === 'own' && typeof e.name === 'string') names.add(e.name);
+        const P = pathOf(ctx);
+        const list = lists.readList(P.join(s.root, roots.FILES.list));
+        const own = list ? list.own : ((lists.readOldRecord(P.join(s.root, roots.FILES.record)) || {}).servers || []);
+        for (const e of own) if (e.scope === 'project' && e.choice === 'own' && typeof e.name === 'string') names.add(e.name);
     }
     return names;
 }

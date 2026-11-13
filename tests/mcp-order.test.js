@@ -124,7 +124,7 @@ test('withOrderStep appends one step only for a project-scope add, replace or mo
     assert.strictEqual(O.withOrderStep(local, '/work/shop', []), local);
     for (const step of [add('project'), { op: 'mcp-replace', name: 'gh', scope: 'project', entry: {} }, { op: 'mcp-move', from: { name: 'gh', scope: 'local' }, to: { name: 'gh', scope: 'project' }, entry: {} }])
     {
-        const steps = O.withOrderStep([step, { op: 'record-clean', file: 'x' }], '/work/shop', ['mine']);
+        const steps = O.withOrderStep([step, { op: 'list-write', file: 'x' }], '/work/shop', ['mine']);
         assert.strictEqual(steps.length, 3);
         assert.deepStrictEqual(steps[2], { op: 'order-mcp-json', file: '/work/shop/.mcp.json', own: ['mine'], why: '.mcp.json: the catalog servers in your order, your own after them - no value changes' });
     }

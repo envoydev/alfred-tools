@@ -696,3 +696,18 @@ test('a group with one offer is asked with two options: the offer and None of th
     const [q] = update.questions(out).pick.flat();
     assert.deepStrictEqual(q.options, [{ label: '/p/.mcp.json: mcp-order', description: 'upgrade:mcp-order:/p/.mcp.json' }, { label: 'None of these', description: 'none' }]);
 });
+
+test('a 0.4.x own server is skipped before list-import: update all leaves it byte-identical', async () =>
+{
+    const w = world();
+    try
+    {
+        assert.strictEqual(cli.run(['mcp', 'add-json', 'context7', JSON.stringify(C7_PINNED), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        ownRecord(path.join(w.project, '.preferred-tools'));
+        const before = JSON.stringify(require('../scripts/account.js').readAccount(w.env, w.project).local.context7);
+        const a = await run(w, ['--apply', 'all', '--no-refresh'], { registry: C7_AHEAD() });
+        assert.doesNotMatch(a.text, /2\.0\.0 -> 9\.0\.0/, a.text);
+        assert.strictEqual(JSON.stringify(require('../scripts/account.js').readAccount(w.env, w.project).local.context7), before, 'byte-identical');
+    }
+    finally { w.clean(); }
+});

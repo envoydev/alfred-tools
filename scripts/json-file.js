@@ -24,4 +24,13 @@ function blockingStdio(streams = [process.stdout, process.stderr])
     }
 }
 
-module.exports = { stripBom, parseJson, readJson, blockingStdio };
+// Two JSON values the same, whatever their key order (moved from plan.js, which re-exports it).
+function sortKeys(v)
+{
+    if (Array.isArray(v)) return v.map(sortKeys);
+    if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])]));
+    return v;
+}
+const deepEqual = (a, b) => JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
+
+module.exports = { stripBom, parseJson, readJson, blockingStdio, sortKeys, deepEqual };

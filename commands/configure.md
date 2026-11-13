@@ -209,8 +209,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" <tmp>/inventory.json <tmp>/answers.
 Paste the output verbatim in a fenced block: every CLI call, every file it writes (a root's `.gitignore`,
 `mcp-headers.js`, the key names in `.mcps-secrets`), the `Key:` line of each route that uses a key (never a value) and
 the line under it that says how the server connects once the key is there, the sign-in a remote route will ask for,
-and the tools that can run code. `writes` or `removes <root>/preferred-tools.json` is the record of the servers left on
-their own - a server handed back to preferred-tools leaves it, and the file is removed once none is left.
+and the tools that can run code. `writes` or `removes <root>/mcps.json` is the list of the servers preferred-tools
+manages and those left on their own - a server handed back to preferred-tools leaves `own`, and the file is removed once
+it lists none.
 `reorders <project>/.mcp.json (no value changes)` follows a change at Project scope: the catalog servers in the user's
 order, the user's own servers and those left on their own after them. A move to Project scope takes no key
 in `.mcp.json`; one whose entry holds a credential anywhere else - a header of its own, a userinfo URL - is a plan error

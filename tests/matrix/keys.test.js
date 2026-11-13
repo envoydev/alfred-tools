@@ -175,8 +175,8 @@ test('K5 - a server matching atlassian at global scope, recorded on its own: upd
     assert.ok(inv0.registrations.some((r) => r.name === 'atl' && r.rowId === 'atlassian' && r.scope === 'user'), 'matched to the atlassian row');
     const r = h.run(dir, { existing: { 'mcp:atl~user': 'own' } });
     ok(r);
-    const record = readJson(path.join(h.home, '.preferred-tools', roots.FILES.record));
-    assert.deepStrictEqual(record.servers.map((e) => [e.name, e.scope, e.choice]), [['atl', 'user', 'own']], 'recorded in the global root');
+    const list = readJson(path.join(h.home, '.preferred-tools', roots.FILES.list));
+    assert.deepStrictEqual(list.own.map((e) => [e.name, e.scope, e.choice]), [['atl', 'user', 'own']], 'in the global root\'s list');
     assert.strictEqual(readJson(path.join(h.data, roots.FILES.map)).global, path.join(h.home, '.preferred-tools'), 'the roots map names the global root');
 
     const inv = h.inventory(dir);

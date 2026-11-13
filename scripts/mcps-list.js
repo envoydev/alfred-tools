@@ -13,6 +13,7 @@ const path = require('node:path');
 const roots = require('./roots.js');
 const keys = require('./keys.js');
 const kept = require('./kept.js');
+const { deepEqual } = require('./json-file.js');
 
 const LIST_VERSION = 1;
 
@@ -20,7 +21,7 @@ const newerOrBad = (version) => (typeof version === 'number' && version > LIST_V
 const empty = (file, note, state) => ({ version: LIST_VERSION, servers: [], own: [], note: `${file} ${note} - read as empty`, state });
 
 // The list file. Missing: null. Unreadable, not JSON, another version or another shape: empty with a note and its state
-// (roots.readRecord's meanings). Never throws.
+// (readOldRecord's meanings). Never throws.
 function readList(file)
 {
     let text;
@@ -44,11 +45,11 @@ function readList(file)
 
 const listFile = (root) => path.join(root, roots.FILES.list);
 
-// Where the commands look for a family's list: roots.recordFiles' folders, in its order, with the list's name.
+// Where the commands look for a family's list: oldRecordFiles' folders, in its order, with the list's name.
 function listFiles(inv, family, ctx)
 {
     const P = ctx.platform === 'win32' ? path.win32 : path.posix;
-    return roots.recordFiles(inv, family, ctx).map((f) => P.join(P.dirname(f), roots.FILES.list));
+    return oldRecordFiles(inv, family, ctx).map((f) => P.join(P.dirname(f), roots.FILES.list));
 }
 
 const serverKey = (s) => `mcp:${s.name}~${s.scope}`;
@@ -81,13 +82,7 @@ function mergeList(list, { upserts = [], drops = [], own, cursorOffer } = {})
     return doc;
 }
 
-function sortKeys(v)
-{
-    if (Array.isArray(v)) return v.map(sortKeys);
-    if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])]));
-    return v;
-}
-const same = (a, b) => JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
+const same = deepEqual;
 
 // Writes `doc` over `file`, `read` being readList(file) as the plan or apply found it. -> { ok, detail }
 function writeList(file, doc, read)
@@ -143,4 +138,80 @@ function fromRegistration(reg, row, clients, files = [])
     return { name: reg.name, scope: reg.scope, row: row ? row.id : null, route: reg.route, clients: clients.slice(), entry: kept.keep(reg.entry, row), key };
 }
 
-module.exports = { LIST_VERSION, readList, listFile, listFiles, serverKey, regKey, mergeList, writeList, fromRegistration };
+// ---- the 0.4.x record, <root>/preferred-tools.json -------------------------------------------------------------------
+// Read only: the servers the user left on their own until list-import moves them into a list's `own` (0.5.0). Moved here
+// from roots.js unchanged, under the names the list's code reads them by.
+
+const OLD_RECORD_VERSION = 1;
+const pathFor = (platform) => (platform === 'win32' ? path.win32 : path.posix);
+const versionNote = (file, version, current) => (newerOrBad(version) === 'newer' ? `${file} is version ${version}, newer than this plugin's ${current}` : `${file} is version ${JSON.stringify(version)}, not ${current}`);
+
+// Where the commands look for the record (D6): the mapped root, the two standard folders, then every root a managed
+// registration points into.
+function oldRecordFiles(inv, family, ctx)
+{
+    const P = pathFor(ctx.platform);
+    const map = (inv.roots && inv.roots.map) || { projects: {} };
+    const mapped = family === 'global' ? map.global : (Object.keys(map.projects || {}).length ? map.projects[roots.mapKey(ctx.project)] : null);
+    const order = family === 'global' ? roots.standard('global', ctx) : [...roots.standard('project', ctx)].reverse();
+    const dirs = [mapped, ...order.map((s) => s.root), ...roots.registrationRoots(inv, family, ctx)].filter(Boolean);
+    return [...new Set(dirs)].map((d) => P.join(d, roots.FILES.record));
+}
+
+// The record file. Missing: null. Malformed or another version: empty with a note and its state. Never throws.
+function readOldRecord(file)
+{
+    let text;
+    try { text = fs.readFileSync(file, 'utf8'); }
+    catch (err) { return err.code === 'ENOENT' || err.code === 'ENOTDIR' ? null : { version: OLD_RECORD_VERSION, servers: [], note: `${file} cannot be read (${err.code}) - read as empty`, state: 'unreadable' }; }
+    let doc;
+    try { doc = JSON.parse(text); }
+    catch { return { version: OLD_RECORD_VERSION, servers: [], note: `${file} is not JSON - read as empty`, state: 'bad' }; }
+    if (doc && typeof doc === 'object' && doc.version !== OLD_RECORD_VERSION && newerOrBad(doc.version) === 'newer')
+        return { version: OLD_RECORD_VERSION, servers: [], note: `${versionNote(file, doc.version, OLD_RECORD_VERSION)} - read as empty`, state: 'newer' };
+    if (!doc || typeof doc !== 'object' || doc.version !== OLD_RECORD_VERSION || !Array.isArray(doc.servers))
+        return { version: OLD_RECORD_VERSION, servers: [], note: `${file} is version ${JSON.stringify(doc && doc.version)} or has no servers list - read as empty`, state: 'bad' };
+    return { version: OLD_RECORD_VERSION, servers: doc.servers.filter((s) => s && typeof s === 'object') };
+}
+
+// The own entries with this run's merged in (D6). An entry replaces the one with its key, in place; a new key is
+// appended. Then an entry is dropped when its server is gone: a server's key missing from `live.servers`, or there with
+// another fingerprint (null: present, not compared); a connector only when `live.connectors` is a list that lacks it -
+// a run that did not pass the connectors keeps every one (R14). An entry of no known shape is dropped.
+// live: { servers: { <key>: fingerprint | null }, connectors: string[] | null }
+function mergeOwn(record, entries, live)
+{
+    const out = [];
+    const at = new Map();
+    for (const e of [...((record && record.servers) || []), ...(entries || [])])
+    {
+        const key = roots.recordKey(e);
+        if (!key) continue;
+        if (at.has(key)) out[at.get(key)] = e;
+        else { at.set(key, out.length); out.push(e); }
+    }
+    const servers = (live && live.servers) || {};
+    const connectors = live && Array.isArray(live.connectors) ? live.connectors : null;
+    const kept = out.filter((e) =>
+    {
+        if (typeof e.connector === 'string') return !connectors || connectors.includes(e.connector);
+        const key = roots.recordKey(e);
+        if (!Object.hasOwn(servers, key)) return false;
+        return servers[key] === null || deepEqual(servers[key], e.fingerprint);
+    });
+    return { version: OLD_RECORD_VERSION, servers: kept };
+}
+
+// The own entries a list-write step leaves (recordClean's rules of 0.4.x): `keep` as it is, then the `entries` a server
+// still has (a key in both takes the entries one), the servers left on their own only.
+function ownOf({ entries, keep, live })
+{
+    const fresh = roots.ownOnly(mergeOwn({ servers: [] }, entries, live).servers);
+    const keys = new Set(fresh.map(roots.recordKey));
+    return [...roots.ownOnly(keep).filter((e) => !keys.has(roots.recordKey(e))), ...fresh];
+}
+
+module.exports = {
+    LIST_VERSION, readList, listFile, listFiles, serverKey, regKey, mergeList, writeList, fromRegistration,
+    OLD_RECORD_VERSION, oldRecordFiles, readOldRecord, mergeOwn, ownOf,
+};

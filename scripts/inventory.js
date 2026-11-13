@@ -240,14 +240,14 @@ function buildInventory({ project, env = process.env, platform = process.platfor
     out.roots = { map: roots.readMap(data) };
     out.roots.project = roots.inUse(out, 'project', rootCtx);
     out.roots.global = roots.inUse(out, 'global', rootCtx);
-    // the answers about servers already set up (spec D6): each family's record, and each registration's choice - null when
-    // never answered or when its launch changed since
+    // the answers about servers already set up (spec D6): each family's list (0.5.0; the 0.4.x record while it has none),
+    // and each registration's choice - null when never answered or when its launch changed since
     const existing = require('./existing.js');
-    out.records = { project: recordOf(out, 'project', rootCtx), global: recordOf(out, 'global', rootCtx) };
+    out.lists = { project: listOf(out, 'project', rootCtx), global: listOf(out, 'global', rootCtx) };
     const fp = (entry) => existing.fingerprintOf(entry, catalog);
     for (const r of out.registrations)
     {
-        const rec = r.scope === 'inherited' || !r.rowId ? null : out.records[roots.familyOf(r.scope)];
+        const rec = r.scope === 'inherited' || !r.rowId ? null : out.lists[roots.familyOf(r.scope)];
         r.choice = choiceIn(rec, (e) => e.name === r.name && e.scope === r.scope, fp(r.entry), ['own', 'manage']);
     }
 
@@ -266,7 +266,7 @@ function buildInventory({ project, env = process.env, platform = process.platfor
         for (const s of existing.pluginServers(installPath.get(`${p.id}~${p.scope}`)))
         {
             const m = matchEntry(s.entry, catalog);
-            const choice = m ? choiceIn(out.records.project, (e) => e.plugin === p.id && e.server === s.server, fp(s.entry), ['own', 'add']) : null;
+            const choice = m ? choiceIn(out.lists.project, (e) => e.plugin === p.id && e.server === s.server, fp(s.entry), ['own', 'add']) : null;
             out.pluginServers.push({ plugin: p.id, server: s.server, entry: s.entry, rowId: m ? m.rowId : null, route: m ? m.route : null, choice });
         }
 
@@ -276,21 +276,30 @@ function buildInventory({ project, env = process.env, platform = process.platfor
     return out;
 }
 
-// The family's record: the first the commands' order finds (roots.recordFiles). -> { file, servers, note? } | null
-function recordOf(inv, family, ctx)
+// The family's list: the first mcps.json the commands' order finds (mcpsList.listFiles). While the family has none, its
+// `own` is the first 0.4.x record's (`old` names that file, `file` the list beside it), so a server left on its own is
+// skipped from the first 0.5.0 run. -> { file, servers, own, cursorOffer?, note?, old? } | null
+function listOf(inv, family, ctx)
 {
-    for (const file of roots.recordFiles(inv, family, ctx))
+    const lists = require('./mcps-list.js');
+    for (const file of lists.listFiles(inv, family, ctx))
     {
-        const r = roots.readRecord(file);
-        if (r) return { file, servers: r.servers, ...(r.note ? { note: r.note } : {}) };
+        const l = lists.readList(file);
+        if (l) return { file, servers: l.servers, own: l.own, ...(l.cursorOffer ? { cursorOffer: l.cursorOffer } : {}), ...(l.note ? { note: l.note, state: l.state } : {}) };
+    }
+    const P = ctx.platform === 'win32' ? path.win32 : path.posix;
+    for (const old of lists.oldRecordFiles(inv, family, ctx))
+    {
+        const r = lists.readOldRecord(old);
+        if (r) return { file: P.join(P.dirname(old), roots.FILES.list), servers: [], own: r.servers, old, ...(r.note ? { note: r.note, state: r.state } : {}) };
     }
     return null;
 }
 
 // A recorded choice that still holds: the entry found, its fingerprint the launch's now, its choice one of `allowed`.
-function choiceIn(record, match, fingerprint, allowed)
+function choiceIn(list, match, fingerprint, allowed)
 {
-    const e = record ? record.servers.find(match) : null;
+    const e = list ? (list.own || []).find(match) : null;
     return e && e.fingerprint === fingerprint && allowed.includes(e.choice) ? e.choice : null;
 }
 
