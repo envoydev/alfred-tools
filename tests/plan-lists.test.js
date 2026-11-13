@@ -429,3 +429,128 @@ test('deny-read\'s file sits under the isolated CLAUDE_CONFIG_DIR, never the rea
     assert.ok(ops(bad).includes('mcp-add') && ops(bad).includes('cursor-write'), ops(bad).join());
     assert.ok(bad.notes.some((n) => n.startsWith(`${path.join(conf, 'settings.json')} is not a settings object`)), bad.notes.join('\n'));
 });
+
+// ---- a workspace in Cursor (spec D4a) ----------------------------------------------------------------------------------
+const wsLib = require('../scripts/workspace.js');
+const wsRec = (folder, doc) => { fs.mkdirSync(path.join(folder, '.alfred'), { recursive: true }); fs.writeFileSync(path.join(folder, '.alfred', 'workspace.json'), JSON.stringify(doc)); };
+const MEMORY_A = { command: 'uvx', args: ['mcp-memory-service', '--a'] };
+// a root (the project, `shop`) listing a, b and c, c ignored; each member's record names the root. `own`: a's own list.
+function wsWorld({ own = [], at = null } = {})
+{
+    const w = cursorWorld();
+    wsRec(w.project, { role: 'root', children: ['a', 'b', 'c'], ignoredChildren: ['c'] });
+    const m = Object.fromEntries(['a', 'b', 'c'].map((c) => { const d = path.join(w.project, c); fs.mkdirSync(d); wsRec(d, { parent: '..' }); return [c, d]; }));
+    const aList = path.join(m.a, '.preferred-tools', 'mcps.json');
+    if (own.length) { fs.mkdirSync(path.dirname(aList), { recursive: true }); fs.writeFileSync(aList, JSON.stringify({ version: 1, servers: own, own: [] })); }
+    w.inv.workspace = wsLib.of(at || w.project, {});
+    const cf = (d) => path.join(d, '.cursor', 'mcp.json');
+    return { ...w, m, aList, cf };
+}
+const cursorNames = (file) => (fs.existsSync(file) ? Object.keys(JSON.parse(fs.readFileSync(file, 'utf8')).mcpServers) : null);
+const cursorDoc = (file) => JSON.parse(fs.readFileSync(file, 'utf8')).mcpServers;
+
+test('workspace: two joined children get the root\'s project entries after their own; the ignored one gets none', () => {
+    const w = wsWorld({ own: [srv('memory', 'project', ['claude', 'cursor'], 'memory', MEMORY_A)] });
+    const out = outOf(listWriteOf(w, [srv('serena'), srv('memory')]));
+    const steps = cursorSteps(w.inv, w.ctx, out, {});
+    assert.deepStrictEqual(out.errors, []);
+    assert.deepStrictEqual(steps.map((s) => [s.file, s.lists]), [
+        [w.cursorFile, [{ file: w.listFile, scopes: ['local', 'project'] }]],
+        [w.cf(w.m.a), [{ file: w.aList, scopes: ['local', 'project'] }, { file: w.listFile, scopes: ['project'] }]],
+        [w.cf(w.m.b), [{ file: w.listFile, scopes: ['project'] }]],
+    ]);
+    runFiles(w, out, steps);
+    assert.deepStrictEqual(cursorNames(w.cf(w.m.b)).sort(), ['memory', 'serena']);
+    assert.deepStrictEqual(cursorDoc(w.cf(w.m.a)).memory, MEMORY_A, 'a\'s own memory wins over the root\'s: the nearest first');
+    assert.deepStrictEqual(cursorDoc(w.cf(w.m.a)).serena, SERENA_E);
+    assert.strictEqual(cursorNames(w.cf(w.m.c)), null, 'the ignored child is not written');
+    for (const c of ['b', 'c']) assert.ok(!fs.existsSync(path.join(w.m[c], '.preferred-tools')), `${c} gets no root`);
+});
+
+test('workspace: local-scope root entries are not passed down', () => {
+    const w = wsWorld();
+    const out = outOf(listWriteOf(w, [srv('serena', 'local')]));
+    const steps = cursorSteps(w.inv, w.ctx, out, {});
+    assert.deepStrictEqual(steps.map((s) => s.file), [w.cursorFile], 'a local change writes no member');
+    const both = outOf(listWriteOf(w, [srv('serena', 'local'), srv('memory', 'project')]));
+    const bsteps = cursorSteps(w.inv, w.ctx, both, {});
+    runFiles(w, both, bsteps);
+    assert.deepStrictEqual(cursorNames(w.cf(w.m.b)), ['memory']);
+});
+
+test('workspace: removing a root entry removes it from each member, and no member gets a root or a list', () => {
+    const w = wsWorld();
+    const first = outOf(listWriteOf(w, [srv('serena'), srv('memory')]));
+    runFiles(w, first, cursorSteps(w.inv, w.ctx, first, {}));
+    assert.deepStrictEqual(cursorNames(w.cf(w.m.a)).sort(), ['memory', 'serena']);
+    // the inventory as the next run reads it
+    const servers = readList(w).servers;
+    w.inv.lists.project = { file: w.listFile, servers, own: [] };
+    const out = outOf({ ...listWriteOf(w, []), drops: [{ key: 'mcp:serena~project', after: null }] });
+    const steps = cursorSteps(w.inv, w.ctx, out, {});
+    assert.deepStrictEqual(steps.map((s) => [s.file, [...s.before].sort()]), [[w.cursorFile, ['memory', 'serena']], [w.cf(w.m.a), ['memory', 'serena']], [w.cf(w.m.b), ['memory', 'serena']]]);
+    runFiles(w, out, steps);
+    for (const c of ['a', 'b']) assert.deepStrictEqual(cursorNames(w.cf(w.m[c])), ['memory'], c);
+    for (const c of ['a', 'b', 'c']) assert.ok(!fs.existsSync(path.join(w.m[c], '.preferred-tools')), `${c} gets no root`);
+});
+
+test('workspace: a plan at a member writes its own file with the root\'s project entries after its own', () => {
+    const w = wsWorld({ at: null });
+    // the root lists serena for Cursor already
+    fs.mkdirSync(path.dirname(w.listFile), { recursive: true });
+    fs.writeFileSync(w.listFile, JSON.stringify({ version: 1, servers: [srv('serena')], own: [] }));
+    const a = { project: w.m.a, listFile: w.aList, cursorFile: w.cf(w.m.a) };
+    const inv = { ...w.inv, project: w.m.a, lists: { project: null, global: null }, workspace: wsLib.of(w.m.a, {}) };
+    const ctx = { ...w.ctx, project: w.m.a, roots: { project: path.dirname(w.aList), global: null } };
+    const out = outOf({ op: 'list-write', file: w.aList, family: 'project', upserts: [{ server: srv('memory'), after: null, cursorFile: null }], drops: [], own: null, why: 'x' });
+    const steps = cursorSteps(inv, ctx, out, {});
+    assert.deepStrictEqual(steps.map((s) => [s.file, s.lists, s.before]), [[a.cursorFile, [{ file: w.aList, scopes: ['local', 'project'] }, { file: w.listFile, scopes: ['project'] }], ['serena']]]);
+    runFiles({ ...w, project: w.m.a }, out, steps);
+    assert.deepStrictEqual(cursorNames(a.cursorFile).sort(), ['memory', 'serena']);
+});
+
+test('workspace: a root in git with a plain-folder member gets the note for its own entries', { skip: !GIT && 'NOT RUN: git is not on PATH' }, () => {
+    const w = wsWorld();
+    gitInit(w.project);
+    const inv = { ...w.inv, project: w.m.a, lists: { project: null, global: null }, workspace: wsLib.of(w.m.a, {}) };
+    const ctx = { ...w.ctx, project: w.m.a, roots: { project: path.dirname(w.aList), global: null } };
+    const out = outOf({ op: 'list-write', file: w.aList, family: 'project', upserts: [{ server: srv('memory'), after: null, cursorFile: null }], drops: [], own: null, why: 'x' });
+    cursorSteps(inv, ctx, out, {});
+    const note = `${w.m.a} is a folder of ${w.project}'s git repo; Cursor's CLI reads ${w.project}/.cursor/mcp.json there, so these servers reach the editor opened at ${w.m.a} only. Install them at the root or at Global scope for the CLI`;
+    assert.deepStrictEqual(out.notes, [note]);
+    // a member that is its own repo: no note
+    gitInit(w.m.b);
+    const bout = outOf({ op: 'list-write', file: path.join(w.m.b, '.preferred-tools', 'mcps.json'), family: 'project', upserts: [{ server: srv('memory'), after: null, cursorFile: null }], drops: [], own: null, why: 'x' });
+    cursorSteps({ ...inv, project: w.m.b, workspace: wsLib.of(w.m.b, {}) }, { ...ctx, project: w.m.b, roots: { project: path.join(w.m.b, '.preferred-tools'), global: null } }, bout, {});
+    assert.deepStrictEqual(bout.notes, []);
+});
+
+test('workspace: a member file holding a root name as its own asks for that file; keep skips it there only', () => {
+    const w = wsWorld();
+    fs.mkdirSync(path.dirname(w.cf(w.m.b)), { recursive: true });
+    fs.writeFileSync(w.cf(w.m.b), '{"mcpServers":{"serena":{"command":"mine"}}}\n');
+    const out = outOf(listWriteOf(w, [srv('serena')]));
+    cursorSteps(w.inv, w.ctx, out, {});
+    assert.deepStrictEqual(out.errors, [`cursor: ${w.cf(w.m.b)} already has serena - answer cursor-name-serena@${w.cf(w.m.b)}`]);
+    const kept = outOf(listWriteOf(w, [srv('serena')]));
+    const steps = cursorSteps(w.inv, w.ctx, kept, { cursorNames: { [`serena@${w.cf(w.m.b)}`]: 'keep' } });
+    assert.deepStrictEqual(kept.errors, []);
+    assert.deepStrictEqual(kept.steps[0].upserts[0].server.clients, ['claude', 'cursor'], 'keep in a member leaves the root\'s entry for Cursor');
+    runFiles(w, kept, steps);
+    assert.deepStrictEqual(cursorDoc(w.cf(w.m.b)).serena, { command: 'mine' });
+    assert.deepStrictEqual(cursorDoc(w.cf(w.m.a)).serena, SERENA_E);
+});
+
+test('workspace: a record read as no workspace is named once in a plan that writes Cursor\'s project file', () => {
+    const w = cursorWorld();
+    fs.mkdirSync(path.join(w.project, '.alfred'), { recursive: true });
+    fs.writeFileSync(path.join(w.project, '.alfred', 'workspace.json'), '{ nope');
+    w.inv.workspace = wsLib.of(w.project, {});
+    const out = outOf(listWriteOf(w, [srv('serena')]));
+    cursorSteps(w.inv, w.ctx, out, {});
+    assert.deepStrictEqual(out.notes.filter((l) => l.includes('read as no workspace')), [`${path.join(w.project, '.alfred', 'workspace.json')} is not JSON - read as no workspace`]);
+    // a plan that writes no Cursor file says nothing of it
+    const quiet = outOf(listWriteOf(w, [srv('c7', 'project', ['claude'], 'context7', { type: 'http', url: 'https://mcp.context7.com/mcp' })]));
+    cursorSteps(w.inv, w.ctx, quiet, {});
+    assert.deepStrictEqual(quiet.notes, []);
+});

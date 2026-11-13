@@ -250,6 +250,8 @@ function buildInventory({ project, env = process.env, platform = process.platfor
     const existing = require('./existing.js');
     out.lists = { project: listOf(out, 'project', rootCtx), global: listOf(out, 'global', rootCtx) };
     out.cursor = cursorFiles(out, { platform, env, project: proj }, catalog);
+    // the workspace alfred-code records (spec D4a): the folders whose Cursor files take this folder's project servers
+    out.workspace = require('./workspace.js').of(proj, env);
     const fp = (entry) => existing.fingerprintOf(entry, catalog);
     for (const r of out.registrations)
     {

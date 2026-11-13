@@ -660,3 +660,16 @@ test('inventory matches the shared sign-in form to its row\'s remote route, and 
     assert.strictEqual(inv.matchEntry({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0', 'https://mcp.atlassian.com/v2/mcp'] }, catalog), null);
     assert.strictEqual(inv.matchEntry({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0', 'https://mcp.example.com/mcp'], env: { MCP_REMOTE_CONFIG_DIR: '/r' } }, catalog), null);
 });
+
+test('inv.workspace is alfred-code\'s workspace as read, and no workspace without a record', () => {
+    const w = world();
+    try
+    {
+        assert.deepStrictEqual(build(w).workspace, { root: null, members: [], ancestors: [], notes: [] });
+        writeJson(path.join(w.project, '.alfred', 'workspace.json'), { role: 'root', children: ['a'] });
+        writeJson(path.join(w.project, 'a', '.alfred', 'workspace.json'), { parent: '..' });
+        const i = build(w);
+        assert.deepStrictEqual([i.workspace.root, i.workspace.members], [path.resolve(w.project), [path.join(path.resolve(w.project), 'a')]]);
+    }
+    finally { w.clean(); }
+});

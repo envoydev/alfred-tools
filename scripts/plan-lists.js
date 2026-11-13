@@ -14,6 +14,7 @@ const roots = require('./roots.js');
 const keys = require('./keys.js');
 const lists = require('./mcps-list.js');
 const cursorMcp = require('./cursor-mcp.js');
+const workspace = require('./workspace.js');
 
 const REG_OPS = ['mcp-add', 'mcp-replace', 'mcp-move', 'mcp-remove'];
 
@@ -270,16 +271,68 @@ function outsideItsRepo(project, P)
     catch { return false; }
 }
 
+// A workspace folder's list, as a member's cursor-write reads it (D4a): the first mcps.json the commands' order finds for
+// that folder. A folder with none has no root, and none is made. -> { file, servers } | null
+function folderList(inv, folder, ctx)
+{
+    const fctx = { project: folder, home: ctx.home, platform: ctx.platform };
+    for (const file of lists.listFiles({ roots: inv.roots, registrations: [] }, 'project', fctx))
+    {
+        const l = lists.readList(file);
+        if (l && !l.state) return { file, servers: l.servers };
+    }
+    return null;
+}
+
+// The lists a workspace folder's Cursor file is composed from: its own (local and project scope), then each folder
+// above's project scope, the nearest first. `own` overrides the folder's own list (the one this plan writes);
+// `listed` overrides a folder above's list. -> { sources: [{ file, scopes, servers }], lists: [{ file, scopes }] }
+function sourcesOf(inv, ctx, folder, ancestors, { own, listed } = {})
+{
+    const sources = [];
+    const mine = own !== undefined ? own : folderList(inv, folder, ctx);
+    if (mine && mine.file) sources.push({ file: mine.file, scopes: SCOPES.project, servers: mine.servers || [] });
+    for (const up of ancestors)
+    {
+        const l = listed && listed.has(up) ? listed.get(up) : folderList(inv, up, ctx);
+        if (l && l.file) sources.push({ file: l.file, scopes: ['project'], servers: l.servers || [] });
+    }
+    return { sources, lists: sources.map((x) => ({ file: x.file, scopes: x.scopes })) };
+}
+
+const sameKeys = (a, b) => a.size === b.size && [...a.keys()].every((n) => b.has(n));
+
 // The cursor-write steps of a plan (spec D2): one per Cursor file whose managed set the plan's list-write steps change,
 // `before` from the lists as they stand. A name Cursor's file already holds as the user's is written only on an answer
 // (answers.cursorNames['<name>@<file>']: 'replace' | 'keep'); with none it is a plan error, and `out.taken` names it. A file Cursor's writer
 // refuses is a note: no step, and the entries new to Cursor are recorded without it. Reads `out.steps`' list-write
 // steps, and marks each upsert set up for Cursor with the file it waits on.
+//
+// In a workspace (D4a, alfred-code's record), the project file also takes the project scope of each folder above, and
+// a change to this folder's project scope writes each member below it too: no member gets a root or a list.
 function cursorSteps(inv, ctx, out, answers = {})
 {
     const P = E.pathFor(ctx.platform);
     const named = answers.cursorNames || {};
     const steps = [];
+    const ws = inv.workspace !== undefined ? inv.workspace : (ctx.project ? workspace.of(ctx.project, ctx.env || {}) : null);
+    const inWs = Boolean(ws && ws.root);
+    const strip = (u) => { u.server = { ...u.server, clients: (u.server.clients || []).filter((c) => c !== 'cursor') }; };
+    // a taken name in `file`: 'keep' runs `onKeep`, 'replace' is pushed to `replace`, no answer is a plan error
+    const settle = (taken, replace, onKeep) =>
+    {
+        for (const t of taken)
+        {
+            const answer = named[`${t.name}@${t.file}`];
+            if (answer === 'keep') onKeep(t);
+            else if (answer === 'replace') replace.push(t.name);
+            else
+            {
+                out.errors.push(`cursor: ${t.file} already has ${t.name} - answer cursor-name-${t.name}@${t.file}`);
+                out.taken = [...(out.taken || []), t];
+            }
+        }
+    };
     for (const family of ['project', 'global'])
     {
         const writes = out.steps.filter((s) => s.op === 'list-write' && s.family === family);
@@ -289,11 +342,13 @@ function cursorSteps(inv, ctx, out, answers = {})
         if (!target) continue;
         const scopes = SCOPES[family];
         const beforeServers = cur ? cur.servers || [] : [];
-        const before = cursorMcp.managedSet([{ file: cur && cur.file, scopes, servers: beforeServers }]);
+        const above = family === 'project' && inWs ? ws.ancestors : [];
+        const base = cur && cur.file === target ? beforeServers : ((foundList(inv, target, P) || {}).servers || []);
+        const beforeSrc = sourcesOf(inv, ctx, ctx.project, above, { own: { file: cur && cur.file, servers: beforeServers } });
+        const before = cursorMcp.managedSet(family === 'project' ? beforeSrc.sources : [{ file: cur && cur.file, scopes, servers: beforeServers }]);
         const wasForCursor = new Set(beforeServers.filter(forCursor).map(lists.serverKey));
         const upserts = writes.flatMap((w) => w.upserts || []);
         const file = cursorMcp.fileFor(family, ctx);
-        const strip = (u) => { u.server = { ...u.server, clients: (u.server.clients || []).filter((c) => c !== 'cursor') }; };
 
         const why = cursorMcp.refusal(cursorMcp.readCursor(file));
         if (why)
@@ -305,29 +360,54 @@ function cursorSteps(inv, ctx, out, answers = {})
 
         const replace = [];
         const fresh = upserts.filter((u) => forCursor(u.server) && !before.has(u.server.name)).map((u) => ({ ...u, cursorFile: file }));
-        for (const t of takenNames(inv, ctx, fresh))
-        {
-            const answer = named[`${t.name}@${t.file}`];
-            if (answer === 'keep') { for (const u of upserts) if (u.server.name === t.name && forCursor(u.server)) strip(u); }
-            else if (answer === 'replace') replace.push(t.name);
-            else
-            {
-                out.errors.push(`cursor: ${t.file} already has ${t.name} - answer cursor-name-${t.name}@${t.file}`);
-                out.taken = [...(out.taken || []), t];
-            }
-        }
+        settle(takenNames(inv, ctx, fresh), replace, (t) => { for (const u of upserts) if (u.server.name === t.name && forCursor(u.server)) strip(u); });
         for (const u of upserts) if (forCursor(u.server)) u.cursorFile = file;
 
-        const base = cur && cur.file === target ? beforeServers : ((foundList(inv, target, P) || {}).servers || []);
-        const after = cursorMcp.managedSet([{ file: target, scopes, servers: afterWrite(base, writes.find((w) => w.file === target)) }]);
-        const same = before.size === after.size && [...before.keys()].every((n) => after.has(n));
-        if (same && !upserts.some((u) => forCursor(u.server))) continue;
-        steps.push({ op: 'cursor-write', file, family, lists: [{ file: target, scopes }], before: [...before.keys()], skip: [], replace, why: `${file}: Cursor's servers from ${target}, the user's own kept as they are` });
+        // after the answers: a kept name is no longer set up for Cursor
+        const afterServers = afterWrite(base, writes.find((w) => w.file === target));
+        const afterSrc = sourcesOf(inv, ctx, ctx.project, above, { own: { file: target, servers: afterServers } });
+        const after = cursorMcp.managedSet(family === 'project' ? afterSrc.sources : [{ file: target, scopes, servers: afterServers }]);
+        const touched = upserts.some((u) => forCursor(u.server));
+        if (sameKeys(before, after) && !touched) continue;
+        const listsOf = family === 'project' ? afterSrc.lists : [{ file: target, scopes }];
+        steps.push({ op: 'cursor-write', file, family, lists: listsOf, before: [...before.keys()], skip: [], replace, why: `${file}: Cursor's servers from ${target}, the user's own kept as they are` });
+        // why a workspace record was read as none, said once (D4a)
+        if (family === 'project' && ws && ws.notes) for (const n of ws.notes) if (!out.notes.includes(n)) out.notes.push(n);
 
-        if (family !== 'project' || !after.size) continue;
+        if (family !== 'project') continue;
+        // the members below this folder, when its project scope changed for Cursor (D4a)
+        const projectOnly = (servers) => cursorMcp.managedSet([{ file: target, scopes: ['project'], servers }]);
+        const projectTouched = upserts.some((u) => forCursor(u.server) && u.server.scope === 'project');
+        if (inWs && (projectTouched || !sameKeys(projectOnly(beforeServers), projectOnly(afterServers))))
+            for (const m of workspace.below(ws, ctx.project))
+            {
+                const mfile = cursorMcp.fileFor('project', { ...ctx, project: m.folder });
+                const mwhy = cursorMcp.refusal(cursorMcp.readCursor(mfile));
+                if (mwhy) { out.notes.push(`Cursor: ${mfile} ${mwhy} - not written; ${ctx.project}'s servers do not reach it`); continue; }
+                const ups = new Map([[ctx.project, { file: cur && cur.file, servers: beforeServers }]]);
+                const mbefore = cursorMcp.managedSet(sourcesOf(inv, ctx, m.folder, m.ancestors, { listed: ups }).sources);
+                const msrc = sourcesOf(inv, ctx, m.folder, m.ancestors, { listed: new Map([[ctx.project, { file: target, servers: afterServers }]]) });
+                const mreplace = [];
+                const mskip = [];
+                const mfresh = upserts.filter((u) => forCursor(u.server) && u.server.scope === 'project' && !mbefore.has(u.server.name)).map((u) => ({ ...u, cursorFile: mfile }));
+                settle(takenNames(inv, ctx, mfresh), mreplace, (t) => mskip.push(t.name));
+                steps.push({ op: 'cursor-write', file: mfile, family, lists: msrc.lists, before: [...mbefore.keys()], skip: mskip, replace: mreplace, why: `${mfile}: the workspace member's servers, with ${ctx.project}'s project servers` });
+            }
+
+        if (!after.size) continue;
         if ([...after.values()].some((v) => v.scope === 'local') && roots.gitIgnores(file) === false)
             out.notes.push('.cursor/mcp.json now holds this machine\'s local servers; add it to .gitignore to keep them private');
-        if (outsideItsRepo(ctx.project, P))
+        if (inWs)
+        {
+            // a member that is a plain folder of the root's repo: Cursor's CLI reads the root's file there (D4a)
+            const own = cursorMcp.managedSet([{ file: target, scopes, servers: afterServers }]);
+            const top = ctx.project !== ws.root && own.size ? workspace.gitTop(ctx.project) : null;
+            let rootReal = null;
+            try { rootReal = require('node:fs').realpathSync(ws.root); } catch { /* none */ }
+            if (top && top === rootReal)
+                out.notes.push(`${ctx.project} is a folder of ${ws.root}'s git repo; Cursor's CLI reads ${P.join(ws.root, '.cursor', 'mcp.json')} there, so these servers reach the editor opened at ${ctx.project} only. Install them at the root or at Global scope for the CLI`);
+        }
+        else if (outsideItsRepo(ctx.project, P))
             out.notes.push(`Cursor reads .cursor/mcp.json only from the folder it opens (its git root for the CLI), never a parent's: open Cursor at ${ctx.project}, or install at Global scope for servers every folder needs`);
     }
     return steps;
