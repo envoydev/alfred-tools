@@ -257,3 +257,30 @@ test('ignoreGap names mcp-remote-v1/ when git would commit it, after the key fil
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ---- serena's context file (spec D7) ----------------------------------------------------------------------------------
+test('the # version line is read', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-ctx-'));
+    try
+    {
+        assert.strictEqual(roots.FILES.serenaContext, 'serena-context.yml');
+        assert.strictEqual(roots.SERENA_CONTEXT_VERSION, 1);
+        const file = path.join(dir, roots.FILES.serenaContext);
+        const src = roots.shippedSource('serenaContext');
+        assert.strictEqual(src.split('\n')[0], '# preferred-tools serena-context 1');
+        assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'absent', number: null });
+        fs.writeFileSync(file, src.replace(/^# preferred-tools serena-context \d+/, '# preferred-tools serena-context 0'));
+        assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'lower', number: 0 });
+        fs.writeFileSync(file, src.replace(/\n/g, '\r\n'));
+        assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'same', number: 1 });
+        fs.writeFileSync(file, `${src}# mine\n`);
+        assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'edited', number: 1 });
+        fs.writeFileSync(file, src.replace(/^# preferred-tools serena-context \d+/, '# preferred-tools serena-context 2'));
+        assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'higher', number: 2 });
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('GITIGNORE keeps mcp-bridge.js and serena-context.yml in git', () => {
+    assert.strictEqual(roots.GITIGNORE, '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n');
+});

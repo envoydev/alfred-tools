@@ -24,6 +24,7 @@ const account = require('./account.js');
 const kept = require('./kept.js');
 const tmpdir = require('./tmpdir.js');
 const E = require('./entries.js');
+const serenaConfig = require('./serena-config.js');
 const { blockingStdio } = require('./json-file.js');
 
 const VERSION = 1;
@@ -186,7 +187,15 @@ async function run(j, { env = process.env, runFetch = realFetch, start = realSta
         }
         log(`${n}. ...    starting '${step.name}' once (a first start can download more, such as a model)`);
         const s = await start(entry, { cwd, env });
-        if (s.ok) { res.started.push(step.name); log(`${n}. ok     '${step.name}' answered its first start in ${(s.ms / 1000).toFixed(1)}s`); }
+        if (s.ok)
+        {
+            res.started.push(step.name);
+            log(`${n}. ok     '${step.name}' answered its first start in ${(s.ms / 1000).toFixed(1)}s`);
+            // serena wrote its settings at that start: base_modes: [] (D7), where the home is one the plugin may edit
+            const home = step.row === 'serena' && entry.env && entry.env.SERENA_HOME;
+            if (home && serenaConfig.editableHome(home, { platform: process.platform }).ok)
+                log(`${n}. ok     ${serenaConfig.emptyBaseModes(serenaConfig.configOf(home)).detail}`);
+        }
         else warn(n, `'${step.name}' did not answer its first start (${s.why}) - the registration stays; its first session start tries again`);
     }
     res.status = status(j.check, { cwd, env, runCli, log });

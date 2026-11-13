@@ -12,7 +12,7 @@ const MCP_ROW = ['id', 'kind', 'group', 'label', 'summary', 'name', 'os', 'recom
 const PLUGIN_ROW = ['id', 'kind', 'group', 'label', 'summary', 'plugin', 'marketplace', 'os', 'recommendedScope', 'prereqs'];
 const OSES = ['darwin', 'linux', 'win32'];
 const GROUPS = ['code', 'docs', 'browsers', 'machine'];
-const PLACEHOLDER = /\{(root|name|host|value|version|minor)\}/g;
+const PLACEHOLDER = /\{(root|name|host|value|version|minor|contextFile)\}/g;
 
 test('the catalog has the 17 rows of the brief, each id once', () => {
     const ids = cat.tools.map((r) => r.id);
@@ -138,7 +138,7 @@ test('each Playwright engine is its own row with --browser and --no-webmcp', () 
 
 test('only placeholders the builder knows appear, and no file holds a secret', () => {
     const text = fs.readFileSync(path.join(CATALOG_DIR, 'tools.json'), 'utf8');
-    for (const m of text.matchAll(/(?<!\$)\{[a-zA-Z]+\}/g)) assert.ok(/^\{(root|name|host|value|version|minor)\}$/.test(m[0]), `placeholder ${m[0]}`);
+    for (const m of text.matchAll(/(?<!\$)\{[a-zA-Z]+\}/g)) assert.ok(/^\{(root|name|host|value|version|minor|contextFile)\}$/.test(m[0]), `placeholder ${m[0]}`);
     // every ${VAR} is a bare reference
     for (const m of text.matchAll(/\$\{([^}]*)\}/g)) assert.match(m[1], /^[A-Z][A-Z0-9_]*$/, `\${${m[1]}}`);
     // known token shapes
@@ -193,7 +193,7 @@ test('every fix row has the fields the brief names and points at an existing row
     const FIX = ['id', 'tool', 'os', 'symptom', 'detect', 'fix', 'verifiedOn', 'source'];
     assert.strictEqual(new Set(cat.fixes.map((f) => f.id)).size, cat.fixes.length);
     assert.deepStrictEqual(cat.fixes.map((f) => f.id), ['serena-windows-home', 'serena-windows-ts-shim', 'uvx-python', 'windows-arm-python',
-        'windows-npx-cmd', 'playwright-webmcp', 'appium-sdk-env', 'serena-telemetry', 'token-sync', 'list-import', 'read-guard', 'typescript-lsp-ts7', 'windows-mcp-one-per-desktop', 'data-folder-ignore', 'npx-cache-entry',
+        'windows-npx-cmd', 'playwright-webmcp', 'appium-sdk-env', 'serena-telemetry', 'token-sync', 'serena-context', 'serena-base-modes', 'list-import', 'read-guard', 'typescript-lsp-ts7', 'windows-mcp-one-per-desktop', 'data-folder-ignore', 'npx-cache-entry',
         'key-to-helper', 'helper-missing', 'helper-stale', 'root-ignore', 'project-relative-path', 'mcp-order', 'helper-child-folder']);
     for (const f of cat.fixes)
     {

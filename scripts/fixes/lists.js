@@ -93,4 +93,27 @@ function readGuardDetect(ctx)
 
 const readGuardSteps = (f) => [planLists.denyReadStep(f.name, f.rules)];
 
-module.exports = { listImportDetect, listImportSteps, readGuardDetect, readGuardSteps };
+// serena-base-modes (0.5.0, D7): a managed serena's home, other than an alfred-code 2.x one, whose serena_config.yml
+// lists base modes. Read by serena-config.js, which reads that key alone and never the file's other lines.
+function serenaBaseModesDetect(ctx)
+{
+    const serenaConfig = require('../serena-config.js');
+    const out = [];
+    const seen = new Set();
+    for (const reg of (ctx.inv.registrations || []).filter((r) => r.rowId === 'serena' && !r.own && !r.alfredRetired && r.choice !== 'own' && r.scope !== 'inherited'))
+    {
+        const home = reg.entry && reg.entry.env && reg.entry.env.SERENA_HOME;
+        if (!home) continue;
+        const e = serenaConfig.editableHome(home, { platform: ctx.platform });
+        const file = serenaConfig.configOf(home);
+        if (!e.ok || seen.has(file)) continue;
+        seen.add(file);
+        if (serenaConfig.baseModesState(file) !== 'set') continue;
+        out.push({ id: 'serena-base-modes', name: file, scope: null, file, shared: Boolean(e.shared), found: `${file} lists base modes - serena's manual names edit tools its context leaves out`, ...(e.shared ? { note: serenaConfig.planNote(reg.entry, { platform: ctx.platform }) } : {}) });
+    }
+    return out;
+}
+
+const serenaBaseModesSteps = (f) => [{ op: 'serena-base-modes', file: f.file, shared: f.shared, why: `${f.file}: base_modes: [], so serena's manual names only the tools it has` }];
+
+module.exports = { listImportDetect, listImportSteps, readGuardDetect, readGuardSteps, serenaBaseModesDetect, serenaBaseModesSteps };

@@ -79,16 +79,26 @@ function keyToHelperFix(entry, f, ctx)
 // The files this plugin copied that the managed registrations name, each once: [{ file, root, kind, reg }]. A
 // `headersHelper` names its helper; a bridge registration (0.4.0) its mcp-bridge.js and the mcp-headers.js beside it,
 // which the bridge requires. A project-scope path is relative to the project, the folder whose .mcp.json declares it.
-const SHIPPED = { helper: { word: 'helper', version: HELPER_VERSION }, bridge: { word: 'bridge', version: BRIDGE_VERSION } };
+const SHIPPED = { helper: { word: 'helper', version: HELPER_VERSION }, bridge: { word: 'bridge', version: BRIDGE_VERSION }, serenaContext: { word: 'context', version: roots.SERENA_CONTEXT_VERSION } };
 function shippedFiles(ctx, fixId)
 {
     const P = E.pathFor(ctx.platform);
     const seen = new Map();
     const add = (file, kind, reg) => { if (!seen.has(file)) seen.set(file, { file, root: P.dirname(file), kind, reg }); };
+    let familyRoots = null;
     for (const reg of C.registrationsOf(ctx, fixId))
     {
         const named = roots.helperPathOf(reg.entry && reg.entry.headersHelper);
         if (named) add(roots.absOf(named, rootCtx(ctx)), 'helper', reg);
+        // serena's context file (0.5.0, D7): the --context path a managed serena names
+        // only the root's own: a path elsewhere is serena-context's to repoint, and a folder there may not be writable
+        const ctxAt = E.contextArgAt(reg.entry);
+        if (ctxAt >= 0)
+        {
+            const file = roots.absOf(reg.entry.args[ctxAt], rootCtx(ctx));
+            const root = (familyRoots || (familyRoots = rootsOf(ctx)))[roots.familyOf(reg.scope)];
+            if (root && file === P.join(root, roots.FILES.serenaContext)) add(file, 'serenaContext', reg);
+        }
         const bridge = E.bridgeParts(reg.entry);
         if (!bridge) continue;
         const file = roots.absOf(bridge.path, rootCtx(ctx));
@@ -100,13 +110,14 @@ function shippedFiles(ctx, fixId)
 
 // `bridged`: found through a bridge registration, which did not start without the file - so its fix needs a new start,
 // where a hosted server's helper runs at each connect (review)
-const helperFinding = (fixId, h, what, extra = {}) => ({ ...C.finding(fixId, h.reg, what, extra), name: h.file, path: h.file, shipped: h.kind, bridged: Boolean(E.bridgeParts(h.reg.entry)) });
+const helperFinding = (fixId, h, what, extra = {}) => ({ ...C.finding(fixId, h.reg, what, extra), name: h.file, path: h.file, shipped: h.kind, bridged: Boolean(E.bridgeParts(h.reg.entry)) || h.kind === 'serenaContext' });
 const nameOf = (h) => roots.FILES[h.kind];
 // the file this finding writes: 'helper' or 'bridge' (a finding from before 0.4.0 carries none: a helper)
-const kindOf = (f) => (f.shipped === 'bridge' ? 'bridge' : 'helper');
+const kindOf = (f) => (f.shipped === 'bridge' || f.shipped === 'serenaContext' ? f.shipped : 'helper');
 // a fix that writes a file says CommonJS beside it (apply.js ensureCommonjs, 0.4.0 Ruling 12)
-const withCommonjs = (root, r) =>
+const withCommonjs = (root, r, kind) =>
 {
+    if (kind === 'serenaContext') return r;
     const pkg = require('../apply.js').ensureCommonjs(root);
     return { ...r, detail: [r.detail, pkg.wrote ? `wrote ${path.join(root, 'package.json')} (type commonjs)` : null, pkg.note].filter(Boolean).join('; ') };
 };
@@ -114,7 +125,7 @@ const withCommonjs = (root, r) =>
 function helperMissingDetect(ctx)
 {
     return shippedFiles(ctx, 'helper-missing').filter((h) => !fs.existsSync(h.file))
-        .map((h) => helperFinding('helper-missing', h, `${nameOf(h)} is missing - ${h.reg.name} (${h.reg.scope}) ${E.bridgeParts(h.reg.entry) ? 'does not start' : 'connects without its key'}`));
+        .map((h) => helperFinding('helper-missing', h, `${nameOf(h)} is missing - ${h.reg.name} (${h.reg.scope}) ${E.bridgeParts(h.reg.entry) || h.kind === 'serenaContext' ? 'does not start' : 'connects without its key'}`));
 }
 
 function helperMissingFix(f)
@@ -122,7 +133,7 @@ function helperMissingFix(f)
     const kind = kindOf(f);
     fs.mkdirSync(path.dirname(f.path), { recursive: true });
     fs.writeFileSync(f.path, roots.shippedSource(kind));
-    return withCommonjs(path.dirname(f.path), { ok: roots.shippedState(kind, f.path).state === 'same', detail: `wrote ${f.path} (${SHIPPED[kind].word} ${SHIPPED[kind].version})`, restart: Boolean(f.bridged) });
+    return withCommonjs(path.dirname(f.path), { ok: roots.shippedState(kind, f.path).state === 'same', detail: `wrote ${f.path} (${SHIPPED[kind].word} ${SHIPPED[kind].version})`, restart: Boolean(f.bridged) }, kind);
 }
 
 function helperStaleDetect(ctx)
@@ -147,7 +158,7 @@ function helperStaleFix(f)
     const { word, version } = SHIPPED[kind];
     if (roots.shippedState(kind, f.path).state === 'higher') return { ok: false, detail: `${f.path} is newer than this plugin - left; update preferred-tools`, restart: false };
     fs.writeFileSync(f.path, roots.shippedSource(kind));
-    return withCommonjs(path.dirname(f.path), { ok: roots.shippedState(kind, f.path).state === 'same', detail: `rewrote ${f.path} (${word} ${f.from === undefined ? 'edited' : f.from} -> ${version})`, restart: Boolean(f.bridged) });
+    return withCommonjs(path.dirname(f.path), { ok: roots.shippedState(kind, f.path).state === 'same', detail: `rewrote ${f.path} (${word} ${f.from === undefined ? 'edited' : f.from} -> ${version})`, restart: Boolean(f.bridged) }, kind);
 }
 
 // ---- root-ignore ----------------------------------------------------------------------------------------------------
@@ -171,18 +182,20 @@ function rootIgnoreDetect(ctx)
         const helperGap = family === 'project' && path.basename(root) !== '.alfred' && roots.gitIgnores(helper) === true;
         const signIns = path.join(root, roots.FILES.signIns);
         const signInsGap = roots.gitIgnores(path.join(signIns, 'tokens')) === false;
-        const found = [secretsGap && `git would commit ${secrets}`, signInsGap && `git would commit ${signIns}/`, helperGap && `git ignores ${helper}, which a project-scope server needs committed`].filter(Boolean).join('; ');
+        const unignore = gap.unignore || [];
+        const found = [secretsGap && `git would commit ${secrets}`, signInsGap && `git would commit ${signIns}/`, helperGap && `git ignores ${helper}, which a project-scope server needs committed`, unignore.length && `git ignores ${unignore.map((f) => path.join(root, f)).join(' and ')}, which a committed entry names`].filter(Boolean).join('; ');
         const base = { id: 'root-ignore', row: null, name: root, scope: family, found, path: root, family };
         if (path.basename(root) === '.alfred') { out.push({ ...base, blocked: `${root} is alfred-code's - add ${[secretsGap && roots.FILES.secrets, signInsGap && `${roots.FILES.signIns}/`].filter(Boolean).join(' and ')} to its .gitignore yourself` }); continue; }
         if (gap.excluded) { out.push({ ...base, blocked: `a .gitignore above excludes ${root} - remove that line (git check-ignore -v ${root} names it): git never re-includes a file inside an excluded folder` }); continue; }
         const lines = rootIgnoreLines(root);
-        const fixes = { secrets: secretsGap && lines.lack.includes(lines.mine ? '*' : roots.FILES.secrets), helper: helperGap && lines.mine && lines.lack.includes(`!${roots.FILES.helper}`), signIns: signInsGap && lines.lack.includes(lines.mine ? '*' : `${roots.FILES.signIns}/`) };
+        const fixes = { secrets: secretsGap && lines.lack.includes(lines.mine ? '*' : roots.FILES.secrets), helper: helperGap && lines.mine && lines.lack.includes(`!${roots.FILES.helper}`), signIns: signInsGap && lines.lack.includes(lines.mine ? '*' : `${roots.FILES.signIns}/`), unignore: lines.mine ? unignore.filter((f) => lines.lack.includes(`!${f}`)) : [] };
         const left = [
             secretsGap && !fixes.secrets && `every line preferred-tools writes is in ${lines.file}, yet git would still commit ${secrets}: a later line re-includes ${roots.FILES.secrets}, or git tracks it already (git rm --cached -- ${secrets})`,
             signInsGap && !fixes.signIns && `every line preferred-tools writes is in ${lines.file}, yet git would still commit ${signIns}/: a later line re-includes it, or git tracks it already (git rm -r --cached -- ${signIns})`,
             helperGap && !fixes.helper && `git ignores ${helper} through lines of your own - add !${roots.FILES.helper} at the end of ${lines.file}`,
+            ...unignore.filter((f) => !fixes.unignore.includes(f)).map((f) => `git ignores ${path.join(root, f)} through lines of your own - add !${f} at the end of ${lines.file}`),
         ].filter(Boolean).join('; ');
-        if (!fixes.secrets && !fixes.helper && !fixes.signIns) out.push({ ...base, blocked: left });
+        if (!fixes.secrets && !fixes.helper && !fixes.signIns && !fixes.unignore.length) out.push({ ...base, blocked: left });
         else out.push({ ...base, fixes, ...(left ? { note: left } : {}) });
     }
     return out;
@@ -195,6 +208,7 @@ function rootIgnoreFix(f)
         f.fixes.secrets && roots.gitIgnores(path.join(f.path, roots.FILES.secrets)) === false && `git would still commit ${path.join(f.path, roots.FILES.secrets)}`,
         f.fixes.helper && roots.gitIgnores(path.join(f.path, roots.FILES.helper)) === true && `git still ignores ${path.join(f.path, roots.FILES.helper)}`,
         f.fixes.signIns && roots.gitIgnores(path.join(f.path, roots.FILES.signIns, 'tokens')) === false && `git would still commit ${path.join(f.path, roots.FILES.signIns)}/`,
+        ...(f.fixes.unignore || []).filter((x) => roots.gitIgnores(path.join(f.path, x)) === true).map((x) => `git still ignores ${path.join(f.path, x)}`),
     ].filter(Boolean);
     return { ok: !still.length, detail: still.length ? `${r.detail}; ${still.join('; ')}` : r.detail, restart: false };
 }

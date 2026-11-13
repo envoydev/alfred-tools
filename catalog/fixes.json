@@ -166,6 +166,43 @@
       "source": "docs/build-prompt.md D7; docs/sources.md 'Claude Code - headersHelper'"
     },
     {
+      "id": "serena-context",
+      "upgrade": "0.5.0",
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "tool": [
+        "serena"
+      ],
+      "kind": "registration",
+      "symptom": "a managed serena runs with a --context other than <root>/serena-context.yml - 0.4.x ran Serena's claude-code context, whose instructions name Claude Code's own tools",
+      "detect": "serenaContextDetect",
+      "fix": "serenaContextFix",
+      "verifiedOn": "this build: tests/fix.test.js serena-context (2026-11-13)",
+      "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D7"
+    },
+    {
+      "id": "serena-base-modes",
+      "upgrade": "0.5.0",
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "tool": [
+        "serena"
+      ],
+      "kind": "file",
+      "symptom": "a managed serena's <SERENA_HOME>/serena_config.yml lists base modes, so its manual names edit tools the context leaves out (not an alfred-code 2.x home)",
+      "detect": "serenaBaseModesDetect",
+      "fix": null,
+      "steps": "serenaBaseModesSteps",
+      "verifiedOn": "this build: tests/fix.test.js serena-base-modes (2026-11-13)",
+      "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D7, F9"
+    },
+    {
       "id": "list-import",
       "upgrade": "0.5.0",
       "tool": [
@@ -337,7 +374,8 @@
         "github",
         "sentry",
         "gitlab",
-        "atlassian"
+        "atlassian",
+        "serena"
       ],
       "os": [
         "darwin",
@@ -358,7 +396,8 @@
         "github",
         "sentry",
         "gitlab",
-        "atlassian"
+        "atlassian",
+        "serena"
       ],
       "os": [
         "darwin",

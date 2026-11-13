@@ -75,7 +75,7 @@
             "serena",
             "start-mcp-server",
             "--context",
-            "claude-code",
+            "{contextFile}",
             "--enable-web-dashboard",
             "false",
             "--project-from-cwd",

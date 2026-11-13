@@ -386,6 +386,32 @@ function bridgePathFor(scope, ctx)
     return pathFor(ctx.platform).join(rootOf(scope === 'user' ? 'global' : 'project', ctx), 'mcp-bridge.js');
 }
 
+// serena's context file (D7): in the scope's family root, absolute at every scope.
+function contextPathFor(scope, ctx)
+{
+    return pathFor(ctx.platform).join(rootOf(scope === 'user' ? 'global' : 'project', ctx), 'serena-context.yml');
+}
+
+// The --context an entry runs with points at this plugin's file (any root) - the path form D7 writes, not a name such as
+// claude-code. -> its index in args, or -1
+function contextArgAt(entry)
+{
+    const args = (entry && Array.isArray(entry.args)) ? entry.args : [];
+    const i = args.indexOf('--context');
+    return i >= 0 && i + 1 < args.length && /(^|[\\/])serena-context\.yml$/.test(String(args[i + 1])) ? i + 1 : -1;
+}
+
+// The entry with its context file following the scope's root (a root change, a scope move). A named context is fix's to
+// change (serena-context), so it is left.
+function applyContext(entry, scope, ctx)
+{
+    const at = contextArgAt(entry);
+    if (at < 0) return entry;
+    const args = [...entry.args];
+    args[at] = contextPathFor(scope, ctx);
+    return { ...entry, args };
+}
+
 // A bridge registration's parts, read from its launch: `node <path>/mcp-bridge.js <template> <KEY> <SCHEME> <pkg> [<root>]`.
 // -> { path, template, keyName, scheme, pkg, globalRoot } | null
 function bridgeParts(entry)
@@ -439,7 +465,8 @@ function buildEntry(row, routeId, a, ctx, rules)
         const p = route.package;
         const args = ['--python', pythonRequest(route, ctx, rules), '--exclude-newer', p.cutoff];
         for (const w of route.with || []) args.push('--with', w);
-        args.push('--from', subst(p.fromSpec, { version: p.version }), ...route.run, ...extra);
+        const run = route.run.some((x) => x.includes('{contextFile}')) ? route.run.map((x) => subst(x, { contextFile: contextPathFor(a.scope, ctx) })) : route.run;
+        args.push('--from', subst(p.fromSpec, { version: p.version }), ...run, ...extra);
         entry = { command: 'uvx', args };
         if (Object.keys(route.env || {}).length) entry.env = { ...route.env };
     }
@@ -573,6 +600,7 @@ function fetchOf(name, entry, rowId)
 
 module.exports = {
     signInFormOf, signInParts,
+    contextPathFor, contextArgAt, applyContext,
     pathFor, slashes, isWindowsArm, pythonRequest, parseRoot, logicalRoot, currentOf, formatRoot, withSub, homeVar, serenaWindowsHome, serenaSpaceFree, validWindowsSerenaHome,
     defaultRoot, alfredRoot, otherSide, otherPlace, rootOfEntry, applyRoot, buildEntry, nameProblem, subst, fetchStep,
     ALFRED_ENTRIES, alfredData, alfredNameProblem, recommendedSide, rootOf, machinePath, expandVars,

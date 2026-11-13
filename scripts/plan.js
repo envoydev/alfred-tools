@@ -37,6 +37,7 @@ const mcpOrder = require('./mcp-order.js');
 const planLists = require('./plan-lists.js');
 const mcpsList = require('./mcps-list.js');
 const cursorMcp = require('./cursor-mcp.js');
+const serenaConfig = require('./serena-config.js');
 const { installedOf, keyOf, targetOf, fromHere, otherWindowsMcp } = require('./inventory.js');
 const { blockingStdio, deepEqual } = require('./json-file.js');
 
@@ -279,6 +280,8 @@ function planMcp(row, pick, inv, ctx, catalog, out)
     {
         entry = JSON.parse(JSON.stringify(cur.entry));
         if (row.locations && rootStr !== cur.rootStr) entry = E.applyRoot(entry, row, rootStr, scope, ctx);
+        // serena's context file follows the scope's root (D7)
+        if (route.run && route.run.includes('{contextFile}')) entry = E.applyContext(entry, scope, ctx);
         if (route.optionalArgs && route.optionalArgs.executablePath && wantExec !== cur.executablePath)
         {
             const args = (entry.args || []).slice();
@@ -448,15 +451,18 @@ function planMcp(row, pick, inv, ctx, catalog, out)
     // a launch the cache may not hold yet is fetched once it is written (entries.js fetchStep says why); a change that
     // keeps the package, such as a location or a name, fetches nothing
     const fetch = E.fetchStep(name, entry, row.id, cur && cur.entry);
-    const uses = { helper: Boolean(entry.headersHelper) || Boolean(bridge), bridge: Boolean(bridge) || form === 'two', keyFile, keyName, keyNames, data: dataAbs };
+    const uses = { helper: Boolean(entry.headersHelper) || Boolean(bridge), bridge: Boolean(bridge) || form === 'two', serenaContext: E.contextArgAt(entry) >= 0, keyFile, keyName, keyNames, data: dataAbs };
     // the shared sign-in's folder sits in the family's root: the root is written (its .gitignore) like any other
     const signInRoot = () => { if (form === 'signin') ctx.uses.push({ family: roots.familyOf(scope), root: ctx.roots[roots.familyOf(scope)] }); };
     // the apps and the form this registration is listed with (plan-lists.js)
     const record = () => { const k = keyOf('mcp', name, scope); if (ctx.clientsFor) ctx.clientsFor.set(k, clients); if (ctx.formFor) ctx.formFor.set(k, form); };
     // a bridge step says whether its names are filled: the apply's background start skips one that cannot start yet
     const withFilled = bridge ? { filled: Boolean(bridgeFilled) } : {};
+    // serena's base modes (D7): the edit runs after its first start, so the plan says what it does first
+    const serenaLine = () => { const l = row.id === 'serena' ? serenaConfig.planNote(entry, ctx) : null; if (l && !out.notes.includes(l)) out.notes.push(l); };
     if (!cur)
     {
+        serenaLine();
         if (reconnect) out.reconnect.push(reconnect);
         useRoots(ctx, scope, uses);
         signInRoot();
@@ -478,6 +484,7 @@ function planMcp(row, pick, inv, ctx, catalog, out)
         if (form === 'two') useRoots(ctx, scope, { helper: true, bridge: true });
         return undefined;
     }
+    serenaLine();
     if (reconnect) out.reconnect.push(reconnect);
     useRoots(ctx, scope, uses);
     signInRoot();
@@ -496,7 +503,7 @@ function planMcp(row, pick, inv, ctx, catalog, out)
 // The roots a registration step writes into (spec D2-D4): its helper's - the scope's family root, with the bridge beside
 // it for a bridge route - its key file's and its data folder's. Only a step that is planned uses a root, so a plan with no
 // change writes no file. `keyNames` (a bridge's key and URL names) replaces the one `keyName` when given.
-function useRoots(ctx, scope, { helper, bridge, keyFile, keyName, keyNames, data })
+function useRoots(ctx, scope, { helper, bridge, serenaContext, keyFile, keyName, keyNames, data })
 {
     const P = E.pathFor(ctx.platform);
     const r = ctx.roots || {};
@@ -504,6 +511,7 @@ function useRoots(ctx, scope, { helper, bridge, keyFile, keyName, keyNames, data
     const familyOf = (p) => ['project', 'global'].find((f) => inside(r[f], p)) || null;
     const family = roots.familyOf(scope);
     if (helper && r[family]) ctx.uses.push({ family, root: r[family], helper: true, bridge: Boolean(bridge), committed: scope === 'project' });
+    if (serenaContext && r[family]) ctx.uses.push({ family, root: r[family], serenaContext: true, committed: scope === 'project' });
     const kf = familyOf(keyFile);
     if (kf) ctx.uses.push({ family: kf, root: r[kf], key: { file: keyFile, name: keyName, names: keyNames || [keyName] } });
     const df = familyOf(data);
@@ -527,6 +535,7 @@ function fileSteps(inv, ctx, out, regSteps = [])
             byRoot.set(u.root, r);
             if (u.helper) r.helper = true;
             if (u.bridge) r.bridge = true;
+            if (u.serenaContext) r.serenaContext = true;
             if (u.committed) r.committed = true;
             if (u.key) r.keys.set(u.key.file, [...new Set([...(r.keys.get(u.key.file) || []), ...(u.key.names || [u.key.name])])]);
         }
@@ -542,7 +551,15 @@ function fileSteps(inv, ctx, out, regSteps = [])
             ignore.push({ op: 'root-ignore', path: r.root, why: `the new root ${r.root}: its .gitignore keeps the key file, the record and the data out of git` });
         // a key file git would commit gets no name; an ignored helper matters only to a project-scope server, whose
         // committed .mcp.json names it - the key file beside it is still ignored, so its names are written
-        const gap = existed ? roots.ignoreGap(r.root, r.family) : null;
+        const gap = existed ? roots.ignoreGap(r.root, r.family, { writes: [r.bridge && roots.FILES.bridge, r.serenaContext && roots.FILES.serenaContext].filter(Boolean) }) : null;
+        // a root of this plugin's own files whose .gitignore predates a line GITIGNORE has now (0.5.0: the bridge and
+        // serena's context): rootIgnore appends only the lines it lacks
+        if (existed && P.basename(r.root) !== '.alfred')
+        {
+            const lines = require('./apply.js').rootIgnoreLines(r.root);
+            if (lines.text !== null && lines.mine && lines.lack.length)
+                ignore.push({ op: 'root-ignore', path: r.root, why: `${r.root}: its .gitignore gains ${lines.lack.join(', ')}` });
+        }
         if (gap && gap.secrets) out.notes.push(`${r.root}: ${gap.reason} - no key file is written there; /preferred-tools:fix (root-ignore) covers it`);
         if (gap && gap.helper && r.committed)
             out.notes.push(`${r.root}: ${gap.reason} - ${gap.excluded ? `a .gitignore above excludes ${r.root}: remove that line (git check-ignore -v ${r.root} names it)` : '/preferred-tools:fix (root-ignore) covers it'}`);
@@ -561,6 +578,14 @@ function fileSteps(inv, ctx, out, regSteps = [])
                 helpers.push({ op: 'write-bridge', path: r.root, why: `${r.root}: mcp-bridge.js, which fills a hosted URL from .mcps-secrets each time the server starts` });
             else if (state === 'higher') out.notes.push(`mcp-bridge.js in ${r.root} is newer than this plugin - update preferred-tools`);
             else if (state === 'edited') out.notes.push(`mcp-bridge.js in ${r.root} changed since preferred-tools wrote it - left as it is; /preferred-tools:fix (helper-stale) rewrites it`);
+        }
+        if (r.serenaContext)
+        {
+            const { state } = roots.shippedState('serenaContext', P.join(r.root, roots.FILES.serenaContext), exists);
+            if (state === 'absent' || state === 'lower')
+                helpers.push({ op: 'write-serena-context', path: r.root, why: `${r.root}: serena-context.yml, the context serena runs with - code navigation only, in Claude Code and Cursor` });
+            else if (state === 'higher') out.notes.push(`serena-context.yml in ${r.root} is newer than this plugin - update preferred-tools`);
+            else if (state === 'edited') out.notes.push(`serena-context.yml in ${r.root} changed since preferred-tools wrote it - left as it is; /preferred-tools:fix (helper-stale) rewrites it`);
         }
         if (!gap || !gap.secrets)
             for (const [file, want] of r.keys)
@@ -630,7 +655,7 @@ function plan(inv, answers, opts = {})
 {
     const catalog = opts.catalog || catalogLib.load();
     // answers.machine: what prereq.js found (docker: false picks github's binary fallback); an explicit option wins
-    const ctx = { ...makeCtx(inv, { ...opts, machine: opts.machine || answers.machine }), changing: new Set(Object.keys(answers.change || {})), uses: [] };
+    const ctx = { ...makeCtx(inv, { ...opts, machine: opts.machine || answers.machine }), changing: new Set(Object.keys(answers.change || {})), uses: [], rootMoves: [] };
     const out = { version: 1, project: inv.project, os: inv.os, alfredCodeEnabled: Boolean(inv.alfredCodeEnabled), steps: [], notes: [], errors: [], unchanged: [], keys: [], reconnect: [], oauth: [], dangerous: [], expect: [], hud: null };
     // the root folders (spec D2): every data folder, key file and helper of a family sits in its root
     const resolved = roots.resolve(inv, answers.roots, { ...ctx, catalog });
@@ -678,10 +703,14 @@ function plan(inv, answers, opts = {})
     if (out.hud === 'defer') { out.hud = null; out.hudAfter = true; out.notes.push('claude-hud: its statusLine and recommended settings are asked after the install'); }
     if (out.hud) out.steps.push({ op: 'hud', mode: out.hud, why: `claude-hud: ${out.hud === 'skip' ? 'statusLine only' : out.hud === 'replace' ? 'statusLine plus recommended settings, replacing differing keys' : 'statusLine plus recommended settings, add-only'}` });
     // the file steps first, the records last (D8): a failed add leaves files a re-run finds in place
-    const files = fileSteps(inv, ctx, out, out.steps);
-    out.steps = [...files.before, ...out.steps, ...files.after];
+    // a root change's moved list is the list from here on: its writes and Cursor's read it at its new path
+    const listInv = movedLists(inv, ctx.rootMoves);
+    const files = fileSteps(listInv, ctx, out, out.steps);
+    const moves = ctx.rootMoves.map((m) => ({ op: 'move-root-file', from: m.from, to: m.to, why: `the ${m.family} root moves: ${m.name} goes with it` }));
+    const ignores = files.before.filter((x) => x.op === 'root-ignore');
+    out.steps = [...ignores, ...moves, ...files.before.filter((x) => x.op !== 'root-ignore'), ...out.steps, ...files.after];
     // Cursor's files from the lists, after the list-write steps they read (spec D2)
-    const cursor = planLists.cursorSteps(inv, { ...ctx, catalog }, out, answers);
+    const cursor = planLists.cursorSteps(listInv, { ...ctx, catalog }, out, answers);
     // the read guard (ruling 13): one deny-read, last before the list-write steps
     const deny = planLists.denyReadSteps(out.steps, ctx, out);
     if (deny.length) { const at = out.steps.findIndex((x) => x.op === 'list-write'); out.steps.splice(at < 0 ? out.steps.length : at, 0, ...deny); }
@@ -708,6 +737,16 @@ function planRootChange(answers, inv, ctx, catalog, out)
         if (!used) { out.unchanged.push(`rootChange: no ${family} root is in use here - nothing to move`); continue; }
         if (used.path === next) { out.unchanged.push(`rootChange: the ${family} root is already ${next}`); continue; }
         const inOld = (p) => { const rel = P.relative(used.path, p); return rel === '' || (!rel.startsWith('..') && !P.isAbsolute(rel)); };
+        // the root's own files move with it (D1): the list, serena's context and mcp-remote's sign-in folder - each that is
+        // there, renamed whole, before any registration names the new root
+        const exists = ctx.exists || ((x) => fs.existsSync(x));
+        const list = inv.lists && inv.lists[family];
+        for (const f of [roots.FILES.list, roots.FILES.serenaContext, roots.FILES.signIns])
+        {
+            const from = P.join(used.path, f);
+            if (f === roots.FILES.list && (!list || list.note || list.old || list.file !== from)) continue;
+            if (exists(from)) ctx.rootMoves.push({ family, name: f, from, to: P.join(next, f) });
+        }
         const scopes = family === 'global' ? ['user'] : ['project', 'local'];
         const secretsOld = P.join(used.path, roots.FILES.secrets);
         const secretsNew = P.join(next, roots.FILES.secrets);
@@ -750,6 +789,16 @@ function planRootChange(answers, inv, ctx, catalog, out)
             out.notes.push(`a local server in another project whose helper names ${used.path} keeps reading its .mcps-secrets until /preferred-tools:configure runs there`);
         }
     }
+}
+
+// The inventory with each moved list at its new path (planRootChange's moves).
+function movedLists(inv, moves)
+{
+    const listMoves = (moves || []).filter((m) => m.name === roots.FILES.list);
+    if (!listMoves.length) return inv;
+    const next = { ...inv, lists: { ...inv.lists } };
+    for (const m of listMoves) next.lists[m.family] = { ...inv.lists[m.family], file: m.to };
+    return next;
 }
 
 // The answers about the servers already set up (spec D6, F4), from configure: 'own' puts the server in its family's
@@ -851,6 +900,8 @@ function render(p)
         else if (s.op === 'root-ignore') lines.push(`   writes ${P.join(s.path, '.gitignore')}  (${roots.GITIGNORE.trim().split('\n').join(', ')} - or the lines it lacks, appended)`);
         else if (s.op === 'write-helper') lines.push(`   writes ${P.join(s.path, roots.FILES.helper)}  (this plugin's header helper)`, `   (and package.json, type commonjs, when absent)`);
         else if (s.op === 'write-bridge') lines.push(`   writes ${P.join(s.path, roots.FILES.bridge)}  (this plugin's URL bridge)`, `   (and package.json, type commonjs, when absent)`);
+        else if (s.op === 'move-root-file') lines.push(`   moves ${s.from} to ${s.to}  (the root's own file goes with it)`);
+        else if (s.op === 'write-serena-context') lines.push(`   writes ${P.join(s.path, roots.FILES.serenaContext)}  (serena's context: code navigation only)`);
         else if (s.op === 'ensure-key-name') lines.push(`   writes ${s.file}  (names only: ${s.names.join(', ')} - you fill in each value)`);
         else if (s.op === 'list-write' || s.op === 'retire-record' || s.op === 'cursor-write' || s.op === 'deny-read') lines.push(planLists.renderLine(s));
         else if (s.op === 'order-mcp-json') lines.push(`   reorders ${s.file}  (no value changes)`);

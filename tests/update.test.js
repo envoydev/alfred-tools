@@ -539,7 +539,7 @@ const listed = (root, servers) => writeJson(path.join(root, 'mcps.json'), { vers
 test('the fix rows update applies are the ones marked upgrade, each with the version that brought its way', () =>
 {
     const catalog = require('../scripts/catalog.js').load();
-    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['list-import', '0.5.0'], ['read-guard', '0.5.0'], ['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
+    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['list-import', '0.5.0'], ['read-guard', '0.5.0'], ['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
 });
 
 test('update offers the new ways to pass data that fix knows - a 0.1.x key header, a relative project path - and applies them after the pins, by registration', async () =>
@@ -794,6 +794,29 @@ test('update moves the shared form\'s mcp-remote pin in Claude Code', async () =
         const e = accountOf(w).mcpServers.atlassian;
         assert.ok(e.args.includes('mcp-remote@0.17.0'), JSON.stringify(e));
         assert.strictEqual(e.env.MCP_REMOTE_CONFIG_DIR, path.join(w.home, '.preferred-tools'));
+    }
+    finally { w.clean(); }
+});
+
+test('update offers a lower serena-context.yml as context:<file> and rewrites it', async () => {
+    const roots = require('../scripts/roots.js');
+    const w = world();
+    try
+    {
+        const pt = path.join(w.project, '.preferred-tools');
+        fs.mkdirSync(pt, { recursive: true });
+        const file = path.join(pt, 'serena-context.yml');
+        fs.writeFileSync(file, roots.shippedSource('serenaContext').replace(/^# preferred-tools serena-context \d+/, '# preferred-tools serena-context 0'));
+        const S = { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20T23:59:59Z', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server', '--context', file, '--project-from-cwd'], env: { SERENA_USAGE_REPORTING: 'false', SERENA_HOME: path.join(pt, 'serena') } };
+        assert.strictEqual(cli.run(['mcp', 'add-json', 'serena', JSON.stringify(S), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        const registry = fakeRegistry({ 'pypi:serena-agent': [{ version: '2.1.0', time: ago(30) }] });
+        const c = await run(w, ['--check', '--no-refresh'], { registry });
+        assert.strictEqual(c.code, 0, c.text);
+        assert.match(c.text, /serena-context\.yml in .*\.preferred-tools +0 -> 1/);
+        const a = await run(w, ['--apply', `context:${file}`], { registry });
+        assert.strictEqual(a.code, 0, a.text);
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), roots.shippedSource('serenaContext'));
+        assert.ok(!fs.existsSync(path.join(pt, 'package.json')), 'a YAML file needs no package.json');
     }
     finally { w.clean(); }
 });

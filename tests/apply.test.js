@@ -70,7 +70,7 @@ test('a fresh install writes through the CLI at each scope, and every add is rea
         // the slow half is handed to fetch.js, never run here: no download and no `claude mcp get` inside the apply
         assert.ok(!w.calls().some((a) => a[0] === 'mcp' && a[1] === 'get'), 'apply asks the CLI for no status');
         assert.deepStrictEqual(w.fetches(), [], 'apply runs no runtime');
-        assert.match(r.text, /5\. later  serena: fetch serena-agent@/);
+        assert.match(r.text, /6\. later  serena: fetch serena-agent@/);
         // each root got its .gitignore first (R13): the project root for serena, the global root for playwright-chrome
         const { GITIGNORE } = require('../scripts/roots.js');
         for (const root of [path.join(w.project, '.preferred-tools'), path.join(w.home, '.preferred-tools')]) assert.strictEqual(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), GITIGNORE, root);
@@ -882,7 +882,7 @@ test('root-ignore: written once, left when present, never under .alfred', () => 
         // a 0.1.x .gitignore holding *: the lines it lacks appended, none rewritten
         fs.writeFileSync(file, '*\n');
         runSteps(w, [{ op: 'root-ignore', path: root }]);
-        assert.strictEqual(fs.readFileSync(file, 'utf8'), '*\n!.gitignore\n!mcp-headers.js\n');
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n');
         // a folder holding the user's own files: only the key file, the record, the list and the sign-in folder, never *
         const named = path.join(w.project, 'tools');
         fs.mkdirSync(named, { recursive: true });
@@ -1100,7 +1100,7 @@ test('a new root gets root-ignore with GITIGNORE before any other step', () => {
         assert.strictEqual(r.p.steps[0].op, 'root-ignore');
         const root = path.join(w.project, '.preferred-tools');
         assert.strictEqual(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), require('../scripts/roots.js').GITIGNORE);
-        assert.match(r.text, /^1\. ok {5}wrote .*\.gitignore \(\*, !\.gitignore, !mcp-headers\.js\)$/m);
+        assert.match(r.text, /^1\. ok {5}wrote .*\.gitignore \(\*, !\.gitignore, !mcp-headers\.js, !mcp-bridge\.js, !serena-context\.yml\)$/m);
     }
     finally { w.clean(); }
 });
@@ -1465,4 +1465,34 @@ test('a Claude-side rewrite keeps Cursor\'s moved pin and its added env pair', (
         assert.ok(!('cursorEntry' in JSON.parse(fs.readFileSync(file, 'utf8')).servers.find((x) => x.name === 'docs')));
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('write-serena-context writes an absent and a lower file, keeps a higher or edited one', () => {
+    const w = world();
+    try
+    {
+        const src = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'serena-context.yml'), 'utf8');
+        const root = path.join(w.project, '.preferred-tools');
+        const dest = path.join(root, 'serena-context.yml');
+        const step = { op: 'write-serena-context', path: root };
+        let r = runSteps(w, [step]);
+        assert.strictEqual(r.report.failed, null, r.text);
+        assert.strictEqual(fs.readFileSync(dest, 'utf8'), src);
+        assert.ok(r.text.includes(`wrote ${dest} (context 1)`), r.text);
+        assert.ok(!fs.existsSync(path.join(root, 'package.json')), 'a YAML file needs no package.json');
+        fs.writeFileSync(dest, src.replace(/^# preferred-tools serena-context \d+/, '# preferred-tools serena-context 0'));
+        r = runSteps(w, [step]);
+        assert.strictEqual(fs.readFileSync(dest, 'utf8'), src);
+        assert.ok(r.text.includes(`rewrote ${dest} (context 0 -> 1)`), r.text);
+        const edited = `${src}# mine\n`;
+        fs.writeFileSync(dest, edited);
+        r = runSteps(w, [step]);
+        assert.strictEqual(fs.readFileSync(dest, 'utf8'), edited);
+        const newer = src.replace(/^# preferred-tools serena-context \d+/, '# preferred-tools serena-context 2');
+        fs.writeFileSync(dest, newer);
+        r = runSteps(w, [step]);
+        assert.strictEqual(fs.readFileSync(dest, 'utf8'), newer);
+        assert.ok(r.text.includes(`serena-context.yml in ${root} is newer than this plugin - update preferred-tools`), r.text);
+    }
+    finally { w.clean(); }
 });

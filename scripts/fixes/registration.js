@@ -210,6 +210,35 @@ function serenaTelemetryFix(entry)
     return { ...entry, env: { ...(entry.env || {}), SERENA_USAGE_REPORTING: 'false' } };
 }
 
+// ---- serena-context (0.5.0, D7) --------------------------------------------------------------------------------------
+// A managed serena whose --context is not the context file in its family's root: 0.4.x ran Serena's own claude-code
+// context, whose instructions name Claude Code's tools. The fix points it at <root>/serena-context.yml; fix.js plans the
+// file's write before the replace.
+function serenaContextDetect(ctx)
+{
+    const r = roots.resolve(ctx.inv, null, { project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog }).roots;
+    return eachReg(ctx, 'serena-context', (reg) =>
+    {
+        const root = r[roots.familyOf(reg.scope)];
+        if (!root) return null;
+        const want = E.pathFor(ctx.platform).join(root, roots.FILES.serenaContext);
+        const args = reg.entry.args || [];
+        const i = args.indexOf('--context');
+        const now = i >= 0 ? args[i + 1] : null;
+        if (now === want) return null;
+        return C.finding('serena-context', reg, `serena runs with ${now ? `the context ${now}` : 'no --context'} - this plugin's ${want} gives it code navigation only, for Claude Code and Cursor`, { want, roots: r });
+    });
+}
+
+function serenaContextFix(entry, f)
+{
+    const args = [...(entry.args || [])];
+    const i = args.indexOf('--context');
+    if (i >= 0 && i + 1 < args.length) args[i + 1] = f.want;
+    else args.push('--context', f.want);
+    return { ...entry, args };
+}
+
 // ---- token-sync -----------------------------------------------------------------------------------------------------
 // A local or user registration of a stdio token route whose key no filled name in its stdio chain holds (spec D3, D7):
 // the key changed in the key file since, or the registration still holds the ${VAR} 0.1.x left. Compared in this process;
@@ -292,5 +321,5 @@ module.exports = {
     windowsMcpOneDetect,
     serenaWindowsHomeDetect, serenaWindowsHomeFix, uvxPythonDetect, uvxPythonFix, windowsArmPythonDetect, windowsArmPythonFix,
     windowsNpxCmdDetect, windowsNpxCmdFix, playwrightWebmcpDetect, playwrightWebmcpFix, appiumSdkEnvDetect, appiumSdkEnvFix,
-    serenaTelemetryDetect, serenaTelemetryFix, tokenSyncDetect, tokenSyncFix, androidSdk, javaHome,
+    serenaTelemetryDetect, serenaTelemetryFix, serenaContextDetect, serenaContextFix, tokenSyncDetect, tokenSyncFix, androidSdk, javaHome,
 };

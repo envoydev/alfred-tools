@@ -35,17 +35,20 @@ function ctxFor({ platform = 'darwin', arch = 'x64', registrations = [], plugins
 }
 
 // a fresh entry the way the catalog builds it, for the row's local route
-function fresh(rowId, platform = 'darwin', arch = 'x64', scope = 'local')
+function fresh(rowId, platform = 'darwin', arch = 'x64', scope = 'local', where = {})
 {
     const win = platform === 'win32';
     const r = row(rowId);
-    const ctx = { platform, arch, env: {}, home: win ? 'C:\\Users\\dev' : '/home/dev', project: win ? 'C:\\proj' : '/proj' };
+    const ctx = { platform, arch, env: {}, home: win ? 'C:\\Users\\dev' : '/home/dev', project: win ? 'C:\\proj' : '/proj', ...where };
     const rootStr = r.locations ? (win ? 'C:\\Users\\dev\\.pt\\x' : '/home/dev/.pt/x') : undefined;
     return E.buildEntry(r, 'local', { rootStr, scope, token: false }, ctx, catalog.rules);
 }
 
 const ids = (list) => list.map((f) => f.id);
-const detect = (ctx, only) => fix.detectAll(ctx, { only });
+// a synthetic /proj never holds the serena-context.yml an install writes beside serena's entry (tests/plan.test.js and
+// tests/apply.test.js prove that write): its helper-missing finding is left out here, and only here
+const synthetic = (f) => f.id === 'helper-missing' && f.shipped === 'serenaContext' && /^(?:\/proj|C:\\proj)[\\/]/.test(f.path);
+const detect = (ctx, only) => { const d = fix.detectAll(ctx, { only }); return { ...d, found: d.found.filter((f) => !synthetic(f)) }; };
 
 // ---- the catalog is wired ------------------------------------------------------------------------------------------
 
@@ -91,7 +94,7 @@ test('a fresh entry from the catalog is clean on every OS - no detector fires on
 test('serena-windows-home: slashes keep the folder, a space needs another one, a relative path resolves against the project', () =>
 {
     const homes = (ctx) => detect(ctx).found.filter((f) => f.id === 'serena-windows-home');
-    const mk = (home, extra = {}, opts = {}) => ctxFor({ platform: 'win32', registrations: [reg('serena', { command: 'uvx', args: ['--python', '3.13'], env: { SERENA_HOME: home, ...extra } }, opts)], ...opts.ctx });
+    const mk = (home, extra = {}, opts = {}) => ctxFor({ platform: 'win32', registrations: [reg('serena', { command: 'uvx', args: ['--python', '3.13', '--context', 'C:\\proj\\.preferred-tools\\serena-context.yml'], env: { SERENA_HOME: home, ...extra } }, opts)], ...opts.ctx });
     // slashes only
     let [f] = homes(mk('C:/Users/dev/.serena'));
     assert.strictEqual(f.id, 'serena-windows-home');
@@ -119,7 +122,7 @@ test('serena-windows-home: slashes keep the folder, a space needs another one, a
     assert.deepStrictEqual(homes(mk('${USERPROFILE}/.serena', {}, { scope: 'project' })), []);
     // not Windows, or no SERENA_HOME at all: nothing
     assert.deepStrictEqual(detect(ctxFor({ platform: 'darwin', registrations: [reg('serena', { command: 'uvx', args: [], env: { SERENA_HOME: 'C:/x' } })] })).found.filter((x) => x.id === 'serena-windows-home'), []);
-    assert.deepStrictEqual(detect(ctxFor({ platform: 'win32', registrations: [reg('serena', { command: 'uvx', args: ['--python', '3.13'], env: { SERENA_USAGE_REPORTING: 'false' } })] })).found, []);
+    assert.deepStrictEqual(detect(ctxFor({ platform: 'win32', registrations: [reg('serena', { command: 'uvx', args: ['--python', '3.13'], env: { SERENA_USAGE_REPORTING: 'false' } })] })).found.filter((x) => x.id === 'serena-windows-home'), []);
 });
 
 test('serena-windows-home: no SERENA_HOME is serena\'s default <profile>\\.serena - found on a profile with a space, never on one without', () =>
@@ -652,8 +655,10 @@ test('apply: two fixes on one registration are ONE replace, from the entry as re
     const w = world();
     try
     {
-        // the entry as the installer writes it on this machine, so the same two fixes apply on every OS
-        const entry = fresh('serena', process.platform, process.arch);
+        // the entry as the installer writes it on this machine, so the same two fixes apply on every OS - with its
+        // context file in the global root, as the install leaves it
+        const entry = fresh('serena', process.platform, process.arch, 'user', { project: w.project, home: w.home });
+        put(path.join(w.home, '.preferred-tools', 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
         const theirs = {
             command: 'uvx',
             args: entry.args.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python').map((a) => (a === 'serena-agent@2.1.0' ? 'serena-agent@2.0.0' : a)).concat(['--verbose']),
@@ -1038,7 +1043,7 @@ test('root-ignore covers a project or global root inside a git work tree: append
         const l = logged();
         const res = fix.applyFixes(ctxOf(w), ['root-ignore'], { log: l.log });
         assert.strictEqual(res.failed, null, l.text());
-        assert.strictEqual(fsx.readFileSync(path.join(ptRoot(w), '.gitignore'), 'utf8'), '*\n!.gitignore\n!mcp-headers.js\n', 'appended, never rewritten');
+        assert.strictEqual(fsx.readFileSync(path.join(ptRoot(w), '.gitignore'), 'utf8'), rootsLib.GITIGNORE, 'appended, never rewritten');
         assert.strictEqual(fsx.readFileSync(path.join(homeRoot(w), '.gitignore'), 'utf8'), rootsLib.GITIGNORE);
         assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), 'mcp-headers.js')), false);
         assert.strictEqual(rootsLib.gitIgnores(path.join(homeRoot(w), '.mcps-secrets')), true);
@@ -1611,8 +1616,9 @@ test('the file pass runs after the registration pass, detects on what it wrote, 
     const w = world();
     try
     {
-        // uvx-python fires on it: no python request
-        const entry = fresh('serena', process.platform, process.arch);
+        // uvx-python fires on it: no python request (its context file in place, as the install leaves it)
+        const entry = fresh('serena', process.platform, process.arch, 'local', { project: w.project, home: w.home });
+        put(path.join(w.project, '.preferred-tools', 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
         seed(w, 'serena', 'local', { ...entry, args: entry.args.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python') });
         const l = logged();
         const res = fix.applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
@@ -1702,4 +1708,132 @@ test('read-guard never opens a file in mcp-remote-v1 or .mcps-secrets', () =>
         assert.deepStrictEqual(opened.filter((p) => p.includes('mcp-remote-v1') || p.endsWith('.mcps-secrets')), []);
     }
     finally { undo.forEach((u) => u()); w.clean(); }
+});
+
+// ---- 0.5.0: serena navigation only (spec D7) ---------------------------------------------------------------------------
+const SERENA_OLD = (home) => ({ command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20T23:59:59Z', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server', '--context', 'claude-code', '--enable-web-dashboard', 'false', '--project-from-cwd', '--agent-interface', 'tools'], env: { SERENA_USAGE_REPORTING: 'false', SERENA_HOME: home } });
+const ctxArg = (entry) => entry.args[entry.args.indexOf('--context') + 1];
+
+test('serena-context rewrites --context and writes the file first', () =>
+{
+    const w = world();
+    try
+    {
+        seed(w, 'serena', 'local', SERENA_OLD(path.join(ptRoot(w), 'serena')));
+        const found = fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-context');
+        assert.deepStrictEqual(found.map((f) => [f.name, f.scope]), [['serena', 'local']]);
+        const l = logged();
+        const res = fix.applyFixes(ctxOf(w), ['serena-context'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.strictEqual(res.failed, null, l.text());
+        const want = path.join(ptRoot(w), 'serena-context.yml');
+        assert.strictEqual(ctxArg(localEntry(w, 'serena')), want);
+        assert.strictEqual(fsx.readFileSync(want, 'utf8'), rootsLib.shippedSource('serenaContext'));
+        assert.ok(l.text().indexOf(`wrote ${want}`) < l.text().indexOf('rewrote \'serena\''), 'the file is written before the registration');
+        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-context'), []);
+    }
+    finally { w.clean(); }
+});
+
+test('helper-missing covers serena\'s context file', () =>
+{
+    const w = world();
+    try
+    {
+        const want = path.join(ptRoot(w), 'serena-context.yml');
+        const e = SERENA_OLD(path.join(ptRoot(w), 'serena'));
+        e.args[e.args.indexOf('claude-code')] = want;
+        seed(w, 'serena', 'local', e);
+        const found = fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'helper-missing');
+        assert.deepStrictEqual(found.map((f) => f.name), [want]);
+        const l = logged();
+        assert.strictEqual(fix.applyFixes(ctxOf(w), ['helper-missing'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(fsx.readFileSync(want, 'utf8'), rootsLib.shippedSource('serenaContext'));
+        assert.ok(!fsx.existsSync(path.join(ptRoot(w), 'package.json')), 'a YAML file needs no package.json');
+        // a lower one is helper-stale
+        fsx.writeFileSync(want, rootsLib.shippedSource('serenaContext').replace(/^# preferred-tools serena-context \d+/, '# preferred-tools serena-context 0'));
+        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'helper-stale').map((f) => f.name), [want]);
+    }
+    finally { w.clean(); }
+});
+
+test('serena-base-modes: Apply all found runs the op and the finding is gone', () =>
+{
+    const w = world();
+    try
+    {
+        const home = path.join(ptRoot(w), 'serena');
+        const e = SERENA_OLD(home);
+        e.args[e.args.indexOf('claude-code')] = path.join(ptRoot(w), 'serena-context.yml');
+        put(path.join(ptRoot(w), 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
+        seed(w, 'serena', 'local', e);
+        const cfg = path.join(home, 'serena_config.yml');
+        put(cfg, 'base_modes:\n- interactive\n- editing\nauth_secret: s3cr3t-fixture\n');
+        const found = fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-base-modes');
+        assert.deepStrictEqual(found.map((f) => [f.name, f.kind]), [[cfg, 'file']]);
+        assert.ok(!shownOf(fix.detectAll(ctxOf(w))).includes('s3cr3t'));
+        const l = logged();
+        const res = fix.applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.strictEqual(res.failed, null, l.text());
+        assert.strictEqual(fsx.readFileSync(cfg, 'utf8'), 'base_modes: []\nauth_secret: s3cr3t-fixture\n');
+        assert.ok(!l.text().includes('s3cr3t'));
+        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-base-modes'), []);
+        // an alfred-code 2.x home is never found
+        const alfredHome = path.join(w.project, '.alfred', 'serena', 'home');
+        put(path.join(alfredHome, 'serena_config.yml'), 'base_modes:\n- editing\n');
+        seed(w, 'serena2', 'project', { ...e, env: { ...e.env, SERENA_HOME: alfredHome } });
+        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-base-modes'), []);
+    }
+    finally { w.clean(); }
+});
+
+test('a 0.4.x root .gitignore gains !mcp-bridge.js and !serena-context.yml from the plan and from fix root-ignore', () =>
+{
+    const w = world();
+    try
+    {
+        gitInit(w.project);
+        const OLD = '*\n!.gitignore\n!mcp-headers.js\n';
+        put(path.join(ptRoot(w), '.gitignore'), OLD);
+        put(path.join(ptRoot(w), 'preferred-tools.json.0.4.bak'), '{}\n');
+        put(path.join(ptRoot(w), '.mcps-secrets'), '');
+        seed(w, 'serena', 'project', SERENA_OLD(path.join(ptRoot(w), 'serena')));
+        // the plan that writes serena-context.yml plans the root's .gitignore first
+        const l = logged();
+        assert.strictEqual(fix.applyFixes(ctxOf(w), ['serena-context'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(fsx.readFileSync(path.join(ptRoot(w), '.gitignore'), 'utf8'), `${OLD}!mcp-bridge.js\n!serena-context.yml\n`);
+        assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), 'serena-context.yml')), false);
+        assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), 'mcp-bridge.js')), false);
+        assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), '.mcps-secrets')), true, 'the key file stays ignored');
+        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'root-ignore'), []);
+        // fix root-ignore on its own: a root holding mcp-bridge.js under the old .gitignore
+        fsx.writeFileSync(path.join(ptRoot(w), '.gitignore'), OLD);
+        put(path.join(ptRoot(w), 'mcp-bridge.js'), rootsLib.shippedSource('bridge'));
+        const [f] = fix.detectAll(ctxOf(w)).found.filter((x) => x.id === 'root-ignore');
+        assert.ok(f && !f.blocked, JSON.stringify(f));
+        assert.match(f.found, /mcp-bridge\.js/);
+        assert.match(f.found, /serena-context\.yml/);
+        const l2 = logged();
+        assert.strictEqual(fix.applyFixes(ctxOf(w), ['root-ignore'], { tmp: path.join(w.dir, 'tmp2'), log: l2.log }).failed, null, l2.text());
+        assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), 'mcp-bridge.js')), false);
+        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((x) => x.id === 'root-ignore'), []);
+    }
+    finally { w.clean(); }
+});
+
+test('a root of the user\'s own files gets the advice to add !<file> for the bridge', () =>
+{
+    const w = world();
+    try
+    {
+        gitInit(w.project);
+        put(path.join(ptRoot(w), '.gitignore'), '*\n!.gitignore\n!mcp-headers.js\n');
+        put(path.join(ptRoot(w), 'notes.txt'), 'mine\n');
+        put(path.join(ptRoot(w), 'mcp-bridge.js'), rootsLib.shippedSource('bridge'));
+        put(path.join(ptRoot(w), '.mcps-secrets'), '');
+        seed(w, 'serena', 'project', SERENA_OLD(path.join(ptRoot(w), 'serena')));
+        const [f] = fix.detectAll(ctxOf(w)).found.filter((x) => x.id === 'root-ignore');
+        assert.ok(f, 'found');
+        assert.match(f.blocked || f.note || '', new RegExp(`add !mcp-bridge\\.js at the end of ${path.join(ptRoot(w), '.gitignore').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    }
+    finally { w.clean(); }
 });

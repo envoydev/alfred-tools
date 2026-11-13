@@ -1,0 +1,20 @@
+# preferred-tools serena-context 1
+description: preferred-tools - code navigation for Claude Code and Cursor
+prompt: |
+  Serena gives you language-server navigation for this project: what a file defines, where a symbol is declared,
+  what implements it and what references it. Reading, editing, text search and shell commands stay with your own
+  built-in tools.
+
+  For code symbols:
+  - Who uses a symbol: find_referencing_symbols - never a text search.
+  - Where a symbol is defined or declared: find_declaration, or find_symbol by name.
+  - What implements an interface or an abstract member: find_implementations.
+  - What a file contains: get_symbols_overview before reading it, then find_symbol with include_body for the one
+    symbol you need instead of the whole file.
+  A text search is for discovery only - strings, configuration keys, and XAML or HTML markup the language server
+  does not index. Follow it up with Serena for any code symbol it finds.
+  'I already know the path' or 'one text search is faster' is not a reason to skip Serena for references.
+fixed_tools: [initial_instructions, get_symbols_overview, find_symbol, find_referencing_symbols, find_implementations, find_declaration]
+tool_description_overrides: {}
+single_project: true
+structured_tool_output: false

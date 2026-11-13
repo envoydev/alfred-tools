@@ -13,11 +13,13 @@ const account = require('./account.js');
 const E = require('./entries.js');
 const helper = require('./mcp-headers.js');
 
-const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json', signIns: 'mcp-remote-v1' };
+const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json', signIns: 'mcp-remote-v1', serenaContext: 'serena-context.yml' };
 // The read guard (0.5.0, ruling 13): two deny rules in Claude Code's settings that keep a session's Read tool out of
 // mcp-remote's sign-in tokens and the key file, wherever a root sits.
 const READ_GUARD = { signIns: 'Read(//**/mcp-remote-v1/**)', secrets: 'Read(//**/.mcps-secrets)' };
-const GITIGNORE = '*\n!.gitignore\n!mcp-headers.js\n';
+const GITIGNORE = '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n';
+// serena's context file (spec D7): its number, on its first line
+const SERENA_CONTEXT_VERSION = 1;
 const MAP_VERSION = 1;
 
 const pathFor = (platform) => (platform === 'win32' ? path.win32 : path.posix);
@@ -313,7 +315,7 @@ function gitIgnores(file)
 // would ignore the helper a project-scope server needs committed (`helper`; `excluded` when a .gitignore above excludes
 // the root folder itself, which no line inside it can undo). -> null | { reason, secrets?, helper?, excluded? }; null
 // outside a work tree or with no git.
-function ignoreGap(root, family)
+function ignoreGap(root, family, { writes = [] } = {})
 {
     const secrets = path.join(root, FILES.secrets);
     const s = gitIgnores(secrets);
@@ -322,15 +324,21 @@ function ignoreGap(root, family)
     // mcp-remote's sign-in folder (0.5.0, D5): its tokens are as private as the key file
     const signIns = gitIgnores(path.join(root, FILES.signIns, 'tokens')) === false;
     const file = path.join(root, FILES.helper);
-    if (family === 'project' && path.basename(root) !== '.alfred' && gitIgnores(file) === true)
-        return { reason: `git ignores ${file}, which a project-scope server needs committed`, helper: true, excluded: gitIgnores(root) === true, ...(signIns ? { signIns: true } : {}) };
-    return signIns ? { reason: `git would commit ${path.join(root, FILES.signIns)}/`, signIns: true } : null;
+    const projectRoot = family === 'project' && path.basename(root) !== '.alfred';
+    // the bridge and serena's context (0.5.0, D7): a committed entry names them too, when they are there or this plan
+    // writes them
+    const unignore = projectRoot ? [FILES.bridge, FILES.serenaContext].filter((f) => (writes.includes(f) || fs.existsSync(path.join(root, f))) && gitIgnores(path.join(root, f)) === true) : [];
+    const extra = { ...(signIns ? { signIns: true } : {}), ...(unignore.length ? { unignore } : {}) };
+    if (projectRoot && gitIgnores(file) === true)
+        return { reason: `git ignores ${file}, which a project-scope server needs committed`, helper: true, excluded: gitIgnores(root) === true, ...extra };
+    const why = [signIns && `git would commit ${path.join(root, FILES.signIns)}/`, unignore.length && `git ignores ${unignore.map((f) => path.join(root, f)).join(' and ')}, which a committed entry names`].filter(Boolean);
+    return why.length ? { reason: why.join('; '), ...extra, ...(unignore.length ? { excluded: gitIgnores(root) === true } : {}) } : null;
 }
 
-// The two files this plugin copies into a root: the key helper (D4) and the URL bridge (0.4.0). Each carries its version
-// on its first line.
-const SHIPPED_LINE = { helper: /^\/\/ preferred-tools mcp-headers (\d+)\s*$/, bridge: /^\/\/ preferred-tools mcp-bridge (\d+)\s*$/ };
-const shippedVersion = (kind) => (kind === 'bridge' ? require('./mcp-bridge.js').BRIDGE_VERSION : helper.HELPER_VERSION);
+// The files this plugin copies into a root: the key helper (D4), the URL bridge (0.4.0) and serena's context (0.5.0,
+// D7). Each carries its version on its first line.
+const SHIPPED_LINE = { helper: /^\/\/ preferred-tools mcp-headers (\d+)\s*$/, bridge: /^\/\/ preferred-tools mcp-bridge (\d+)\s*$/, serenaContext: /^# preferred-tools serena-context (\d+)\s*$/ };
+const shippedVersion = (kind) => (kind === 'bridge' ? require('./mcp-bridge.js').BRIDGE_VERSION : kind === 'serenaContext' ? SERENA_CONTEXT_VERSION : helper.HELPER_VERSION);
 const shippedText = {};
 const shippedSource = (kind) => (shippedText[kind] = shippedText[kind] || fs.readFileSync(path.join(__dirname, FILES[kind]), 'utf8'));
 const helperSource = () => shippedSource('helper');
@@ -355,7 +363,7 @@ function shippedState(kind, file, exists = (p) => fs.existsSync(p))
 const helperState = (file, exists) => shippedState('helper', file, exists);
 
 module.exports = {
-    READ_GUARD,
+    READ_GUARD, SERENA_CONTEXT_VERSION,
     FILES, GITIGNORE, familyOf, readMap, mapKey, withRoot, inUse, options, resolveNamed, resolve, rootStrFor,
     helperPathOf, registrationRoots, standard, pointsIntoRoot, absOf, recordKey, recordFamily, ownOnly, gitIgnores, ignoreGap, helperState, helperSource,
     shippedState, shippedSource,

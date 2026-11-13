@@ -9,7 +9,7 @@
 //   node update.js --apply <id,id | all> [--project <dir>] [--tmp <dir>]  changes the install
 //
 // An offer id is `plugin:<plugin id>~<scope>`, `mcp:<name>~<scope>`, `lsp:typescript`, `helper:<file>` (an
-// mcp-headers.js copy older than this plugin's), `bridge:<file>`, or `upgrade:<fix id>:<name>~<scope>` (`:<path>` for a
+// mcp-headers.js copy older than this plugin's), `bridge:<file>`, `context:<file>` (serena's, 0.5.0), or `upgrade:<fix id>:<name>~<scope>` (`:<path>` for a
 // file or folder finding); `all` is every offer whose newer version is known. A plugin whose
 // marketplace lists no version cannot be compared ahead: it is listed as unchecked, and `claude plugin update` is the
 // check, run only on its own id.
@@ -222,9 +222,13 @@ function helperOffers(ctx, out)
     const rctx = { project: ctx.project, home: require('./account.js').homeDir(ctx.env), platform: ctx.inv.os, catalog: ctx.catalog };
     const dirs = new Set(['project', 'global'].map((f) => ctx.inv.roots && ctx.inv.roots[f] && ctx.inv.roots[f].path).filter(Boolean));
     const bridgeDirs = new Set();
+    const contextDirs = new Set();
     for (const r of ctx.inv.registrations || [])
     {
         if (!r.rowId || r.own || r.alfredRetired || r.choice === 'own' || r.scope === 'inherited') continue;
+        // serena's context file (0.5.0, D7), where the entry names this plugin's
+        const at = E.contextArgAt(r.entry);
+        if (at >= 0) contextDirs.add(P.dirname(roots.absOf(r.entry.args[at], rctx)));
         const named = roots.helperPathOf(r.entry && r.entry.headersHelper);
         if (named) dirs.add(P.dirname(roots.absOf(named, rctx)));
         // a bridge's folder holds its bridge and the helper it requires (0.4.0)
@@ -237,12 +241,14 @@ function helperOffers(ctx, out)
         const name = roots.FILES[kind];
         const file = P.join(root, name);
         const { state, number } = roots.shippedState(kind, file);
-        if (state === 'lower') out.offers.push({ kind, id: `${kind}:${file}`, file, root, from: String(number), to: String(version), group: 'helper', label: `${name} in ${root}` });
+        const idKind = kind === 'serenaContext' ? 'context' : kind;
+        if (state === 'lower') out.offers.push({ kind: idKind, id: `${idKind}:${file}`, file, root, from: String(number), to: String(version), group: 'helper', label: `${name} in ${root}` });
         else if (state === 'higher') out.notes.push(`${name} in ${root} is newer than this plugin - update preferred-tools`);
         else if (state === 'edited') out.notes.push(`${name} in ${root} changed since preferred-tools wrote it - left; /preferred-tools:fix (helper-stale) rewrites it`);
     };
     for (const root of dirs) offer('helper', root, HELPER_VERSION);
     for (const root of bridgeDirs) offer('bridge', root, BRIDGE_VERSION);
+    for (const root of contextDirs) offer('serenaContext', root, roots.SERENA_CONTEXT_VERSION);
 }
 
 // ---- new ways to pass data (the user's ruling, 2026-11-12) ---------------------------------------------------------------
@@ -316,7 +322,7 @@ function render(out)
     table('Other plugins:', out.offers.filter((o) => o.kind === 'plugin' && o.group === 'other'));
     table('MCP servers (pin -> newest release at least 7 days old):', out.offers.filter((o) => o.kind === 'mcp' || o.kind === 'cursor-pin'));
     table('Language servers:', out.offers.filter((o) => o.kind === 'lsp'));
-    table('Key helpers:', out.offers.filter((o) => o.kind === 'helper' || o.kind === 'bridge'));
+    table('Key helpers:', out.offers.filter((o) => o.kind === 'helper' || o.kind === 'bridge' || o.kind === 'context'));
     const ups = out.offers.filter((o) => o.kind === 'upgrade');
     if (ups.length)
     {
@@ -451,11 +457,12 @@ function updateCursorPin(ctx, offer, tmp, log)
 function updateHelper(offer, log)
 {
     const roots = require('./roots.js');
-    const kind = offer.kind === 'bridge' ? 'bridge' : 'helper';
+    const kind = offer.kind === 'bridge' ? 'bridge' : offer.kind === 'context' ? 'serenaContext' : 'helper';
     const before = roots.shippedState(kind, offer.file);
     if (before.state !== 'lower') { log(`CHECK  ${offer.label}: now ${before.state} - left as it is`); return false; }
     fs.writeFileSync(offer.file, roots.shippedSource(kind));
-    const pkg = require('./apply.js').ensureCommonjs(path.dirname(offer.file));
+    // a YAML file needs no package.json
+    const pkg = kind === 'serenaContext' ? {} : require('./apply.js').ensureCommonjs(path.dirname(offer.file));
     if (pkg.note) log(`note   ${pkg.note}`);
     const ok = roots.shippedState(kind, offer.file).state === 'same';
     log(`${ok ? 'ok    ' : 'CHECK '} ${offer.label}: ${kind} ${offer.from} -> ${offer.to} (read back)`);
@@ -496,7 +503,7 @@ function applyUpdates(ctx, ids, out, { tmp, log = console.log } = {})
     for (const c of chosen)
     {
         if (typeof c === 'string') { res.unknown.push(c); log(`NOT OFFERED ${c}: nothing is behind under that id`); continue; }
-        const ok = c.kind === 'plugin' ? updatePlugin(ctx, c, log) : c.kind === 'lsp' ? updateLsp(ctx, c, log) : c.kind === 'helper' || c.kind === 'bridge' ? updateHelper(c, log) : c.kind === 'upgrade' ? updateUpgrade(ctx, c, dir, log) : c.kind === 'cursor-pin' ? updateCursorPin(ctx, c, dir, log) : updateMcp(ctx, c, dir, log);
+        const ok = c.kind === 'plugin' ? updatePlugin(ctx, c, log) : c.kind === 'lsp' ? updateLsp(ctx, c, log) : c.kind === 'helper' || c.kind === 'bridge' || c.kind === 'context' ? updateHelper(c, log) : c.kind === 'upgrade' ? updateUpgrade(ctx, c, dir, log) : c.kind === 'cursor-pin' ? updateCursorPin(ctx, c, dir, log) : updateMcp(ctx, c, dir, log);
         (ok ? res.applied : res.failed).push(c.id);
     }
     // every rewritten server in one fetch file, for fetch.js in the background (apply.js says why); a server rewritten

@@ -141,7 +141,7 @@ const appendLines = (text, lines) => { const eol = eolOf(text); return `${text}$
 
 // What the plugin itself writes in a root (R13): a folder holding anything else holds the user's files. package.json is the
 // one ensureCommonjs writes (0.4.0 Ruling 12).
-const PLUGIN_FILES = new Set(['.gitignore', 'package.json', ...Object.values(roots.FILES), ['.', 'secrets'].join('')]);
+const PLUGIN_FILES = new Set(['.gitignore', 'package.json', ...Object.values(roots.FILES), ['.', 'secrets'].join(''), `${roots.FILES.record}.0.4.bak`, `${roots.FILES.list}.bak`]);
 function pluginWritten(root, name)
 {
     if (PLUGIN_FILES.has(name)) return true;
@@ -202,13 +202,19 @@ function ensureCommonjs(root)
 
 // A file this plugin copies into a root - <root>/mcp-headers.js (D4) or <root>/mcp-bridge.js (0.4.0): copied when absent
 // or its number is lower; a hand edit or a newer copy is left. package.json beside it either way.
-const SHIPPED = { helper: { word: 'helper', version: () => require('./mcp-headers.js').HELPER_VERSION }, bridge: { word: 'bridge', version: () => require('./mcp-bridge.js').BRIDGE_VERSION } };
+const SHIPPED = {
+    helper: { word: 'helper', version: () => require('./mcp-headers.js').HELPER_VERSION },
+    bridge: { word: 'bridge', version: () => require('./mcp-bridge.js').BRIDGE_VERSION },
+    // serena's context (D7): YAML, so no package.json beside it
+    serenaContext: { word: 'context', version: () => roots.SERENA_CONTEXT_VERSION, plain: true },
+};
 function writeShipped(kind, root)
 {
     const file = path.join(root, roots.FILES[kind]);
     const { state, number } = roots.shippedState(kind, file);
-    const { word, version } = SHIPPED[kind];
-    const pkg = ensureCommonjs(root);
+    const { word, version, plain } = SHIPPED[kind];
+    if (plain) fs.mkdirSync(root, { recursive: true });
+    const pkg = plain ? { wrote: false, note: null } : ensureCommonjs(root);
     const withPkg = (detail) => ({ ok: true, detail: [detail, pkg.wrote ? `wrote ${path.join(root, 'package.json')} (type commonjs)` : null, pkg.note].filter(Boolean).join('; ') });
     if (state === 'same') return withPkg(`${file} is up to date - left as it is`);
     if (state === 'higher') return withPkg(`${roots.FILES[kind]} in ${root} is newer than this plugin - update preferred-tools`);
@@ -338,6 +344,35 @@ function denyRead(file, rules)
     return { ok: true, detail: `added ${lack.join(' and ')} to permissions.deny in ${file}` };
 }
 
+// A root's own file or folder to its new root (configure's root change, D1): renamed when the new one is absent; a file the
+// new root holds with the same bytes is the same file, so the old one goes; anything else stops the apply with both named,
+// before any registration moves. A folder (mcp-remote-v1, whose files are sign-in tokens) is renamed whole, never opened.
+function moveRootFile(from, to)
+{
+    let st;
+    try { st = fs.lstatSync(from); } catch { return { ok: true, detail: `${from}: not there - nothing to move` }; }
+    let there = null;
+    try { there = fs.lstatSync(to); } catch { /* absent */ }
+    if (!there)
+    {
+        fs.mkdirSync(path.dirname(to), { recursive: true });
+        try { fs.renameSync(from, to); }
+        catch (err)
+        {
+            if (err.code !== 'EXDEV') throw err;
+            fs.cpSync(from, to, { recursive: true });
+            fs.rmSync(from, { recursive: true, force: true });
+        }
+        return { ok: true, detail: `moved ${from} to ${to}` };
+    }
+    if (st.isFile() && there.isFile() && fs.readFileSync(from).equals(fs.readFileSync(to)))
+    {
+        fs.rmSync(from);
+        return { ok: true, detail: `${to} holds the same as ${from} - removed ${from}` };
+    }
+    return { ok: false, detail: `${to} is there already and is not ${from} - nothing moved; move or remove one of them, then run the command again` };
+}
+
 // A 0.4.x preferred-tools.json whose entries the list holds now: moved aside as <file>.0.4.bak, or .0.4.bak.2 and on
 // when an earlier backup is there - never over one, so the record always leaves and list-import finds nothing next run.
 function retireRecord(file)
@@ -394,6 +429,9 @@ function runStep(step, ctx)
         case 'root-ignore': return rootIgnore(step.path);
         case 'write-helper': return writeHelper(step.path);
         case 'write-bridge': return writeShipped('bridge', step.path);
+        case 'write-serena-context': return writeShipped('serenaContext', step.path);
+        case 'move-root-file': return moveRootFile(step.from, step.to);
+        case 'serena-base-modes': { const r = require('./serena-config.js').emptyBaseModes(step.file); return { ok: true, detail: r.detail }; }
         case 'ensure-key-name': return ensureKeyName(step.file, step.names);
         case 'list-write': return listWrite(step, ctx);
         case 'retire-record': return retireRecord(step.file);

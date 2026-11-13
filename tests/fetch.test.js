@@ -256,3 +256,27 @@ test('fetch fetches mcp-remote for a shared sign-in entry and does not start it'
     }
     finally { w.clean(); }
 });
+
+test('fetch empties base_modes after serena\'s first start', async () => {
+    const w = world();
+    try
+    {
+        const home = path.join(w.project, '.preferred-tools', 'serena');
+        const S = { command: 'uvx', args: [...UVX.args], env: { SERENA_HOME: home } };
+        writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { serena: S } });
+        const file = fetchLib.writeJob(path.join(w.dir, 'tmp', 'fetch.json'), fetchLib.job(w.project, [{ ...E.fetchStep('serena', S, 'serena'), scope: 'project' }], []));
+        const lines = [];
+        const res = await fetchLib.run(JSON.parse(fs.readFileSync(file, 'utf8')), {
+            env: w.env,
+            runFetch: () => ({ status: 0 }),
+            // serena writes its config at its first start
+            start: async (entry) => { fs.mkdirSync(entry.env.SERENA_HOME, { recursive: true }); fs.writeFileSync(path.join(entry.env.SERENA_HOME, 'serena_config.yml'), 'base_modes:\n- interactive\n- editing\nauth_secret: s3cr3t-fixture\n'); return { ok: true, ms: 1 }; },
+            log: (...a) => lines.push(a.join(' ')),
+        });
+        assert.deepStrictEqual(res.started, ['serena']);
+        assert.strictEqual(fs.readFileSync(path.join(home, 'serena_config.yml'), 'utf8'), 'base_modes: []\nauth_secret: s3cr3t-fixture\n');
+        assert.ok(lines.some((l) => l.includes(`set base_modes: [] in ${path.join(home, 'serena_config.yml')}`)), lines.join('\n'));
+        assert.ok(!lines.join('\n').includes('s3cr3t'));
+    }
+    finally { w.clean(); }
+});

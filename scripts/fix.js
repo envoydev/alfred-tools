@@ -184,6 +184,8 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
         if (deepEqual(entry, reg.entry)) continue;
         steps.push({ op: 'mcp-replace', name: reg.name, scope: reg.scope, entry, old: reg.entry, row: reg.rowId, route: reg.route, why: `${list.map((x) => x.id).join(' + ')}: rewrite '${reg.name}' from the registration as read` });
         if (entry.headersHelper && !reg.entry.headersHelper && fileCtx.roots) useRoots(fileCtx, reg.scope, { helper: true, keyFile: null, keyName: null, data: null });
+        // serena's context file (D7) is written into its root before the registration names it
+        if (E.contextArgAt(entry) >= 0 && fileCtx.roots) useRoots(fileCtx, reg.scope, { serenaContext: true });
     }
     res.steps = steps.length;
     if (steps.length)

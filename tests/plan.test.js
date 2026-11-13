@@ -410,8 +410,8 @@ test('a rename starts from the registration as read: an updated pin and a user-a
     r.entry.env.MY_VAR = 'kept';
     const p = plan(inv(MAC, { registrations: [r] }), changeOf(r, { name: 'shop-serena' }), opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
-    assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'mcp-move', 'list-write', 'record-root'], 'its data folder sits in the project root');
-    const s = p.steps[1];
+    assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'write-serena-context', 'mcp-move', 'list-write', 'record-root'], 'its data folder and its context file sit in the project root');
+    const s = p.steps.find((x) => x.op === 'mcp-move');
     assert.deepStrictEqual([s.from, s.to], [{ name: 'serena', scope: 'local' }, { name: 'shop-serena', scope: 'local' }]);
     assert.ok(s.entry.args.includes('serena-agent@2.4.0'), 'the updated pin is not downgraded to the catalog pin');
     assert.deepStrictEqual(s.entry.args.slice(-2), ['--user-added', 'yes']);
@@ -2711,4 +2711,90 @@ test('remove drops the entry from the list', { skip: POSIX_FIXTURE }, () => {
     const lw = p.steps.find((s) => s.op === 'list-write');
     assert.deepStrictEqual([lw.file, lw.upserts, lw.drops], [PFILE, [], [{ key: 'mcp:c7~local', after: 'mcp:c7~local' }]]);
     assert.ok(render(p).includes(`   removes ${PFILE}  (no server is listed)`), render(p));
+});
+
+// ---- serena: navigation only (spec D7) ---------------------------------------------------------------------------------
+test('serena args at project, local and global scope: --context absolute, --project-from-cwd kept', () => {
+    for (const [scope, root] of [['project', '/work/shop/.preferred-tools'], ['local', '/work/shop/.preferred-tools'], ['user', '/h/.preferred-tools']])
+    {
+        const p = plan(inv(MAC), pickOne('serena', { scope }), opts('/h'));
+        assert.deepStrictEqual(p.errors, [], scope);
+        const args = addStep(p).entry.args;
+        assert.strictEqual(args[args.indexOf('--context') + 1], `${root}/serena-context.yml`, scope);
+        assert.ok(args.includes('--project-from-cwd'), scope);
+        assert.ok(!args.includes('claude-code'), scope);
+        assert.deepStrictEqual(p.steps.filter((s) => s.op === 'write-serena-context').map((s) => s.path), [root], scope);
+    }
+    // a server that is not serena plans no context file
+    assert.deepStrictEqual(plan(inv(MAC), pickOne('memory', { scope: 'project' }), opts('/h')).steps.filter((s) => s.op === 'write-serena-context'), []);
+});
+
+// ---- configure's root change moves the root's files (spec D1, D5, D7) --------------------------------------------------
+function rootMoveWorld(t, pick)
+{
+    const fs = require('node:fs');
+    const { world } = require('./helpers.js');
+    const { apply } = require('../scripts/apply.js');
+    const w = world();
+    t.after(() => w.clean());
+    const data = path.join(w.dir, 'data');
+    const old = path.join(w.project, '.preferred-tools');
+    const fresh = path.join(w.project, 'tools');
+    const inv = () => inventoryLib.buildInventory({ project: w.project, env: w.env, data });
+    const install = plan(inv(), { clients: ['claude', 'cursor'], picks: pick }, { home: w.home, env: w.env });
+    assert.deepStrictEqual(install.errors, []);
+    assert.strictEqual(apply(install, { env: w.env, tmp: path.join(w.dir, 'tmp1'), data, log: () => {} }).failed, null);
+    const change = () => plan(inv(), { rootChange: ['project'], roots: { project: { id: 'named', path: 'tools' } } }, { home: w.home, env: w.env });
+    const run = (p, tmp) => { const lines = []; const r = apply(p, { env: w.env, tmp: path.join(w.dir, tmp), data, log: (...a) => lines.push(a.join(' ')) }); return { r, text: lines.join('\n') }; };
+    const local = (name) => require('../scripts/account.js').readAccount(w.env, w.project).local[name];
+    const cursor = () => JSON.parse(fs.readFileSync(path.join(w.project, '.cursor', 'mcp.json'), 'utf8')).mcpServers;
+    return { w, fs, old, fresh, change, run, local, cursor };
+}
+
+test('a root change moves mcps.json and serena-context.yml, rewrites --context and writes Cursor', (t) => {
+    const m = rootMoveWorld(t, { serena: { scope: 'local' } });
+    const ctxOf = (e) => e.args[e.args.indexOf('--context') + 1];
+    assert.strictEqual(ctxOf(m.local('serena')), path.join(m.old, 'serena-context.yml'));
+    const listBefore = m.fs.readFileSync(path.join(m.old, 'mcps.json'), 'utf8');
+    const p = m.change();
+    assert.deepStrictEqual(p.errors, []);
+    const ops = p.steps.map((s) => s.op);
+    assert.deepStrictEqual(p.steps.filter((s) => s.op === 'move-root-file').map((s) => [s.from, s.to]), [
+        [path.join(m.old, 'mcps.json'), path.join(m.fresh, 'mcps.json')],
+        [path.join(m.old, 'serena-context.yml'), path.join(m.fresh, 'serena-context.yml')],
+    ]);
+    assert.ok(ops.lastIndexOf('root-ignore') < ops.indexOf('move-root-file') && ops.lastIndexOf('move-root-file') < ops.indexOf('mcp-replace'), ops.join());
+    const { r, text } = m.run(p, 'tmp2');
+    assert.strictEqual(r.failed, null, text);
+    assert.ok(!m.fs.existsSync(path.join(m.old, 'mcps.json')) && !m.fs.existsSync(path.join(m.old, 'serena-context.yml')));
+    assert.ok(m.fs.existsSync(path.join(m.fresh, 'serena-context.yml')));
+    assert.deepStrictEqual(JSON.parse(m.fs.readFileSync(path.join(m.fresh, 'mcps.json'), 'utf8')).servers.map((s) => s.name), JSON.parse(listBefore).servers.map((s) => s.name));
+    assert.strictEqual(ctxOf(m.local('serena')), path.join(m.fresh, 'serena-context.yml'));
+    assert.strictEqual(ctxOf(m.cursor().serena), path.join(m.fresh, 'serena-context.yml'), 'Cursor follows');
+});
+
+test('a root change stops before any registration when the new root holds another mcps.json', (t) => {
+    const m = rootMoveWorld(t, { serena: { scope: 'local' } });
+    m.fs.mkdirSync(m.fresh, { recursive: true });
+    m.fs.writeFileSync(path.join(m.fresh, 'mcps.json'), '{"version":1,"servers":[],"own":[{"name":"x","scope":"local","choice":"own"}]}\n');
+    const before = JSON.stringify(m.local('serena'));
+    const { r, text } = m.run(m.change(), 'tmp2');
+    assert.ok(r.failed, text);
+    assert.match(text, new RegExp(`${path.join(m.fresh, 'mcps.json').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    assert.strictEqual(JSON.stringify(m.local('serena')), before, 'no registration moved');
+    assert.ok(m.fs.existsSync(path.join(m.old, 'mcps.json')), 'the old list stays');
+});
+
+test('a root move renames mcp-remote-v1 and rewrites MCP_REMOTE_CONFIG_DIR in both apps', (t) => {
+    const m = rootMoveWorld(t, { atlassian: { route: 'remote', scope: 'local', token: false } });
+    assert.strictEqual(m.local('atlassian').env.MCP_REMOTE_CONFIG_DIR, m.old);
+    m.fs.mkdirSync(path.join(m.old, 'mcp-remote-v1'), { recursive: true });
+    m.fs.writeFileSync(path.join(m.old, 'mcp-remote-v1', 'tokens.json'), '{}');
+    const p = m.change();
+    assert.ok(p.steps.some((s) => s.op === 'move-root-file' && s.from === path.join(m.old, 'mcp-remote-v1')), p.steps.map((s) => s.op).join());
+    const { r, text } = m.run(p, 'tmp2');
+    assert.strictEqual(r.failed, null, text);
+    assert.ok(m.fs.existsSync(path.join(m.fresh, 'mcp-remote-v1', 'tokens.json')) && !m.fs.existsSync(path.join(m.old, 'mcp-remote-v1')));
+    assert.strictEqual(m.local('atlassian').env.MCP_REMOTE_CONFIG_DIR, m.fresh);
+    assert.strictEqual(m.cursor().atlassian.env.MCP_REMOTE_CONFIG_DIR, m.fresh);
 });

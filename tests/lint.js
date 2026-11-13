@@ -150,6 +150,25 @@ const BRIDGE_SHA256 = {
     need(pattern && String(bridge.CREDENTIAL) === pattern[1], `${rel}: CREDENTIAL is not keys.js credentialName's pattern`);
 }
 
+// serena's context file (0.5.0, D7): its number on the first line, and each number's bytes pinned like the helper's
+const SERENA_CONTEXT_SHA256 = {
+    1: '5bd9211269e4440ac32b1240b5aa66a277ba16cd84f754adedd58f278ccf5321', // 0.5.0
+};
+{
+    const rel = path.join('scripts', 'serena-context.yml');
+    const text = fs.readFileSync(path.join(root, rel), 'utf8');
+    const first = /^# preferred-tools serena-context (\d+)\r?$/.exec(text.split('\n')[0]);
+    need(first, `${rel}: the first line must be '# preferred-tools serena-context <version>'`);
+    if (first)
+    {
+        const version = Number(first[1]);
+        const want = require(path.join(root, 'scripts', 'roots.js')).SERENA_CONTEXT_VERSION;
+        need(version === want, `${rel}: the first line says version ${version}, SERENA_CONTEXT_VERSION is ${want}`);
+        const digest = require(path.join(root, 'scripts', 'mcp-headers.js')).digestOf(text);
+        need(digest === SERENA_CONTEXT_SHA256[version], `${rel}: SHA-256 ${digest} is not SERENA_CONTEXT_SHA256[${version}] in tests/lint.js - a changed context bumps its version`);
+    }
+}
+
 // Public repo: no absolute local path and no home directory in anything shipped.
 const scan = (rel) => {
     const p = path.join(root, rel);
