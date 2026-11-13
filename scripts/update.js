@@ -262,7 +262,9 @@ function upgradeOffers(ctx, out)
             continue;
         }
         const machine = f.kind !== 'registration';
-        out.offers.push({ kind: 'upgrade', id: `upgrade:${f.id}:${machine ? f.name : `${f.name}~${f.scope}`}`, fix: f.id, fixKind: f.kind, name: f.name, scope: machine ? null : f.scope, found: f.found, group: 'upgrade', label });
+        // list-import also names its family, its list and the servers it brings in, for the Cursor offer below
+        const imports = f.id === 'list-import' ? { family: f.family, listFile: f.name, servers: f.servers } : {};
+        out.offers.push({ kind: 'upgrade', id: `upgrade:${f.id}:${machine ? f.name : `${f.name}~${f.scope}`}`, fix: f.id, fixKind: f.kind, name: f.name, scope: machine ? null : f.scope, found: f.found, group: 'upgrade', label, ...imports });
     }
 }
 
@@ -297,7 +299,8 @@ async function check(ctx)
 
 // Update's Cursor offer (spec D9): once per root, when Cursor is on this machine, its list sets no server up for Cursor
 // and its 'Not now' is not recorded. Each names the servers set up for Claude Code, and the names Cursor's file already
-// holds as its own (asked before the offer is taken).
+// holds as its own (asked before the offer is taken). A 0.4.x root has no list until this update's list-import writes
+// it, so the servers that import brings in count too, and the offer then `needs` that import picked in the same run.
 function cursorOffers(ctx, out)
 {
     const home = account.homeDir(ctx.env);
@@ -306,13 +309,18 @@ function cursorOffers(ctx, out)
     for (const family of ['project', 'global'])
     {
         const l = ctx.inv.lists && ctx.inv.lists[family];
-        if (!l || l.note || l.old || l.cursorOffer === 'declined') continue;
-        const servers = (l.servers || []).filter((x) => (x.clients || ['claude']).includes('claude'));
-        if (!servers.length || (l.servers || []).some((x) => (x.clients || []).includes('cursor'))) continue;
-        const root = path.dirname(l.file);
+        if (l && (l.note || l.cursorOffer === 'declined')) continue;
+        const listed = l && !l.old ? (l.servers || []) : [];
+        if (listed.some((x) => (x.clients || []).includes('cursor'))) continue;
+        const pending = out.offers.find((o) => o.fix === 'list-import' && o.family === family);
+        const brought = ((pending && pending.servers) || []).filter((x) => !listed.some((y) => y.name === x.name && y.scope === x.scope));
+        const servers = [...listed, ...brought].filter((x) => (x.clients || ['claude']).includes('claude'));
+        const file = l && !l.old ? l.file : pending ? pending.listFile : null;
+        if (!servers.length || !file) continue;
+        const root = path.dirname(file);
         const upserts = servers.map((x) => ({ server: { ...x, clients: ['claude', 'cursor'] }, cursorFile: null }));
         const taken = planLists.takenNames(ctx.inv, { ...cctx, catalog: ctx.catalog }, upserts);
-        out.cursorOffers.push({ id: `cursor-offer:${root}`, family, root, list: l.file, servers: servers.map((x) => ({ name: x.name, scope: x.scope })), taken });
+        out.cursorOffers.push({ id: `cursor-offer:${root}`, family, root, list: file, servers: servers.map((x) => ({ name: x.name, scope: x.scope })), taken, needs: brought.length ? pending.id : null });
     }
 }
 
@@ -570,6 +578,7 @@ function applyUpdates(ctx, ids, out, { tmp, log = console.log, input = {} } = {}
     {
         const answer = input[o.id];
         if (answer === undefined) continue;
+        if (o.needs && !res.applied.includes(o.needs)) { log(`NOT OFFERED ${o.id}: its servers join the list through ${o.needs}, which was not picked - run /preferred-tools:update again`); continue; }
         const ok = answer === 'set' || answer === 'declined' ? applyCursorOffer(ctx, o, answer, input, dir, log) : (log(`FAILED ${o.id}: '${answer}' is not set or declined`), false);
         (ok ? res.applied : res.failed).push(o.id);
     }

@@ -1057,6 +1057,31 @@ test('cursor-offer: two options, Set them up recommended and first; Not now is k
     finally { w.clean(); }
 });
 
+test('cursor-offer from 0.4.x: a root with no list yet is offered in the same update, after list-import, and needs it picked', async () =>
+{
+    const w = world();
+    try
+    {
+        install(w, { clients: ['claude'], picks: { serena: { scope: 'local' } } });
+        fs.rmSync(projectList(w)); // 0.4.x wrote no list
+        fs.mkdirSync(path.join(w.home, '.cursor'), { recursive: true });
+        const root = path.join(w.project, '.preferred-tools');
+        const q = JSON.parse((await run(w, ['--questions', '--no-refresh'])).text);
+        assert.deepStrictEqual(q.cursorOffers.map((x) => x.id), [`cursor-offer:${root}`], 'asked in the first update');
+        // without the import picked, the offer has no list to write: left, and said so
+        const skipped = await run(w, ['--apply', 'none', '--input', `cursor-offer:${root}=set`]);
+        assert.strictEqual(skipped.code, 0, skipped.text);
+        assert.match(skipped.text, new RegExp(`NOT OFFERED cursor-offer:${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: its servers join the list through upgrade:list-import:.*, which was not picked - run /preferred-tools:update again`));
+        assert.ok(!fs.existsSync(projectCursor(w)) && !fs.existsSync(projectList(w)));
+        // picked with the import: the list is written, then Cursor
+        const a = await run(w, ['--apply', 'all', '--input', `cursor-offer:${root}=set`, '--no-refresh']);
+        assert.strictEqual(a.code, 0, a.text);
+        assert.deepStrictEqual(listed0(w, 'serena').clients, ['claude', 'cursor']);
+        assert.deepStrictEqual(cursorCopy(w, 'serena'), listed0(w, 'serena').entry);
+    }
+    finally { w.clean(); }
+});
+
 test('update\'s Cursor offer asks for a taken name, and an unanswered one is left Claude Code only', async () =>
 {
     const w = world();
