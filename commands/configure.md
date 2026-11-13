@@ -131,6 +131,10 @@ What each step is, and where its answer goes:
     settings. Record a route under `"routes": {<key>: ...}`, a scope under `"scopes"`, a name under `"names"` ('Keep
     ...' is `"keep"`) and the API key under `"tokens": {<key>: true | false}` in `picks.json`, and each answer that
     changes something in the target's `change` entry, mapped by the table below.
+  - Last, 'Set up <name> for which apps?' - what its list entry has now first. Its answer is
+    `next.answers.<question id>.<label>`: `["claude", "cursor"]` or `["claude"]`, written as `"clients"` in the
+    target's `change` entry when it is not `current.clients`. A change of the apps alone makes no `claude` call: the
+    plan writes the list and Cursor's file only.
 - **A plugin**: one question, its scope.
 
 The key name is `next.answers.<question id>.<label>` - the name it uses now first, 'A name you choose' asked next - and
@@ -164,6 +168,7 @@ below, and leave out every answer that keeps what the tool has now - the plan re
 | key name, when it is not first | top-level `"keyNames": {<key>: "<NAME>"}` |
 | URL name, when it is not first | top-level `"urlNames": {<key>: {"<VAR>": "<NAME>"}}` |
 | settings, pairs asked next | top-level `"settings": {<key>: {"<NAME>": "<value>"}}` |
+| apps, when it is not `current.clients` | `"clients": ["claude", "cursor"]` / `["claude"]` |
 
 A name must match `^[A-Za-z_][A-Za-z0-9_]*$`, and a setting whose name looks like a credential is refused by the plan - a
 key goes in `.mcps-secrets` and is picked as the key's name, never typed here.
@@ -297,8 +302,9 @@ Remove what?
 is two options). Each option's description is the exact command, from which you read the target:
 `claude mcp remove <name> -s <scope>` is `{"kind": "mcp", "name": ..., "scope": ...}`, and
 `claude plugin uninstall <id> --scope <scope>` is `{"kind": "plugin", "id": ..., "scope": ...}`. 'None of these', or
-nothing picked: say so and stop. Put them in `answers.json` under `"remove"` and go to step 7. Data folders and key
-files stay where they are; the plan names them.
+nothing picked: say so and stop. Put them in `answers.json` under `"remove"` and go to step 7. A server removed leaves
+both apps: its list entry goes, and so does its entry in Cursor's file when it was set up for Cursor. Data folders and
+key files stay where they are; the plan names them.
 
 ## claude-hud
 

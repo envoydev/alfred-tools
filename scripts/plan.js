@@ -35,6 +35,7 @@ const { templateNames } = require('./mcp-bridge.js');
 const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const mcpOrder = require('./mcp-order.js');
 const planLists = require('./plan-lists.js');
+const mcpsList = require('./mcps-list.js');
 const { installedOf, keyOf, targetOf, fromHere, otherWindowsMcp } = require('./inventory.js');
 const { blockingStdio, deepEqual } = require('./json-file.js');
 
@@ -562,15 +563,28 @@ function plan(inv, answers, opts = {})
     // a bridge's URL names (0.4.0): { <row id or target key>: { <VAR>: <NAME> } }
     const urlNamesOf = answers.urlNames || {};
     const connectors = opts.connectors === undefined ? null : opts.connectors;
+    // which apps (spec D3): install's one answer for every pick, configure's per target. The registration steps a pick
+    // plans carry it into the list (ctx.clientsFor); a configure change of the apps alone is a list entry, no CLI call.
+    ctx.clientsFor = new Map();
+    ctx.clientsOnly = [];
+    const tagClients = (from, clients) =>
+    {
+        const keys = out.steps.slice(from).filter((x) => ['mcp-add', 'mcp-replace', 'mcp-move'].includes(x.op)).map(mcpsList.regKey).filter(Boolean);
+        for (const k of keys) ctx.clientsFor.set(k, clients);
+        return keys.length;
+    };
+    if (answers.clients && Object.keys(answers.picks || {}).length) out.apps = answers.clients;
     for (const [rowId, pick] of Object.entries(answers.picks || {}))
     {
         const row = catalog.byId.get(rowId);
         if (!row) { out.errors.push(`unknown tool '${rowId}'`); continue; }
+        const from = out.steps.length;
         if (row.kind === 'mcp')
         {
             planMcp(row, { ...(pick || {}), keyName: keyNames[rowId], settings: settings[rowId], urlNames: urlNamesOf[rowId] || (pick || {}).urlNames }, inv, ctx, catalog, out);
             // a claude.ai connector or an enabled plugin's server provides it too (spec F4)
             for (const a of asks.alsoProvided(inv, rowId, connectors)) out.notes.push(existing.twoServers(row.label, a.owner));
+            if (answers.clients) tagClients(from, answers.clients);
         }
         else planPlugin(row, pick || {}, inv, ctx, catalog, out);
     }
@@ -579,7 +593,10 @@ function plan(inv, answers, opts = {})
     for (const [key, pick] of Object.entries(answers.change || {}))
     {
         if (leftNow.has(key)) { out.unchanged.push(`${key}: left on its own`); continue; }
-        planChange(key, { ...(pick || {}), keyName: keyNames[key], settings: settings[key], urlNames: urlNamesOf[key] || (pick || {}).urlNames }, inv, ctx, catalog, out);
+        const { clients, ...rest } = pick || {};
+        const from = out.steps.length;
+        planChange(key, { ...rest, keyName: keyNames[key], settings: settings[key], urlNames: urlNamesOf[key] || rest.urlNames }, inv, ctx, catalog, out);
+        if (clients && !tagClients(from, clients)) ctx.clientsOnly.push({ key, clients });
     }
     for (const r of answers.remove || []) planRemove(r, inv, catalog, out);
     planExisting(answers, inv, ctx, catalog, out, connectors);
@@ -741,6 +758,13 @@ function render(p)
     const P = E.pathFor(p.os);
     if (p.errors.length) lines.push('Cannot plan:', ...p.errors.map((e) => `  ! ${e}`), '');
     if (!p.steps.length && !p.errors.length) lines.push('Nothing to do: every answer already matches what is installed - no claude call, no file written.');
+    // which apps (spec D3): stated once, with the Cursor file each scope writes
+    if (p.apps)
+    {
+        lines.push(`Apps: ${p.apps.includes('cursor') ? 'Claude Code and Cursor' : 'Claude Code'}`);
+        for (const s of p.steps.filter((x) => x.op === 'cursor-write')) lines.push(`  ${s.family === 'global' ? 'Global scope' : 'Project and Local scope'} in Cursor: ${s.file}`);
+        lines.push('');
+    }
     p.steps.forEach((s, i) =>
     {
         lines.push(`${i + 1}. ${s.why || s.op}`);

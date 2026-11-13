@@ -614,6 +614,29 @@ function cursorNameQuestion({ file, name, sameRow })
     };
 }
 
+// The apps a server is set up for (spec D3). Install asks once a run, 'Claude Code and Cursor' recommended when Cursor is
+// found; configure asks per server, what the list entry has now first. -> { question, answers: { <label>: clients } }
+const CLIENTS = [
+    { label: 'Claude Code and Cursor', description: "each server is written to .mcp.json or your account and to Cursor's mcp.json", value: ['claude', 'cursor'] },
+    { label: 'Claude Code only', description: 'Cursor is left as it is', value: ['claude'] },
+];
+function clientsOptions(firstIsCursor)
+{
+    const opts = (firstIsCursor ? CLIENTS : [...CLIENTS].reverse()).map((o, i) => ({ ...o, label: `${o.label}${i === 0 ? REC : ''}` }));
+    return { options: opts.map(({ label, description }) => ({ label, description })), answers: Object.fromEntries(opts.map((o) => [o.label, o.value])) };
+}
+function clientsQuestion(found)
+{
+    const { options, answers } = clientsOptions(found);
+    return { question: { id: 'clients', header: 'Apps', multiSelect: false, question: 'Which apps should these servers be set up for?', options }, answers };
+}
+// configure: `current` is the list entry's clients (none listed yet: Claude Code only)
+function targetClientsQuestion(key, name, current)
+{
+    const { options, answers } = clientsOptions((current || []).includes('cursor'));
+    return { question: { id: `clients-${key}`, header: 'Apps', multiSelect: false, question: `Set up ${name} for which apps?`, options }, answers };
+}
+
 // The fixed asks of the commands, here so a test holds them to the limits.
 const STATIC = {
     menu: { id: 'menu', header: 'Action', multiSelect: false, question: 'What do you want to change?', options: [
@@ -651,6 +674,7 @@ const STATIC = {
         { label: `Apply recommended${REC}`, description: 'adds only the missing keys; every value already chosen is kept' },
         { label: 'Apply and replace differing', description: 'adds the missing keys and overwrites the differing ones' },
         { label: 'Skip', description: 'nothing changes' } ] }),
+    clients: clientsQuestion(true).question,
     // a STATIC function whose labels hold placeholders names them, so tests/ask-blocks.js fills the block's own
     'cursor-name-taken': Object.assign((file, name) => cursorNameQuestion({ file, name, sameRow: true }).question, { placeholders: ['<file>', '<name>'] }),
 };
@@ -729,6 +753,8 @@ function all(inv, picks, catalog, { env = {}, home = null, connectors = null } =
     // the roots answered so far (the walk asks them before a tool's folder), else the recommended ones
     ctx.roots = roots.resolve(inv, picks && picks.roots, { ...ctx, catalog }).roots;
     out.change = changeQuestions(inv, catalog, ctx);
+    // which apps (spec D3): asked once an install run, when it picked something
+    out.clients = picks && (picks.rows || []).length ? clientsQuestion(require('./cursor-mcp.js').cursorFound(ctx, inv)) : null;
     const routes = (picks && picks.routes) || {};
     const scopes = (picks && picks.scopes) || {};
     const names = (picks && picks.names) || {};
@@ -762,9 +788,11 @@ function all(inv, picks, catalog, { env = {}, home = null, connectors = null } =
         if (!row) { out.targets[key] = { error: `'${key}' is not a catalog tool installed here` }; continue; }
         // required here, not at the top: plan.js requires this file
         const current = t.kind === 'mcp' ? E.currentOf(row, t.item) : { scope: t.item.scope };
+        const listed = t.kind === 'mcp' ? listedOf(inv, t.item) : null;
         out.targets[key] = {
-            row: row.id, kind: t.kind, current: { name: t.item.name || t.item.id, scope: t.item.scope, route: current.route || null },
+            row: row.id, kind: t.kind, current: { name: t.item.name || t.item.id, scope: t.item.scope, route: current.route || null, ...(t.kind === 'mcp' ? { clients: listed ? listed.clients : ['claude'] } : {}) },
             route: t.kind === 'mcp' ? routeQuestion(row, current.route) : null,
+            ...(t.kind === 'mcp' ? { clients: targetClientsQuestion(key, t.item.name, listed ? listed.clients : ['claude']) } : {}),
             ...toolAsk(row, inv, { route: routes[key], scope: scopes[key], name: names[key], current, ctx, catalog }),
         };
     }
@@ -819,6 +847,13 @@ function all(inv, picks, catalog, { env = {}, home = null, connectors = null } =
         if (st) out.settings[key] = st;
     }
     return out;
+}
+
+// The family list's entry for a registration, or null.
+function listedOf(inv, item)
+{
+    const l = inv.lists && inv.lists[roots.familyOf(item.scope)];
+    return l && !l.note ? (l.servers || []).find((x) => x.name === item.name && x.scope === item.scope) || null : null;
 }
 
 // ---- the walk (spec F1) ---------------------------------------------------------------------------------------------
@@ -896,9 +931,11 @@ function next(inv, picks, catalog, opts = {}, built = null)
         const rows = pickOrder(catalog, picks.rows);
         if (rows.length)
         {
+            // which apps, first after the picks (spec D3)
+            if (b.clients) add('clients', null, [b.clients.question], { clients: b.clients.answers });
             const one = rows.length === 1 ? STATIC.settingsOne(catalog.byId.get(rows[0]).label) : STATIC.settings;
             add('settings', null, [one], { settings: { [one.options[0].label]: 'recommended', [one.options[1].label]: 'each' } });
-            if (picks.walk === 'recommended') return done.has('settings') ? { id: 'done' } : steps[0];
+            if (picks.walk === 'recommended') return steps.find((s) => !done.has(s.id)) || { id: 'done' };
         }
         const asked = new Set(Object.keys(picks.roots || {}));
         for (const id of rows)
@@ -936,8 +973,9 @@ function next(inv, picks, catalog, opts = {}, built = null)
             if ((picks.existing || {})[key] === 'own') continue;
         }
         toolSteps(t, key, null);
+        if (t.clients) add(`${key}:clients`, key, [t.clients.question], { [t.clients.question.id]: t.clients.answers });
     }
     return steps.find((s) => !done.has(s.id)) || { id: 'done' };
 }
 
-module.exports = { PARENT_HELPER_IN_CHILD, cursorNameQuestion, ownStep, next, SCOPE_TEXT, keyNameQuestion, urlNameQuestions, settingsQuestion, liveReader, heldKey, SCOPE_LABEL, scopeOfLabel, needsRoot, rootFamilies, rootQuestion, REC, recommendedScope, keyStateOf, keyToSend, alsoProvided, pickQuestions, changeQuestions, routeQuestion, toolQuestions, toolAsk, scopeQuestion, nameQuestion, locationQuestion, removeQuestions, packed, STATIC, all, chunk, scopesFor };
+module.exports = { PARENT_HELPER_IN_CHILD, cursorNameQuestion, clientsQuestion, targetClientsQuestion, ownStep, next, SCOPE_TEXT, keyNameQuestion, urlNameQuestions, settingsQuestion, liveReader, heldKey, SCOPE_LABEL, scopeOfLabel, needsRoot, rootFamilies, rootQuestion, REC, recommendedScope, keyStateOf, keyToSend, alsoProvided, pickQuestions, changeQuestions, routeQuestion, toolQuestions, toolAsk, scopeQuestion, nameQuestion, locationQuestion, removeQuestions, packed, STATIC, all, chunk, scopesFor };

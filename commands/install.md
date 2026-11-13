@@ -94,13 +94,15 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" --questions <tmp>/inventory.json <t
 
 Its `next` is the one step to ask now: `next.id`, the `next.tool` it belongs to, `next.call` (the questions, as one
 `AskUserQuestion`), `next.answers` (what a label picked stands for) and, sometimes, `next.set`. The first step is the
-settings question; every step after it is one tool's, and one tool's steps come one after another - its route, scope and
-name, the root folder its scope uses when this run has not asked it yet, its location and extras, then its key name and
-settings. Until `next.id` is `done`:
+apps question, the second the settings question; every step after them is one tool's, and one tool's steps come one
+after another - its route, scope and name, the root folder its scope uses when this run has not asked it yet, its
+location and extras, then its key name and settings. Until `next.id` is `done`:
 
 1. Ask `next.call` as printed. When `next.call` is empty, make no call.
 2. Record each answer in `<tmp>/picks.json` and in the tool's entry in `<tmp>/answers.json` (`{"picks": {<id>: {...}}}`),
    mapped by the table below. In `picks.json`:
+   - the apps answer is `next.answers.clients.<label>`, written as `"clients"` in `picks.json` and at the top of
+     `answers.json`: `["claude", "cursor"]` or `["claude"]`;
    - the settings answer is `next.answers.settings.<label>`, written as `"walk"`: `"recommended"` or `"each"`;
    - a route goes under `"routes": {<id>: ...}`, a scope under `"scopes"`, a name under `"names"` ('Keep ...' is
      `"keep"`) and the API key under `"tokens": {<id>: true | false}`;
@@ -109,6 +111,15 @@ settings. Until `next.id` is `done`:
 3. Write `next.set` when it is there: `{"location": ...}` is the one folder left for the tool, written as its
    `"location"` in `answers.json`.
 4. Append `next.id` to `"done"` in `picks.json` and run the command again.
+
+The apps question is asked once a run, for every tool picked; 'Claude Code and Cursor' is recommended when Cursor is
+found (`~/.cursor`, `cursor-agent` or `cursor` on `PATH`, or a server already set up for it):
+
+```ask clients
+Which apps should these servers be set up for?
+- 'Claude Code and Cursor (Recommended)' - each server is written to .mcp.json or your account and to Cursor's mcp.json
+- 'Claude Code only' - Cursor is left as it is
+```
 
 'Use the recommended settings' ends the walk at once: every pick is `{}` in the answers file, and the recommended route,
 scope, roots, key names and settings are used. A tool already installed in this project is never offered, so either
@@ -194,6 +205,8 @@ that can run code. Two kinds of step may read new:
   the servers left on their own; the file is removed once it lists none.
 - `reorders <project>/.mcp.json (no value changes)` - after a change at Project scope, the catalog servers in the user's
   order, the user's own servers after them; no entry is changed.
+- `Apps:` and `writes <project>/.cursor/mcp.json` or `~/.cursor/mcp.json` - the apps answered, and Cursor's file for
+  each scope written; the user's own entries in it are kept as they are.
 
 Exit 1 means the plan has errors; show them and go back to the ask that causes them, never around them. Add the audit
 and 'register anyway' lines from step 5.

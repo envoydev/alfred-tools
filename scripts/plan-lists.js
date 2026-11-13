@@ -107,9 +107,35 @@ function listSteps(inv, ctx, out, regSteps = [])
         const file = targets[fam] || (current(fam) && current(fam).file);
         if (!file) continue;
         const { entry: _entry, ...was } = prior || {};
-        const server = { ...was, name: to.name, scope: to.scope, row: s.row || was.row || null, route: s.route || was.route || null, clients: was.clients || ['claude'], entry: null, key: was.key === undefined ? null : was.key };
+        const clients = (ctx.clientsFor && ctx.clientsFor.get(after)) || was.clients || ['claude'];
+        const server = { ...was, name: to.name, scope: to.scope, row: s.row || was.row || null, route: s.route || was.route || null, clients, entry: null, key: was.key === undefined ? null : was.key };
         const keyFiles = keys.stdioChain({ scope: to.scope, projectRoot: ctx.roots && ctx.roots.project, globalRoot: ctx.roots && ctx.roots.global });
         at(file, fam).upserts.push({ server, after, cursorFile: null, ...(keyFiles.length ? { keyFiles } : {}) });
+        if (!found.has(file)) found.set(file, { rec: foundList(inv, file, P), family: fam });
+    }
+
+    // a configure change of the apps alone (spec D3): the list entry with its new clients, no registration step - the
+    // entry as listed, or the registration as read when the list does not hold it yet
+    for (const { key, clients } of ctx.clientsOnly || [])
+    {
+        const cut = key.lastIndexOf('~');
+        if (!key.startsWith('mcp:') || cut < 0) continue;
+        const name = key.slice(4, cut);
+        const scope = key.slice(cut + 1);
+        const fam = roots.familyOf(scope);
+        const cur = current(fam);
+        const prior = cur ? cur.servers.find((x) => lists.serverKey(x) === key) : null;
+        const file = prior ? cur.file : targets[fam] || (cur && cur.file);
+        if (!file) continue;
+        let server = prior ? { ...prior, clients } : null;
+        if (!server)
+        {
+            const reg = (inv.registrations || []).find((x) => x.name === name && x.scope === scope && x.rowId && !x.own);
+            const catalog = ctx.catalog || catalogLib.load();
+            if (!reg) continue;
+            server = lists.fromRegistration(reg, catalog.byId.get(reg.rowId), clients, keys.stdioChain({ scope, projectRoot: ctx.roots && ctx.roots.project, globalRoot: ctx.roots && ctx.roots.global }));
+        }
+        at(file, fam).upserts.push({ server, after: null, cursorFile: null });
         if (!found.has(file)) found.set(file, { rec: foundList(inv, file, P), family: fam });
     }
 
@@ -163,7 +189,7 @@ function listSteps(inv, ctx, out, regSteps = [])
     const retire = [];
     const answers = {};
     for (const family of ['project', 'global']) for (const e of (ctx.recordEntries && ctx.recordEntries[family]) || []) answers[roots.recordKey(e)] = e.choice;
-    const taken = new Set(regSteps.filter((x) => REG_OPS.includes(x.op)).flatMap((x) => [lists.regKey(x), x.op === 'mcp-move' && x.from ? lists.serverKey(x.from) : null]).filter(Boolean));
+    const taken = new Set([...regSteps.filter((x) => REG_OPS.includes(x.op)).flatMap((x) => [lists.regKey(x), x.op === 'mcp-move' && x.from ? lists.serverKey(x.from) : null]), ...(ctx.clientsOnly || []).map((c) => c.key)].filter(Boolean));
     for (const family of ['project', 'global'])
     {
         const l = inv.lists && inv.lists[family];

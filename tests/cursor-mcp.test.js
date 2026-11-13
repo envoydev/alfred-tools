@@ -151,6 +151,7 @@ test('cursor-mcp reports a read-back mismatch and stops the apply', (t) => {
 test('fileFor: the project\'s .cursor/mcp.json, or the home\'s', () => {
     assert.strictEqual(C.fileFor('project', { project: '/work/shop', env: { HOME: '/Users/me' }, platform: 'darwin' }), '/work/shop/.cursor/mcp.json');
     assert.strictEqual(C.fileFor('global', { project: '/work/shop', env: { HOME: '/Users/me' }, platform: 'darwin' }), '/Users/me/.cursor/mcp.json');
+    assert.strictEqual(C.fileFor('global', { project: '/work/shop', home: '/Users/plan', env: {}, platform: 'darwin' }), '/Users/plan/.cursor/mcp.json', 'the plan\'s home wins');
 });
 
 test('matchesRow matches context7\'s bridge copy to the context7 row and an unrelated bridge to none', () => {

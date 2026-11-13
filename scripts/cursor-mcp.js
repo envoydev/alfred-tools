@@ -18,7 +18,7 @@ const pathFor = (platform) => (platform === 'win32' ? path.win32 : path.posix);
 function fileFor(family, ctx)
 {
     const P = pathFor(ctx.platform);
-    return family === 'global' ? P.join(account.homeDir(ctx.env || process.env), '.cursor', 'mcp.json') : P.join(ctx.project, '.cursor', 'mcp.json');
+    return family === 'global' ? P.join(ctx.home || account.homeDir(ctx.env || process.env), '.cursor', 'mcp.json') : P.join(ctx.project, '.cursor', 'mcp.json');
 }
 
 // -> { state: 'absent' | 'ok' | 'symlink' | 'bad' | 'shape', doc, eol }
@@ -142,4 +142,18 @@ function cursorOf(file, marked, catalog)
     return { file, state: read.state, names: Object.keys(servers), entries };
 }
 
-module.exports = { fileFor, readCursor, refusal, managedSet, compose, cursorWrite, matchesRow, cursorOf };
+// Is Cursor on this machine (spec D3)? `~/.cursor` exists, `cursor-agent` or `cursor` is on PATH (with .exe or .cmd on
+// Windows), or a list already sets a server up for Cursor. Bare `agent` does not count: the name is too common.
+function cursorFound(ctx, inv)
+{
+    const P = pathFor(ctx.platform);
+    const env = ctx.env || {};
+    const home = ctx.home || account.homeDir(env);
+    if (home && fs.existsSync(P.join(home, '.cursor'))) return true;
+    const exts = ctx.platform === 'win32' ? ['.exe', '.cmd', ''] : [''];
+    const dirs = String(env.PATH || env.Path || '').split(ctx.platform === 'win32' ? ';' : ':').filter(Boolean);
+    for (const dir of dirs) for (const name of ['cursor-agent', 'cursor']) for (const ext of exts) if (fs.existsSync(P.join(dir, `${name}${ext}`))) return true;
+    return ['project', 'global'].some((f) => { const l = inv && inv.lists && inv.lists[f]; return Boolean(l) && (l.servers || []).some((x) => (x.clients || []).includes('cursor')); });
+}
+
+module.exports = { fileFor, readCursor, refusal, managedSet, compose, cursorWrite, matchesRow, cursorOf, cursorFound };
