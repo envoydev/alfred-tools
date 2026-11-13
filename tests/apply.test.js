@@ -1352,3 +1352,24 @@ test('a remove drops the list entry once the removal succeeded', () => {
     }
     finally { w.clean(); }
 });
+
+test('cursor-write runs after the registration steps and before order-mcp-json', () => {
+    const w = world();
+    try
+    {
+        const file = path.join(w.project, '.preferred-tools', 'mcps.json');
+        const cursorFile = path.join(w.project, '.cursor', 'mcp.json');
+        const r = runSteps(w, [
+            { op: 'mcp-add', name: 'a', scope: 'local', entry: memEntry('mcp-memory-service'), row: 'memory', route: 'local' },
+            { op: 'list-write', file, family: 'project', upserts: [{ ...upsert('a', 'local', { clients: ['claude', 'cursor'] }), cursorFile }], drops: [], own: null },
+            { op: 'cursor-write', file: cursorFile, family: 'project', lists: [{ file, scopes: ['local', 'project'] }], before: [], skip: [], replace: [] },
+            { op: 'order-mcp-json', file: path.join(w.project, '.mcp.json'), own: [] },
+        ]);
+        assert.strictEqual(r.report.failed, null, r.text);
+        const at = (re) => r.text.split('\n').findIndex((l) => re.test(l));
+        assert.ok(at(/added 'a'/) < at(/wrote .*\.cursor.mcp\.json/) && at(/wrote .*\.cursor.mcp\.json/) < at(/\.mcp\.json: not there/), r.text);
+        assert.deepStrictEqual(readJson(cursorFile).mcpServers.a, memEntry('mcp-memory-service'));
+        assert.deepStrictEqual(readJson(file).servers[0].clients, ['claude', 'cursor'], 'the cursor-write applied: cursor stays');
+    }
+    finally { w.clean(); }
+});

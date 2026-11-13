@@ -35,6 +35,7 @@ const tmpdir = require('./tmpdir.js');
 const roots = require('./roots.js');
 const mcpOrder = require('./mcp-order.js');
 const lists = require('./mcps-list.js');
+const cursorMcp = require('./cursor-mcp.js');
 
 const SCRIPTS = __dirname;
 const quote = (s) => (/^[A-Za-z0-9_\-./:=@,+]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`);
@@ -360,6 +361,7 @@ function runStep(step, ctx)
         case 'ensure-key-name': return ensureKeyName(step.file, step.names);
         case 'list-write': return listWrite(step, ctx);
         case 'retire-record': return retireRecord(step.file);
+        case 'cursor-write': return cursorMcp.cursorWrite(step, ctx);
         // never fails the apply: a warning, and the file as it was (spec F8)
         case 'order-mcp-json': return mcpOrder.orderFile(step.file, ctx.catalog, new Set(step.own || []));
         case 'record-root': return recordRoot(step, ctx.data);

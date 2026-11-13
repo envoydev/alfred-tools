@@ -1,0 +1,117 @@
+'use strict';
+// CURSOR'S FILES - <project>/.cursor/mcp.json and ~/.cursor/mcp.json, written from the lists (spec D2, 0.5.0). Cursor has
+// no CLI that adds a server, so this is the one writer of those files besides the user: it replaces only the names it
+// manages, keeps every other entry with its keys and values in their order, and refuses a file it does not recognise -
+// a symbolic link, text that is not JSON (comments and trailing commas included), or no mcpServers object - writing
+// nothing. A write goes through a temporary file and a rename, and is read back.
+const fs = require('node:fs');
+const path = require('node:path');
+const account = require('./account.js');
+const lists = require('./mcps-list.js');
+const { stripBom, deepEqual } = require('./json-file.js');
+
+const pathFor = (platform) => (platform === 'win32' ? path.win32 : path.posix);
+
+// The Cursor file of a scope family: the project's for project and local scope, the home's for user scope.
+function fileFor(family, ctx)
+{
+    const P = pathFor(ctx.platform);
+    return family === 'global' ? P.join(account.homeDir(ctx.env || process.env), '.cursor', 'mcp.json') : P.join(ctx.project, '.cursor', 'mcp.json');
+}
+
+// -> { state: 'absent' | 'ok' | 'symlink' | 'bad' | 'shape', doc, eol }
+function readCursor(file)
+{
+    let st;
+    try { st = fs.lstatSync(file); }
+    catch (err) { return err.code === 'ENOENT' || err.code === 'ENOTDIR' ? { state: 'absent', doc: { mcpServers: {} }, eol: '\n' } : { state: 'bad', doc: null, eol: '\n', error: err.code }; }
+    if (st.isSymbolicLink()) return { state: 'symlink', doc: null, eol: '\n' };
+    let text;
+    try { text = fs.readFileSync(file, 'utf8'); }
+    catch (err) { return { state: 'bad', doc: null, eol: '\n', error: err.code }; }
+    const eol = text.includes('\r\n') ? '\r\n' : '\n';
+    let doc;
+    try { doc = JSON.parse(stripBom(text)); }
+    catch { return { state: 'bad', doc: null, eol }; }
+    if (!doc || typeof doc !== 'object' || Array.isArray(doc) || !doc.mcpServers || typeof doc.mcpServers !== 'object' || Array.isArray(doc.mcpServers)) return { state: 'shape', doc, eol };
+    return { state: 'ok', doc, eol, text };
+}
+
+// Why a file is left as it is, or null when it can be written.
+function refusal(read)
+{
+    if (read.state === 'symlink') return 'is a symbolic link - preferred-tools writes no file through a link; replace it with the file itself';
+    if (read.state === 'bad') return read.error ? `cannot be read (${read.error})` : 'is not JSON (Cursor reads comments and trailing commas, preferred-tools does not) - remove them, then run the command again';
+    if (read.state === 'shape') return 'has no mcpServers object - not a file preferred-tools recognises';
+    return null;
+}
+
+// The servers this file holds from the lists: those set up for Cursor, the nearest list first. `lists`: [{ file,
+// scopes, servers }] - the family's own list (local and project scope; local wins one name) and, for a project, the
+// lists above it (project scope only). -> Map<name, { entry, scope, list, row }>
+function managedSet(sources)
+{
+    const out = new Map();
+    for (const src of sources)
+    {
+        const rank = (s) => (s.scope === 'local' ? 0 : 1);
+        const mine = (src.servers || []).filter((s) => (s.clients || []).includes('cursor') && (src.scopes || []).includes(s.scope)).sort((a, b) => rank(a) - rank(b));
+        for (const s of mine) if (!out.has(s.name)) out.set(s.name, { entry: s.cursorEntry || s.entry, scope: s.scope, list: src.file, row: s.row });
+    }
+    return out;
+}
+
+// The file's document with the managed servers in place: a name in `before` the set no longer holds goes, a `skip` name
+// keeps the file's own value, the managed names come first in catalog.order and the user's after them in their order.
+// Every other top-level key keeps its place and value.
+function compose(doc, managed, { before = [], skip = [], order = [] } = {})
+{
+    const servers = (doc && doc.mcpServers) || {};
+    const at = (name) => { const i = order.indexOf((managed.get(name) || {}).row); return i < 0 ? order.length : i; };
+    const names = [...managed.keys()].sort((a, b) => at(a) - at(b));
+    const next = {};
+    for (const name of names) next[name] = skip.includes(name) && Object.hasOwn(servers, name) ? servers[name] : managed.get(name).entry;
+    for (const [name, value] of Object.entries(servers))
+    {
+        if (Object.hasOwn(next, name)) continue;
+        if (before.includes(name) && !skip.includes(name)) continue;
+        next[name] = value;
+    }
+    const base = doc && typeof doc === 'object' ? doc : {};
+    const out = Object.hasOwn(base, 'mcpServers') ? {} : { mcpServers: next };
+    for (const [k, v] of Object.entries(base)) out[k] = k === 'mcpServers' ? next : v;
+    return out;
+}
+
+const textOf = (doc, eol) => `${JSON.stringify(doc, null, 2)}\n`.replace(/\n/g, eol);
+
+// The cursor-write step: the managed set from its lists, composed into the file, written, read back.
+// step: { file, family, lists: [{ file, scopes }], before, skip, replace }. A name the file holds as the user's own
+// (not in `before`) is replaced only when `replace` names it.
+function cursorWrite(step, ctx)
+{
+    const read = readCursor(step.file);
+    const why = refusal(read);
+    if (why) return { ok: false, detail: `${step.file} ${why} - left as it is` };
+    const sources = (step.lists || []).map((l) => ({ file: l.file, scopes: l.scopes, servers: ((l.file && lists.readList(l.file)) || { servers: [] }).servers }));
+    const managed = managedSet(sources);
+    const servers = read.doc.mcpServers;
+    const before = step.before || [];
+    const theirs = [...managed.keys()].filter((n) => Object.hasOwn(servers, n) && !before.includes(n) && !(step.replace || []).includes(n));
+    const skip = [...new Set([...(step.skip || []), ...theirs])];
+    const order = (ctx && ctx.catalog && ctx.catalog.order) || [];
+    const doc = compose(read.doc, managed, { before, skip, order });
+    const text = textOf(doc, read.eol);
+    if (read.state === 'ok' && read.text === text) return { ok: true, detail: `${step.file} already holds these servers - left as it is` };
+    fs.mkdirSync(path.dirname(step.file), { recursive: true });
+    const tmp = `${step.file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, text);
+    fs.renameSync(tmp, step.file);
+    const back = readCursor(step.file);
+    const wrong = back.state !== 'ok' ? [...managed.keys()] : [...managed.keys()].filter((n) => !skip.includes(n) && !deepEqual(back.doc.mcpServers[n], managed.get(n).entry));
+    if (wrong.length) return { ok: false, detail: `${step.file}: ${wrong.join(', ')} did not read back as written` };
+    const kept = theirs.length ? ` - ${theirs.join(', ')} left as your own` : '';
+    return { ok: true, detail: `wrote ${step.file} (${managed.size - theirs.length} server${managed.size - theirs.length === 1 ? '' : 's'} from the list)${kept}` };
+}
+
+module.exports = { fileFor, readCursor, refusal, managedSet, compose, cursorWrite };
