@@ -13,7 +13,7 @@ const account = require('./account.js');
 const E = require('./entries.js');
 const helper = require('./mcp-headers.js');
 
-const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js' };
+const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json' };
 const GITIGNORE = '*\n!.gitignore\n!mcp-headers.js\n';
 const MAP_VERSION = 1;
 const RECORD_VERSION = 1;
@@ -267,7 +267,7 @@ function pointsIntoRoot(reg, inv, ctx)
     const map = (inv.roots && inv.roots.map) || emptyMap();
     const known = [...standard('project', ctx), ...standard('global', ctx)].map((s) => s.root).concat([map.global, ...Object.values(map.projects || {})].filter(Boolean));
     const exists = existsOf(ctx);
-    return known.includes(parent) || [FILES.secrets, FILES.helper, FILES.record].some((f) => exists(P.join(parent, f))) ? parent : null;
+    return known.includes(parent) || [FILES.secrets, FILES.helper, FILES.record, FILES.list].some((f) => exists(P.join(parent, f))) ? parent : null;
 }
 
 // Where the commands look for the record (D6): the mapped root, the two standard folders, then every root a managed

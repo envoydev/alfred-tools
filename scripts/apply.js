@@ -154,7 +154,7 @@ function rootIgnoreLines(root)
     let names = [];
     try { names = fs.readdirSync(root); } catch { /* a new root */ }
     const mine = names.every((n) => pluginWritten(root, n));
-    const want = mine ? roots.GITIGNORE.trim().split('\n') : [roots.FILES.secrets, roots.FILES.record];
+    const want = mine ? roots.GITIGNORE.trim().split('\n') : [roots.FILES.secrets, roots.FILES.record, roots.FILES.list];
     const file = path.join(root, '.gitignore');
     let text = null;
     try { text = fs.readFileSync(file, 'utf8'); } catch { /* absent */ }

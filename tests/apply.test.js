@@ -880,12 +880,12 @@ test('root-ignore: written once, left when present, never under .alfred', () => 
         fs.writeFileSync(file, '*\n');
         runSteps(w, [{ op: 'root-ignore', path: root }]);
         assert.strictEqual(fs.readFileSync(file, 'utf8'), '*\n!.gitignore\n!mcp-headers.js\n');
-        // a folder holding the user's own files: only the key file and the record, never *
+        // a folder holding the user's own files: only the key file, the record and the list, never *
         const named = path.join(w.project, 'tools');
         fs.mkdirSync(named, { recursive: true });
         fs.writeFileSync(path.join(named, 'notes.txt'), 'mine');
         runSteps(w, [{ op: 'root-ignore', path: named }]);
-        assert.strictEqual(fs.readFileSync(path.join(named, '.gitignore'), 'utf8'), '.mcps-secrets\npreferred-tools.json\n');
+        assert.strictEqual(fs.readFileSync(path.join(named, '.gitignore'), 'utf8'), '.mcps-secrets\npreferred-tools.json\nmcps.json\n');
         // .alfred is alfred-code's: nothing written
         const alfred = path.join(w.project, '.alfred');
         r = runSteps(w, [{ op: 'root-ignore', path: alfred }]);
@@ -1255,4 +1255,17 @@ test('a bridge step with filled: false is left out of the fetch job\'s check; fi
         assert.deepStrictEqual(JSON.parse(fs.readFileSync(fetchFile, 'utf8')).check, ['sentry2']);
     }
     finally { w.clean(); }
+});
+
+test('rootIgnoreLines puts mcps.json in a user-files root\'s short list', () => {
+    const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'pt-ignore-'));
+    try
+    {
+        fs.writeFileSync(path.join(dir, 'notes.md'), 'mine\n');
+        const { rootIgnoreLines } = require('../scripts/apply.js');
+        const r = rootIgnoreLines(dir);
+        assert.strictEqual(r.mine, false);
+        assert.deepStrictEqual(r.want, ['.mcps-secrets', 'preferred-tools.json', 'mcps.json']);
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

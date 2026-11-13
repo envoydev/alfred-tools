@@ -231,3 +231,10 @@ test('shippedState reads the bridge like the helper: absent, lower, same, edited
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('registrationRoots finds a root holding only mcps.json', { skip: POSIX_FIXTURE }, () => {
+    const serena = reg('serena', 'project', { type: 'stdio', command: 'uvx', args: ['serena'], env: { SERENA_HOME: '/data/x/serena' } }, 'serena', 'local');
+    assert.deepStrictEqual(roots.registrationRoots(inv({ registrations: [serena] }), 'project', ctxOf(['/data/x/mcps.json'])), ['/data/x']);
+    assert.deepStrictEqual(roots.registrationRoots(inv({ registrations: [serena] }), 'project', ctxOf([])), [], 'no root file there: not a root');
+    assert.strictEqual(roots.FILES.list, 'mcps.json');
+});
