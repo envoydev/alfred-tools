@@ -44,14 +44,17 @@ its recommended scope (a hosted keyed route, 0.2.0 D5).
 
 Done means every acceptance criterion in 'Acceptance criteria' holds and its proof is in your report.
 
-## The catalog - 17 rows
+## The catalog - 14 rows
+
+The catalog held 17 rows until 0.5.0, which removed the three plugins (claude-hud, typescript-lsp, csharp-lsp): the
+catalog keeps only tools that work in Claude Code and Cursor (rulings 3, 5 and 6 of 'One list, both apps - 0.5.0').
 
 Items marked (verify) are facts from the alfred-code record or from memory, unchecked against today's vendor docs. Step
 1 checks each one and records the source.
 
 | Row | Kind | Original name | Routes | Package or endpoint at the last known pin |
 |---|---|---|---|---|
-| serena | MCP | `serena` | local | `uvx --python 3.13 --from serena-agent@2.1.0 serena start-mcp-server --context claude-code --project-from-cwd ...` |
+| serena | MCP | `serena` | local | `uvx --python 3.13 --from serena-agent@2.1.0 serena start-mcp-server --context <root>/serena-context.yml --enable-web-dashboard false --project-from-cwd --agent-interface tools` (the context file since 0.5.0) |
 | memory | MCP | `memory` | local | `uvx --python 3.13 --with numpy --from mcp-memory-service[sqlite]==12.1.1 memory server` |
 | context7 | MCP | `context7` | remote, local | remote `https://mcp.context7.com/mcp` + header `Context7-API-Key`; local `npx -y @upstash/context7-mcp@<pin>` (verify) |
 | github | MCP | `github` | remote, local | remote `https://api.githubcopilot.com/mcp/`; local the Docker image `ghcr.io/github/github-mcp-server:<tag>` running `stdio`, chosen because it is the vendor's documented local route and a tag pins it; the release binary only when Docker is absent (verify) |
@@ -65,9 +68,6 @@ Items marked (verify) are facts from the alfred-code record or from memory, unch
 | appium | MCP | `appium-mcp` | local | `npx -y appium-mcp@1.97.1` |
 | macos-control | MCP | `macos-desktop` | local, macOS only | `uvx --python 3.13 --from macos-mcp==0.4.6 macos-mcp serve` |
 | windows-control | MCP | `windows-desktop` | local, Windows only | `uvx --python 3.14 --from windows-mcp==0.8.8 windows-mcp serve --exclude-tools PowerShell,Registry,Process,FileSystem` |
-| claude-hud | plugin | `claude-hud@claude-hud` | marketplace `jarrodwatts/claude-hud` | status line; also writes its statusLine and config (see 'claude-hud') |
-| typescript-lsp | plugin | `typescript-lsp@claude-plugins-official` | marketplace `anthropics/claude-plugins-official` | needs `typescript-language-server` + `typescript@6` on PATH, Node 22.22.2 or later |
-| csharp-lsp | plugin | `csharp-lsp@claude-plugins-official` | the same | needs `csharp-ls` on PATH (`dotnet tool install -g csharp-ls`, .NET 10 SDK) |
 
 A route's key mode sits in `authMode` (`token`, `oauth`, `optional-token`), and a hosted route that signs in with OAuth
 when no key is chosen carries `keyless: "oauth"`. No field is named like a credential unless it holds a `${VAR}`, a
@@ -405,6 +405,82 @@ argument of the registration as read, keeping the pin; update offers a lower `mc
 the mcp-remote pin; fix writes a missing bridge and the helper it requires, and `npx-cache-entry` covers mcp-remote's
 cache folder. The matrix starts it for real (`tests/matrix/bridge.test.js`).
 
+## One list, both apps - 0.5.0
+
+The spec is `docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md` and the plan
+`docs/superpowers/plans/2026-11-13-one-list-both-clients.md` (both machine-local). The user works in Claude Code and in
+Cursor and wants the same servers in both, set up once. Cursor reads `.cursor/mcp.json` and `~/.cursor/mcp.json`, never
+`.mcp.json` or `~/.claude.json`, and a link between the files breaks at Claude Code's first write (`docs/sources.md`,
+F1-F4). **The user's rulings, 2026-11-12 and 2026-11-13,** quoted in order (typos kept):
+
+Quoted in order (typos kept):
+
+1. 'Apply this changes that during setup everything will be okay and do the same for rest of mcps, update command must
+   update mcps in .mcp file.' (2026-11-12)
+2. 'Then you need to handle mcp for both and when running something like install particular plugin from preffered
+   tools than it must be installed from both. Let's .preferred-tools or .alfred contains json which will store all mcps
+   that are installed and they will be just copied and moved to mcp files of cursor/agent and claude data.' This
+   replaces the link design discussed on 2026-11-12, and 'no ledger' for the servers the plugin manages.
+3. 'I allow you to delete from current plugin lsp for typescript and csharp.'
+4. 'I like the idea about prompt but you need exclude all tools except tools that helps to generate code refereces and
+   navigate in them.' (about the draft serena context)
+5. 'Also, all plugins must be compatible with cursor/agent and claude code.'
+6. Answers, 2026-11-13: claude-hud - 'Remove it (Recommended)' ('The catalog keeps only tools that work in both
+   clients. Existing installs stay; update offers to uninstall it.'); the plugin's commands - 'Also a Cursor plugin'
+   (part B, out of scope here); Local scope - '.cursor/mcp.json (Recommended)' ('Cursor gets it in this project.
+   Install suggests adding .cursor/mcp.json to .gitignore so it stays private.'); the old LSP plugins - 'Offer to
+   uninstall (Recommended)' ('Update offers to remove them once, since Serena now covers navigation. You can
+   decline.').
+7. 'Also you need to ask a question of additional isntallation. If installation with claude to ask about cursor, if
+   with cursor to ask about claude.' The Claude half is here; the Cursor half is part B.
+8. Earlier answers that still stand (2026-11-12): keyed hosted routes, 'Bridge when shared (Recommended)', since replaced by ruling 9; testing,
+   'Cursor CLI, throwaway home (Recommended)'. The third answer, 'Project scope only (Recommended)', was given while
+   sharing meant a link, which cannot reach `~/.claude.json`. With copying that limit is gone, so this design covers
+   global scope too: Decision 2 asks the user to confirm it.
+9. 'okay' (2026-11-13), to five recommendations: global scope for Cursor included; keyed hosted servers keep Claude
+   Code's direct `headersHelper` form, with only Cursor's copy in the bridge form (this replaces 'Bridge when shared',
+   for start speed); stdio keyed routes at local scope for Claude Code only; the `base_modes` edit, the Windows home
+   included; update's Cursor offer recommended when Cursor is found.
+10. 'workspace is considered by Alfred-code' (2026-11-13): which folders make one workspace is read from alfred-code's
+    workspace record (D4a).
+11. Serena in a workspace, 2026-11-13: 'Each project itself (Recommended)' - `--project-from-cwd` stays, so a session
+    in a child repo indexes that repo with its own language; a session at the root indexes the root with one language.
+12. One sign-in for both apps, 2026-11-13: 'can we have generic source of signing via oauth for both?', then, on where
+    the sign-ins are kept, 'I want to store inside .alfred workspace or .preferred-tools folder this data', and on the
+    proposal (both apps run the server through mcp-remote, its store at `<root>/mcp-remote-v1/`): 'yes, go with (a) and
+    the root folder'. This replaces D5's keyless line, under which each app signed in on its own (D5).
+13. Keeping AI sessions out of the sign-ins and the keys, 2026-11-13, to two questions: 'Add the deny rule
+    (Recommended)' (`Read(//**/mcp-remote-v1/**)` in the user's Claude Code settings) and 'Cover .mcps-secrets too
+    (Recommended)' (`Read(//**/.mcps-secrets)` beside it, so the key file is guarded without alfred-code).
+
+What 0.5.0 builds on them:
+
+- **The list.** Each root folder holds `<root>/mcps.json`: every server the plugin manages in that scope family, with
+  its `clients`, its Claude Code entry and, for a keyed hosted route, Cursor's copy (`cursorEntry`), never a key value.
+  Its `own` array replaces `preferred-tools.json` (ruling 2's exception to 'no ledger'). `scripts/mcps-list.js` is its
+  only reader and writer; a list from a newer version is never replaced.
+- **Both apps from it.** Claude Code is written through the `claude` CLI as before; Cursor's two files by
+  `scripts/cursor-mcp.js` (the `cursor-write` step), which keeps every entry the user added and asks before replacing
+  a name the list does not mark for Cursor. Install asks once a run which apps; configure asks per server; update offers
+  Cursor once per root when Cursor is found.
+- **Hosted routes.** A keyed route keeps Claude Code's `headersHelper` form; Cursor, which ignores the helper, gets the
+  bridge form. A keyless OAuth route set up for both apps runs mcp-remote in both with `MCP_REMOTE_CONFIG_DIR` set to
+  the root, so one sign-in in `<root>/mcp-remote-v1/` serves both (ruling 12, F13). Where git would commit that folder
+  the server stays Claude Code only. The deny rules `Read(//**/mcp-remote-v1/**)` and `Read(//**/.mcps-secrets)` go in
+  the user's Claude Code settings (ruling 13, F15).
+- **Stdio keyed routes** reach Cursor at global scope only, since a local-scope copy would put the key in a project file.
+- **Serena** runs with `<root>/serena-context.yml`, which allows the six navigation tools only, and `base_modes: []`
+  in the root's `serena_config.yml`, so its manual names no other tool (ruling 4).
+- **The catalog** keeps only tools that work in both apps: claude-hud, typescript-lsp and csharp-lsp left it (rulings
+  3, 5, 6), and a plugin row comes back only when it works in both. Update offers once to uninstall each; a decline is
+  kept in `${CLAUDE_PLUGIN_DATA}/retired-declined.json`.
+- **Update and fix.** New rows marked `upgrade: "0.5.0"` (`list-import`, `serena-context`, `serena-base-modes`,
+  `retired-plugin`, `read-guard`) run before the pins. Fix's `client-drift` asks which copy stays when one app's copy
+  was edited by hand, and `cursor-file` names a Cursor file that is not JSON. Every repair writes the list and Cursor in
+  the same run, and the plan names each Cursor entry that will ask to be approved again.
+- **A workspace.** Which folders form one is read from alfred-code's workspace record (ruling 10), never needed: no
+  record, no workspace.
+
 ## The install command - `commands/install.md`
 
 `disable-model-invocation: true`. Mirror alfred-code's configure walk (`../alfred-code/setup-plugin/references/walk.md`):
@@ -494,7 +570,11 @@ Two rules hold for every command and the skill:
 
 A re-run with the same answers runs no CLI call and says so.
 
-## claude-hud - the status line and the recommended settings
+## claude-hud - the status line and the recommended settings (removed in 0.5.0)
+
+Removed in 0.5.0: claude-hud works in Claude Code alone, so it left the catalog ('One list, both apps - 0.5.0', ruling
+6). An install keeps working; update offers once to uninstall it, and removes its statusLine only when it is the
+plugin's own. This section records how 0.1.0 to 0.4.x set it up.
 
 alfred-code's init and configure already do this. Its walk installs claude-hud, writes the statusLine, then offers
 the recommended claude-hud settings as one apply-or-skip ask. Port that step; the only changes are the three
