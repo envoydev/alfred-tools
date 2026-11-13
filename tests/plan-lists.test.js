@@ -539,7 +539,7 @@ test('workspace: a root in git with a plain-folder member gets the note for its 
     const ctx = { ...w.ctx, project: w.m.a, roots: { project: path.dirname(w.aList), global: null } };
     const out = outOf({ op: 'list-write', file: w.aList, family: 'project', upserts: [{ server: srv('memory'), after: null, cursorFile: null }], drops: [], own: null, why: 'x' });
     cursorSteps(inv, ctx, out, {});
-    const note = `${w.m.a} is a folder of ${w.project}'s git repo; Cursor's CLI reads ${w.project}/.cursor/mcp.json there, so these servers reach the editor opened at ${w.m.a} only. Install them at the root or at Global scope for the CLI`;
+    const note = `${w.m.a} is a folder of ${w.project}'s git repo; Cursor's CLI reads ${path.join(w.project, '.cursor', 'mcp.json')} there, so these servers reach the editor opened at ${w.m.a} only. Install them at the root or at Global scope for the CLI`;
     assert.deepStrictEqual(out.notes, [note]);
     // a member that is its own repo: no note
     gitInit(w.m.b);

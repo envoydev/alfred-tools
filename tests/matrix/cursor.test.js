@@ -85,10 +85,8 @@ const ROW = (id) => catalogLib.load().byId.get(id);
 // Claude Code's entry for a list server, as the CLI wrote it
 function claudeEntry(hh, project, s)
 {
-    if (s.scope === 'project') return (readJson(path.join(project, '.mcp.json')) || { mcpServers: {} }).mcpServers[s.name];
-    const acct = readJson(account.accountFile(hh.env)) || {};
-    if (s.scope === 'user') return (acct.mcpServers || {})[s.name];
-    return ((acct.projects || {})[project] || { mcpServers: {} }).mcpServers?.[s.name];
+    // account's reader keys a local entry the way Claude Code does on this platform (on Windows, the path with '/')
+    return account.readRegistration(s.name, s.scope, project, hh.env);
 }
 // Cursor's entry for a list server: the project file for project and local scope, the home's for user scope
 const cursorFile = (hh, project, scope) => (scope === 'user' ? path.join(hh.home, '.cursor', 'mcp.json') : path.join(project, '.cursor', 'mcp.json'));
@@ -360,8 +358,12 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     const repo = path.join(__dirname, '..', '..');
     const old = path.join(root, 'm6-040');
     fs.mkdirSync(old, { recursive: true });
-    const archive = spawnSync('sh', ['-c', `git -C "${repo}" archive ${V040} | tar -x -C "${old}"`], { encoding: 'utf8' });
-    if (archive.status !== 0) return t.skip(`NOT RUN: 0.4.0 (${V040.slice(0, 7)}) is not in this checkout: ${archive.stderr.trim().slice(0, 160)}`);
+    // no shell: git writes the tarball and tar (bsdtar on Windows 10 and later) unpacks it
+    const tarball = path.join(root, 'm6-040.tar');
+    const archive = spawnSync('git', ['-C', repo, 'archive', '-o', tarball, V040], { encoding: 'utf8' });
+    const unpack = archive.status === 0 ? spawnSync('tar', ['-xf', tarball, '-C', old], { encoding: 'utf8' }) : null;
+    if (archive.status !== 0) return t.skip(`NOT RUN: 0.4.0 (${V040.slice(0, 7)}) is not in this checkout: ${String(archive.stderr || archive.error || '').trim().slice(0, 160)}`);
+    if (unpack.status !== 0) return t.skip(`NOT RUN: tar could not unpack 0.4.0: ${String(unpack.stderr || unpack.error || '').trim().slice(0, 160)}`);
     const { Harness: Harness040 } = require(path.join(old, 'tests', 'harness.js'));
     const world = path.join(root, 'm6');
     const oh = new Harness040({ root: world });

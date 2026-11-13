@@ -1424,7 +1424,7 @@ test('a Claude-side rewrite keeps Cursor\'s moved pin and its added env pair', (
         const cursorMcp = require('../scripts/cursor-mcp.js');
         const file = path.join(dir, 'mcps.json');
         const helper = (root) => ({ type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: `node ${root}/mcp-headers.js CONTEXT7_API_KEY Bearer` });
-        const moved = { command: 'node', args: [`${dir}/mcp-bridge.js`, 'https://mcp.context7.com/mcp', 'CONTEXT7_API_KEY', 'Bearer', 'mcp-remote@0.17.0'], env: { npm_config_before: '2026-12-01T00:00:00Z', MINE: '1' } };
+        const moved = { command: 'node', args: [path.join(dir, 'mcp-bridge.js'), 'https://mcp.context7.com/mcp', 'CONTEXT7_API_KEY', 'Bearer', 'mcp-remote@0.17.0'], env: { npm_config_before: '2026-12-01T00:00:00Z', MINE: '1' } };
         const ctx = { report: { appliedKeys: new Set(), cursorFiles: new Set() } };
         // a new two-form entry: the catalog's pin
         let r = listWrite({ op: 'list-write', file, family: 'global', upserts: [{ server: { name: 'context7', scope: 'user', row: 'context7', route: 'remote', clients: ['claude', 'cursor'], entry: helper(dir), key: null, form: 'two' }, after: null, cursorFile: null }], drops: [], own: null }, ctx);
@@ -1436,7 +1436,7 @@ test('a Claude-side rewrite keeps Cursor\'s moved pin and its added env pair', (
         const other = path.join(dir, 'other');
         r = listWrite({ op: 'list-write', file, family: 'global', upserts: [{ server: { name: 'docs', scope: 'user', row: 'context7', route: 'remote', clients: ['claude', 'cursor'], entry: helper(other), cursorEntry: moved, key: null, form: 'two' }, after: null, cursorFile: null }], drops: [{ key: 'mcp:context7~user', after: null }], own: null }, ctx);
         s = JSON.parse(fs.readFileSync(file, 'utf8')).servers.find((x) => x.name === 'docs');
-        assert.deepStrictEqual(s.cursorEntry.args, [`${other}/mcp-bridge.js`, 'https://mcp.context7.com/mcp', 'CONTEXT7_API_KEY', 'Bearer', 'mcp-remote@0.17.0']);
+        assert.deepStrictEqual(s.cursorEntry.args, [path.join(other, 'mcp-bridge.js'), 'https://mcp.context7.com/mcp', 'CONTEXT7_API_KEY', 'Bearer', 'mcp-remote@0.17.0']);
         assert.deepStrictEqual(s.cursorEntry.env, { npm_config_before: '2026-12-01T00:00:00Z', MINE: '1' });
         // Cursor taken off: no cursorEntry
         r = listWrite({ op: 'list-write', file, family: 'global', upserts: [{ server: { ...s, clients: ['claude'], form: 'two' }, after: null, cursorFile: null }], drops: [], own: null }, ctx);
