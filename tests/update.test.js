@@ -533,10 +533,13 @@ test("update moves a bridge's mcp-remote pin and its cut-off", async () => {
 
 // ---- new ways to pass data (the user's ruling, 2026-11-12) ---------------------------------------------------------------
 
+// a 0.5.0 root: its list names these servers, so list-import has nothing to do
+const listed = (root, servers) => writeJson(path.join(root, 'mcps.json'), { version: 1, servers: servers.map(([name, scope, entry]) => ({ name, scope, row: name, route: 'local', clients: ['claude'], entry, key: null })), own: [] });
+
 test('the fix rows update applies are the ones marked upgrade, each with the version that brought its way', () =>
 {
     const catalog = require('../scripts/catalog.js').load();
-    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
+    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['list-import', '0.5.0'], ['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
 });
 
 test('update offers the new ways to pass data that fix knows - a 0.1.x key header, a relative project path - and applies them after the pins, by registration', async () =>
@@ -554,6 +557,9 @@ test('update offers the new ways to pass data that fix knows - a 0.1.x key heade
         const memory = { command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: '.preferred-tools/memory/memory.db' } };
         assert.strictEqual(cli.run(['mcp', 'add-json', 'memory', JSON.stringify(memory), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
         const registry = fakeRegistry({ 'pypi:mcp-memory-service': [{ version: '12.1.1', time: ago(40) }, { version: '12.5.0', time: ago(20) }] });
+        // already on the list (0.5.0), so list-import has nothing to offer here
+        listed(pt, [['github', 'local', gh], ['memory', 'project', memory]]);
+        listed(path.join(w.home, '.preferred-tools'), [['github', 'user', gh]]);
 
         const c = await run(w, ['--check', '--no-refresh'], { registry });
         assert.strictEqual(c.code, 0, c.text);
@@ -602,6 +608,7 @@ test('an upgrade that cannot apply on its own - a key not filled - is a note nam
     {
         const gh = { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headers: { Authorization: 'Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}' } };
         assert.strictEqual(cli.run(['mcp', 'add-json', 'github', JSON.stringify(gh), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        listed(path.join(w.project, '.preferred-tools'), [['github', 'local', gh]]);
         const c = await run(w, ['--check', '--no-refresh']);
         assert.strictEqual(c.code, 0, c.text);
         assert.doesNotMatch(c.text, /New ways to pass data/);

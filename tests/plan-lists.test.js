@@ -48,3 +48,13 @@ test('a family with no root and no list gets no step; a remove of a server no li
     assert.deepStrictEqual(listSteps(inv(), ctx({ project: null, global: null }), { notes: [] }, [add('c7', 'user')]), []);
     assert.deepStrictEqual(listSteps(inv(), ctx(), { notes: [] }, [{ op: 'mcp-remove', name: 'c7', scope: 'user' }]), []);
 });
+
+test('install over 0.4.x registrations imports the family it writes', { skip: POSIX_FIXTURE }, () => {
+    const serena = { name: 'serena', scope: 'project', rowId: 'serena', route: 'local', own: false, alfredRetired: false, choice: null, entry: { command: 'uvx', args: ['--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'] } };
+    const i = { ...inv({ project: { file: PROJECT_LIST, servers: [], own: [], old: '/work/shop/.preferred-tools/preferred-tools.json' }, global: null }), registrations: [serena] };
+    const steps = listSteps(i, ctx(), { notes: [] }, [add('memory', 'project')]);
+    assert.deepStrictEqual(steps.map((s) => s.op), ['list-write', 'retire-record']);
+    assert.deepStrictEqual(steps[0].upserts.map((u) => [u.server.name, u.after, u.server.clients]), [['memory', 'mcp:memory~project', ['claude']], ['serena', null, ['claude']]]);
+    assert.deepStrictEqual(steps[0].upserts[1].server.entry, serena.entry, 'an imported server carries its entry as read');
+    assert.strictEqual(steps[1].file, '/work/shop/.preferred-tools/preferred-tools.json');
+});

@@ -213,7 +213,7 @@ function helperOffers(ctx, out)
 // Only those detectors run. A finding that cannot apply alone - blocked, or needing a folder - is a note naming
 // /preferred-tools:fix, counted in `waiting`.
 const upgradeCatalog = (catalog) => ({ ...catalog, fixes: catalog.fixes.filter((f) => f.upgrade) });
-const upgradeLabel = (f) => (f.kind === 'machine' ? f.name : `${f.name} (${f.scope})`);
+const upgradeLabel = (f) => (f.kind === 'registration' ? `${f.name} (${f.scope})` : f.name);
 
 function upgradeOffers(ctx, out)
 {
@@ -231,7 +231,7 @@ function upgradeOffers(ctx, out)
             out.waiting += 1;
             continue;
         }
-        const machine = f.kind === 'machine';
+        const machine = f.kind !== 'registration';
         out.offers.push({ kind: 'upgrade', id: `upgrade:${f.id}:${machine ? f.name : `${f.name}~${f.scope}`}`, fix: f.id, name: f.name, scope: machine ? null : f.scope, found: f.found, group: 'upgrade', label });
     }
 }

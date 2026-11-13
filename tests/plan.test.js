@@ -1985,7 +1985,10 @@ test("install plans no own entry when nothing is left on its own; a 0.2.0 record
     assert.deepStrictEqual(cleans(p), [[PFILE, [], []]]);
     const step = p.steps.find((s) => s.op === 'list-write');
     assert.strictEqual(step.why, `${PFILE}: the servers preferred-tools manages, and the ones you left on their own - configure, update and fix skip those. Remove an entry from its own list, or the file, to hand them back.`);
-    assert.deepStrictEqual(step.upserts.map((u) => u.server.name), ['playwright-chrome']);
+    // the first touch of a family with no list: its managed registrations join it, the record is moved aside
+    assert.deepStrictEqual(step.upserts.map((u) => [u.server.name, u.after]), [['playwright-chrome', 'mcp:playwright-chrome~local'], ['gh', null]]);
+    assert.deepStrictEqual(p.steps.filter((s) => s.op === 'retire-record').map((s) => s.file), ['/work/shop/.preferred-tools/preferred-tools.json']);
+    assert.ok(render(p).includes('moves /work/shop/.preferred-tools/preferred-tools.json aside as preferred-tools.json.0.4.bak  (its entries are in mcps.json now)'), render(p));
     // fix's own call to fileSteps has no own part
     const ctx = { ...makeCtx(inv(MAC), opts('/Users/me')), uses: [], roots: { project: '/work/shop/.preferred-tools', global: null } };
     assert.deepStrictEqual(fileSteps(i, ctx, { notes: [] }).after.filter((s) => s.op === 'list-write'), []);

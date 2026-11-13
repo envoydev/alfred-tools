@@ -5,7 +5,10 @@
 // One list-write per list file the plan touches: an upsert per mcp-add, mcp-replace and mcp-move (filled at apply from
 // the registration as read), a drop per mcp-remove and per server that leaves a list (a move, a root change), and the
 // servers the user left on their own (`own`), with this run's answers applied - the 0.4.x record's rules (spec F4).
+// The first plan that writes a family with no list yet imports it, as list-import does: every managed registration of
+// the family joins the list as read, and the 0.4.x record's own entries move into it, the record itself moved aside.
 const E = require('./entries.js');
+const catalogLib = require('./catalog.js');
 const roots = require('./roots.js');
 const keys = require('./keys.js');
 const lists = require('./mcps-list.js');
@@ -26,6 +29,24 @@ function foundList(inv, file, P)
     const old = lists.readOldRecord(P.join(P.dirname(file), roots.FILES.record));
     if (old) return old.state ? { servers: [], own: [], state: old.state } : { servers: [], own: old.servers };
     return null;
+}
+
+// The managed registrations of a family that its list does not name yet (list-import, and a plan's first touch): each
+// as read, kept (every key value the marker), with clients claude. A registration on its own is not one, unless this
+// run's `answers` (mcp key -> 'own' | 'manage') hand it back. opts: { answers, roots: { project, global } }
+function importUnlisted(inv, family, catalog, { answers = {}, roots: r = {} } = {})
+{
+    const l = inv.lists && inv.lists[family];
+    const listed = new Set(l && !l.old && !l.note ? (l.servers || []).map(lists.serverKey) : []);
+    return (inv.registrations || [])
+        .filter((x) => x.rowId && !x.own && !x.alfredRetired && x.scope !== 'inherited' && roots.familyOf(x.scope) === family)
+        .filter((x) =>
+        {
+            const key = lists.serverKey(x);
+            const answer = answers[key];
+            return !listed.has(key) && (answer ? answer !== 'own' : x.choice !== 'own');
+        })
+        .map((x) => lists.fromRegistration(x, catalog.byId.get(x.rowId), ['claude'], keys.stdioChain({ scope: x.scope, projectRoot: r.project, globalRoot: r.global })));
 }
 
 const ownChanged = (rec, next) => (!rec || rec.state ? next.length > 0 : JSON.stringify(next) !== JSON.stringify(rec.own));
@@ -136,6 +157,21 @@ function listSteps(inv, ctx, out, regSteps = [])
         }
     }
 
+    // the first touch: a family this plan writes that has no list yet is imported as list-import does
+    const retire = [];
+    const answers = {};
+    for (const family of ['project', 'global']) for (const e of (ctx.recordEntries && ctx.recordEntries[family]) || []) answers[roots.recordKey(e)] = e.choice;
+    const taken = new Set(regSteps.filter((x) => REG_OPS.includes(x.op)).flatMap((x) => [lists.regKey(x), x.op === 'mcp-move' && x.from ? lists.serverKey(x.from) : null]).filter(Boolean));
+    for (const family of ['project', 'global'])
+    {
+        const l = inv.lists && inv.lists[family];
+        if (!targets[family] || !plans.has(targets[family]) || (l && (!l.old || l.note))) continue;
+        const p = plans.get(targets[family]);
+        for (const server of importUnlisted(inv, family, ctx.catalog || catalogLib.load(), { answers, roots: ctx.roots || {} }))
+            if (!taken.has(lists.serverKey(server))) p.upserts.push({ server, after: null, cursorFile: null });
+        if (l && l.old) retire.push({ op: 'retire-record', file: l.old, why: `${l.old}: the 0.4.x record - its entries are in ${targets[family]} now, so it is moved aside as ${roots.FILES.record}.0.4.bak` });
+    }
+
     const steps = [];
     for (const [file, p] of plans)
     {
@@ -148,10 +184,14 @@ function listSteps(inv, ctx, out, regSteps = [])
         if (target && !empty) ctx.uses.push({ family: p.family, root: ctx.roots[p.family] });
         steps.push({ op: 'list-write', file, family: p.family, upserts: p.upserts, drops: p.drops, own: p.own, ...(empty ? { empty: true } : {}), why: `${file}: the servers preferred-tools manages, and the ones you left on their own - configure, update and fix skip those. Remove an entry from its own list, or the file, to hand them back.` });
     }
-    return steps;
+    return [...steps, ...retire];
 }
 
-// The plan line of a list-write step.
-const renderLine = (s) => (s.empty ? `   removes ${s.file}  (no server is listed)` : `   writes ${s.file}  (the servers preferred-tools manages, and the ones left on their own)`);
+// The plan line of a list-write or retire-record step.
+function renderLine(s)
+{
+    if (s.op === 'retire-record') return `   moves ${s.file} aside as ${roots.FILES.record}.0.4.bak  (its entries are in mcps.json now)`;
+    return s.empty ? `   removes ${s.file}  (no server is listed)` : `   writes ${s.file}  (the servers preferred-tools manages, and the ones left on their own)`;
+}
 
-module.exports = { listSteps, renderLine, foundList };
+module.exports = { listSteps, renderLine, foundList, importUnlisted };

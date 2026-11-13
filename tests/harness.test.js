@@ -51,7 +51,8 @@ test('the fix engine against the REAL CLI: detect, apply as one replace, read ba
     const machine = { exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1 }), nodeVersion: process.versions.node };
     const ctx = () => fix.makeCtx({ inv: h.inventory(project), env: h.env, machine });
     const found = fix.detectAll(ctx()).found;
-    assert.deepStrictEqual(found.map((f) => f.id).sort(), ['serena-telemetry', 'uvx-python']);
+    // and the 0.4.x install moves onto the list
+    assert.deepStrictEqual(found.map((f) => f.id).sort(), ['list-import', 'serena-telemetry', 'uvx-python']);
     const lines = [];
     const res = fix.applyFixes(ctx(), ['all'], { tmp: path.join(h.root, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
     assert.strictEqual(res.failed, null, lines.join('\n'));
@@ -63,5 +64,7 @@ test('the fix engine against the REAL CLI: detect, apply as one replace, read ba
     assert.strictEqual(now.serena.env.SERENA_USAGE_REPORTING, 'false');
     assert.deepStrictEqual(now['my-own-server'], own);
     assert.deepStrictEqual(fix.detectAll(ctx()).found, []);
+    const list = JSON.parse(fs.readFileSync(path.join(h.home, '.preferred-tools', 'mcps.json'), 'utf8'));
+    assert.deepStrictEqual(list.servers.map((s) => [s.name, s.scope, s.entry.args[0]]), [['serena', 'user', '--python']], 'the list holds the repaired entry, as the real CLI reads it back');
     assert.ok(h.realUntouched().ok);
 });

@@ -79,6 +79,8 @@ function detectAll(ctx, { only } = {})
         if (!fix.os.includes(ctx.platform)) continue;
         const detect = F[fix.detect];
         if (typeof detect !== 'function') throw new Error(`fix row ${fix.id}: no function ${fix.detect} in scripts/fixes/`);
+        // a file row plans its repair: one that is not advice names the function that does
+        if (fix.kind === 'file' && !fix.advice && typeof F[fix.steps] !== 'function') throw new Error(`fix row ${fix.id}: no steps function ${fix.steps} in scripts/fixes/`);
         // an advice row has no fix: its finding is shown and never offered, whatever its detector returned
         const advice = (f) => (fix.advice && !f.blocked ? { blocked: 'advice only - nothing here is applied' } : {});
         for (const f of detect(ctx)) if (matches(f, only)) out.found.push({ ...f, ...advice(f), kind: fix.kind, symptom: fix.symptom, documented: fix.documented !== false });
@@ -86,7 +88,7 @@ function detectAll(ctx, { only } = {})
     return out;
 }
 
-const where = (f) => (f.kind === 'machine' ? f.name : `${f.name} (${f.scope})`);
+const where = (f) => (f.kind === 'registration' ? `${f.name} (${f.scope})` : f.name);
 
 function render(detected)
 {
@@ -204,6 +206,25 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
         if (report.failed) { res.failed = report.failed.detail; return res; }
         const lines = reconnectOf(ctx, steps).map(reconnectLine);
         if (lines.length) log('', ...lines);
+    }
+
+    // file fixes (spec D9): detected again on what the registration pass left, their steps in the catalog's row order
+    // as one plan through apply.js, read back below like the rest
+    const filePicked = todo.filter((x) => x.kind === 'file');
+    if (filePicked.length)
+    {
+        const fctx = steps.length ? { ...ctx, inv: inventory.buildInventory({ project: ctx.inv.project, env: ctx.env, data: ctx.data }) } : ctx;
+        const now = detectAll(fctx, { only }).found.filter((f) => f.kind === 'file' && !f.blocked && filePicked.some((p) => p.id === f.id && p.name === f.name && p.scope === f.scope));
+        const planned = [];
+        for (const row of ctx.catalog.fixes.filter((x) => x.kind === 'file'))
+            for (const f of now.filter((x) => x.id === row.id)) planned.push(...F[row.steps](f, fctx, input));
+        if (planned.length)
+        {
+            const plan = { version: 1, project: ctx.inv.project, os: ctx.platform, alfredCodeEnabled: Boolean(ctx.inv.alfredCodeEnabled), steps: planned, notes: [], errors: [], expect: [] };
+            res.tmp = res.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
+            const report = apply(plan, { env: ctx.env, tmp: res.tmp, runCli, log, fetchFile: false, data: ctx.data });
+            if (report.failed) { res.failed = report.failed.detail; return res; }
+        }
     }
 
     // machine fixes; one that says `restart: false` (a .gitignore written) changes nothing a session has started, and one

@@ -301,6 +301,17 @@ function listWrite(step, ctx, { failure = false } = {})
     return lists.writeList(step.file, doc, read);
 }
 
+// A 0.4.x preferred-tools.json whose entries the list holds now: moved aside as <file>.0.4.bak, or .0.4.bak.2 and on
+// when an earlier backup is there - never over one, so the record always leaves and list-import finds nothing next run.
+function retireRecord(file)
+{
+    if (!fs.existsSync(file)) return { ok: true, detail: `${file}: not there - nothing to move` };
+    let to = `${file}.0.4.bak`;
+    for (let n = 2; fs.existsSync(to); n++) to = `${file}.0.4.bak.${n}`;
+    fs.renameSync(file, to);
+    return { ok: true, detail: `moved ${file} to ${to} - its entries are in the list now` };
+}
+
 // After a stop: every list-write of the plan again, so each list holds what was applied before the stop and nothing
 // after it. A failure here is reported and never masks the stop's. -> [{ ok, detail }]
 function failureLists(plan, report, ctx, log = () => {})
@@ -348,6 +359,7 @@ function runStep(step, ctx)
         case 'write-bridge': return writeShipped('bridge', step.path);
         case 'ensure-key-name': return ensureKeyName(step.file, step.names);
         case 'list-write': return listWrite(step, ctx);
+        case 'retire-record': return retireRecord(step.file);
         // never fails the apply: a warning, and the file as it was (spec F8)
         case 'order-mcp-json': return mcpOrder.orderFile(step.file, ctx.catalog, new Set(step.own || []));
         case 'record-root': return recordRoot(step, ctx.data);

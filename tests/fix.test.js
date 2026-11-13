@@ -27,6 +27,10 @@ function ctxFor({ platform = 'darwin', arch = 'x64', registrations = [], plugins
 {
     const win = platform === 'win32';
     const inv = { version: 1, project: project || (win ? 'C:\\proj' : '/proj'), os: platform, arch, registrations, plugins, cli: { ok: true } };
+    // a 0.5.0 install: every registration is in its family's list, so list-import has nothing to do here
+    const P = win ? path.win32 : path.posix;
+    const listOf = (family, root) => ({ file: P.join(root, '.preferred-tools', 'mcps.json'), servers: registrations.filter((r) => r.scope !== 'inherited' && (family === 'global') === (r.scope === 'user')), own: [] });
+    inv.lists = { project: listOf('project', inv.project), global: listOf('global', home || (win ? 'C:\\Users\\dev' : '/home/dev')) };
     return fix.makeCtx({ inv, catalog, env: { ...env, HOME: home || (win ? 'C:\\Users\\dev' : '/home/dev') }, machine, platform, arch });
 }
 
@@ -58,6 +62,7 @@ test('every live fix row names a detector and a fix that exist, a tool the catal
         if (f.hold) continue;
         assert.strictEqual(typeof F[f.detect], 'function', `${f.id}: no ${f.detect}`);
         if (f.advice) assert.strictEqual(f.fix, null, `${f.id}: an advice row has no fix`);
+        else if (f.kind === 'file') assert.deepStrictEqual([f.fix, typeof F[f.steps]], [null, 'function'], `${f.id}: a file row plans through ${f.steps}`);
         else assert.strictEqual(typeof F[f.fix], 'function', `${f.id}: no ${f.fix}`);
     }
     const held = detect(ctxFor({ platform: 'win32' })).held;
@@ -671,7 +676,8 @@ test('apply: two fixes on one registration are ONE replace, from the entry as re
         assert.strictEqual(now.env.SERENA_USAGE_REPORTING, 'false');
         assert.strictEqual(now.env.SERENA_HOME, entry.env.SERENA_HOME);
         assert.deepStrictEqual(userEntry(w, 'my-own-server'), own, 'a registration that matches no row is never touched');
-        assert.deepStrictEqual(res.applied.map((f) => f.id).sort(), ['serena-telemetry', 'uvx-python']);
+        // and the 0.4.x install moves onto the list (list-import)
+        assert.deepStrictEqual(res.applied.map((f) => f.id).sort(), ['list-import', 'serena-telemetry', 'uvx-python']);
         assert.deepStrictEqual(res.remaining, []);
         assert.match(lines.join('\n'), /fixed +uvx-python on serena \(user\)/);
         assert.match(lines.join('\n'), /Restart Claude Code/);
@@ -1483,7 +1489,7 @@ test("npx-cache-entry finds a bridge registration's mcp-remote folder without pa
 });
 
 // ---- 0.5.0: a 0.4.x server left on its own, before list-import (spec D1) ----------------------------------------------
-test('a 0.4.x own server is skipped before list-import: fix all leaves it byte-identical', () =>
+test('a 0.4.x own server is skipped before list-import: fix all leaves it byte-identical and list-import moves it to own', () =>
 {
     const fs = require('node:fs');
     const X = require('../scripts/existing.js');
@@ -1503,7 +1509,130 @@ test('a 0.4.x own server is skipped before list-import: fix all leaves it byte-i
         const res = fix.applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
         assert.strictEqual(res.failed, null, lines.join('\n'));
         assert.deepStrictEqual(account.readAccount(w.env, w.project).local.serena, before, 'byte-identical');
-        assert.ok(!fs.existsSync(path.join(root, 'mcps.json')), 'no list written');
+        const list = JSON.parse(fs.readFileSync(path.join(root, 'mcps.json'), 'utf8'));
+        assert.deepStrictEqual([list.servers, list.own.map((e) => e.name)], [[], ['serena']], 'not a managed server; its own entry moved');
+    }
+    finally { w.clean(); }
+});
+
+// ---- 0.5.0: list-import, and the file pass (spec D1, D9) ---------------------------------------------------------------
+const C7_HOSTED = { type: 'http', url: 'https://mcp.context7.com/mcp' };
+const listAt = (root) => { const f = path.join(root, 'mcps.json'); return fsx.existsSync(f) ? readJson(f) : null; };
+const recordAt = (root, servers) => put(path.join(root, 'preferred-tools.json'), JSON.stringify({ version: 1, servers }));
+const OWN_X = { name: 'x', scope: 'local', fingerprint: 'pkg:x', choice: 'own' };
+
+test('list-import writes each managed registration with clients claude and moves the record to own', () =>
+{
+    const w = world();
+    try
+    {
+        seed(w, 'serena', 'project', fresh('serena', process.platform, process.arch, 'project'));
+        seed(w, 'context7', 'user', C7_HOSTED);
+        const proot = path.join(w.project, '.preferred-tools');
+        recordAt(proot, [OWN_X]);
+        const l = logged();
+        const res = fix.applyFixes(ctxOf(w), ['list-import'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.strictEqual(res.failed, null, l.text());
+        const list = listAt(proot);
+        assert.deepStrictEqual(list.servers.map((s) => [s.name, s.scope, s.clients]), [['serena', 'project', ['claude']]]);
+        assert.deepStrictEqual(list.own, [OWN_X]);
+        assert.ok(fsx.existsSync(path.join(proot, 'preferred-tools.json.0.4.bak')), l.text());
+        assert.ok(!fsx.existsSync(path.join(proot, 'preferred-tools.json')));
+        assert.deepStrictEqual(listAt(path.join(w.home, '.preferred-tools')).servers.map((s) => [s.name, s.scope, s.clients]), [['context7', 'user', ['claude']]]);
+        assert.deepStrictEqual(res.applied.map((f) => f.id), ['list-import', 'list-import']);
+        // a second run finds nothing
+        assert.deepStrictEqual(ids(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'list-import')), []);
+    }
+    finally { w.clean(); }
+});
+
+test('list-import into a family with no root writes its .gitignore first and records the root', () =>
+{
+    const w = world();
+    try
+    {
+        seed(w, 'context7', 'user', C7_HOSTED);
+        const data = path.join(w.dir, 'data');
+        const ctx = ctxData(w, data);
+        const [f] = ctx.catalog && fix.detectAll(ctx).found.filter((x) => x.id === 'list-import');
+        const groot = path.join(w.home, '.preferred-tools');
+        assert.deepStrictEqual([f.name, f.scope, f.family, f.record], [path.join(groot, 'mcps.json'), null, 'global', null]);
+        assert.deepStrictEqual(F.listImportSteps(f, ctx).map((s) => s.op), ['root-ignore', 'list-write', 'record-root']);
+        const l = logged();
+        assert.strictEqual(fix.applyFixes(ctx, ['list-import'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(fsx.readFileSync(path.join(groot, '.gitignore'), 'utf8'), rootsLib.GITIGNORE);
+        assert.strictEqual(readJson(path.join(data, 'roots.json')).global, groot);
+        assert.deepStrictEqual(listAt(groot).servers.map((s) => s.name), ['context7']);
+    }
+    finally { w.clean(); }
+});
+
+test('retire-record after a rollback keeps both backups and list-import finds nothing next run', () =>
+{
+    const w = world();
+    try
+    {
+        seed(w, 'context7', 'local', C7_HOSTED);
+        const proot = path.join(w.project, '.preferred-tools');
+        recordAt(proot, [OWN_X]);
+        put(path.join(proot, 'preferred-tools.json.0.4.bak'), 'the first backup\n');
+        const l = logged();
+        assert.strictEqual(fix.applyFixes(ctxOf(w), ['list-import'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(fsx.readFileSync(path.join(proot, 'preferred-tools.json.0.4.bak'), 'utf8'), 'the first backup\n');
+        assert.deepStrictEqual(readJson(path.join(proot, 'preferred-tools.json.0.4.bak.2')).servers, [OWN_X]);
+        assert.ok(!fsx.existsSync(path.join(proot, 'preferred-tools.json')));
+        assert.deepStrictEqual(ids(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'list-import')), []);
+    }
+    finally { w.clean(); }
+});
+
+test('the file pass runs after the registration pass, detects on what it wrote, and is read back', () =>
+{
+    const w = world();
+    try
+    {
+        // uvx-python fires on it: no python request
+        const entry = fresh('serena', process.platform, process.arch);
+        seed(w, 'serena', 'local', { ...entry, args: entry.args.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python') });
+        const l = logged();
+        const res = fix.applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.strictEqual(res.failed, null, l.text());
+        assert.deepStrictEqual(res.applied.map((f) => f.id).sort(), ['list-import', 'uvx-python']);
+        const text = l.text();
+        assert.ok(text.indexOf("'serena'") >= 0 && text.indexOf("'serena'") < text.indexOf('mcps.json'), text);
+        const [s] = listAt(path.join(w.project, '.preferred-tools')).servers;
+        assert.strictEqual(s.entry.args[0], '--python', 'the list holds the repaired entry');
+        assert.match(text, /fixed +list-import on .*mcps\.json/);
+    }
+    finally { w.clean(); }
+});
+
+test("install's first touch retires the old record, and a configure 'manage' answer given then survives a later fix run", () =>
+{
+    const { plan } = require('../scripts/plan.js');
+    const { apply } = require('../scripts/apply.js');
+    const X = require('../scripts/existing.js');
+    const w = world();
+    try
+    {
+        seed(w, 'context7', 'local', C7_HOSTED);
+        const proot = path.join(w.project, '.preferred-tools');
+        recordAt(proot, [{ name: 'context7', scope: 'local', fingerprint: X.fingerprintOf(C7_HOSTED, catalog), choice: 'own' }, OWN_X]);
+        const inv0 = inventory.buildInventory({ project: w.project, env: w.env });
+        assert.strictEqual(inv0.registrations.find((r) => r.name === 'context7').choice, 'own');
+        const p = plan(inv0, { existing: { 'mcp:context7~local': 'manage' } }, { home: w.home, env: w.env });
+        assert.deepStrictEqual(p.errors, []);
+        assert.ok(p.steps.some((s) => s.op === 'retire-record'), p.steps.map((s) => s.op).join());
+        const l = logged();
+        assert.strictEqual(apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        const list = listAt(proot);
+        // x's server is gone, so its own entry goes, as 0.4.x dropped it
+        assert.deepStrictEqual([list.servers.map((s) => s.name), list.own], [['context7'], []]);
+        assert.ok(!fsx.existsSync(path.join(proot, 'preferred-tools.json')) && fsx.existsSync(path.join(proot, 'preferred-tools.json.0.4.bak')));
+        fix.applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp2'), log: () => {} });
+        const inv1 = inventory.buildInventory({ project: w.project, env: w.env });
+        assert.strictEqual(inv1.registrations.find((r) => r.name === 'context7').choice, null, 'managed');
+        assert.deepStrictEqual(listAt(proot).servers.map((s) => s.name), ['context7']);
     }
     finally { w.clean(); }
 });
