@@ -46,8 +46,8 @@ State one line before anything else: `Size: <trivial|spike|bounded|architectural
    House voice holds in every file written (single dashes, single quotes in prose). A case not run is reported NOT RUN.
 7. Review - one fresh Opus review of the whole branch, one fix pass (each fix RED then GREEN), minors deferred to
    the ledger.
-8. Commit - one commit per plan task as its commit step says, else one commit for the change; by pathspec, its
-   message with no trace of the agent (`.claude/CLAUDE.md`). No version bump, push or merge without the user's word.
+8. Commit - one commit per plan task as its commit step says, else one commit for the change; by pathspec,
+   its message with no trace of the agent (`.claude/CLAUDE.md`). No version bump, push or merge without the user's word.
 
 ## The close
 
@@ -56,5 +56,5 @@ and why - then 'Rulings I made' and 'Deferred minors' from the ledger, and `auto
 
 ## Not here
 
-- A change in a sibling repo (alfred-code hosts the `envoydev` marketplace), which follows that repo's own flow.
+- A change in a sibling repo (plugins-marketplaces hosts the `envoydev` marketplace), which follows that repo's own flow.
 - Alfred Code's `task-solve` and its seats, stamps and stops, which serve the projects that install the stack.

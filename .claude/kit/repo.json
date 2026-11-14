@@ -1,0 +1,20 @@
+{
+  "name": "alfred-tools",
+  "claude_md": ".claude/CLAUDE.md",
+  "check_batch": "run the tests that cover the change and `npm run lint`",
+  "check_once": "the full `npm test`",
+  "not_for": "Not for a release, which follows the Release section of `plugin-handling.md`, on the user's word.",
+  "settled": "A design already settled by a run order or the user's rulings skips the spec and goes to the plan.",
+  "checks": [
+    "   - per batch: `npm run lint` and the tests that cover the change;",
+    "   - `npm run matrix` (real-CLI cases in a throwaway home and account) after a change to install, configure, update",
+    "     or fix, reading the written `.mcp.json`, account file and settings, never the exit code alone;",
+    "   - the full `npm test` once, in the background, its output to a log, its tail read, then `npm run validate`."
+  ],
+  "voice": "single dashes, single quotes in prose",
+  "commit": "its message with no trace of the agent (`.claude/CLAUDE.md`)",
+  "not_here": [
+    "- A change in a sibling repo (plugins-marketplaces hosts the `envoydev` marketplace), which follows that repo's own flow.",
+    "- Alfred Code's `task-solve` and its seats, stamps and stops, which serve the projects that install the stack."
+  ]
+}
