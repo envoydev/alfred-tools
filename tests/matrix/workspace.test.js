@@ -31,10 +31,11 @@ const roots = require('../../scripts/roots.js');
 const fake = require('../fake-mcp-http.js');
 const { Harness, hashTree } = require('../harness.js');
 const { buildAlfred } = require('../probes/alfred-workspace.js');
+const { keepWritten } = require('../proof/matrix-keep.js');
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-ws-')));
-test.after(() => fs.rmSync(root, { recursive: true, force: true }));
+test.after(() => { keepWritten(root, 'workspace'); fs.rmSync(root, { recursive: true, force: true }); });
 const catalog = catalogLib.load();
 const T = { skip: skipAll, timeout: 900000 };
 const S = 'SENTRY_ACCESS_TOKEN';

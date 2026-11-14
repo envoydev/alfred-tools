@@ -14,11 +14,12 @@ const path = require('node:path');
 const cli = require('../../scripts/claude-cli.js');
 const fake = require('../fake-mcp-http.js');
 const { Harness } = require('../harness.js');
+const { keepWritten } = require('../proof/matrix-keep.js');
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const NETWORK = /could not resolve|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|ECONNRESET|fetch failed|network/i;
 const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-b-')));
-test.after(() => fs.rmSync(base, { recursive: true, force: true }));
+test.after(() => { keepWritten(base, 'bridge'); fs.rmSync(base, { recursive: true, force: true }); });
 
 // a test-only value, written by this case into the throwaway root and never printed
 const KEY = 'pt-test-token';

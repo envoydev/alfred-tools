@@ -18,10 +18,11 @@ const catalog = require('../../scripts/catalog.js').load();
 const keys = require('../../scripts/keys.js');
 const { Harness } = require('../harness.js');
 const spec = require('./fresh-answers.json');
+const { keepWritten } = require('../proof/matrix-keep.js');
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-fresh-'));
-test.after(() => fs.rmSync(root, { recursive: true, force: true }));
+test.after(() => { keepWritten(root, 'fresh-install'); fs.rmSync(root, { recursive: true, force: true }); });
 
 const h = new Harness({ root });
 // fake key values, built at run time, in the throwaway global root's .mcps-secrets - the one file 0.2.0 reads a key from

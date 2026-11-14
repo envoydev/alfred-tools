@@ -1,0 +1,15 @@
+{
+  "rows": [
+    "context7",
+    "serena",
+    "atlassian",
+    "sentry"
+  ],
+  "clients": [
+    "claude",
+    "cursor"
+  ],
+  "done": [
+    "clients"
+  ]
+}

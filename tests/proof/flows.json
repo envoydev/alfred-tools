@@ -1,0 +1,568 @@
+{
+  "note": "The golden's inputs (docs/superpowers/plans/2026-11-14-typescript-restructure.md, Task 1): each step's argv after node scripts/<entry>. <w> the flow's temp folder (the tmpdir step's, else the world's), <data> its plugin data folder, <root> the project root folder, <cursor> the project's Cursor file, <fixture:name> a file of fixtures/ copied into <w>, <first> the first id the step marked takeFirst printed, <missing> a folder that is not there (refresh-reserved's error path: its --bogus builds the catalog file from the alfred-code checkout beside the tree). A step with build runs a builder of golden.js; after runs another flow's steps first.",
+  "entries": [
+    "apply",
+    "fetch",
+    "fix",
+    "inventory",
+    "plan",
+    "prereq",
+    "table",
+    "tmpdir",
+    "update",
+    "refresh-pins",
+    "refresh-reserved"
+  ],
+  "flows": [
+    {
+      "name": "1-fresh",
+      "steps": [
+        {
+          "entry": "tmpdir",
+          "argv": [],
+          "setTmp": true
+        },
+        {
+          "entry": "inventory",
+          "argv": [
+            "--json",
+            "<w>/inventory.json",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "table",
+          "argv": [
+            "<w>/inventory.json"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "--questions",
+            "<w>/inventory.json",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "--questions",
+            "<w>/inventory.json",
+            "<fixture:f1-picks-0.json>",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "--questions",
+            "<w>/inventory.json",
+            "<fixture:f1-picks-1.json>",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "prereq",
+          "argv": [
+            "<fixture:f1-answers.json>",
+            "--audit"
+          ]
+        },
+        {
+          "entry": "prereq",
+          "argv": [
+            "<w>/f1-answers.json",
+            "--json"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "<w>/inventory.json",
+            "<w>/f1-answers.json",
+            "--out",
+            "<w>/plan.json",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "apply",
+          "argv": [
+            "<w>/plan.json",
+            "--tmp",
+            "<w>",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "fetch",
+          "argv": [
+            "<w>/fetch.json"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1c-connectors",
+      "steps": [
+        {
+          "entry": "tmpdir",
+          "argv": [],
+          "setTmp": true
+        },
+        {
+          "entry": "inventory",
+          "argv": [
+            "--json",
+            "<w>/inventory.json",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "--questions",
+            "<w>/inventory.json",
+            "--data",
+            "<data>",
+            "--connectors",
+            "Linear,Sentry"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "<w>/inventory.json",
+            "<fixture:f1-answers.json>",
+            "--out",
+            "<w>/plan.json",
+            "--data",
+            "<data>",
+            "--connectors",
+            "Linear,Sentry"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2-repair",
+      "after": "1-fresh",
+      "steps": [
+        {
+          "build": "breakFlow2"
+        },
+        {
+          "entry": "tmpdir",
+          "argv": [],
+          "setTmp": true
+        },
+        {
+          "entry": "fix",
+          "argv": [
+            "--detect",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "fix",
+          "argv": [
+            "--questions",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "fix",
+          "argv": [
+            "--apply",
+            "none",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "fix",
+          "argv": [
+            "--apply",
+            "mcp-order",
+            "--data",
+            "<data>",
+            "--only",
+            "context7"
+          ]
+        },
+        {
+          "entry": "fix",
+          "argv": [
+            "--apply",
+            "all",
+            "--data",
+            "<data>",
+            "--input",
+            "retired-declined=claude-hud@claude-hud~user",
+            "--input",
+            "drift:cursor:sentry~project=keep"
+          ]
+        },
+        {
+          "entry": "update",
+          "argv": [
+            "--check",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "update",
+          "argv": [
+            "--questions",
+            "--no-refresh",
+            "--data",
+            "<data>"
+          ],
+          "takeFirst": true
+        },
+        {
+          "entry": "update",
+          "argv": [
+            "--apply",
+            "none",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "update",
+          "argv": [
+            "--apply",
+            "<first>",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "update",
+          "argv": [
+            "--apply",
+            "all",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "tmpdir",
+          "argv": [],
+          "setTmp": true
+        },
+        {
+          "entry": "inventory",
+          "argv": [
+            "--json",
+            "<w>/inventory.json",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "<w>/inventory.json",
+            "<fixture:f2-add.json>",
+            "--out",
+            "<w>/plan-add.json",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "apply",
+          "argv": [
+            "<w>/plan-add.json",
+            "--tmp",
+            "<w>",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "inventory",
+          "argv": [
+            "--json",
+            "<w>/inventory.json",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "<w>/inventory.json",
+            "<fixture:f2-change.json>",
+            "--out",
+            "<w>/plan-change.json",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "apply",
+          "argv": [
+            "<w>/plan-change.json",
+            "--tmp",
+            "<w>",
+            "--data",
+            "<data>"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3-from-0.4",
+      "steps": [
+        {
+          "entry": "tmpdir",
+          "argv": [],
+          "setTmp": true
+        },
+        {
+          "entry": "inventory",
+          "argv": [
+            "--json",
+            "<w>/inventory.json",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "<w>/inventory.json",
+            "<fixture:f3-answers.json>",
+            "--out",
+            "<w>/plan.json",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "apply",
+          "argv": [
+            "<w>/plan.json",
+            "--tmp",
+            "<w>",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "build": "from04"
+        },
+        {
+          "entry": "update",
+          "argv": [
+            "--check",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "update",
+          "argv": [
+            "--questions",
+            "--no-refresh",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "update",
+          "argv": [
+            "--apply",
+            "all",
+            "--data",
+            "<data>",
+            "--input",
+            "retired-declined=claude-hud@claude-hud~user",
+            "--input",
+            "cursor-offer:<root>=set",
+            "--input",
+            "cursor-name:memory@<cursor>=keep"
+          ]
+        },
+        {
+          "entry": "fix",
+          "argv": [
+            "--questions",
+            "--data",
+            "<data>"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4-workspace",
+      "steps": [
+        {
+          "build": "workspace"
+        },
+        {
+          "entry": "tmpdir",
+          "argv": [],
+          "setTmp": true
+        },
+        {
+          "entry": "inventory",
+          "argv": [
+            "--json",
+            "<w>/inventory.json",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "--questions",
+            "<w>/inventory.json",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "fix",
+          "argv": [
+            "--questions",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "update",
+          "argv": [
+            "--questions",
+            "--no-refresh",
+            "--data",
+            "<data>"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5-errors",
+      "steps": [
+        {
+          "entry": "apply",
+          "argv": []
+        },
+        {
+          "entry": "apply",
+          "argv": [
+            "--bogus"
+          ]
+        },
+        {
+          "entry": "fetch",
+          "argv": []
+        },
+        {
+          "entry": "fetch",
+          "argv": [
+            "--bogus"
+          ]
+        },
+        {
+          "entry": "fix",
+          "argv": []
+        },
+        {
+          "entry": "fix",
+          "argv": [
+            "--bogus"
+          ]
+        },
+        {
+          "entry": "inventory",
+          "argv": []
+        },
+        {
+          "entry": "inventory",
+          "argv": [
+            "--bogus"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": []
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "--bogus"
+          ]
+        },
+        {
+          "entry": "prereq",
+          "argv": []
+        },
+        {
+          "entry": "prereq",
+          "argv": [
+            "--bogus"
+          ]
+        },
+        {
+          "entry": "table",
+          "argv": []
+        },
+        {
+          "entry": "table",
+          "argv": [
+            "--bogus"
+          ]
+        },
+        {
+          "entry": "tmpdir",
+          "argv": []
+        },
+        {
+          "entry": "tmpdir",
+          "argv": [
+            "--bogus"
+          ]
+        },
+        {
+          "entry": "update",
+          "argv": []
+        },
+        {
+          "entry": "update",
+          "argv": [
+            "--bogus"
+          ]
+        },
+        {
+          "entry": "refresh-pins",
+          "argv": [
+            "--bogus"
+          ]
+        },
+        {
+          "entry": "refresh-reserved",
+          "argv": [
+            "--alfred",
+            "<missing>"
+          ]
+        }
+      ]
+    }
+  ]
+}

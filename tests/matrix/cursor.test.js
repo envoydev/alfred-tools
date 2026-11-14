@@ -18,6 +18,7 @@ const catalogLib = require('../../scripts/catalog.js');
 const fake = require('../fake-mcp-http.js');
 const fakeOauth = require('../fake-oauth-http.js');
 const { Harness } = require('../harness.js');
+const { keepWritten } = require('../proof/matrix-keep.js');
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-cursor-'));
@@ -32,7 +33,7 @@ const stop = (child) =>
     if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F']);
     else try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ }
 };
-test.after(() => { children.forEach(stop); fs.rmSync(root, { recursive: true, force: true }); });
+test.after(() => { children.forEach(stop); keepWritten(root, 'cursor'); fs.rmSync(root, { recursive: true, force: true }); });
 
 const which = (bin) => spawnSync(process.platform === 'win32' ? 'where' : 'which', [bin], { encoding: 'utf8' }).status === 0;
 const expand = (s, env) => s.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (_, k, d) => (env[k] !== undefined ? env[k] : d !== undefined ? d : ''));

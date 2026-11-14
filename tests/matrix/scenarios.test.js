@@ -21,10 +21,11 @@ const fix = require('../../scripts/fix.js');
 const update = require('../../scripts/update.js');
 const { pinnedVersion } = require('../../scripts/fixes/common.js');
 const { Harness } = require('../harness.js');
+const { keepWritten } = require('../proof/matrix-keep.js');
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-scn-'));
-test.after(() => fs.rmSync(root, { recursive: true, force: true }));
+test.after(() => { keepWritten(root, 'scenarios'); fs.rmSync(root, { recursive: true, force: true }); });
 const h = new Harness({ root });
 const catalog = catalogLib.load();
 const NETWORK = /could not resolve|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|network|clone|fetch|timed out|ECONNREFUSED/i;

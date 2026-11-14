@@ -1252,3 +1252,37 @@ Windows 11 ARM64.
   `open`; on Windows mcp-remote opens the browser through PowerShell), so one sign-in for both apps is proved on macOS
   only; M2 and M7 (no Cursor CLI). The first run's failures were the tests' own: expected paths joined with `/`, a
   local entry looked up under the `\` key, and `sh` for unpacking 0.4.0 (29f48ec).
+
+## Node - running `.ts` and the TypeScript tools (read and measured 2026-11-14, macOS arm64)
+
+The facts the TypeScript restructure rests on (`docs/superpowers/specs/2026-11-14-typescript-restructure-design.md`,
+kept locally; this list is the record).
+
+- Node runs a `.ts` file with no flag and no warning from v22.18.0: 'v22.18.0 Type stripping is enabled by default',
+  'v22.18.0 Type stripping no longer emits an experimental warning' -
+  https://nodejs.org/docs/latest-v22.x/api/typescript.html (History). Measured: 22.23.3, 24.11.0 and 26.13.0 run a
+  `.ts` entry with empty stderr; 22.14.0 and 22.16.0 throw `ERR_UNKNOWN_FILE_EXTENSION` (ESM) or a `SyntaxError` on
+  `import type` (CommonJS).
+- Node 23 strips by default only from v23.6.0: 'v23.6.0 Type stripping is enabled by default' -
+  https://nodejs.org/docs/latest-v23.x/api/typescript.html (History). So `engines` reads `^22.18.0 || >=23.6.0`.
+- A `.ts` file's module system follows the nearest `package.json` `type`, as for `.js` (typescript.html). With no
+  `type` field, an ESM `.ts` prints `[MODULE_TYPELESS_PACKAGE_JSON] Warning` on stderr (measured on 22.23.3, 24.11.0,
+  26.13.0; not in the docs).
+- In a CommonJS `.ts`, `require()` returns `any`, `import x = require()` is an import alias Node will not strip, and
+  `export` makes the file ESM (typescript.html, the features that need transformation; measured).
+- Imports name their extension: `import './file.ts'` (typescript.html).
+- Node refuses a `.ts` file under a `node_modules` path (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`) -
+  https://nodejs.org/docs/latest-v22.x/api/errors.html. The plugin cache is `~/.claude/plugins/cache/...`.
+- `import.meta.main` exists from v22.18.0 (Stability 1.0); `import.meta.dirname` and `filename` are stable from
+  v22.16.0; JSON modules are stable from v22.12.0 - https://nodejs.org/docs/latest-v22.x/api/esm.html.
+- `node --test` finds `.ts` tests; its default patterns include `**/*.test.{cts,mts,ts}` -
+  https://nodejs.org/docs/latest-v22.x/api/test.html; measured on 22.23.3, 24.11.0, 26.13.0.
+- TypeScript 7.0.2 (npm `latest` on 2026-11-14) has no JavaScript compiler API (`createLanguageService` is
+  undefined); 6.0.3 has it (measured, `npm install --ignore-scripts`). 6.0.3 typechecks an ESM `.ts` tree that
+  imports a CommonJS `.js` and JSON under the restructure's `tsconfig.json`; `enum` fails with TS1294 under
+  `erasableSyntaxOnly`. `@types/node` 22.20.5 was published 2026-10-01 (`npm view`).
+- The start cost of type stripping: a scratch copy of `scripts/` renamed `.ts`, 15 runs, median, the argument-error
+  path, on 24.11.0 - `table` 27.9 to 63.9 ms, `plan` 31.7 to 73.5, `fix` 34.3 to 79.2, `update` 33.3 to 77.9; on
+  22.23.3 - `table` 30.9 to 58.2, `plan` 35.9 to 72.7, `fix` 38.5 to 79.8. About 35-45 ms more per start.
+- A `node:test` reporter's `test:start` events carry `file`, `name` and `nesting`; the TAP reporter's output names no
+  file (measured on 24.11.0), so the proof's test-name list is a reporter (`tests/proof/test-names.js`).

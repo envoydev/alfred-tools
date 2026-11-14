@@ -1,0 +1,16 @@
+{
+  "change": {
+    "mcp:context7~project": {
+      "row": "context7",
+      "name": "docs",
+      "scope": "local"
+    }
+  },
+  "remove": [
+    {
+      "kind": "mcp",
+      "name": "sentry",
+      "scope": "project"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "clients": [
+    "claude"
+  ],
+  "picks": {
+    "memory": {}
+  }
+}

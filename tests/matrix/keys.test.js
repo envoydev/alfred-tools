@@ -26,11 +26,12 @@ const update = require('../../scripts/update.js');
 const fake = require('../fake-mcp-http.js');
 const { stubCatalog, trust, fill } = fake;
 const { Harness } = require('../harness.js');
+const { keepWritten } = require('../proof/matrix-keep.js');
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const T = { skip: skipAll, timeout: 600000 };
 const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-keys-')));
-test.after(() => fs.rmSync(base, { recursive: true, force: true }));
+test.after(() => { keepWritten(base, 'keys'); fs.rmSync(base, { recursive: true, force: true }); });
 
 const G = 'GITHUB_PERSONAL_ACCESS_TOKEN';
 const KEY = `mx-${crypto.randomBytes(12).toString('hex')}`;

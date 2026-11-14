@@ -10,6 +10,7 @@
     "matrix": "node --test --test-concurrency=1 tests/matrix/*.test.js",
     "lint": "node tests/lint.js",
     "validate": "node tests/validate-plugin.js",
-    "refresh-pins": "node scripts/refresh-pins.js"
+    "refresh-pins": "node scripts/refresh-pins.js",
+    "proof": "node tests/proof/proof.js"
   }
 }

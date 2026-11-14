@@ -1,0 +1,27 @@
+{
+  "clients": [
+    "claude",
+    "cursor"
+  ],
+  "keyNames": {
+    "context7": "CONTEXT7_API_KEY"
+  },
+  "picks": {
+    "context7": {
+      "route": "remote",
+      "scope": "project",
+      "token": true
+    },
+    "serena": {
+      "scope": "local"
+    },
+    "atlassian": {
+      "route": "remote",
+      "token": false
+    },
+    "sentry": {
+      "route": "remote",
+      "scope": "project"
+    }
+  }
+}
