@@ -106,7 +106,7 @@ const REPO = path.resolve(import.meta.dirname, '..', '..');
 const VERSIONS = ['2.9.0', '2.11.0', '3.0.0', '3.2.1'];
 const WORKSPACE_FROM = '2.11.0';
 const COMMANDS = ['install', 'configure', 'fix', 'update'];
-const NODE_LINE = /node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/([a-z-]+\.js)"([^`\n]*)/g;
+const NODE_LINE = /node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/([a-z-]+\.ts)"([^`\n]*)/g;
 
 const newer = (a: string, b: string) => { const x = a.split('.').map(Number); const y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i]! > y[i]!; return true; };
 
@@ -329,7 +329,7 @@ function prereqAndApply(s: Session, tmp: string, t: (f: string) => string, answe
     const file = fetchFileOf(applied);
     if (file) s.bash('fetch.ts', '"<file>"', { '<file>': file });
     else s.skip('fetch.ts', '"<file>"', 'apply handed no fetch file on');
-    s.skip('hud-statusline.js', '--check', 'claude-hud is not picked');
+    s.skip('hud-statusline.ts', '--check', 'claude-hud is not picked');
 }
 
 function install(s: Session, ctx: HookCtx)
