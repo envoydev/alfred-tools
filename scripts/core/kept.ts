@@ -10,14 +10,9 @@
 // else: a known token shape, a PEM private key, a connection string's `Password=` and a URL's userinfo password. Never
 // masked: a value of nothing but ${NAME} / ${NAME:-default} placeholders after at most one scheme word (`Bearer
 // ${CONTEXT7_API_KEY}`), and a catalog row's location keys, which configure reads.
-import type { CatalogRow } from '../catalog/types.ts';
-import type { ServerEntry } from './types.ts';
+import type { Path, RowOf, ServerEntry } from './types.ts';
 
 export const MARKER = '${PREFERRED_TOOLS_KEPT}';
-
-// The catalog row a registration matched, for its location keys; null for the user's own.
-type RowOf = CatalogRow | null | undefined;
-type Path = (string | number)[];
 
 // the guard's tests (v3.2.1 :63-67, :143-156), copied so this file masks at least what it blocks
 const SECRET_KEY_RE = /(TOKEN|SECRET|KEY|PASSWORD|PASSWD|DSN|CREDENTIAL|AUTH)$/i;

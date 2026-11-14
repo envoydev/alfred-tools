@@ -575,3 +575,13 @@ export interface AskOptions
     home?: string | null | undefined;
     connectors?: string[] | null;
 }
+
+export interface PlanArgs
+{
+    questions: boolean;
+    files: string[];
+    data: string | null;
+    connectors: string | null;
+    out: string | null;
+    error: string | null;
+}

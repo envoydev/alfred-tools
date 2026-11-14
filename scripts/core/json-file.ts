@@ -4,6 +4,7 @@
 // text - a BOM plus garbage included - still throws, so it still counts as unreadable.
 // Ported from alfred-code scripts/install/json-file.js; blockingStdio is alfred-code stack/hooks/hook-prelude.js's.
 import fs from 'node:fs';
+import type { HandleOf } from './types.ts';
 
 export const stripBom = (text: string): string => (typeof text === 'string' && text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text);
 
@@ -12,10 +13,6 @@ export const parseJson = (text: string): unknown => JSON.parse(stripBom(text));
 
 // The file's parsed value, or `{}` when it is absent or unreadable.
 export const readJson = (file: string): unknown => { try { return parseJson(fs.readFileSync(file, 'utf8')); } catch { return {}; } };
-
-// A pipe closed early must not truncate the last lines of a script's output: make stdout and stderr blocking.
-// A stream's libuv handle, which Node's types do not declare.
-type HandleOf = { _handle?: { setBlocking?: (blocking: boolean) => void } | null };
 
 export function blockingStdio(streams: NodeJS.WriteStream[] = [process.stdout, process.stderr]): void
 {

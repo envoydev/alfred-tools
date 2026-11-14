@@ -65,3 +65,12 @@ export interface CursorOf
     names: string[];
     entries: Record<string, ServerEntry>;
 }
+
+// Where a Cursor file is looked for: the platform, the project and the home (or the env it is read from).
+export interface CursorPlace
+{
+    platform: string;
+    project?: string | undefined;
+    home?: string | undefined;
+    env?: Env | undefined;
+}

@@ -126,3 +126,8 @@ export interface Workspace
     ancestors: string[];
     notes: string[];
 }
+
+// The record while it is read: every field present.
+export type RawRecord = { parent: string | null; role: Role | null; children: string[]; ignoredChildren: string[] };
+export type LineEntry = { kind: 'skip' } | { kind: 'parent-none' } | { kind: 'parent' | 'child'; value: string } | { kind: 'role'; value: Role };
+export type WorkspaceJson = { parent?: unknown; role?: unknown; children?: unknown; ignoredChildren?: unknown };

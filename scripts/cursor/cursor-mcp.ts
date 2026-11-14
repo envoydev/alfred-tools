@@ -16,16 +16,7 @@ import { matchesFingerprint } from '../inventory/inventory.ts';
 import type { Env, Outcome, ServerEntry, ServerMap } from '../core/types.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { ListServer } from '../mcps-list/types.ts';
-import type { CursorCtx, CursorDoc, CursorOf, CursorRead, CursorWriteStep, ListSource, Managed } from './types.ts';
-
-// Where a Cursor file is looked for: the platform, the project and the home (or the env it is read from).
-interface CursorPlace
-{
-    platform: string;
-    project?: string | undefined;
-    home?: string | undefined;
-    env?: Env | undefined;
-}
+import type { CursorCtx, CursorDoc, CursorOf, CursorPlace, CursorRead, CursorWriteStep, ListSource, Managed } from './types.ts';
 
 const pathFor = (platform: string) => (platform === 'win32' ? path.win32 : path.posix);
 

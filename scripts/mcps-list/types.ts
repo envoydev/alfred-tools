@@ -96,3 +96,12 @@ export interface FileOps
     write?: (file: string, text: string) => void;
     rename?: (from: string, to: string) => void;
 }
+
+// A list or record file as parsed, before it is checked.
+export interface RawDoc
+{
+    version?: unknown;
+    servers?: unknown;
+    own?: unknown;
+    cursorOffer?: unknown;
+}

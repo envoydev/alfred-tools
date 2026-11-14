@@ -1,4 +1,5 @@
 // The shapes core/ reads, writes and hands to every other folder.
+import type { CatalogRow } from '../catalog/types.ts';
 
 // A process environment: the variables the scripts read by name, and any other.
 export interface Env
@@ -115,3 +116,11 @@ export interface Outcome
     ok: boolean;
     detail: string;
 }
+
+// A pipe closed early must not truncate the last lines of a script's output: make stdout and stderr blocking.
+// A stream's libuv handle, which Node's types do not declare.
+export type HandleOf = { _handle?: { setBlocking?: (blocking: boolean) => void } | null };
+
+// The catalog row a registration matched, for its location keys; null for the user's own.
+export type RowOf = CatalogRow | null | undefined;
+export type Path = (string | number)[];

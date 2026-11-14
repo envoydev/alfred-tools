@@ -234,3 +234,7 @@ export interface Refresh
     held: string[];
     errors: string[];
 }
+
+// alfred-code's files, the part read here.
+export type RetiredRow = { id?: string; name?: string; retiredIn?: string };
+export type AlfredFiles = { plugins: RetiredRow[] | Record<string, RetiredRow>; retired: { mcps?: string[] }; mcpServers: Record<string, unknown> };

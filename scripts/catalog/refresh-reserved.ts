@@ -7,13 +7,9 @@
 // `--check` compares instead of writing. Without a checkout the shipped file is the record.
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ReservedFile } from './types.ts';
+import type { AlfredFiles, ReservedFile, RetiredRow } from './types.ts';
 
 const FILE = path.join(import.meta.dirname, '..', '..', 'catalog', 'reserved-names.json');
-
-// alfred-code's files, the part read here.
-type RetiredRow = { id?: string; name?: string; retiredIn?: string };
-type AlfredFiles = { plugins: RetiredRow[] | Record<string, RetiredRow>; retired: { mcps?: string[] }; mcpServers: Record<string, unknown> };
 
 export function reservedFrom(alfredDir: string): string[]
 {

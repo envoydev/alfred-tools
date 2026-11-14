@@ -10,17 +10,7 @@ import { blockingStdio } from '../core/json-file.ts';
 import { plan } from './plan.ts';
 import { renderPlan } from './render.ts';
 import type { Inventory } from '../inventory/types.ts';
-import type { Answers, Picks } from './types.ts';
-
-interface PlanArgs
-{
-    questions: boolean;
-    files: string[];
-    data: string | null;
-    connectors: string | null;
-    out: string | null;
-    error: string | null;
-}
+import type { Answers, Picks, PlanArgs } from './types.ts';
 
 // The arguments, by flag: `--questions` first or not at all, then at most two files, and the flags anywhere after them.
 // An unknown flag, or a flag without its value, is an error - never read as a file.

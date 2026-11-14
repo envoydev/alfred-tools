@@ -211,6 +211,12 @@ for (const file of scriptFiles(path.join(root, 'scripts')))
     const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
     const visit = (node: ts.Node): void =>
     {
+        // the spec's Types rule: a logic file holds functions and their constants, its folder's types.ts every shape
+        if ((ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) && path.basename(file) !== 'types.ts')
+        {
+            const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
+            problems.push(`${path.relative(root, file)}:${line + 1}: type '${node.name.text}' belongs in its folder's types.ts`);
+        }
         const binding = ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node) || ts.isFunctionDeclaration(node)
             || ts.isPropertySignature(node) || ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node) || ts.isPropertyDeclaration(node) ? node.name : undefined;
         const bare = binding && ts.isIdentifier(binding) ? binding.text.replace(/^_/, '') : '';

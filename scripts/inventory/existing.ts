@@ -12,10 +12,8 @@ import { matchesFingerprint } from './inventory.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Live, OwnEntry } from '../mcps-list/types.ts';
-import type { DeclaredServer, ExistingItem, InvRegistration, Inventory, PluginServer } from './types.ts';
+import type { DeclaredServer, ExistingItem, Inventory, InvRegistration, PluginServer, ServersDoc } from './types.ts';
 
-// A servers file or a plugin manifest as parsed: the mcpServers map, or the map itself at the top.
-type ServersDoc = { mcpServers?: unknown; [key: string]: unknown };
 // inventory.js requires this file lazily, inside buildInventory
 
 // the rows with a hosted route: the only ones a connector can be

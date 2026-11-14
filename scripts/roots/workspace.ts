@@ -7,12 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { Env } from '../core/types.ts';
-import type { RecordRead, Role, Workspace, WorkspaceRecord } from './types.ts';
-
-// The record while it is read: every field present.
-type RawRecord = { parent: string | null; role: Role | null; children: string[]; ignoredChildren: string[] };
-type LineEntry = { kind: 'skip' } | { kind: 'parent-none' } | { kind: 'parent' | 'child'; value: string } | { kind: 'role'; value: Role };
-type WorkspaceJson = { parent?: unknown; role?: unknown; children?: unknown; ignoredChildren?: unknown };
+import type { LineEntry, RawRecord, RecordRead, Role, Workspace, WorkspaceJson, WorkspaceRecord } from './types.ts';
 
 const DATA = '.alfred';
 const JSON_NAME = 'workspace.json';

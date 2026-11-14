@@ -18,16 +18,7 @@ import type { CatalogRow } from '../catalog/types.ts';
 import type { TokenField } from '../keys/types.ts';
 import type { Registration } from '../entries/types.ts';
 import type { Family, InventoryView, RootsCtx } from '../roots/types.ts';
-import type { ListChanges, ListRead, ListServer, Live, McpsList, OldRecord, OwnEntry, ReadState, StepEnd, StepLike } from './types.ts';
-
-// A list or record file as parsed, before it is checked.
-interface RawDoc
-{
-    version?: unknown;
-    servers?: unknown;
-    own?: unknown;
-    cursorOffer?: unknown;
-}
+import type { ListChanges, ListRead, ListServer, Live, McpsList, OldRecord, OwnEntry, RawDoc, ReadState, StepEnd, StepLike } from './types.ts';
 
 export const LIST_VERSION = 1;
 
