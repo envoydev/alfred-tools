@@ -161,3 +161,6 @@ vite.config.ts.timestamp-*
 
 # session investigations copied from a user's machine: they name private workspaces and paths
 docs/sessions-investigation/
+
+# A local MCP config: the repo root is the plugin root, so a tracked .mcp.json would ship its servers to every install
+.mcp.json
