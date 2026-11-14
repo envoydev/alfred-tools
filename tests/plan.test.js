@@ -2182,7 +2182,7 @@ test('configure: a 0.1.x project-scope github Docker registration keeps Project 
     const { apply } = require('../scripts/apply/run.js');
     const cli = require('../scripts/core/claude-cli.js');
     const account = require('../scripts/core/account.js');
-    const fix = require('../scripts/fix.js');
+    const fix = require('../scripts/fix/fix.js');
     const docker = { command: 'docker', args: ['run', '-i', '--rm', '-e', G, 'ghcr.io/github/github-mcp-server:v2.1.0', 'stdio'], env: { [G]: `\${${G}}` } };
     const t = asks.all(inv(MAC, { registrations: [reg('github', 'project', docker, 'github', 'local')] }), { targets: ['mcp:github~project'] }, catalog).targets['mcp:github~project'];
     const scopeQ = [...(t.first || []), ...t.questions].find((q) => q.id === 'scope-github');

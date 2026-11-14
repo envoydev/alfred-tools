@@ -14,11 +14,8 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const catalogLib = require('./catalog/catalog.js');
-const account = require('./core/account.js');
-const { realMachine } = require('./fixes/common.js');
-const { androidSdk, javaHome } = require('./fixes/registration.js');
-const { blockingStdio } = require('./core/json-file.js');
+const catalogLib = require('../catalog/catalog.js');
+const { androidSdk, javaHome } = require('../fix/registration.js');
 
 const versionOf = (text) => (/(\d+\.\d+(?:\.\d+)?)/.exec(String(text || '')) || [])[1] || null;
 
@@ -153,20 +150,4 @@ function picksFrom(argv, catalog)
     return Object.entries(answers.picks || {}).map(([id, p]) => ({ row: id, route: (p && p.route) || (catalog.byId.get(id) || {}).recommendedRoute })).concat(changed);
 }
 
-function main(argv, { env = process.env, machine, platform = process.platform, out = (s) => process.stdout.write(`${s}\n`) } = {})
-{
-    const catalog = catalogLib.load();
-    let picks;
-    try { picks = picksFrom(argv, catalog); }
-    catch (e) { out(`prereq: ${e.message}`); return 2; }
-    if (!picks) { out('usage: prereq.js <answers.json> | --rows id,id  [--json]'); return 2; }
-    const unknown = picks.filter((p) => !catalog.byId.has(p.row));
-    if (unknown.length) { out(`prereq: unknown tool ${unknown.map((u) => u.row).join(', ')}`); return 2; }
-    const ctx = { platform, env, home: account.homeDir(env), machine: machine || realMachine({ env, platform }) };
-    const res = check(picks, ctx, catalog, { withAudit: argv.includes('--audit') });
-    out(argv.includes('--json') ? JSON.stringify(res, null, 2) : render(res));
-    return 0;
-}
-
-if (require.main === module) { blockingStdio(); process.exit(main(process.argv.slice(2))); }
-module.exports = { CHECKS, check, audit, render, main };
+module.exports = { CHECKS, check, audit, render, picksFrom };

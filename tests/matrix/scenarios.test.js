@@ -17,9 +17,9 @@ const cli = require('../../scripts/core/claude-cli.js');
 const account = require('../../scripts/core/account.js');
 const catalogLib = require('../../scripts/catalog/catalog.js');
 const { buildEntry } = require('../../scripts/entries/entry.js');
-const fix = require('../../scripts/fix.js');
-const update = require('../../scripts/update.js');
-const { pinnedVersion } = require('../../scripts/fixes/common.js');
+const { makeCtx, detectAll, applyFixes, questions } = require('../../scripts/fix/fix.js');
+const { main } = require('../../scripts/update/command.js');
+const { pinnedVersion } = require('../../scripts/fix/common.js');
 const { Harness } = require('../harness.js');
 const { keepWritten } = require('../proof/matrix-keep.js');
 
@@ -141,7 +141,7 @@ test('an update with a stale pin: the registry\'s newer, old-enough release is w
     const lines = [];
     // a fetch file is handed on, so update keeps its <tmp>: under the root, which test.after removes
     const tmp = fs.mkdtempSync(path.join(root, 'update-'));
-    const code = await update.main(['--apply', 'mcp:serena~user', '--no-refresh', '--tmp', tmp, '--project', p], { env: h.env, out: (s) => lines.push(s), registry, now, machine: { which: () => null, run: () => ({ status: 1 }), nodeVersion: process.versions.node } });
+    const code = await main(['--apply', 'mcp:serena~user', '--no-refresh', '--tmp', tmp, '--project', p], { env: h.env, out: (s) => lines.push(s), registry, now, machine: { which: () => null, run: () => ({ status: 1 }), nodeVersion: process.versions.node } });
     assert.strictEqual(code, 0, lines.join('\n'));
     const got = reg(p, 'serena', 'user');
     assert.strictEqual(pinnedVersion(got.entry, 'serena-agent'), '1.5.0', 'the 2-day-old 1.6.0 is held back');
@@ -270,20 +270,20 @@ for (const f of FIXES)
         const seeded = f.seed();
         const name = `fix-${f.id}`; // a custom name: identity is the launch, and another case's registration in the shared account cannot match `--only`
         add(p, name, seeded, 'local');
-        const mk = () => fix.makeCtx({
+        const mk = () => makeCtx({
             inv: h.inventory(p), catalog, env: { ...h.env, ...(f.env || {}) }, platform: f.platform, arch: f.arch || 'x64',
             machine: { exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1, stdout: '', stderr: '' }), nodeVersion: process.versions.node, ...(f.machine || {}) },
         });
-        const found = fix.detectAll(mk(), { only: name }).found.filter((x) => x.id === f.id);
+        const found = detectAll(mk(), { only: name }).found.filter((x) => x.id === f.id);
         assert.strictEqual(found.length, 1, `${f.id} not found on ${JSON.stringify(seeded)}`);
         assert.ok(!found[0].blocked, found[0].blocked);
         const lines = [];
-        const res = fix.applyFixes(mk(), [f.id], { only: name, tmp: path.join(root, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
+        const res = applyFixes(mk(), [f.id], { only: name, tmp: path.join(root, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
         assert.ok(!res.failed, lines.join('\n'));
         const after = reg(p, name, 'local');
         assert.notDeepStrictEqual(after.entry, seeded, 'the entry changed');
         assert.strictEqual(after.rowId, catalog.byId.get(f.row).id, 'still matched by what it launches');
-        assert.deepStrictEqual(fix.detectAll(mk(), { only: name }).found.filter((x) => x.id === f.id), [], 'read back: the detector finds nothing now');
+        assert.deepStrictEqual(detectAll(mk(), { only: name }).found.filter((x) => x.id === f.id), [], 'read back: the detector finds nothing now');
         // the real file holds what the CLI wrote
         assert.deepStrictEqual(account.readAccount(h.env, p).local[name], after.entry);
     });
@@ -299,18 +299,18 @@ test('fix windows-mcp-one-per-desktop: two real registrations on a simulated win
         add(p, 'wd-a', freshEntry('windows-control', 'win32', 'x64', 'local'), 'local');
         add(p, 'wd-b', freshEntry('windows-control', 'win32'), 'user');
         // x64 as the FIXES cases: an ARM64 host would fire windows-arm-python on the same entries
-        const mk = () => fix.makeCtx({ inv: h.inventory(p), catalog, env: h.env, platform: 'win32', arch: 'x64',
+        const mk = () => makeCtx({ inv: h.inventory(p), catalog, env: h.env, platform: 'win32', arch: 'x64',
             machine: { exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1, stdout: '', stderr: '' }), nodeVersion: process.versions.node } });
-        const detected = fix.detectAll(mk(), { only });
+        const detected = detectAll(mk(), { only });
         assert.strictEqual(detected.found.length, 1, JSON.stringify(detected.found));
         // the shared account may hold other cases' windows-mcp entries: these two are named, the count is not asserted
         assert.match(detected.found[0].found, /wd-a \(local\)/);
         assert.match(detected.found[0].found, /wd-b \(user\)/);
         assert.match(detected.found[0].blocked, /^keep one per Windows desktop - /);
-        assert.deepStrictEqual(fix.questions(detected), { choose: null, pick: [], drift: [] });
+        assert.deepStrictEqual(questions(detected), { choose: null, pick: [], drift: [] });
         const before = accountText();
         const lines = [];
-        const res = fix.applyFixes(mk(), [only], { only, tmp: path.join(root, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
+        const res = applyFixes(mk(), [only], { only, tmp: path.join(root, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
         assert.ok(!res.failed, lines.join('\n'));
         assert.match(lines.join('\n'), /skipped windows-mcp-one-per-desktop/);
         assert.strictEqual(res.steps, 0);

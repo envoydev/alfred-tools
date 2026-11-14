@@ -9,7 +9,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { world, readJson, writeJson } = require('./helpers.js');
 const inventory = require('../scripts/inventory/inventory.js');
-const fix = require('../scripts/fix.js');
+const { makeCtx, detectAll, applyFixes, questions } = require('../scripts/fix/fix.js');
 const cli = require('../scripts/core/claude-cli.js');
 const { plan } = require('../scripts/plan/plan.js');
 const { apply } = require('../scripts/apply/run.js');
@@ -23,12 +23,12 @@ function installIn(w, project, answers)
     assert.strictEqual(apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
 }
 const install = (w, answers) => installIn(w, w.project, answers);
-const ctxOf = (w, project = w.project) => fix.makeCtx({ inv: inventory.buildInventory({ project, env: w.env }), env: w.env, machine: noMachine() });
-const drifts = (w, project) => fix.detectAll(ctxOf(w, project), { only: 'client-drift' }).found;
+const ctxOf = (w, project = w.project) => makeCtx({ inv: inventory.buildInventory({ project, env: w.env }), env: w.env, machine: noMachine() });
+const drifts = (w, project) => detectAll(ctxOf(w, project), { only: 'client-drift' }).found;
 function run(w, ids, input = {}, project = w.project)
 {
     const lines = [];
-    const res = fix.applyFixes(ctxOf(w, project), ids, { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')), input });
+    const res = applyFixes(ctxOf(w, project), ids, { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')), input });
     return { res, text: lines.join('\n') };
 }
 const listFile = (w) => path.join(w.project, '.preferred-tools', 'mcps.json');
@@ -51,13 +51,13 @@ function editCursor(file, name, change)
     writeJson(file, doc);
 }
 const shape = (f) => [f.app, f.change, f.keyGuard, f.rowGone, f.inherited];
-const driftQs = (w, project) => fix.questions(fix.detectAll(ctxOf(w, project))).drift.flat();
+const driftQs = (w, project) => questions(detectAll(ctxOf(w, project))).drift.flat();
 const labels = (q) => q.options.map((o) => o.label);
 
 test('fixes/lists.js loads before plan-lists.js and both export every function', () =>
 {
     const scripts = path.join(__dirname, '..', 'scripts');
-    for (const order of [['fixes/lists.js', 'plan/lists.js', 'plan/cursor-steps.js', 'plan/repair-tail.js'], ['plan/repair-tail.js', 'plan/cursor-steps.js', 'plan/lists.js', 'fixes/lists.js']])
+    for (const order of [['fix/lists.js', 'plan/lists.js', 'plan/cursor-steps.js', 'plan/repair-tail.js'], ['plan/repair-tail.js', 'plan/cursor-steps.js', 'plan/lists.js', 'fix/lists.js']])
     {
         const code = `const out = ${JSON.stringify(order)}.map((f) => require(${JSON.stringify(scripts)} + '/' + f)); const bad = out.flatMap((m, i) => Object.entries(m).filter(([, v]) => v === undefined).map(([k]) => ${JSON.stringify(order)}[i] + ':' + k)); if (bad.length) { console.log(bad.join(',')); process.exit(1); }`;
         const r = spawnSync(process.execPath, ['-e', code], { encoding: 'utf8' });
@@ -254,8 +254,8 @@ test('Apply all found applies list-import and serena-base-modes and leaves every
         fs.mkdirSync(home, { recursive: true });
         fs.writeFileSync(path.join(home, 'serena_config.yml'), 'base_modes:\n  - interactive\n  - editing\n');
         editCursor(cursorFile(w), 'serena', (s) => s.args.push('--extra'));
-        const d = fix.detectAll(ctxOf(w));
-        const q = fix.questions(d);
+        const d = detectAll(ctxOf(w));
+        const q = questions(d);
         assert.ok(!JSON.stringify(q.choose).includes('client-drift') && !JSON.stringify(q.pick).includes('client-drift'), 'drift is in neither the choice nor the pick');
         assert.deepStrictEqual(q.drift.flat().map((x) => x.id), ['drift-cursor-serena~local']);
         const r = run(w, ['all']);
@@ -393,12 +393,12 @@ test('cursor-file names a symlinked or non-JSON .cursor/mcp.json as advice only'
     {
         fs.mkdirSync(path.dirname(cursorFile(w)), { recursive: true });
         fs.writeFileSync(cursorFile(w), '{ // mine\n  "mcpServers": {}\n}\n');
-        const found = () => fix.detectAll(ctxOf(w), { only: 'cursor-file' }).found;
+        const found = () => detectAll(ctxOf(w), { only: 'cursor-file' }).found;
         const [f] = found();
         assert.strictEqual(f.name, cursorFile(w));
         assert.match(f.found, /is not JSON \(Cursor reads comments and trailing commas, preferred-tools does not\) - remove them/);
         assert.strictEqual(f.blocked, 'advice only - nothing here is applied');
-        assert.strictEqual(fix.questions(fix.detectAll(ctxOf(w), { only: 'cursor-file' })).choose, null, 'never offered');
+        assert.strictEqual(questions(detectAll(ctxOf(w), { only: 'cursor-file' })).choose, null, 'never offered');
         if (process.platform !== 'win32')
         {
             const real = path.join(w.dir, 'elsewhere.json');

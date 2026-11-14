@@ -9,7 +9,7 @@
 // in this plugin touches it.
 const catalogLib = require('../catalog/catalog.js');
 const { fromHere } = require('./inventory.js');
-const { pinnedVersion, launchArgs } = require('../fixes/common.js');
+const { pinnedVersion, launchArgs } = require('../fix/common.js');
 
 const SCOPES = ['local', 'project', 'user'];
 

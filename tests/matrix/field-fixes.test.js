@@ -23,8 +23,8 @@ const roots = require('../../scripts/roots/roots.js');
 const catalogLib = require('../../scripts/catalog/catalog.js');
 const { shellArg, buildEntry } = require('../../scripts/entries/entry.js');
 const existing = require('../../scripts/inventory/existing.js');
-const fix = require('../../scripts/fix.js');
-const update = require('../../scripts/update.js');
+const { makeCtx, detectAll, applyFixes, render } = require('../../scripts/fix/fix.js');
+const update = require('../../scripts/update/check.js');
 const { REFUSED } = require('../../scripts/apply/run.js');
 const fake = require('../fake-mcp-http.js');
 const { Harness } = require('../harness.js');
@@ -108,10 +108,10 @@ test('X4 - fix on a 0.2.0 project file: relative paths and helper written absolu
     const before = servers(dir);
     const cutoff = arg(before.serena, '--exclude-newer');
     const lines = [];
-    const fctx = fix.makeCtx({ inv: h.inventory(dir), env: h.env, data: h.data });
-    const found = fix.detectAll(fctx).found.map((f) => f.id);
+    const fctx = makeCtx({ inv: h.inventory(dir), env: h.env, data: h.data });
+    const found = detectAll(fctx).found.map((f) => f.id);
     for (const id of ['project-relative-path', 'mcp-order']) assert.ok(found.includes(id), `${id} found: ${found.join(', ')}`);
-    const res = fix.applyFixes(fctx, ['all'], { tmp: path.join(h.root, 'tmp', 'fix'), log: (...a) => lines.push(a.join(' ')) });
+    const res = applyFixes(fctx, ['all'], { tmp: path.join(h.root, 'tmp', 'fix'), log: (...a) => lines.push(a.join(' ')) });
     assert.strictEqual(res.failed, null, lines.join('\n'));
     const after = servers(dir);
     const root = path.join(dir, '.preferred-tools');
@@ -123,7 +123,7 @@ test('X4 - fix on a 0.2.0 project file: relative paths and helper written absolu
     assert.strictEqual(arg(after.serena, '--exclude-newer'), cutoff, 'the cut-off as seeded');
     assert.deepStrictEqual(after.serena.args, before.serena.args, 'serena\'s args as seeded');
     assert.strictEqual(after.context7.headersHelper, `node ${shellArg(path.join(root, roots.FILES.helper), style)} CONTEXT7_API_KEY Bearer`);
-    const left = fix.detectAll(fix.makeCtx({ inv: h.inventory(dir), env: h.env, data: h.data })).found.map((f) => f.id);
+    const left = detectAll(makeCtx({ inv: h.inventory(dir), env: h.env, data: h.data })).found.map((f) => f.id);
     assert.ok(!left.includes('project-relative-path') && !left.includes('mcp-order'), left.join(', '));
 });
 
@@ -155,8 +155,8 @@ test('X6 - configure answered \'Leave it on its own\': one own entry in the fami
     assert.deepStrictEqual(readJson(list).own.map((e) => [e.name, e.scope, e.choice]), [['context7', 'project', 'own']]);
     assert.ok(!fs.existsSync(path.join(h.home, '.preferred-tools', roots.FILES.list)), 'no list in the global root');
     const inv = h.inventory(dir);
-    const d = fix.detectAll(fix.makeCtx({ inv, env: h.env, data: h.data }));
-    assert.ok(fix.render(d).includes('context7 (project): on its own - not checked'), fix.render(d));
+    const d = detectAll(makeCtx({ inv, env: h.env, data: h.data }));
+    assert.ok(render(d).includes('context7 (project): on its own - not checked'), render(d));
     const out = await update.check(update.makeCtx({ inv, project: dir, env: h.env, refresh: false }));
     assert.ok(out.skipped.includes('context7 (project): on its own - not checked'), out.skipped.join('\n'));
 });

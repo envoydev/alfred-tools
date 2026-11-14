@@ -400,13 +400,14 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     fs.mkdirSync(path.join(hh.home, '.cursor'), { recursive: true }); // Cursor is on this machine
 
     // 2. 0.5.0's update, as the command runs it
-    const update = require('../../scripts/update.js');
+    const { makeCtx, check } = require('../../scripts/update/check.js');
+    const { applyUpdates } = require('../../scripts/update/apply.js');
     const inventory = require('../../scripts/inventory/inventory.js');
     const checkNow = async () =>
     {
         const inv = inventory.buildInventory({ project: p, env: hh.env, run: cli.run, data: hh.data });
-        const ctx = update.makeCtx({ inv, project: p, env: hh.env, refresh: false, data: hh.data });
-        return { ctx, found: await update.check(ctx) };
+        const ctx = makeCtx({ inv, project: p, env: hh.env, refresh: false, data: hh.data });
+        return { ctx, found: await check(ctx) };
     };
     const { ctx, found } = await checkNow();
     const retired = found.offers.filter((o) => o.fix === 'retired-plugin').map((o) => `${o.name}~${o.scope}`).sort();
@@ -415,7 +416,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     const lines = [];
     // 'Pick which' with claude-hud's uninstall left unpicked - the decline (commands/update.md); every other offer picked
     const picked = found.offers.filter((o) => !(o.fix === 'retired-plugin' && o.name === HUD)).map((o) => o.id);
-    const res = update.applyUpdates(ctx, picked, found, { tmp: path.join(world, 'tmp'), log: (...a) => lines.push(a.join(' ')), input: { 'retired-declined': `${HUD}~user`, [`cursor-offer:${projRoot}`]: 'declined' } });
+    const res = applyUpdates(ctx, picked, found, { tmp: path.join(world, 'tmp'), log: (...a) => lines.push(a.join(' ')), input: { 'retired-declined': `${HUD}~user`, [`cursor-offer:${projRoot}`]: 'declined' } });
     const text = lines.join('\n');
     assert.deepStrictEqual(res.failed, [], text);
 

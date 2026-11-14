@@ -6,7 +6,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const catalogLib = require('../scripts/catalog/catalog.js');
-const prereq = require('../scripts/prereq.js');
+const { CHECKS, check, render } = require('../scripts/prereq/prereq.js');
+const { main } = require('../scripts/prereq/command.js');
 
 const catalog = catalogLib.load();
 
@@ -23,15 +24,15 @@ function machine({ files = [], bins = {}, out = {}, real = {}, node = '24.1.0' }
     };
 }
 const ctx = (m, over = {}) => ({ platform: 'darwin', env: {}, home: '/Users/dev', machine: m, ...over });
-const one = (id, c) => prereq.CHECKS[id](c);
+const one = (id, c) => CHECKS[id](c);
 
 test('every prerequisite id the catalog uses has a check', () =>
 {
     const ids = new Set();
     for (const r of catalog.tools)
         for (const list of r.kind === 'plugin' ? [r.prereqs || []] : Object.values(r.routes).map((x) => x.prereqs || [])) list.forEach((i) => ids.add(i));
-    for (const id of ids) assert.strictEqual(typeof prereq.CHECKS[id], 'function', id);
-    assert.deepStrictEqual([...ids].sort(), Object.keys(prereq.CHECKS).sort(), 'and no check is left without a user');
+    for (const id of ids) assert.strictEqual(typeof CHECKS[id], 'function', id);
+    assert.deepStrictEqual([...ids].sort(), Object.keys(CHECKS).sort(), 'and no check is left without a user');
 });
 
 test('uvx and npx: found on the PATH, or the vendor page is named', () =>
@@ -82,13 +83,13 @@ test('android-sdk and jdk: looked up as the appium fix looks them up', () =>
 test('check: each pick on its own route; a remote route needs nothing; the machine facts come back for the plan', () =>
 {
     const m = machine({ bins: { npx: '/usr/bin/npx' } });
-    const res = prereq.check([{ row: 'context7', route: 'remote' }, { row: 'context7', route: 'local' }, { row: 'github', route: 'local' }], ctx(m), catalog);
+    const res = check([{ row: 'context7', route: 'remote' }, { row: 'context7', route: 'local' }, { row: 'github', route: 'local' }], ctx(m), catalog);
     assert.deepStrictEqual(res.tools.map((t) => [t.row, t.route, t.needs.map((n) => `${n.id}:${n.ok}`)]), [
         ['context7', 'remote', []], ['context7', 'local', ['npx:true']], ['github', 'local', ['docker-or-github-binary:false']],
     ]);
     assert.strictEqual(res.missing, 1);
     assert.deepStrictEqual(res.machine, { docker: true });
-    const text = prereq.render(res);
+    const text = render(res);
     assert.match(text, /^context7 \(remote\): nothing to check$/m);
     assert.match(text, /^github \(local\): docker-or-github-binary - MISSING$/m);
     assert.match(text, /prereq: 1 missing$/);
@@ -104,21 +105,21 @@ test('main: an answers file, --rows, --json; a bad argument exits 2 and checks n
         const m = machine({ bins: { uvx: '/bin/uvx' } });
         let text = '';
         const out = (s) => { text += `${s}\n`; };
-        assert.strictEqual(prereq.main([file], { env: {}, machine: m, platform: 'darwin', out }), 0);
+        assert.strictEqual(main([file], { env: {}, machine: m, platform: 'darwin', out }), 0);
         assert.match(text, /serena \(local\): uvx - ok/);
         text = '';
-        prereq.main(['--rows', 'serena,context7', '--json'], { env: {}, machine: m, platform: 'darwin', out });
+        main(['--rows', 'serena,context7', '--json'], { env: {}, machine: m, platform: 'darwin', out });
         const json = JSON.parse(text);
         assert.deepStrictEqual(json.tools.map((t) => [t.row, t.route]), [['serena', 'local'], ['context7', 'remote']]);
         // configure: only a change to another route is checked
         fs.writeFileSync(file, JSON.stringify({ change: { 'mcp:c7~project': { row: 'context7', route: 'local' }, 'mcp:serena~user': { row: 'serena', name: 'nav' } } }));
         text = '';
-        prereq.main([file, '--json'], { env: {}, machine: m, platform: 'darwin', out });
+        main([file, '--json'], { env: {}, machine: m, platform: 'darwin', out });
         assert.deepStrictEqual(JSON.parse(text).tools.map((t) => [t.row, t.route]), [['context7', 'local']]);
         for (const bad of [[], ['--rows', 'no-such-tool'], [path.join(dir, 'missing.json')]])
         {
             text = '';
-            assert.strictEqual(prereq.main(bad, { env: {}, machine: m, platform: 'darwin', out }), 2, JSON.stringify(bad));
+            assert.strictEqual(main(bad, { env: {}, machine: m, platform: 'darwin', out }), 2, JSON.stringify(bad));
         }
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
@@ -137,23 +138,23 @@ test('audit: the package is audited in a temp folder with --ignore-scripts and t
         },
     });
     const pick = [{ row: 'appium', route: 'local' }];
-    const res = prereq.check(pick, ctx(mk()), catalog, { withAudit: true });
+    const res = check(pick, ctx(mk()), catalog, { withAudit: true });
     assert.deepStrictEqual(res.tools[0].audit, { package: 'appium-mcp@1.99.3', ok: true, counts: { critical: 3, high: 17, moderate: 0, low: 2, total: 22 } });
     const install = seen.find((s) => /^npm install/.test(s.line));
     assert.match(install.line, /--package-lock-only --ignore-scripts/);
     assert.strictEqual(install.before, '2026-11-11T23:59:59Z', 'resolved at the row\'s cut-off, as npx will');
     assert.deepStrictEqual(install.pkg.dependencies, { 'appium-mcp': '1.99.3' });
     assert.ok(!fs.existsSync(install.cwd), 'the temp folder is removed');
-    assert.match(prereq.render(res), /^appium: audit - appium-mcp@1\.99\.3 has 22 known vulnerabilities in its dependency tree \(3 critical, 17 high, 0 moderate, 2 low\)$/m);
+    assert.match(render(res), /^appium: audit - appium-mcp@1\.99\.3 has 22 known vulnerabilities in its dependency tree \(3 critical, 17 high, 0 moderate, 2 low\)$/m);
     // not asked for: not run, no npm call
     seen.length = 0;
-    assert.strictEqual(prereq.check(pick, ctx(mk()), catalog).tools[0].audit, undefined);
+    assert.strictEqual(check(pick, ctx(mk()), catalog).tools[0].audit, undefined);
     assert.strictEqual(seen.filter((x) => /^npm /.test(x.line)).length, 0, 'no npm call without --audit');
     // offline, or output that is not npm's JSON: 'not run', never 'clean'
-    const offline = prereq.check(pick, ctx(mk({ lock: 1 })), catalog, { withAudit: true }).tools[0].audit;
+    const offline = check(pick, ctx(mk({ lock: 1 })), catalog, { withAudit: true }).tools[0].audit;
     assert.strictEqual(offline.ok, false);
     assert.match(offline.note, /audit not run: npm install --package-lock-only failed: ENOTFOUND/);
-    assert.match(prereq.check(pick, ctx(mk({ json: 'oops' })), catalog, { withAudit: true }).tools[0].audit.note, /audit not run: npm audit gave no result/);
+    assert.match(check(pick, ctx(mk({ json: 'oops' })), catalog, { withAudit: true }).tools[0].audit.note, /audit not run: npm audit gave no result/);
     // a row that is not marked for audit is not audited
-    assert.strictEqual(prereq.check([{ row: 'sentry', route: 'local' }], ctx(mk()), catalog, { withAudit: true }).tools[0].audit, undefined);
+    assert.strictEqual(check([{ row: 'sentry', route: 'local' }], ctx(mk()), catalog, { withAudit: true }).tools[0].audit, undefined);
 });

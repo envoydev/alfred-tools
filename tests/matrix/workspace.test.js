@@ -28,7 +28,7 @@ const { pickQuestions } = require('../../scripts/plan/asks-picks.js');
 const { changeQuestions } = require('../../scripts/plan/asks-tool.js');
 const { all } = require('../../scripts/plan/asks-all.js');
 const catalogLib = require('../../scripts/catalog/catalog.js');
-const fix = require('../../scripts/fix.js');
+const { makeCtx, detectAll, applyFixes } = require('../../scripts/fix/fix.js');
 const roots = require('../../scripts/roots/roots.js');
 const fake = require('../fake-mcp-http.js');
 const { Harness, hashTree } = require('../harness.js');
@@ -244,11 +244,11 @@ test('W4 - keys without alfred-code: the root and its ignores, a stdio key writt
 
         // token-sync: a changed stdio value is written in
         fake.fill(secrets, S, s2);
-        const ctx = () => fix.makeCtx({ inv: h.inventory(api, { catalog }), catalog, env: h.env, data: h.data });
-        assert.ok(fix.detectAll(ctx()).found.some((f) => f.id === 'token-sync' && f.name === 'sentry' && !f.blocked), 'token-sync names it');
+        const ctx = () => makeCtx({ inv: h.inventory(api, { catalog }), catalog, env: h.env, data: h.data });
+        assert.ok(detectAll(ctx()).found.some((f) => f.id === 'token-sync' && f.name === 'sentry' && !f.blocked), 'token-sync names it');
         const lines = [];
         const log = (...a) => lines.push(a.join(' '));
-        let res = fix.applyFixes(ctx(), ['token-sync'], { tmp: path.join(h.root, 'tmp', 'fix'), log });
+        let res = applyFixes(ctx(), ['token-sync'], { tmp: path.join(h.root, 'tmp', 'fix'), log });
         assert.strictEqual(res.failed, null, lines.join('\n'));
         assert.strictEqual(localOf(h, api).sentry.env[S], s2, 'the new value written');
 
@@ -256,9 +256,9 @@ test('W4 - keys without alfred-code: the root and its ignores, a stdio key writt
         run({ remove: [{ kind: 'mcp', name: 'github', scope: 'project' }] });
         const was = { type: 'http', url: catalog.byId.get('github').routes.remote.url, headers: { Authorization: `Bearer \${${G}}` } };
         assert.strictEqual(h.claude(api, ['mcp', 'add-json', 'github', JSON.stringify(was), '-s', 'project']).status, 0);
-        const found = fix.detectAll(ctx()).found.filter((f) => f.id === 'key-to-helper');
+        const found = detectAll(ctx()).found.filter((f) => f.id === 'key-to-helper');
         assert.deepStrictEqual(found.map((f) => [f.name, f.scope, f.keyName, f.blocked || null]), [['github', 'project', G, null]]);
-        res = fix.applyFixes(ctx(), ['key-to-helper'], { tmp: path.join(h.root, 'tmp', 'fix'), log });
+        res = applyFixes(ctx(), ['key-to-helper'], { tmp: path.join(h.root, 'tmp', 'fix'), log });
         assert.strictEqual(res.failed, null, lines.join('\n'));
         helperOnly(readJson(path.join(api, '.mcp.json')).mcpServers.github, g);
         assert.strictEqual((await fake.authOnGet(s, api, 'github', h.env)).auth, 'expected', 'moved: the stub sees the key');
@@ -335,8 +335,8 @@ test('W5 - a root\'s project-scope tool in alfred-code\'s folder, absolute: the 
     assert.ok(h.inventory(b.child).registrations.some((x) => x.scope === 'inherited' && x.name === 'playwright-chrome' && x.from === b.root), 'the child lists it inherited');
 
     // a session started in a child or a subfolder uses the root's folder: no copy is made there, so nothing is found
-    const ctxAt = (dir) => fix.makeCtx({ inv: h.inventory(dir), env: h.env });
-    const findings = (dir) => fix.detectAll(ctxAt(dir), { only: 'data-folder-ignore' }).found;
+    const ctxAt = (dir) => makeCtx({ inv: h.inventory(dir), env: h.env });
+    const findings = (dir) => detectAll(ctxAt(dir), { only: 'data-folder-ignore' }).found;
     const bare = gitDir(path.join(b.root, 'bare'));
     const src = path.join(b.child, 'src');
     fs.mkdirSync(src, { recursive: true });
@@ -346,7 +346,7 @@ test('W5 - a root\'s project-scope tool in alfred-code\'s folder, absolute: the 
     fs.mkdirSync(want, { recursive: true });
     assert.deepStrictEqual(findings(bare).map((f) => f.proposal.path), [want], 'the 0.2.0 copy is found');
     const lines = [];
-    const res = fix.applyFixes(ctxAt(bare), ['data-folder-ignore'], { tmp: path.join(h.root, 'tmp', 'fix-w5'), log: (...a) => lines.push(a.join(' ')) });
+    const res = applyFixes(ctxAt(bare), ['data-folder-ignore'], { tmp: path.join(h.root, 'tmp', 'fix-w5'), log: (...a) => lines.push(a.join(' ')) });
     assert.strictEqual(res.failed, null, lines.join('\n'));
     assert.strictEqual(fs.readFileSync(path.join(want, '.gitignore'), 'utf8'), '*\n', 'read back from disk');
     assert.deepStrictEqual(findings(bare), [], 'covered after the fix');

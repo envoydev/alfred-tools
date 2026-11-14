@@ -6,7 +6,7 @@
 // A registry is read with `fetch`. The two base URLs can be overridden for a test or a mirror:
 //   PREFERRED_TOOLS_NPM_URL   default https://registry.npmjs.org
 //   PREFERRED_TOOLS_PYPI_URL  default https://pypi.org/pypi
-const { compareVersions } = require('../fixes/common.js');
+const { compareVersions } = require('../fix/common.js');
 
 const DAY = 86400000;
 const AGE_DAYS = 7;

@@ -12,9 +12,10 @@ const { expandVars } = require('../scripts/entries/locations.js');
 const { buildEntry } = require('../scripts/entries/entry.js');
 const cli = require('../scripts/core/claude-cli.js');
 const account = require('../scripts/core/account.js');
-const F = require('../scripts/fixes/index.js');
-const fix = require('../scripts/fix.js');
-const C = require('../scripts/fixes/common.js');
+const F = require('../scripts/fix/fix-functions.js');
+const { makeCtx, detectAll, applyFixes, questions, render } = require('../scripts/fix/fix.js');
+const { main } = require('../scripts/fix/command.js');
+const C = require('../scripts/fix/common.js');
 
 const catalog = catalogLib.load();
 const row = (id) => catalog.byId.get(id);
@@ -33,7 +34,7 @@ function ctxFor({ platform = 'darwin', arch = 'x64', registrations = [], plugins
     const P = win ? path.win32 : path.posix;
     const listOf = (family, root) => ({ file: P.join(root, '.preferred-tools', 'mcps.json'), servers: registrations.filter((r) => r.scope !== 'inherited' && (family === 'global') === (r.scope === 'user')), own: [] });
     inv.lists = { project: listOf('project', inv.project), global: listOf('global', home || (win ? 'C:\\Users\\dev' : '/home/dev')) };
-    return fix.makeCtx({ inv, catalog, env: { ...env, HOME: home || (win ? 'C:\\Users\\dev' : '/home/dev') }, machine, platform, arch });
+    return makeCtx({ inv, catalog, env: { ...env, HOME: home || (win ? 'C:\\Users\\dev' : '/home/dev') }, machine, platform, arch });
 }
 
 // a fresh entry the way the catalog builds it, for the row's local route
@@ -50,7 +51,7 @@ const ids = (list) => list.map((f) => f.id);
 // a synthetic /proj never holds the serena-context.yml an install writes beside serena's entry (tests/plan.test.js and
 // tests/apply.test.js prove that write): its helper-missing finding is left out here, and only here
 const synthetic = (f) => f.id === 'helper-missing' && f.shipped === 'serenaContext' && /^(?:\/proj|C:\\proj)[\\/]/.test(f.path);
-const detect = (ctx, only) => { const d = fix.detectAll(ctx, { only }); return { ...d, found: d.found.filter((f) => !synthetic(f)) }; };
+const detect = (ctx, only) => { const d = detectAll(ctx, { only }); return { ...d, found: d.found.filter((f) => !synthetic(f)) }; };
 
 // ---- the catalog is wired ------------------------------------------------------------------------------------------
 
@@ -321,7 +322,7 @@ test('data-folder-ignore: a relative folder here with no ignore is found and fix
         assert.deepStrictEqual(f.map((x) => [x.id, x.name, x.scope, x.proposal.path]), [['data-folder-ignore', 'playwright-chrome', 'inherited', folder]]);
         assert.match(f[0].found, /\.preferred-tools\/playwright-chrome .*not git-ignored/);
         // through the engine: a machine fix, offered
-        const d = fix.detectAll(ctx([parent('.preferred-tools/playwright-chrome')]), { only: 'data-folder-ignore' });
+        const d = detectAll(ctx([parent('.preferred-tools/playwright-chrome')]), { only: 'data-folder-ignore' });
         assert.deepStrictEqual(d.found.map((x) => [x.id, x.kind, Boolean(x.blocked)]), [['data-folder-ignore', 'machine', false]]);
 
         const r = F.dataFolderIgnoreFix(f[0], ctx([]));
@@ -395,7 +396,7 @@ test('npx-cache-entry: an npx server whose cache folder lost its package.json is
         assert.match(f.found, /no package\.json/);
         assert.match(f.found, /ENOENT/);
         assert.ok(!JSON.stringify(f).includes('npm_config_before'), 'a finding carries no env - a key could be in it');
-        assert.deepStrictEqual(fix.detectAll(ctx(), { only: 'npx-cache-entry' }).found.map((x) => [x.id, x.kind, Boolean(x.blocked)]), [['npx-cache-entry', 'machine', false]]);
+        assert.deepStrictEqual(detectAll(ctx(), { only: 'npx-cache-entry' }).found.map((x) => [x.id, x.kind, Boolean(x.blocked)]), [['npx-cache-entry', 'machine', false]]);
         // Windows' cmd /c npx is the same package, the same folder: two registrations of it, one finding
         const edge = reg('playwright-msedge', { command: 'cmd', args: ['/c', 'npx', '-y', spec, '--browser', 'msedge'] }, { scope: 'local' });
         assert.strictEqual(found([pw, edge]).length, 1);
@@ -467,7 +468,7 @@ test('apply: npx-cache-entry removes the folder and hands the package to fetch.j
         const folder = npxFolder(cache, spec);
         fs.mkdirSync(path.join(folder, 'node_modules'), { recursive: true });
         const lines = [];
-        const res = fix.applyFixes(ctxOf(w, { machine: npmAt(cache) }), ['npx-cache-entry'], { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
+        const res = applyFixes(ctxOf(w, { machine: npmAt(cache) }), ['npx-cache-entry'], { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
         const text = lines.join('\n');
         assert.strictEqual(res.failed, null, text);
         assert.ok(!fs.existsSync(folder));
@@ -512,12 +513,12 @@ test('fix reports a declined id with no apply step', () =>
     try
     {
         require('../scripts/core/declines.js').add(data, [{ id: RETIRED.hud, scope: 'user' }]);
-        const ctx = fix.makeCtx({ ...ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }), inv: ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }).inv, catalog, machine: noMachine(), data });
+        const ctx = makeCtx({ ...ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }), inv: ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }).inv, catalog, machine: noMachine(), data });
         const [f] = detect(ctx).found.filter((x) => x.id === 'retired-plugin');
         assert.strictEqual(f.declined, true);
         assert.strictEqual(f.blocked, `${RETIRED.hud} is kept at user; remove it with claude plugin uninstall ${RETIRED.hud} --scope user`);
-        assert.ok(!(fix.questions(detect(ctx)).pick.flat().flatMap((q) => q.options.map((o) => o.label))).includes('retired-plugin'), 'no apply step is offered');
-        assert.match(fix.render(detect(ctx)), /NOT APPLICABLE: claude-hud@claude-hud is kept at user/);
+        assert.ok(!(questions(detect(ctx)).pick.flat().flatMap((q) => q.options.map((o) => o.label))).includes('retired-plugin'), 'no apply step is offered');
+        assert.match(render(detect(ctx)), /NOT APPLICABLE: claude-hud@claude-hud is kept at user/);
     }
     finally { fs.rmSync(data, { recursive: true, force: true }); }
 });
@@ -555,9 +556,9 @@ test("windows-mcp-one-per-desktop: each owner's own drop line", () =>
 test('questions: only NOT APPLICABLE findings give no apply ask', () =>
 {
     const advice = { id: 'windows-mcp-one-per-desktop', name: 'windows-desktop', scope: 'local', kind: 'registration', found: 'x', blocked: 'y' };
-    assert.deepStrictEqual(fix.questions({ found: [advice], held: [] }), { choose: null, pick: [], drift: [] });
-    assert.deepStrictEqual(fix.questions({ found: [], held: [] }), { choose: null, pick: [], drift: [] });
-    const q = fix.questions({ found: [advice, { id: 'uvx-python', name: 'memory', scope: 'local', kind: 'registration', found: 'z' }], held: [] });
+    assert.deepStrictEqual(questions({ found: [advice], held: [] }), { choose: null, pick: [], drift: [] });
+    assert.deepStrictEqual(questions({ found: [], held: [] }), { choose: null, pick: [], drift: [] });
+    const q = questions({ found: [advice, { id: 'uvx-python', name: 'memory', scope: 'local', kind: 'registration', found: 'z' }], held: [] });
     assert.strictEqual(q.choose.question, '1 known problem found. Apply?');
 });
 
@@ -609,10 +610,10 @@ test('--only narrows by fix id, tool or registration name; the table names the h
     assert.strictEqual(detect(ctx, 'memory').found.length, 1);
     assert.strictEqual(detect(ctx, 'serena-telemetry').found.length, 1);
     assert.deepStrictEqual(detect(ctx, 'nope').found, []);
-    const text = fix.render(detect(ctx));
+    const text = render(detect(ctx));
     assert.match(text, /Known problems found \(3\):/);
     assert.match(text, /uvx-python +serena \(local\) +no --python/);
-    assert.match(fix.render(detect(ctxFor({ platform: 'win32' }))), /^No known problem found\.\n\nHeld, not checked: serena-windows-ts-shim - left out by the user's ruling/);
+    assert.match(render(detect(ctxFor({ platform: 'win32' }))), /^No known problem found\.\n\nHeld, not checked: serena-windows-ts-shim - left out by the user's ruling/);
 });
 
 test('the asks stay inside the AskUserQuestion limits: one Recommended, first; four options a question; four questions a call', () =>
@@ -620,7 +621,7 @@ test('the asks stay inside the AskUserQuestion limits: one Recommended, first; f
     const mkFound = (n) => Array.from({ length: n }, (_, i) => ({ id: `fix-${i}`, name: `t${i}`, scope: 'local', kind: 'registration', found: 'x' }));
     for (const n of [1, 2, 4, 5, 9, 17])
     {
-        const q = fix.questions({ found: mkFound(n), held: [] });
+        const q = questions({ found: mkFound(n), held: [] });
         const rec = q.choose.options.filter((o) => /\(Recommended\)$/.test(o.label));
         assert.strictEqual(rec.length, 1, 'exactly one Recommended');
         assert.strictEqual(q.choose.options[0], rec[0], 'and it is first');
@@ -634,7 +635,7 @@ test('the asks stay inside the AskUserQuestion limits: one Recommended, first; f
         assert.strictEqual(q.pick.flat().flatMap((x) => x.options).length, n);
     }
     // a blocked finding is not offered
-    const q = fix.questions({ found: [{ id: 'a', name: 'x', scope: 'local', kind: 'registration', found: 'f', blocked: 'no' }, { id: 'b', name: 'y', scope: 'local', kind: 'registration', found: 'f' }], held: [] });
+    const q = questions({ found: [{ id: 'a', name: 'x', scope: 'local', kind: 'registration', found: 'f', blocked: 'no' }, { id: 'b', name: 'y', scope: 'local', kind: 'registration', found: 'f' }], held: [] });
     assert.deepStrictEqual(q.pick.flat().flatMap((x) => x.options).map((o) => o.label), ['b']);
 });
 
@@ -645,7 +646,7 @@ function seed(w, name, scope, entry)
     const r = cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env });
     assert.strictEqual(r.status, 0, r.stderr);
 }
-const ctxOf = (w, over = {}) => fix.makeCtx({ inv: inventory.buildInventory({ project: w.project, env: w.env }), env: w.env, machine: noMachine(), ...over });
+const ctxOf = (w, over = {}) => makeCtx({ inv: inventory.buildInventory({ project: w.project, env: w.env }), env: w.env, machine: noMachine(), ...over });
 const userEntry = (w, name) => account.readAccount(w.env, w.project).user[name];
 
 test('apply: two fixes on one registration are ONE replace, from the entry as read - the user\'s pin and extra args survive', () =>
@@ -667,7 +668,7 @@ test('apply: two fixes on one registration are ONE replace, from the entry as re
         seed(w, 'my-own-server', 'user', own);
         const before = w.calls().length;
         const lines = [];
-        const res = fix.applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
+        const res = applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
         assert.strictEqual(res.failed, null, lines.join('\n'));
         const mine = w.calls().slice(before).filter((a) => a[0] === 'mcp' && ['add-json', 'remove'].includes(a[1]));
         assert.deepStrictEqual(mine.map((a) => [a[1], a[2]]), [['remove', 'serena'], ['add-json', 'serena']], 'one remove and one add, nothing else touched');
@@ -687,7 +688,7 @@ test('apply: two fixes on one registration are ONE replace, from the entry as re
         // a second run finds nothing and writes nothing
         const again = w.calls().length;
         const lines2 = [];
-        fix.applyFixes(ctxOf(w), ['all'], { log: (...a) => lines2.push(a.join(' ')) });
+        applyFixes(ctxOf(w), ['all'], { log: (...a) => lines2.push(a.join(' ')) });
         assert.match(lines2.join('\n'), /Nothing to apply/);
         assert.strictEqual(w.calls().slice(again).filter((a) => a[0] === 'mcp' && ['add-json', 'remove'].includes(a[1])).length, 0);
     }
@@ -703,15 +704,15 @@ test('apply: picked ids only; --only narrows to one registration; an unknown id 
         seed(w, 'serena', 'user', bare);
         seed(w, 'serena-two', 'user', bare);
         const before = w.calls().length;
-        const res = fix.applyFixes(ctxOf(w), ['serena-telemetry'], { only: 'serena-two', tmp: path.join(w.dir, 'tmp'), log: () => {} });
+        const res = applyFixes(ctxOf(w), ['serena-telemetry'], { only: 'serena-two', tmp: path.join(w.dir, 'tmp'), log: () => {} });
         assert.strictEqual(res.failed, null);
         assert.strictEqual(userEntry(w, 'serena-two').env.SERENA_USAGE_REPORTING, 'false');
         assert.strictEqual(userEntry(w, 'serena').env.SERENA_USAGE_REPORTING, undefined, 'the other registration is left');
-        const bad = fix.applyFixes(ctxOf(w), ['no-such-fix'], { log: () => {} });
+        const bad = applyFixes(ctxOf(w), ['no-such-fix'], { log: () => {} });
         assert.match(bad.failed, /unknown fix id: no-such-fix/);
         assert.ok(w.calls().slice(before).filter((a) => a[1] === 'add-json').length === 1);
         // a held row cannot be picked into a change
-        const held = fix.applyFixes(ctxOf(w, { platform: 'win32' }), ['serena-windows-ts-shim'], { log: () => {} });
+        const held = applyFixes(ctxOf(w, { platform: 'win32' }), ['serena-windows-ts-shim'], { log: () => {} });
         assert.strictEqual(held.applied.length, 0);
     }
     finally { w.clean(); }
@@ -727,12 +728,12 @@ test('an advice row never reaches a fix: a finding it returns unblocked is block
         // a future advice row whose detector forgot `blocked`
         const advice = { ...catalog.fixes.find((f) => f.id === 'serena-telemetry'), advice: true, fix: null };
         const ctx = { ...ctxOf(w), catalog: { ...catalog, fixes: [advice] } };
-        const found = fix.detectAll(ctx).found;
+        const found = detectAll(ctx).found;
         assert.deepStrictEqual(found.map((f) => [f.id, f.blocked]), [['serena-telemetry', 'advice only - nothing here is applied']]);
-        assert.deepStrictEqual(fix.questions(fix.detectAll(ctx)), { choose: null, pick: [], drift: [] });
+        assert.deepStrictEqual(questions(detectAll(ctx)), { choose: null, pick: [], drift: [] });
         const before = w.writes().length;
         const lines = [];
-        const res = fix.applyFixes(ctx, ['all'], { log: (...a) => lines.push(a.join(' ')) });
+        const res = applyFixes(ctx, ['all'], { log: (...a) => lines.push(a.join(' ')) });
         assert.strictEqual(res.failed, null, lines.join('\n'));
         assert.strictEqual(res.steps, 0);
         assert.ok(lines.some((l) => l.startsWith('skipped serena-telemetry')), lines.join('\n'));
@@ -750,7 +751,7 @@ test('apply: a blocked finding, and one that needs an answer, are named and skip
         seed(w, 'playwright-chrome', 'user', old);
         const before = w.calls().length;
         const lines = [];
-        const res = fix.applyFixes(ctxOf(w), ['playwright-webmcp'], { log: (...a) => lines.push(a.join(' ')) });
+        const res = applyFixes(ctxOf(w), ['playwright-webmcp'], { log: (...a) => lines.push(a.join(' ')) });
         assert.strictEqual(res.skipped.length, 1);
         assert.match(lines.join('\n'), /skipped playwright-webmcp on playwright-chrome \(user\): pinned @0\.0\.50 is older than 0\.0\.83/);
         assert.strictEqual(w.calls().slice(before).filter((a) => a[1] === 'add-json').length, 0);
@@ -758,7 +759,7 @@ test('apply: a blocked finding, and one that needs an answer, are named and skip
 
         const spaced = ctxFor({ platform: 'win32', home: 'C:\\Users\\Jo Doe', registrations: [reg('serena', { command: 'uvx', args: ['--python', '3.13'], env: { SERENA_HOME: 'C:\\Users\\Jo Doe\\.serena' } }, { scope: 'user' })] });
         const out = [];
-        const r2 = fix.applyFixes({ ...spaced, env: w.env, inv: { ...spaced.inv, project: w.project } }, ['serena-windows-home'], { log: (...a) => out.push(a.join(' ')) });
+        const r2 = applyFixes({ ...spaced, env: w.env, inv: { ...spaced.inv, project: w.project } }, ['serena-windows-home'], { log: (...a) => out.push(a.join(' ')) });
         assert.match(out.join('\n'), /needs --input serenaHome=<value>/);
         assert.strictEqual(r2.applied.length, 0);
     }
@@ -774,13 +775,13 @@ test('apply: a failing add puts the old registration back; if that fails too, th
         seed(w, 'serena', 'user', bare);
         // only the NEW entry (it carries SERENA_USAGE_REPORTING) is refused: the old one is re-added
         let lines = [];
-        let res = fix.applyFixes(ctxOf(w, { env: { ...w.env, FAKE_CLAUDE_FAIL: 'SERENA_USAGE_REPORTING' } }), ['serena-telemetry'], { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
+        let res = applyFixes(ctxOf(w, { env: { ...w.env, FAKE_CLAUDE_FAIL: 'SERENA_USAGE_REPORTING' } }), ['serena-telemetry'], { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
         assert.ok(res.failed, lines.join('\n'));
         assert.deepStrictEqual(userEntry(w, 'serena'), bare, 'the registration is back exactly as it was');
         assert.ok(!lines.join('\n').includes('Restart Claude Code'));
         // every add is refused: nothing can be put back, and the user is handed the line that does it
         lines = [];
-        res = fix.applyFixes(ctxOf(w, { env: { ...w.env, FAKE_CLAUDE_FAIL: 'add-json' } }), ['serena-telemetry'], { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
+        res = applyFixes(ctxOf(w, { env: { ...w.env, FAKE_CLAUDE_FAIL: 'add-json' } }), ['serena-telemetry'], { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
         assert.ok(res.failed);
         assert.match(lines.join('\n'), /RESTORE BY HAND: claude mcp add-json serena '\{"command":"uvx"/);
         assert.ok(!lines.join('\n').includes('Restart Claude Code'));
@@ -822,7 +823,7 @@ test('the machine fix runs after the registration edits and is read back; its fa
         doc.statusLine = { type: 'command', command: `${require('../scripts/hud/hud-statusline.js').fill(require('../scripts/hud/hud-statusline.js').SHAPES.sortV, { RUNTIME_PATH: process.execPath, SOURCE: 'dist/index.js' })}` };
         fs.writeFileSync(settings, JSON.stringify(doc, null, 2));
         const lines = [];
-        const res = fix.applyFixes(ctxOf(w), ['retired-plugin'], { log: (...a) => lines.push(a.join(' ')) });
+        const res = applyFixes(ctxOf(w), ['retired-plugin'], { log: (...a) => lines.push(a.join(' ')) });
         assert.strictEqual(res.failed, null, lines.join('\n'));
         const text = lines.join('\n');
         assert.match(text, /ok +retired-plugin: uninstalled claude-hud@claude-hud \(user\); removed claude-hud's statusLine from /);
@@ -834,7 +835,7 @@ test('the machine fix runs after the registration edits and is read back; its fa
         // a refused uninstall stops the run and says so
         plugWorld(w, [[RETIRED.cs, 'user']]);
         const failing = [];
-        const bad = fix.applyFixes(ctxOf(w, { env: { ...w.env, FAKE_CLAUDE_FAIL: 'uninstall' } }), ['retired-plugin'], { log: (...a) => failing.push(a.join(' ')) });
+        const bad = applyFixes(ctxOf(w, { env: { ...w.env, FAKE_CLAUDE_FAIL: 'uninstall' } }), ['retired-plugin'], { log: (...a) => failing.push(a.join(' ')) });
         assert.ok(bad.failed);
         assert.match(failing.join('\n'), /FAILED retired-plugin: claude plugin uninstall csharp-lsp@claude-plugins-official --scope user failed/);
     }
@@ -854,22 +855,22 @@ test('declines per answer: unpicked recorded; kept out for alfred-code recorded 
         assert.deepStrictEqual(declines.read(data), []);
         // 'Apply all found' with alfred-code set up: both are kept out, the command passes them as declined, and each is named
         const lines = [];
-        const res = fix.applyFixes(ctxOf(w, { data }), ['all'], { input: { 'retired-declined': `${RETIRED.hud}~user,${RETIRED.ts}~project` }, log: (...a) => lines.push(a.join(' ')) });
+        const res = applyFixes(ctxOf(w, { data }), ['all'], { input: { 'retired-declined': `${RETIRED.hud}~user,${RETIRED.ts}~project` }, log: (...a) => lines.push(a.join(' ')) });
         assert.strictEqual(res.failed, null, lines.join('\n'));
         assert.match(lines.join('\n'), /claude-hud@claude-hud kept - alfred-code installs it; fix lists it/);
         assert.match(lines.join('\n'), /typescript-lsp@claude-plugins-official kept - alfred-code installs it; fix lists it/);
         assert.ok(!w.calls().some((a) => a[0] === 'plugin' && a[1] === 'uninstall'), 'nothing uninstalled');
         assert.deepStrictEqual(declines.read(data), [{ id: RETIRED.hud, scope: 'user' }, { id: RETIRED.ts, scope: 'project' }]);
         // the next detect: advice only
-        const again = fix.detectAll(ctxOf(w, { data })).found.filter((f) => f.id === 'retired-plugin');
+        const again = detectAll(ctxOf(w, { data })).found.filter((f) => f.id === 'retired-plugin');
         assert.ok(again.every((f) => f.declined && f.blocked), JSON.stringify(again));
         // 'Pick which' with one id picked: the other, shown and unpicked, is the one passed as declined
         const data2 = path.join(w.dir, 'data2');
-        fix.applyFixes(ctxOf(w, { data: data2 }), ['none'], { input: { 'retired-declined': `${RETIRED.ts}~project` }, log: () => {} });
+        applyFixes(ctxOf(w, { data: data2 }), ['none'], { input: { 'retired-declined': `${RETIRED.ts}~project` }, log: () => {} });
         assert.deepStrictEqual(declines.read(data2), [{ id: RETIRED.ts, scope: 'project' }]);
         // fix with retired-plugin as its only pick reaches an alfred-code one
         const one = [];
-        const r = fix.applyFixes(ctxOf(w, { data: data2 }), ['retired-plugin'], { log: (...a) => one.push(a.join(' ')) });
+        const r = applyFixes(ctxOf(w, { data: data2 }), ['retired-plugin'], { log: (...a) => one.push(a.join(' ')) });
         assert.strictEqual(r.failed, null, one.join('\n'));
         assert.match(one.join('\n'), /uninstalled claude-hud@claude-hud \(user\)/);
         assert.match(one.join('\n'), /skipped retired-plugin on typescript-lsp@claude-plugins-official: typescript-lsp@claude-plugins-official is kept at project/);
@@ -886,7 +887,7 @@ test('a fix that only writes a data folder\'s .gitignore asks for no restart', (
     {
         seed(w, 'playwright-chrome', 'project', { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '.preferred-tools/playwright-chrome'] });
         const lines = [];
-        const res = fix.applyFixes(ctxOf(w, { machine: noMachine({ exists: (p) => fs.existsSync(p), run: C.realMachine().run }) }), ['data-folder-ignore'], { log: (...a) => lines.push(a.join(' ')) });
+        const res = applyFixes(ctxOf(w, { machine: noMachine({ exists: (p) => fs.existsSync(p), run: C.realMachine().run }) }), ['data-folder-ignore'], { log: (...a) => lines.push(a.join(' ')) });
         assert.strictEqual(res.failed, null, lines.join('\n'));
         assert.match(lines.join('\n'), /fixed +data-folder-ignore/);
         assert.ok(!lines.join('\n').includes('Restart Claude Code'), lines.join('\n'));
@@ -905,18 +906,18 @@ test('CLI: --detect and --questions print; --apply applies; bad arguments exit 2
         seed(w, 'serena', 'user', bare);
         let text = '';
         const out = (s) => { text += `${s}\n`; };
-        assert.strictEqual(fix.main(['--detect', '--project', w.project], { env: w.env, out, machine: noMachine() }), 0);
+        assert.strictEqual(main(['--detect', '--project', w.project], { env: w.env, out, machine: noMachine() }), 0);
         assert.match(text, /serena-telemetry +serena \(user\)/);
         text = '';
-        assert.strictEqual(fix.main(['--questions', '--project', w.project], { env: w.env, out, machine: noMachine() }), 0);
+        assert.strictEqual(main(['--questions', '--project', w.project], { env: w.env, out, machine: noMachine() }), 0);
         assert.strictEqual(JSON.parse(text).choose.options[0].label, 'Apply all found (Recommended)');
         text = '';
-        assert.strictEqual(fix.main(['--apply', 'serena-telemetry', '--project', w.project, '--tmp', path.join(w.dir, 'tmp')], { env: w.env, out, machine: noMachine() }), 0);
+        assert.strictEqual(main(['--apply', 'serena-telemetry', '--project', w.project, '--tmp', path.join(w.dir, 'tmp')], { env: w.env, out, machine: noMachine() }), 0);
         assert.strictEqual(userEntry(w, 'serena').env.SERENA_USAGE_REPORTING, 'false');
         for (const bad of [[], ['--detect', '--apply', 'x'], ['--bogus'], ['--apply'], ['--detect', '--only'], ['--input', 'novalue', '--detect'], ['--detect', '--project', 'a', '--project', 'b']])
         {
             text = '';
-            assert.strictEqual(fix.main(bad, { env: w.env, out, machine: noMachine() }), 2, JSON.stringify(bad));
+            assert.strictEqual(main(bad, { env: w.env, out, machine: noMachine() }), 2, JSON.stringify(bad));
             assert.match(text, /^fix: /);
         }
         const missing = readJson(account.accountFile(w.env));
@@ -944,12 +945,12 @@ const secretsAt = (root, pairs) => put(path.join(root, '.mcps-secrets'), Object.
 const ptRoot = (w) => path.join(w.project, '.preferred-tools');
 const homeRoot = (w) => path.join(w.home, '.preferred-tools');
 const localEntry = (w, name) => account.readAccount(w.env, w.project).local[name];
-const ctxData = (w, data) => fix.makeCtx({ inv: inventory.buildInventory({ project: w.project, env: w.env, data }), env: w.env, machine: noMachine(), data });
+const ctxData = (w, data) => makeCtx({ inv: inventory.buildInventory({ project: w.project, env: w.env, data }), env: w.env, machine: noMachine(), data });
 const logged = () => { const lines = []; return { lines, log: (...a) => lines.push(a.join(' ')), text: () => lines.join('\n') }; };
 const gitInit = (dir) => { fsx.mkdirSync(dir, { recursive: true }); assert.strictEqual(spawnx('git', ['init', '-q', dir]).status, 0); };
 const HV = require('../scripts/mcp-headers.js').HELPER_VERSION;
 const helperAt = (root, number, extra = '') => put(path.join(root, 'mcp-headers.js'), rootsLib.helperSource().replace(/^\/\/ preferred-tools mcp-headers \d+/, `// preferred-tools mcp-headers ${number}`) + extra);
-const shownOf = (d) => `${fix.render(d)}${JSON.stringify(d)}`;
+const shownOf = (d) => `${render(d)}${JSON.stringify(d)}`;
 
 test('key-to-helper: a ${VAR} filled in the chain is moved to the helper under that name', () =>
 {
@@ -964,7 +965,7 @@ test('key-to-helper: a ${VAR} filled in the chain is moved to the helper under t
         assert.deepStrictEqual([f.name, f.scope, f.keyName, Boolean(f.blocked)], ['github', 'local', 'ACME_GH', false]);
         assert.ok(!shownOf(d).includes(v), 'the detection names the key, never its value');
         const l = logged();
-        const res = fix.applyFixes(ctxOf(w), ['key-to-helper'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        const res = applyFixes(ctxOf(w), ['key-to-helper'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
         const e = localEntry(w, 'github');
         assert.strictEqual(e.headers, undefined, 'the header is gone');
@@ -988,7 +989,7 @@ test('key-to-helper: a ${VAR} not filled is blocked and names the old file that 
         const [f] = detect(ctxOf(w)).found.filter((x) => x.id === 'key-to-helper');
         const chain0 = path.join(ptRoot(w), '.mcps-secrets');
         assert.strictEqual(f.blocked, `put ${GK}'s value in ${chain0}, then run /preferred-tools:fix; ${GK} is in ${path.join(w.project, '.preferred-tools', '.secrets')}, which preferred-tools no longer reads`);
-        const res = fix.applyFixes(ctxOf(w), ['key-to-helper'], { log: () => {} });
+        const res = applyFixes(ctxOf(w), ['key-to-helper'], { log: () => {} });
         assert.deepStrictEqual(res.skipped.map((x) => x.id), ['key-to-helper']);
         assert.deepStrictEqual(localEntry(w, 'github').headers, { Authorization: `Bearer \${${GK}}` }, 'never moved to a helper that would send no key');
     }
@@ -1011,7 +1012,7 @@ test('key-to-helper: a literal equal to a filled value applies with that name; o
         assert.match(g.blocked, /^the key in this registration matches no name in .*\.mcps-secrets.*: put the working key there under a name, then run \/preferred-tools:fix$/);
         for (const v of [v1, v2]) assert.ok(!shownOf(d).includes(v), 'no literal in the report');
         const l = logged();
-        const res = fix.applyFixes(ctxOf(w), ['key-to-helper'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        const res = applyFixes(ctxOf(w), ['key-to-helper'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
         const e = userEntry(w, 'sentry');
         assert.strictEqual(e.headers, undefined);
@@ -1033,7 +1034,7 @@ test('helper-missing writes the helper; helper-stale rewrites a lower number, na
         const [m] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-missing');
         assert.deepStrictEqual([m.name, m.kind, Boolean(m.blocked)], [file, 'machine', false]);
         const l = logged();
-        assert.strictEqual(fix.applyFixes(ctxOf(w), ['helper-missing'], { log: l.log }).failed, null, l.text());
+        assert.strictEqual(applyFixes(ctxOf(w), ['helper-missing'], { log: l.log }).failed, null, l.text());
         assert.strictEqual(fsx.readFileSync(file, 'utf8'), rootsLib.helperSource());
         assert.deepStrictEqual(detect(ctxOf(w)).found.filter((x) => /^helper-/.test(x.id)), []);
         assert.doesNotMatch(l.text(), /Restart Claude Code/, 'the helper runs at each connect: no restart');
@@ -1041,7 +1042,7 @@ test('helper-missing writes the helper; helper-stale rewrites a lower number, na
         helperAt(ptRoot(w), 0);
         const [lower] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-stale');
         assert.match(lower.found, new RegExp(`helper 0 - this plugin's is ${HV}`));
-        fix.applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
+        applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
         assert.strictEqual(fsx.readFileSync(file, 'utf8'), rootsLib.helperSource());
 
         helperAt(ptRoot(w), HV, '// mine\n');
@@ -1052,7 +1053,7 @@ test('helper-missing writes the helper; helper-stale rewrites a lower number, na
         helperAt(ptRoot(w), HV + 1);
         const [higher] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-stale');
         assert.strictEqual(higher.blocked, `mcp-headers.js in ${ptRoot(w)} is newer than this plugin - update preferred-tools`);
-        fix.applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
+        applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
         assert.match(fsx.readFileSync(file, 'utf8'), new RegExp(`^// preferred-tools mcp-headers ${HV + 1}`), 'never rewritten');
     }
     finally { w.clean(); }
@@ -1069,7 +1070,7 @@ test('helper-stale never rewrites a file with no preferred-tools number line: it
         put(file, mine);
         const [f] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-stale');
         assert.strictEqual(f.blocked, `${file} has no preferred-tools number line - it is not this plugin's helper, and fix never overwrites it: rename yours, or delete it and run /preferred-tools:fix`);
-        fix.applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
+        applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
         assert.strictEqual(fsx.readFileSync(file, 'utf8'), mine, 'left as it is');
     }
     finally { w.clean(); }
@@ -1103,7 +1104,7 @@ test('root-ignore covers a project or global root inside a git work tree: append
         assert.match(found[0].found, /git ignores .*mcp-headers\.js, which a project-scope server needs committed/);
         assert.match(found[1].found, /git would commit .*\.mcps-secrets/);
         const l = logged();
-        const res = fix.applyFixes(ctxOf(w), ['root-ignore'], { log: l.log });
+        const res = applyFixes(ctxOf(w), ['root-ignore'], { log: l.log });
         assert.strictEqual(res.failed, null, l.text());
         assert.strictEqual(fsx.readFileSync(path.join(ptRoot(w), '.gitignore'), 'utf8'), rootsLib.GITIGNORE, 'appended, never rewritten');
         assert.strictEqual(fsx.readFileSync(path.join(homeRoot(w), '.gitignore'), 'utf8'), rootsLib.GITIGNORE);
@@ -1133,7 +1134,7 @@ test('root-ignore appends mcp-remote-v1/ to a root of the user\'s own files wher
         assert.deepStrictEqual(found.map((f) => [f.name, Boolean(f.blocked)]), [[homeRoot(w), false]]);
         assert.match(found[0].found, /git would commit .*mcp-remote-v1\//);
         const l = logged();
-        assert.strictEqual(fix.applyFixes(ctxOf(w), ['root-ignore'], { log: l.log }).failed, null, l.text());
+        assert.strictEqual(applyFixes(ctxOf(w), ['root-ignore'], { log: l.log }).failed, null, l.text());
         assert.ok(fsx.readFileSync(path.join(homeRoot(w), '.gitignore'), 'utf8').endsWith('mcps.json\nmcp-remote-v1/\n'));
         assert.deepStrictEqual(detect(ctxOf(w)).found.filter((x) => x.id === 'root-ignore'), []);
     }
@@ -1184,7 +1185,7 @@ test('root-ignore in a named root holding the user\'s files appends .mcps-secret
         const [f] = detect(ctxData(w, data)).found.filter((x) => x.id === 'root-ignore');
         assert.strictEqual(f.name, named);
         const l = logged();
-        assert.strictEqual(fix.applyFixes(ctxData(w, data), ['root-ignore'], { log: l.log }).failed, null, l.text());
+        assert.strictEqual(applyFixes(ctxData(w, data), ['root-ignore'], { log: l.log }).failed, null, l.text());
         assert.strictEqual(fsx.readFileSync(path.join(named, '.gitignore'), 'utf8'), '.mcps-secrets\npreferred-tools.json\nmcps.json\nmcp-remote-v1/\n');
         assert.strictEqual(rootsLib.gitIgnores(path.join(named, 'notes.md')), false, 'the user\'s files stay visible to git');
         assert.strictEqual(rootsLib.gitIgnores(path.join(named, '.mcps-secrets')), true);
@@ -1213,14 +1214,14 @@ test('token-sync checks stdio routes only, from the stdio chain, by any filled n
         const [g] = ts();
         assert.ok(!g.blocked);
         const l = logged();
-        assert.strictEqual(fix.applyFixes(ctxOf(w), ['token-sync'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(applyFixes(ctxOf(w), ['token-sync'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
         assert.strictEqual(localEntry(w, 'sentry').env[SK], v3, 'the default name\'s value');
         assert.deepStrictEqual(ts(), []);
         // a ${VAR} left by 0.1.x takes the value of the name it holds
         seed(w, 'sentry-b', 'local', SENTRY('${ANY_NAME}'));
         const [p] = ts();
         assert.match(p.found, /holds \$\{ANY_NAME\} while .*\.mcps-secrets has the key/);
-        fix.applyFixes(ctxOf(w), ['token-sync'], { only: 'sentry-b', tmp: path.join(w.dir, 'tmp'), log: l.log });
+        applyFixes(ctxOf(w), ['token-sync'], { only: 'sentry-b', tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(localEntry(w, 'sentry-b').env[SK], v2);
         for (const v of [v1, v2, v3]) assert.ok(!`${l.text()}${shownOf(detect(ctxOf(w)))}`.includes(v), 'no value printed');
     }
@@ -1238,7 +1239,7 @@ test('token-sync blocks an empty stdio key and never writes the default name\'s 
         const [f] = detect(ctxOf(w)).found.filter((x) => x.id === 'token-sync');
         assert.strictEqual(f.blocked, "pick the key's name with /preferred-tools:configure");
         const before = fsx.readFileSync(account.accountFile(w.env), 'utf8');
-        const res = fix.applyFixes(ctxOf(w), ['token-sync'], { log: () => {} });
+        const res = applyFixes(ctxOf(w), ['token-sync'], { log: () => {} });
         assert.deepStrictEqual(res.skipped.map((x) => x.id), ['token-sync']);
         assert.strictEqual(fsx.readFileSync(account.accountFile(w.env), 'utf8'), before, 'the account file unchanged');
         assert.strictEqual(localEntry(w, 'github').env[GK], '');
@@ -1252,14 +1253,14 @@ test('fix notes an untrusted declaring folder', () =>
     const at = (trusted, scope) => { const ctx = ctxFor({ registrations: [helperReg(scope)] }); ctx.inv.trusted = trusted; return detect(ctx); };
     const d = at(false, 'local');
     assert.deepStrictEqual(d.notes, ['github (local): accept the trust dialog the next time Claude Code starts in /proj - until then the server connects without its key']);
-    assert.match(fix.render(d), /note: github \(local\): accept the trust dialog/);
+    assert.match(render(d), /note: github \(local\): accept the trust dialog/);
     assert.deepStrictEqual(at(true, 'local').notes, []);
     assert.deepStrictEqual(at(false, 'user').notes, [], 'a global helper needs no folder trust');
     assert.ok(!at(false, 'local').found.some((f) => /trust/.test(f.id)), 'not a fix');
 });
 
 test('expandVars: ${NAME} from the environment, ${NAME:-fallback} when unset, null when a bare name is unset', () => {
-    const C = require('../scripts/fixes/common.js');
+    const C = require('../scripts/fix/common.js');
     assert.strictEqual(C.expandVars('${A}\\x', { A: 'C:\\a' }), 'C:\\a\\x');
     assert.strictEqual(C.expandVars('${B:-C:\\b}', {}), 'C:\\b');
     assert.strictEqual(C.expandVars('${B:-C:\\b}', { B: 'D:\\d' }), 'D:\\d');
@@ -1268,7 +1269,7 @@ test('expandVars: ${NAME} from the environment, ${NAME:-fallback} when unset, nu
 });
 
 test('one ${VAR} expander, Claude Code\'s rule (2.1.322): a variable set to empty is empty, the fallback only when unset - fix and fetch agree', () => {
-    const C = require('../scripts/fixes/common.js');
+    const C = require('../scripts/fix/common.js');
     const { expand } = require('../scripts/apply/fetch.js');
     assert.strictEqual(expandVars('${B:-C:\\b}', { B: '' }).value, '');
     assert.deepStrictEqual(expandVars('${A}/${MISSING}', { A: 'a' }), { value: 'a/${MISSING}', unset: ['MISSING'] });
@@ -1288,7 +1289,7 @@ test('fix: a registration on its own is not checked and is listed once', () =>
     const own = detect(ctxFor({ platform: 'win32', registrations: [{ ...r, choice: 'own' }, { ...r, name: 'c7-managed', choice: 'manage' }] }));
     assert.deepStrictEqual(own.found.map((f) => [f.id, f.name]), [['windows-npx-cmd', 'c7-managed']], 'only the one on its own is left out');
     assert.deepStrictEqual(own.own, [{ name: 'context7', scope: 'local' }]);
-    const text = fix.render(own);
+    const text = render(own);
     assert.deepStrictEqual(text.split('\n').filter((l) => l.includes('on its own - not checked')), ['context7 (local): on its own - not checked']);
     assert.deepStrictEqual(detect(ctxFor({ platform: 'win32', registrations: [r] })).own, []);
 });
@@ -1326,7 +1327,7 @@ const { PARENT_HELPER_IN_CHILD } = require('../scripts/plan/asks-keys.js');
 const existingLib = require('../scripts/inventory/existing.js');
 const GH = { type: 'http', url: 'https://api.githubcopilot.com/mcp/' };
 const C7 = { type: 'http', url: 'https://mcp.context7.com/mcp' };
-const ctxIn = (w, dir, machine = noMachine()) => fix.makeCtx({ inv: inventory.buildInventory({ project: dir, env: w.env }), env: w.env, machine });
+const ctxIn = (w, dir, machine = noMachine()) => makeCtx({ inv: inventory.buildInventory({ project: dir, env: w.env }), env: w.env, machine });
 
 test('project-relative-path: relative, ${HOME}, ${USERPROFILE}\\.serena and a relative helper are found and fixed as read, a user arg kept', () =>
 {
@@ -1385,7 +1386,7 @@ test('project-relative-path and mcp-order in a child folder name the parent', ()
         const ours = (d) => d.found.filter((f) => ['project-relative-path', 'mcp-order'].includes(f.id));
         const d = detect(ctxIn(w, child));
         assert.deepStrictEqual(ours(d).map((f) => [f.id, f.blocked]), [['project-relative-path', 'run /preferred-tools:fix in ..'], ['mcp-order', 'run /preferred-tools:fix in ..']]);
-        const text = fix.render(d);
+        const text = render(d);
         assert.match(text, /project-relative-path .* NOT APPLICABLE: run \/preferred-tools:fix in \.\./);
         assert.match(text, /mcp-order .* NOT APPLICABLE: run \/preferred-tools:fix in \.\./);
         // in the parent itself, both apply
@@ -1485,12 +1486,12 @@ test('fix prints the reconnect line for each hosted keyed registration it rewrot
         seed(w, 'github', 'local', HOSTED_GH('Bearer ${ACME_GH}'));
         secretsAt(ptRoot(w), { ACME_GH: hexv('gh') });
         const l = logged();
-        assert.strictEqual(fix.applyFixes(ctxOf(w), ['key-to-helper'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(applyFixes(ctxOf(w), ['key-to-helper'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
         assert.ok(l.text().includes('github: connects with its key at the next session start; in a session already running, /mcp -> github -> Reconnect'), l.text());
         // project-relative-path on context7's 0.2.0 helper at project scope, its key not filled: the fill line
         seed(w, 'context7', 'project', { ...C7, headersHelper: 'node .preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' });
         const m = logged();
-        assert.strictEqual(fix.applyFixes(ctxOf(w), ['project-relative-path'], { tmp: path.join(w.dir, 'tmp2'), log: m.log }).failed, null, m.text());
+        assert.strictEqual(applyFixes(ctxOf(w), ['project-relative-path'], { tmp: path.join(w.dir, 'tmp2'), log: m.log }).failed, null, m.text());
         assert.ok(m.text().includes(`context7: fill CONTEXT7_API_KEY in ${path.join(ptRoot(w), '.mcps-secrets')}, then Reconnect it in /mcp - until then it runs without the key, at lower rate limits`), m.text());
         assert.ok(!/github: connects/.test(m.text()), 'only what this run rewrote');
     }
@@ -1515,7 +1516,7 @@ test('helper-missing finds both files of a bridge registration and writes both',
         assert.deepStrictEqual(found.map((x) => x.name).sort(), [bridge, helper].sort());
         assert.ok(found.some((x) => x.found === 'mcp-bridge.js is missing - sentry (local) does not start'), found.map((x) => x.found).join('\n'));
         const l = logged();
-        assert.strictEqual(fix.applyFixes(ctxOf(w), ['helper-missing'], { log: l.log }).failed, null, l.text());
+        assert.strictEqual(applyFixes(ctxOf(w), ['helper-missing'], { log: l.log }).failed, null, l.text());
         // a bridge with a file missing did not start: unlike a hosted helper, it needs a new start (review)
         assert.match(l.text(), /Restart Claude Code/);
         assert.strictEqual(fsx.readFileSync(helper, 'utf8'), rootsLib.helperSource());
@@ -1538,7 +1539,7 @@ test('helper-stale finds helper 3 beside a bridge, and a hand-edited bridge, and
         const [lower] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-stale');
         assert.match(lower.found, new RegExp(`^mcp-headers\\.js is helper 3 - this plugin's is ${HV}`));
         const l = logged();
-        fix.applyFixes(ctxOf(w), ['helper-stale'], { log: l.log });
+        applyFixes(ctxOf(w), ['helper-stale'], { log: l.log });
         assert.match(l.text(), /Restart Claude Code/, 'the bridge exited beside helper 3');
         assert.strictEqual(fsx.readFileSync(path.join(ptRoot(w), 'mcp-headers.js'), 'utf8'), rootsLib.helperSource());
 
@@ -1546,13 +1547,13 @@ test('helper-stale finds helper 3 beside a bridge, and a hand-edited bridge, and
         const [edited] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-stale');
         assert.strictEqual(edited.name, bridge);
         assert.match(edited.found, /^mcp-bridge\.js changed since preferred-tools wrote it/);
-        fix.applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
+        applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
         assert.strictEqual(fsx.readFileSync(bridge, 'utf8'), rootsLib.shippedSource('bridge'));
 
         bridgeAt(ptRoot(w), BV + 1);
         const [higher] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-stale');
         assert.strictEqual(higher.blocked, `mcp-bridge.js in ${ptRoot(w)} is newer than this plugin - update preferred-tools`);
-        fix.applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
+        applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
         assert.match(fsx.readFileSync(bridge, 'utf8'), new RegExp(`^// preferred-tools mcp-bridge ${BV + 1}`), 'never rewritten');
     }
     finally { w.clean(); }
@@ -1591,9 +1592,9 @@ test('a 0.4.x own server is skipped before list-import: fix all leaves it byte-i
         fs.mkdirSync(root, { recursive: true });
         fs.writeFileSync(path.join(root, 'preferred-tools.json'), JSON.stringify({ version: 1, servers: [{ name: 'serena', scope: 'local', fingerprint: X.fingerprintOf(theirs, catalog), choice: 'own' }] }));
         const before = account.readAccount(w.env, w.project).local.serena;
-        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).own, [{ name: 'serena', scope: 'local' }]);
+        assert.deepStrictEqual(detectAll(ctxOf(w)).own, [{ name: 'serena', scope: 'local' }]);
         const lines = [];
-        const res = fix.applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
+        const res = applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
         assert.strictEqual(res.failed, null, lines.join('\n'));
         assert.deepStrictEqual(account.readAccount(w.env, w.project).local.serena, before, 'byte-identical');
         const list = JSON.parse(fs.readFileSync(path.join(root, 'mcps.json'), 'utf8'));
@@ -1618,7 +1619,7 @@ test('list-import writes each managed registration with clients claude and moves
         const proot = path.join(w.project, '.preferred-tools');
         recordAt(proot, [OWN_X]);
         const l = logged();
-        const res = fix.applyFixes(ctxOf(w), ['list-import'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        const res = applyFixes(ctxOf(w), ['list-import'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
         const list = listAt(proot);
         assert.deepStrictEqual(list.servers.map((s) => [s.name, s.scope, s.clients]), [['serena', 'project', ['claude']]]);
@@ -1628,7 +1629,7 @@ test('list-import writes each managed registration with clients claude and moves
         assert.deepStrictEqual(listAt(path.join(w.home, '.preferred-tools')).servers.map((s) => [s.name, s.scope, s.clients]), [['context7', 'user', ['claude']]]);
         assert.deepStrictEqual(res.applied.map((f) => f.id), ['list-import', 'list-import']);
         // a second run finds nothing
-        assert.deepStrictEqual(ids(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'list-import')), []);
+        assert.deepStrictEqual(ids(detectAll(ctxOf(w)).found.filter((f) => f.id === 'list-import')), []);
     }
     finally { w.clean(); }
 });
@@ -1641,12 +1642,12 @@ test('list-import into a family with no root writes its .gitignore first and rec
         seed(w, 'context7', 'user', C7_HOSTED);
         const data = path.join(w.dir, 'data');
         const ctx = ctxData(w, data);
-        const [f] = ctx.catalog && fix.detectAll(ctx).found.filter((x) => x.id === 'list-import');
+        const [f] = ctx.catalog && detectAll(ctx).found.filter((x) => x.id === 'list-import');
         const groot = path.join(w.home, '.preferred-tools');
         assert.deepStrictEqual([f.name, f.scope, f.family, f.record], [path.join(groot, 'mcps.json'), null, 'global', null]);
         assert.deepStrictEqual(F.listImportSteps(f, ctx).map((s) => s.op), ['root-ignore', 'list-write', 'record-root']);
         const l = logged();
-        assert.strictEqual(fix.applyFixes(ctx, ['list-import'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(applyFixes(ctx, ['list-import'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
         assert.strictEqual(fsx.readFileSync(path.join(groot, '.gitignore'), 'utf8'), rootsLib.GITIGNORE);
         assert.strictEqual(readJson(path.join(data, 'roots.json')).global, groot);
         assert.deepStrictEqual(listAt(groot).servers.map((s) => s.name), ['context7']);
@@ -1664,11 +1665,11 @@ test('retire-record after a rollback keeps both backups and list-import finds no
         recordAt(proot, [OWN_X]);
         put(path.join(proot, 'preferred-tools.json.0.4.bak'), 'the first backup\n');
         const l = logged();
-        assert.strictEqual(fix.applyFixes(ctxOf(w), ['list-import'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(applyFixes(ctxOf(w), ['list-import'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
         assert.strictEqual(fsx.readFileSync(path.join(proot, 'preferred-tools.json.0.4.bak'), 'utf8'), 'the first backup\n');
         assert.deepStrictEqual(readJson(path.join(proot, 'preferred-tools.json.0.4.bak.2')).servers, [OWN_X]);
         assert.ok(!fsx.existsSync(path.join(proot, 'preferred-tools.json')));
-        assert.deepStrictEqual(ids(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'list-import')), []);
+        assert.deepStrictEqual(ids(detectAll(ctxOf(w)).found.filter((f) => f.id === 'list-import')), []);
     }
     finally { w.clean(); }
 });
@@ -1683,7 +1684,7 @@ test('the file pass runs after the registration pass, detects on what it wrote, 
         put(path.join(w.project, '.preferred-tools', 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
         seed(w, 'serena', 'local', { ...entry, args: entry.args.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python') });
         const l = logged();
-        const res = fix.applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        const res = applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
         assert.deepStrictEqual(res.applied.map((f) => f.id).sort(), ['list-import', 'uvx-python']);
         const text = l.text();
@@ -1717,7 +1718,7 @@ test("install's first touch retires the old record, and a configure 'manage' ans
         // x's server is gone, so its own entry goes, as 0.4.x dropped it
         assert.deepStrictEqual([list.servers.map((s) => s.name), list.own], [['context7'], []]);
         assert.ok(!fsx.existsSync(path.join(proot, 'preferred-tools.json')) && fsx.existsSync(path.join(proot, 'preferred-tools.json.0.4.bak')));
-        fix.applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp2'), log: () => {} });
+        applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp2'), log: () => {} });
         const inv1 = inventory.buildInventory({ project: w.project, env: w.env });
         assert.strictEqual(inv1.registrations.find((r) => r.name === 'context7').choice, null, 'managed');
         assert.deepStrictEqual(listAt(proot).servers.map((s) => s.name), ['context7']);
@@ -1736,17 +1737,17 @@ test('read-guard finds a root with .mcps-secrets and no rule, applies deny-read,
         const proot = path.join(w.project, '.preferred-tools');
         put(path.join(proot, '.mcps-secrets'), '');
         put(settingsOf(w), JSON.stringify({ permissions: { deny: ['Bash(rm:*)'] }, theme: 'dark' }));
-        const found = fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard');
+        const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard');
         assert.deepStrictEqual(found.map((f) => [f.name, f.rules]), [[settingsOf(w), ['Read(//**/.mcps-secrets)']]]);
         assert.match(found[0].found, /\.mcps-secrets/);
         const l = logged();
-        const res = fix.applyFixes(ctxOf(w), ['read-guard'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        const res = applyFixes(ctxOf(w), ['read-guard'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
         assert.deepStrictEqual(readJson(settingsOf(w)), { permissions: { deny: ['Bash(rm:*)', 'Read(//**/.mcps-secrets)'] }, theme: 'dark' });
-        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard'), []);
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard'), []);
         // the sign-in folder adds its own rule
         fsx.mkdirSync(path.join(proot, 'mcp-remote-v1'));
-        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard').map((f) => f.rules), [['Read(//**/mcp-remote-v1/**)']]);
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard').map((f) => f.rules), [['Read(//**/mcp-remote-v1/**)']]);
     }
     finally { w.clean(); }
 });
@@ -1782,16 +1783,16 @@ test('serena-context rewrites --context and writes the file first', () =>
     try
     {
         seed(w, 'serena', 'local', SERENA_OLD(path.join(ptRoot(w), 'serena')));
-        const found = fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-context');
+        const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-context');
         assert.deepStrictEqual(found.map((f) => [f.name, f.scope]), [['serena', 'local']]);
         const l = logged();
-        const res = fix.applyFixes(ctxOf(w), ['serena-context'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        const res = applyFixes(ctxOf(w), ['serena-context'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
         const want = path.join(ptRoot(w), 'serena-context.yml');
         assert.strictEqual(ctxArg(localEntry(w, 'serena')), want);
         assert.strictEqual(fsx.readFileSync(want, 'utf8'), rootsLib.shippedSource('serenaContext'));
         assert.ok(l.text().indexOf(`wrote ${want}`) < l.text().indexOf('rewrote \'serena\''), 'the file is written before the registration');
-        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-context'), []);
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-context'), []);
     }
     finally { w.clean(); }
 });
@@ -1805,15 +1806,15 @@ test('helper-missing covers serena\'s context file', () =>
         const e = SERENA_OLD(path.join(ptRoot(w), 'serena'));
         e.args[e.args.indexOf('claude-code')] = want;
         seed(w, 'serena', 'local', e);
-        const found = fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'helper-missing');
+        const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'helper-missing');
         assert.deepStrictEqual(found.map((f) => f.name), [want]);
         const l = logged();
-        assert.strictEqual(fix.applyFixes(ctxOf(w), ['helper-missing'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(applyFixes(ctxOf(w), ['helper-missing'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
         assert.strictEqual(fsx.readFileSync(want, 'utf8'), rootsLib.shippedSource('serenaContext'));
         assert.ok(!fsx.existsSync(path.join(ptRoot(w), 'package.json')), 'a YAML file needs no package.json');
         // a lower one is helper-stale
         fsx.writeFileSync(want, rootsLib.shippedSource('serenaContext').replace(/^# preferred-tools serena-context \d+/, '# preferred-tools serena-context 0'));
-        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'helper-stale').map((f) => f.name), [want]);
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'helper-stale').map((f) => f.name), [want]);
     }
     finally { w.clean(); }
 });
@@ -1830,20 +1831,20 @@ test('serena-base-modes: Apply all found runs the op and the finding is gone', (
         seed(w, 'serena', 'local', e);
         const cfg = path.join(home, 'serena_config.yml');
         put(cfg, 'base_modes:\n- interactive\n- editing\nauth_secret: s3cr3t-fixture\n');
-        const found = fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-base-modes');
+        const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-base-modes');
         assert.deepStrictEqual(found.map((f) => [f.name, f.kind]), [[cfg, 'file']]);
-        assert.ok(!shownOf(fix.detectAll(ctxOf(w))).includes('s3cr3t'));
+        assert.ok(!shownOf(detectAll(ctxOf(w))).includes('s3cr3t'));
         const l = logged();
-        const res = fix.applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        const res = applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
         assert.strictEqual(fsx.readFileSync(cfg, 'utf8'), 'base_modes: []\nauth_secret: s3cr3t-fixture\n');
         assert.ok(!l.text().includes('s3cr3t'));
-        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-base-modes'), []);
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-base-modes'), []);
         // an alfred-code 2.x home is never found
         const alfredHome = path.join(w.project, '.alfred', 'serena', 'home');
         put(path.join(alfredHome, 'serena_config.yml'), 'base_modes:\n- editing\n');
         seed(w, 'serena2', 'project', { ...e, env: { ...e.env, SERENA_HOME: alfredHome } });
-        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-base-modes'), []);
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-base-modes'), []);
     }
     finally { w.clean(); }
 });
@@ -1861,23 +1862,23 @@ test('a 0.4.x root .gitignore gains !mcp-bridge.js and !serena-context.yml from 
         seed(w, 'serena', 'project', SERENA_OLD(path.join(ptRoot(w), 'serena')));
         // the plan that writes serena-context.yml plans the root's .gitignore first
         const l = logged();
-        assert.strictEqual(fix.applyFixes(ctxOf(w), ['serena-context'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(applyFixes(ctxOf(w), ['serena-context'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
         assert.strictEqual(fsx.readFileSync(path.join(ptRoot(w), '.gitignore'), 'utf8'), `${OLD}!mcp-bridge.js\n!serena-context.yml\n`);
         assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), 'serena-context.yml')), false);
         assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), 'mcp-bridge.js')), false);
         assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), '.mcps-secrets')), true, 'the key file stays ignored');
-        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((f) => f.id === 'root-ignore'), []);
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'root-ignore'), []);
         // fix root-ignore on its own: a root holding mcp-bridge.js under the old .gitignore
         fsx.writeFileSync(path.join(ptRoot(w), '.gitignore'), OLD);
         put(path.join(ptRoot(w), 'mcp-bridge.js'), rootsLib.shippedSource('bridge'));
-        const [f] = fix.detectAll(ctxOf(w)).found.filter((x) => x.id === 'root-ignore');
+        const [f] = detectAll(ctxOf(w)).found.filter((x) => x.id === 'root-ignore');
         assert.ok(f && !f.blocked, JSON.stringify(f));
         assert.match(f.found, /mcp-bridge\.js/);
         assert.match(f.found, /serena-context\.yml/);
         const l2 = logged();
-        assert.strictEqual(fix.applyFixes(ctxOf(w), ['root-ignore'], { tmp: path.join(w.dir, 'tmp2'), log: l2.log }).failed, null, l2.text());
+        assert.strictEqual(applyFixes(ctxOf(w), ['root-ignore'], { tmp: path.join(w.dir, 'tmp2'), log: l2.log }).failed, null, l2.text());
         assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), 'mcp-bridge.js')), false);
-        assert.deepStrictEqual(fix.detectAll(ctxOf(w)).found.filter((x) => x.id === 'root-ignore'), []);
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((x) => x.id === 'root-ignore'), []);
     }
     finally { w.clean(); }
 });
@@ -1893,7 +1894,7 @@ test('a root of the user\'s own files gets the advice to add !<file> for the bri
         put(path.join(ptRoot(w), 'mcp-bridge.js'), rootsLib.shippedSource('bridge'));
         put(path.join(ptRoot(w), '.mcps-secrets'), '');
         seed(w, 'serena', 'project', SERENA_OLD(path.join(ptRoot(w), 'serena')));
-        const [f] = fix.detectAll(ctxOf(w)).found.filter((x) => x.id === 'root-ignore');
+        const [f] = detectAll(ctxOf(w)).found.filter((x) => x.id === 'root-ignore');
         assert.ok(f, 'found');
         assert.match(f.blocked || f.note || '', new RegExp(`add !mcp-bridge\\.js at the end of ${path.join(ptRoot(w), '.gitignore').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
     }
@@ -1933,7 +1934,7 @@ test('a windows-npx-cmd repair on an entry with cursor ends with list-write and 
         writeJson(cursorFile, doc);
         assert.deepStrictEqual(ids(detect(ctxOf(w), 'uvx-python').found), ['uvx-python']);
         const l = logged();
-        const res = fix.applyFixes(ctxOf(w), ['uvx-python'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        const res = applyFixes(ctxOf(w), ['uvx-python'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
         assert.match(l.text(), /wrote .*mcps\.json/);
         assert.match(l.text(), /wrote .*\.cursor[\\/]mcp\.json/);
@@ -1961,7 +1962,7 @@ test('token-sync with a key changed in .mcps-secrets refills ~/.cursor/mcp.json 
         const ts = () => detect(ctxOf(w), 'token-sync').found;
         assert.deepStrictEqual(ts().map((f) => [f.name, f.scope, Boolean(f.blocked)]), [['sentry', 'user', false]]);
         const l = logged();
-        assert.strictEqual(fix.applyFixes(ctxOf(w), ['token-sync'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(applyFixes(ctxOf(w), ['token-sync'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
         assert.strictEqual(userEntry(w, 'sentry').env[SK], v2);
         assert.strictEqual(readJson(cursorFile).mcpServers.sentry.env[SK], v2, 'Cursor\'s copy refilled');
         assert.deepStrictEqual(ts(), []);
@@ -1972,7 +1973,7 @@ test('token-sync with a key changed in .mcps-secrets refills ~/.cursor/mcp.json 
         const [f] = ts();
         assert.match(f.found, /Cursor's copy in .*mcp\.json holds a key/);
         const calls = w.calls().length;
-        assert.strictEqual(fix.applyFixes(ctxOf(w), ['token-sync'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(applyFixes(ctxOf(w), ['token-sync'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
         assert.strictEqual(readJson(cursorFile).mcpServers.sentry.env[SK], v2);
         assert.strictEqual(w.calls().slice(calls).filter((a) => a[0] === 'mcp' && a[1] !== 'list' && a[1] !== 'get').length, 0, 'Claude Code is not touched');
         assert.deepStrictEqual(ts(), []);

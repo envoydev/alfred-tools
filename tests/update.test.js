@@ -10,9 +10,12 @@ const inventory = require('../scripts/inventory/inventory.js');
 const { plan } = require('../scripts/plan/plan.js');
 const { apply } = require('../scripts/apply/run.js');
 const cli = require('../scripts/core/claude-cli.js');
-const update = require('../scripts/update.js');
+const { bumpEntry } = require('../scripts/update/offers-plugins.js');
+const { makeCtx, check, ordered } = require('../scripts/update/check.js');
+const { questions } = require('../scripts/update/asks.js');
+const update = require('../scripts/update/command.js');
 const registry = require('../scripts/catalog/registry.js');
-const { pinnedVersion } = require('../scripts/fixes/common.js');
+const { pinnedVersion } = require('../scripts/fix/common.js');
 
 const DAY = 86400000;
 const NOW = Date.parse('2026-10-27T12:00:00Z');
@@ -48,24 +51,24 @@ const pypiSerena = (...v) => ({ 'pypi:serena-agent': v.map(([version, days]) => 
 test('bumpEntry moves the pin and the cut-off beside it, and nothing else', () =>
 {
     const serena = { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20T23:59:59Z', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server', '--my-flag'], env: { SERENA_HOME: '/x' } };
-    const b = update.bumpEntry(serena, 'serena-agent', '2.2.0', '2026-10-27T23:59:59Z');
+    const b = bumpEntry(serena, 'serena-agent', '2.2.0', '2026-10-27T23:59:59Z');
     assert.deepStrictEqual(b.args, ['--python', '3.13', '--exclude-newer', '2026-10-27T23:59:59Z', '--from', 'serena-agent@2.2.0', 'serena', 'start-mcp-server', '--my-flag']);
     assert.deepStrictEqual(b.env, serena.env);
     assert.strictEqual(serena.args[5], 'serena-agent@2.1.0', 'the input is not mutated');
 
     const memory = { command: 'uvx', args: ['--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'] };
-    assert.strictEqual(update.bumpEntry(memory, 'mcp-memory-service', '12.2.0', 'C').args[1], 'mcp-memory-service[sqlite]==12.2.0');
-    assert.deepStrictEqual(update.bumpEntry(memory, 'mcp-memory-service', '12.2.0', 'C').args.includes('--exclude-newer'), false, 'a cut-off the user removed stays removed');
+    assert.strictEqual(bumpEntry(memory, 'mcp-memory-service', '12.2.0', 'C').args[1], 'mcp-memory-service[sqlite]==12.2.0');
+    assert.deepStrictEqual(bumpEntry(memory, 'mcp-memory-service', '12.2.0', 'C').args.includes('--exclude-newer'), false, 'a cut-off the user removed stays removed');
 
     const npx = { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '/p'], env: { npm_config_before: '2026-10-20T23:59:59Z', MINE: '1' } };
-    const n = update.bumpEntry(npx, '@playwright/mcp', '0.0.90', '2026-10-27T23:59:59Z');
+    const n = bumpEntry(npx, '@playwright/mcp', '0.0.90', '2026-10-27T23:59:59Z');
     assert.deepStrictEqual(n.args, ['-y', '@playwright/mcp@0.0.90', '--browser', 'chrome', '--user-data-dir', '/p']);
     assert.deepStrictEqual(n.env, { npm_config_before: '2026-10-27T23:59:59Z', MINE: '1' });
 
     const win = { command: 'cmd', args: ['/c', 'npx', '-y', 'appium-mcp@1.97.1'], env: { npm_config_before: 'old' } };
-    assert.deepStrictEqual(update.bumpEntry(win, 'appium-mcp', '1.98.0', 'new').args, ['/c', 'npx', '-y', 'appium-mcp@1.98.0']);
+    assert.deepStrictEqual(bumpEntry(win, 'appium-mcp', '1.98.0', 'new').args, ['/c', 'npx', '-y', 'appium-mcp@1.98.0']);
 
-    assert.strictEqual(update.bumpEntry({ command: 'npx', args: ['-y', 'appium-mcp'] }, 'appium-mcp', '1.98.0', 'x'), null, 'no pin, no edit');
+    assert.strictEqual(bumpEntry({ command: 'npx', args: ['-y', 'appium-mcp'] }, 'appium-mcp', '1.98.0', 'x'), null, 'no pin, no edit');
 });
 
 // ---- the age gate --------------------------------------------------------------------------------------------------
@@ -311,7 +314,7 @@ test('retired-plugin at two scopes is two offers, and picking one uninstalls onl
         seed(w, { markets: [], installed: [[HUD, '0.15.0', 'user'], [HUD, '0.15.0', 'project']] });
         const c = await run(w, ['--check', '--no-refresh', '--data', path.join(w.dir, 'data')]);
         assert.match(c.text, /New ways to pass data:\n\s+claude-hud@claude-hud \(user\)\s+retired-plugin: /);
-        const q = update.questions(JSON.parse((await run(w, ['--check', '--json', '--no-refresh'])).text));
+        const q = questions(JSON.parse((await run(w, ['--check', '--json', '--no-refresh'])).text));
         const ids = q.pick.flat().flatMap((i) => i.options.map((o) => o.description));
         assert.deepStrictEqual(ids.filter((d) => d.startsWith('upgrade:retired-plugin')).sort(), [`upgrade:retired-plugin:${HUD}~project`, `upgrade:retired-plugin:${HUD}~user`]);
         const a = await run(w, ['--apply', `upgrade:retired-plugin:${HUD}~project`, '--no-refresh']);
@@ -388,7 +391,7 @@ test('the asks stay within the AskUserQuestion limits; every pick option carries
 {
     const mk = (n, group, kind) => Array.from({ length: n }, (_, i) => ({ kind, id: `${kind}:${group}${i}~user`, group, label: `${group}${i}`, from: '1.0.0', to: '1.1.0' }));
     const out = { offers: [...mk(6, 'catalog', 'plugin'), ...mk(5, 'other', 'plugin'), ...mk(3, 'mcp', 'mcp')], unchecked: mk(2, 'other', 'plugin').map((o) => ({ ...o, id: o.id + 'u', to: null })), skipped: [], held: [], errors: [], lsp: [], notes: [] };
-    const q = update.questions(out);
+    const q = questions(out);
     assert.deepStrictEqual(q.offer.options.map((o) => o.label), ['All of them (Recommended)', 'Pick which', 'Skip']);
     assert.ok(q.pick.length >= 1);
     for (const call of q.pick)
@@ -403,7 +406,7 @@ test('the asks stay within the AskUserQuestion limits; every pick option carries
     const labels = q.pick.flat().flatMap((i) => i.options.map((o) => o.label));
     assert.strictEqual(new Set(labels).size, labels.length, 'labels are unique');
     // only unchecked plugins: 'All of them' would update nothing, so the recommended option is 'Pick which'
-    const only = update.questions({ ...out, offers: [] });
+    const only = questions({ ...out, offers: [] });
     assert.deepStrictEqual(only.offer.options.map((o) => o.label), ['Pick which (Recommended)', 'Skip']);
 });
 
@@ -483,7 +486,7 @@ test('update: a pinned server on its own is skipped, not offered', async () =>
 
 test('fix and update take --data after their read-only flag', async () =>
 {
-    const fix = require('../scripts/fix.js');
+    const { main } = require('../scripts/fix/command.js');
     const roots = require('../scripts/roots/roots.js');
     const w = world();
     try
@@ -494,7 +497,7 @@ test('fix and update take --data after their read-only flag', async () =>
         ownRecord(named);
         writeJson(path.join(data, 'roots.json'), { version: 1, global: null, projects: { [roots.mapKey(w.project)]: named } });
         const lines = [];
-        assert.strictEqual(fix.main(['--detect', '--data', data, '--project', w.project], { env: w.env, out: (s) => lines.push(s) }), 0, lines.join('\n'));
+        assert.strictEqual(main(['--detect', '--data', data, '--project', w.project], { env: w.env, out: (s) => lines.push(s) }), 0, lines.join('\n'));
         assert.match(lines.join('\n'), /context7 \(local\): on its own - not checked/);
         const c = await run(w, ['--check', '--no-refresh', '--data', data], { registry: C7_AHEAD() });
         assert.strictEqual(c.code, 0, c.text);
@@ -502,7 +505,7 @@ test('fix and update take --data after their read-only flag', async () =>
         assert.doesNotMatch(c.text, /2\.0\.0 -> 9\.0\.0/);
         // without --data the named root's record is not found: managed, so offered
         assert.match((await run(w, ['--check', '--no-refresh'], { registry: C7_AHEAD() })).text, /2\.0\.0 -> 9\.0\.0/);
-        assert.strictEqual(fix.main(['--detect', '--data'], { env: w.env, out: () => {} }), 2, 'a flag without its value');
+        assert.strictEqual(main(['--detect', '--data'], { env: w.env, out: () => {} }), 2, 'a flag without its value');
     }
     finally { w.clean(); }
 });
@@ -577,8 +580,8 @@ test("update moves a bridge's mcp-remote pin and its cut-off", async () => {
         assert.strictEqual(cli.run(['mcp', 'add-json', 'sentry', JSON.stringify(e), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         const reg = fakeRegistry({ 'npm:mcp-remote': [{ version: '0.16.0', time: ago(25) }, { version: '0.16.4', time: ago(8) }] });
         const inv = inventory.buildInventory({ project: w.project, env: w.env });
-        const ctx = update.makeCtx({ inv, project: w.project, env: w.env, machine: noLsp, registry: reg, now: NOW, refresh: false });
-        const out = await update.check(ctx);
+        const ctx = makeCtx({ inv, project: w.project, env: w.env, machine: noLsp, registry: reg, now: NOW, refresh: false });
+        const out = await check(ctx);
         const offers = out.offers.filter((o) => o.kind === 'mcp');
         assert.strictEqual(offers.length, 1, JSON.stringify(out));
         assert.strictEqual(offers[0].entry.args[4], 'mcp-remote@0.16.4');
@@ -759,7 +762,7 @@ test('one server pin-bumped at two scopes keeps a fetch step for each', async ()
 test('a group with one offer is asked with two options: the offer and None of these', () =>
 {
     const out = { offers: [{ kind: 'upgrade', id: 'upgrade:mcp-order:/p/.mcp.json', fix: 'mcp-order', name: '/p/.mcp.json', scope: null, group: 'upgrade', label: '/p/.mcp.json' }], unchecked: [], skipped: [], held: [], errors: [], lsp: [], notes: [] };
-    const [q] = update.questions(out).pick.flat();
+    const [q] = questions(out).pick.flat();
     assert.deepStrictEqual(q.options, [{ label: '/p/.mcp.json: mcp-order', description: 'upgrade:mcp-order:/p/.mcp.json' }, { label: 'None of these', description: 'none' }]);
 });
 
@@ -898,7 +901,7 @@ test('a registration whose pin is newer than its list entry is updated from the 
     {
         install(w, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'local' } } });
         assert.strictEqual(serenaPin(listed0(w, 'serena').entry), '2.1.0');
-        reAdd(w, 'serena', update.bumpEntry(localReg(w, 'serena').entry, 'serena-agent', '2.2.0', '2026-10-01T23:59:59Z'));
+        reAdd(w, 'serena', bumpEntry(localReg(w, 'serena').entry, 'serena-agent', '2.2.0', '2026-10-01T23:59:59Z'));
         const reg = fakeRegistry(pypiSerena(['2.1.0', 90], ['2.2.0', 40], ['2.3.0', 20]));
         const c = await run(w, ['--check', '--no-refresh'], { registry: reg });
         assert.match(c.text, /serena was changed outside preferred-tools/);
@@ -959,7 +962,7 @@ test('a pin move that changes Cursor\'s copy prints the re-approval line in the 
         install(w, { clients: ['claude', 'cursor'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } });
         const inv = inventory.buildInventory({ project: w.project, env: w.env });
         const r = inv.registrations.find((x) => x.name === 'atlassian');
-        const step = { op: 'mcp-replace', name: 'atlassian', scope: 'user', old: r.entry, entry: update.bumpEntry(r.entry, 'mcp-remote', '0.17.0', '2026-10-27T23:59:59Z'), row: 'atlassian', route: r.route };
+        const step = { op: 'mcp-replace', name: 'atlassian', scope: 'user', old: r.entry, entry: bumpEntry(r.entry, 'mcp-remote', '0.17.0', '2026-10-27T23:59:59Z'), row: 'atlassian', route: r.route };
         const notes = [];
         const tail = repairTail(inv, { platform: process.platform, project: w.project, home: w.home, env: w.env, notes }, [step]);
         assert.deepStrictEqual(tail.map((s) => s.op), ['list-write', 'cursor-write']);
@@ -1110,5 +1113,5 @@ test('the upgrade rows run in order: list-import, serena-context, serena-base-mo
     const catalog = require('../scripts/catalog/catalog.js').load();
     const o = (fix, scope, fixKind) => ({ kind: 'upgrade', id: `upgrade:${fix}`, fix, scope, fixKind });
     const offers = [o('read-guard', null, 'file'), o('retired-plugin', 'user', 'machine'), o('serena-base-modes', null, 'file'), o('serena-context', 'local', 'registration'), o('list-import', null, 'file'), { kind: 'mcp', id: 'mcp:serena~local' }];
-    assert.deepStrictEqual(update.ordered(offers, catalog).map((x) => x.fix || x.id), ['list-import', 'serena-context', 'serena-base-modes', 'retired-plugin', 'read-guard', 'mcp:serena~local']);
+    assert.deepStrictEqual(ordered(offers, catalog).map((x) => x.fix || x.id), ['list-import', 'serena-context', 'serena-base-modes', 'retired-plugin', 'read-guard', 'mcp:serena~local']);
 });

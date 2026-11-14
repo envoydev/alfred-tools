@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "note": "Known problems and their recorded fixes. `detect` and `fix` name functions in scripts/fixes/. `verifiedOn` says where the fix was proved; a row not proved on this build says so. A new problem the user meets later becomes a new row. A row with `advice: true` has `fix: null`: every finding it returns is blocked - shown, never applied. A row with `upgrade` brings a registration an older preferred-tools wrote to the way that version passes data, and /preferred-tools:update offers it too.",
+  "note": "Known problems and their recorded fixes. `detect` and `fix` name functions in scripts/fix/. `verifiedOn` says where the fix was proved; a row not proved on this build says so. A new problem the user meets later becomes a new row. A row with `advice: true` has `fix: null`: every finding it returns is blocked - shown, never applied. A row with `upgrade` brings a registration an older preferred-tools wrote to the way that version passes data, and /preferred-tools:update offers it too.",
   "fixes": [
     {
       "id": "serena-windows-home",
