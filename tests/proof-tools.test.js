@@ -26,6 +26,26 @@ test('normalise replaces the tree root and a tests file\'s extension', () =>
     assert.strictEqual(golden.normalise('Error: x\n    at f (/a/b.js:1:2)\n    at g (/a/c.js:3:4)\nnext'), 'Error: x\n    at <FRAMES>\nnext');
 });
 
+test('collect keeps every file two temp folders hold under one name, in the order of their text', () =>
+{
+    const os = require('node:os');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-collect-'));
+    try
+    {
+        const norm = (t) => golden.normalise(t, { root });
+        for (const [suffix, text] of [['Zz9Zz9', '{"b":2}'], ['Aa1Aa1', '{"a":1}']])
+        {
+            fs.mkdirSync(path.join(root, 'temp', `preferred-tools-${suffix}`), { recursive: true });
+            fs.writeFileSync(path.join(root, 'temp', `preferred-tools-${suffix}`, 'fetch.json'), text);
+        }
+        assert.deepStrictEqual(golden.collect(root, norm), {
+            'temp/preferred-tools-XXXXXX/fetch.json': '{"a":1}',
+            'temp/preferred-tools-XXXXXX/fetch.json#2': '{"b":2}',
+        });
+    }
+    finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('compare passes equal records and an allowed line, fails any other difference', () =>
 {
     const rec = (usage, file = '{}\n') => ({ flows: [{ name: 'f', steps: [{ entry: 'plan', code: 2, stdout: '', stderr: usage, files: { '.mcp.json': file } }] }] });

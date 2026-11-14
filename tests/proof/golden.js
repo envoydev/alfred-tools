@@ -85,11 +85,15 @@ function collect(dir, norm)
             const full = path.join(d, e.name);
             if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) walk(full); continue; }
             if (!e.isFile() || !KEPT.has(e.name)) continue;
-            out[norm(path.relative(dir, full).split(path.sep).join('/'))] = norm(fileText(full));
+            const key = norm(path.relative(dir, full).split(path.sep).join('/'));
+            (out[key] = out[key] || []).push(norm(fileText(full)));
         }
     };
     walk(dir);
-    return Object.fromEntries(Object.entries(out).sort(([a], [b]) => a.localeCompare(b)));
+    // two temp folders normalise to one name: each file is kept, in the order of its text, never the order the folder
+    // lists them in (a random suffix)
+    const flat = Object.entries(out).flatMap(([key, texts]) => texts.sort().map((text, i) => [i ? `${key}#${i + 1}` : key, text]));
+    return Object.fromEntries(flat.sort(([a], [b]) => a.localeCompare(b)));
 }
 
 // The entry file a name runs: scripts/<name>.ts once it exists, else scripts/<name>.js - one harness for every phase.
