@@ -1156,6 +1156,19 @@ test('the check offers root-move alone and notes the rest; apply prints RECHECK;
     finally { w.clean(); }
 });
 
+test('the move offer names a registration it leaves alone', async () => {
+    const w = world();
+    try
+    {
+        oldProjectRoot(w);
+        const mine = { command: 'node', args: [path.join(formerRootOf(w), 'mcp-headers.js')] };
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'mine', JSON.stringify(mine), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        const out = await run(w, ['--check', '--no-refresh']);
+        assert.match(out.text, /root-move: renames[^\n]*\n +mine \(local\) names [^\n]*\.preferred-tools[^\n]* - not re-pointed, yours to change/, out.text);
+    }
+    finally { w.clean(); }
+});
+
 test('root-repoint alone gates the check too', async () => {
     const w = world();
     try

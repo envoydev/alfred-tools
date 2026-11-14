@@ -87,7 +87,7 @@ export function upgradeOffers(context: UpdateCtx, out: UpdateCheck): void
         const machine = finding.kind !== 'registration';
         // list-import also names its family, its list and the servers it brings in, for the Cursor offer below
         const imports = finding.id === 'list-import' ? { family: finding.family, listFile: finding.name, servers: finding.servers } : {};
-        out.offers.push({ kind: 'upgrade', id: `upgrade:${finding.id}:${machine ? finding.name : `${finding.name}~${finding.scope}`}`, fix: finding.id, fixKind: finding.kind, name: finding.name, scope: machine ? null : finding.scope, found: finding.found, group: 'upgrade', label, ...imports });
+        out.offers.push({ kind: 'upgrade', id: `upgrade:${finding.id}:${machine ? finding.name : `${finding.name}~${finding.scope}`}`, fix: finding.id, fixKind: finding.kind, name: finding.name, scope: machine ? null : finding.scope, found: finding.found, group: 'upgrade', label, ...imports, ...(finding.unmanaged ? { notes: finding.unmanaged } : {}) });
     }
 }
 

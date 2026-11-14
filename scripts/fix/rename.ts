@@ -9,7 +9,10 @@ import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { deepEqual } from '../core/json-file.ts';
 import { pathFor } from '../entries/platform.ts';
 import * as C from './common.ts';
+import * as kept from '../core/kept.ts';
+import { helperArgv } from '../entries/entry.ts';
 import type { ServerEntry } from '../core/types.ts';
+import type { InvRegistration } from '../inventory/types.ts';
 import type { Machine } from '../entries/types.ts';
 import type { RootsMap } from '../roots/types.ts';
 import type { Finding, FixCtx, MachineFixResult, MovedRoot } from './types.ts';
@@ -27,11 +30,12 @@ export const machineOf = (context: FixCtx): Machine => ({ platform: context.plat
 const isDir = (dir: string): boolean => { try { return fs.lstatSync(dir).isDirectory(); } catch { return false; } };
 
 // Each default root whose `.alfred-tools` exists while its `.preferred-tools` is gone or holds no root files - moved.
-export function movedRoots(context: FixCtx): MovedRoot[]
+export const movedRoots = (context: FixCtx): MovedRoot[] => movedAt(machineOf(context));
+export function movedAt(machine: Machine): MovedRoot[]
 {
-    const pathApi = pathFor(context.platform);
+    const pathApi = pathFor(machine.platform);
     const out: MovedRoot[] = [];
-    for (const base of [...new Set([context.inventory.project, context.home])])
+    for (const base of [...new Set([machine.project, machine.home])])
     {
         const from = pathApi.join(base, roots.FORMER_ROOT_NAME);
         const to = pathApi.join(base, roots.ROOT_NAME);
@@ -50,16 +54,16 @@ function tokenStarts(text: string, end: number, commandLine: boolean): number[]
         return eq >= 0 ? [0, eq + 1] : [0];
     }
     let quote: string | null = null;
-    let quoteStart = -1;
     let wordStart = 0;
     for (let at = 0; at < end; at++)
     {
         const character = text[at]!;
         if (quote) { if (character === quote) quote = null; continue; }
-        if (character === "'" || character === '"') { quote = character; quoteStart = at; continue; }
+        if (character === '\\' && (text[at + 1] === "'" || text[at + 1] === '"')) { at++; continue; }
+        if (character === "'" || character === '"') { quote = character; continue; }
         if (/\s/.test(character)) wordStart = at + 1;
     }
-    return [quote ? quoteStart + 1 : wordStart];
+    return [wordStart];
 }
 
 // `text` with each `.preferred-tools` segment that resolves to a moved root replaced by `.alfred-tools`, in place: the
@@ -76,7 +80,8 @@ function repointText(text: string, moved: MovedRoot[], machine: Machine, command
     for (const match of text.matchAll(segment))
     {
         const end = match.index + match[0].length;
-        const quoted = (start: number) => text.slice(start, end).replace(/^['"]/, '');
+        // a command line's word as its shell reads it (quotes and '\\'' joined, as helperArgv does); a value as written
+        const quoted = (start: number) => (commandLine ? helperArgv(text.slice(start, end))[0] || '' : text.slice(start, end).replace(/^['"]/, ''));
         if (!tokenStarts(text, match.index, commandLine).some((start) => froms.has(norm(roots.absOf(quoted(start), machine))))) continue;
         out += text.slice(last, match.index) + roots.ROOT_NAME;
         last = end;
@@ -113,7 +118,8 @@ export function rootRepointDetect(context: FixCtx): Finding[]
     {
         const list = context.inventory.lists && context.inventory.lists[family];
         const servers = list && !list.note && !list.old ? list.servers || [] : [];
-        const read = cursorMcp.readCursor(cursorMcp.fileFor(family, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env || {} }));
+        const cursorFile = cursorMcp.fileFor(family, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env || {} });
+        const read = cursorMcp.readCursor(cursorFile);
         const copies = read.state === 'ok' ? read.doc!.mcpServers : {};
         const names = [...managed.filter((registration) => roots.familyOf(registration.scope) === family), ...servers];
         for (const { name, scope } of names)
@@ -126,7 +132,18 @@ export function rootRepointDetect(context: FixCtx): Finding[]
             if (owned) continue;
             const server = servers.find((candidate) => candidate.name === name && candidate.scope === scope);
             const copy = server && (server.clients || []).includes('cursor') ? copies[name] : undefined;
-            const where = [registration && stale(registration.entry) && "Claude Code's entry", server && (stale(server.entry) || stale(server.cursorEntry)) && `the list ${list!.file}`, stale(copy) && "Cursor's copy"].filter(Boolean) as string[];
+            // a copy that differs from its list beyond the moved path was changed by hand: the tail would hold it, so
+            // it is named, never offered - client-drift settles the copy
+            const row = server ? context.catalog.byId.get(server.row!) : undefined;
+            const masked = (entry: ServerEntry) => kept.maskCredentials(repointEntry(entry, moved, machine), row);
+            const handEdited = Boolean(copy && stale(copy) && server && !deepEqual(masked(copy), masked(server.cursorEntry || server.entry)));
+            const where = [registration && stale(registration.entry) && "Claude Code's entry", server && (stale(server.entry) || stale(server.cursorEntry)) && `the list ${list!.file}`, stale(copy) && !handEdited && "Cursor's copy"].filter(Boolean) as string[];
+            if (!where.length && handEdited)
+            {
+                const from = moved.find((candidate) => !deepEqual(repointEntry(copy!, [candidate], machine), copy))!;
+                out.push({ ...C.finding('root-repoint', registration || { rowId: server!.row, name, scope }, `Cursor's copy of ${name} names ${from.from} - the folder moved to ${from.to}`, { tailOnly: true }), blocked: `Cursor's copy of ${name} in ${cursorFile} was changed by hand and names ${from.from} - change it to ${from.to} there, or run /alfred-tools:fix to settle the copy` });
+                continue;
+            }
             if (!where.length) continue;
             const root = moved.find((candidate) => [registration?.entry, server?.entry, server?.cursorEntry, copy].some((entry) => entry && stale(entry) && !deepEqual(repointEntry(entry, [candidate], machine), entry)))!;
             out.push(C.finding('root-repoint', registration || { rowId: server!.row, name, scope }, `${where.join(', ')} name${where.length > 1 ? '' : 's'} ${root.from} - the folder moved to ${root.to}`, registration && stale(registration.entry) ? {} : { tailOnly: true }));
@@ -174,21 +191,32 @@ export function rootMoveDetect(context: FixCtx): Finding[]
         out.push({ ...base, found: `renames ${move.from} to ${move.to} (keys, list, helpers, sign-ins and data move unread) and points ${mine.length} registration(s) at it; close other Claude Code and Cursor windows first${global}` });
     }
     const carry = mapToCarry(context.data);
-    if (carry) out.push({ id: 'root-move', row: null, name: 'data', scope: null, moveFrom: carry.from, moveTo: carry.to, found: `copies the roots map ${carry.from} to ${carry.to}, its moved folders re-pointed; the old one is left as it was` });
+    const found = `copies the roots map ${carry?.from} to ${carry?.to}, its moved folders re-pointed; the old one is left as it was`;
+    if (carry) out.push({ id: 'root-move', row: null, name: 'data', scope: null, moveFrom: carry.from, moveTo: carry.to, found, ...(carry.note ? { blocked: `${carry.note} - not copied; each root is found again from its files` } : {}) });
     return out;
 }
 
 // True when this run is the plugin under its former id - its data folder is named after it (A1).
 export const runsAsFormer = (data: string | null | undefined): boolean => Boolean(data) && path.basename(data!).startsWith('preferred-tools-');
 
-// The roots map the former plugin kept (spec D4), while this plugin's data folder has none: { from, to } files, else null.
-export function mapToCarry(data: string | null | undefined): { from: string; to: string } | null
+// The roots map the former plugin kept (spec D4), while this plugin's data folder has none: { from, to } files, and
+// `note` when it cannot be read as a map; else null.
+export function mapToCarry(data: string | null | undefined): { from: string; to: string; note?: string } | null
 {
     const sibling = roots.dataSibling(data);
     if (!sibling) return null;
     const from = path.join(sibling, roots.FILES.map);
     const to = path.join(data!, roots.FILES.map);
-    return fs.existsSync(from) && !fs.existsSync(to) ? { from, to } : null;
+    if (!fs.existsSync(from) || fs.existsSync(to)) return null;
+    const map = roots.readMap(sibling);
+    return map.state ? { from, to, note: map.note! } : { from, to };
+}
+
+// True when a managed registration still names a moved root: install and configure wait for update's re-point (D3).
+export function repointWaits(registrations: InvRegistration[], machine: Machine): boolean
+{
+    const moved = movedAt(machine);
+    return moved.length > 0 && registrations.some((registration) => registration.rowId && !registration.own && registration.choice !== 'own' && registration.scope !== 'inherited' && !deepEqual(repointEntry(registration.entry, moved, machine), registration.entry));
 }
 
 // A map's roots that sit in a moved folder, pointed at the new one; the input is left as it was.
@@ -234,6 +262,8 @@ export function rootMoveFix(finding: Finding, context: FixCtx): MachineFixResult
     }
     const from = finding.moveFrom!;
     const to = finding.moveTo!;
+    // the same folder named twice (a project that is the home, written in another case): the first rename did it
+    if (!fs.existsSync(from) && isDir(to)) return { ok: true, detail: `${from} already moved to ${to}` };
     try
     {
         let beside: string[] | null = null;

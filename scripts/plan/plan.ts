@@ -32,7 +32,8 @@ import { planMcp } from './pick.ts';
 import { fileSteps } from './root-files.ts';
 import { planChange, planRemove, planExisting, planRootChange, movedLists } from './change.ts';
 export { deepEqual };
-import type { Inventory } from '../inventory/types.ts';
+import { repointWaits } from '../fix/rename.ts';
+import type { Inventory, InvRegistration } from '../inventory/types.ts';
 import type { Answers, Plan, PlanCtx, PlanOptions, PlanStep } from './types.ts';
 
 // ---- the plan -------------------------------------------------------------------------------------------------------
@@ -41,6 +42,13 @@ import type { Answers, Plan, PlanCtx, PlanOptions, PlanStep } from './types.ts';
 // new helper no longer reads ~/.preferred-tools - and send the user to update, which moves it.
 export const MOVE_FIRST = ".preferred-tools is this plugin's old folder - run /alfred-tools:update first, which moves it";
 export const moveWaits = (context: { project: string; home: string; platform: string }): boolean => roots.pendingMoves(context).some((move) => move.state === 'move');
+export const REPOINT_FIRST = "a server still names .preferred-tools, this plugin's old folder - run /alfred-tools:update first, which points it at .alfred-tools";
+// the stop's line, or null: a folder to move first, else a managed server still naming a moved one
+export function waitsFor(context: { project: string; home: string; platform: string }, registrations: InvRegistration[]): string | null
+{
+    if (moveWaits(context)) return MOVE_FIRST;
+    return repointWaits(registrations, context) ? REPOINT_FIRST : null;
+}
 
 export function plan(inventory: Inventory, answers: Answers, options: PlanOptions = {}): Plan
 {
@@ -48,7 +56,8 @@ export function plan(inventory: Inventory, answers: Answers, options: PlanOption
     // answers.machine: what prereq.ts found (docker: false picks github's binary fallback); an explicit option wins
     const context: PlanCtx = { ...makeCtx(inventory, { ...options, machine: options.machine || answers.machine }), changing: new Set(Object.keys(answers.change || {})), uses: [], rootMoves: [] };
     const out: Plan = { version: 1, project: inventory.project, os: inventory.os, alfredCodeEnabled: Boolean(inventory.alfredCodeEnabled), steps: [], notes: [], errors: [], unchanged: [], keys: [], reconnect: [], oauth: [], dangerous: [], expect: [] };
-    if (moveWaits({ project: inventory.project, home: context.home, platform: context.platform })) { out.errors.push(MOVE_FIRST); return out; }
+    const waits = waitsFor({ project: inventory.project, home: context.home, platform: context.platform }, inventory.registrations || []);
+    if (waits) { out.errors.push(waits); return out; }
     // the root folders (spec D2): every data folder, key file and helper of a family sits in its root
     const resolved = roots.resolveRoots(inventory, answers.roots, { ...context, catalog });
     out.errors.push(...resolved.errors);

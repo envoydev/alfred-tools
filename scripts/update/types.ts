@@ -116,6 +116,7 @@ export interface UpgradeOffer extends OfferBase
     name: string; // stored - do not rename
     scope: string | null; // stored - do not rename
     found: string; // stored - do not rename
+    notes?: string[]; // stored - do not rename
 }
 export type Offer = PluginOffer | McpOffer | CursorPinOffer | FileOffer | UpgradeOffer;
 

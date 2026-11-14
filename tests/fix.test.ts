@@ -2109,7 +2109,7 @@ test('root-repoint with only the list entry stale: no mcp-replace, the list entr
     finally { w.clean(); }
 });
 
-test('a Cursor copy changed by hand and naming the old root is still held and named', () =>
+test('a Cursor copy changed by hand and naming the old root is advice, not a gate: the rest is offered, the edit kept', () =>
 {
     const w = world();
     try
@@ -2118,10 +2118,74 @@ test('a Cursor copy changed by hand and naming the old root is still held and na
         const doc = readJson(cursorFile);
         doc.mcpServers.serena.args.push('--mine');
         writeJson(cursorFile, doc);
+        const d = detect(ctxOf(w));
+        const [f] = d.found.filter((x) => x.id === 'root-repoint') as [Finding];
+        assert.match(f.blocked || '', /Cursor's copy of serena in .*mcp\.json was changed by hand and names .*\.preferred-tools/);
+        assert.strictEqual(d.afterMove, undefined, 'nothing waits behind it');
         const l = logged();
         applyFixes(ctxOf(w), ['root-repoint'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.ok(readJson(cursorFile).mcpServers.serena.args.includes('--mine'), 'the hand edit is kept');
-        assert.match(l.text(), /serena: Cursor's copy was changed by hand - left/);
+    }
+    finally { w.clean(); }
+});
+
+// ---- the final review's findings ------------------------------------------------------------------------------------
+test('after the move, the reconnect line reads the key in the moved root', () =>
+{
+    const w = world();
+    try
+    {
+        const root = oldRoot(w);
+        put(path.join(root, '.mcps-secrets'), 'ACME_GH=test-value-not-a-key\n');
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w), ['root-move'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.match(l.text(), /^ ?github: connects with its key at the next session start/m);
+        assert.doesNotMatch(l.text(), /\.preferred-tools[\\/]\.mcps-secrets/);
+    }
+    finally { w.clean(); }
+});
+
+test('a roots map that is not JSON is not carried: the data finding is advice, the move and re-point still apply, the old uninstall waits on nothing', () =>
+{
+    const w = world();
+    try
+    {
+        oldRoot(w);
+        const { data, former } = dataDirs(w);
+        put(path.join(former, 'roots.json'), 'not json');
+        const found = moveOf(w, { data });
+        const dataFinding = found.find((f) => f.name === 'data');
+        assert.match(dataFinding?.blocked || '', /not JSON/);
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w, { data }), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(entryAt(w, 'github', 'local').headersHelper, helperCmd(path.join(ptRoot(w), 'mcp-headers.js'), 'ACME_GH', 'Bearer'));
+        const ctx = ctxOf(w, { data });
+        const old = detect({ ...ctx, inventory: { ...ctx.inventory, plugins: [plug(OLD_ID, 'user')] } }).found.find((x) => x.id === 'retired-plugin');
+        assert.ok(old && !old.blocked, JSON.stringify(old));
+    }
+    finally { w.clean(); }
+});
+
+test('a helper path holding an apostrophe or a space is re-pointed, its quoting kept', () =>
+{
+    const apostrophe = [{ from: "/Users/o'brien/.preferred-tools", to: "/Users/o'brien/.alfred-tools" }];
+    const quoted = "node '/Users/o'\\''brien/.preferred-tools/mcp-headers.js' K Bearer";
+    assert.strictEqual(repoint({ type: 'http', url: 'u', headersHelper: quoted } as ServerEntry, apostrophe).headersHelper, quoted.replace('.preferred-tools', '.alfred-tools'));
+    const spaced = [{ from: '/Users/a b/.preferred-tools', to: '/Users/a b/.alfred-tools' }];
+    const double = 'node "/Users/a b/.preferred-tools/mcp-headers.js" K Bearer';
+    assert.strictEqual(repoint({ type: 'http', url: 'u', headersHelper: double } as ServerEntry, spaced).headersHelper, double.replace('.preferred-tools', '.alfred-tools'));
+});
+
+test('a rename whose folder already moved reports it, never throws (a project that is the home, written in another case)', () =>
+{
+    const w = world();
+    try
+    {
+        oldRoot(w);
+        const [f] = moveOf(w) as [Finding];
+        assert.ok(F.rootMoveFix(f, ctxOf(w)).ok);
+        const again = F.rootMoveFix(f, ctxOf(w));
+        assert.deepStrictEqual([again.ok, /already moved/.test(again.detail)], [true, true], again.detail);
     }
     finally { w.clean(); }
 });

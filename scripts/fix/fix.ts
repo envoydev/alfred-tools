@@ -267,9 +267,10 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
             }
         if (dataMove)
         {
+            // the carry never blocks a run (spec D4): a failure is named and the re-point goes on
             const carried = F.rootMoveFix(dataMove, context);
-            log(`${carried.ok ? 'ok    ' : 'FAILED'} root-move: ${carried.detail}`);
-            if (!carried.ok) { result.failed = carried.detail; return result; }
+            log(`${carried.ok ? 'ok    ' : 'left  '} root-move: ${carried.detail}`);
+            if (!carried.ok) allMoves.splice(allMoves.indexOf(dataMove), 1);
         }
         const repointed = F.repointDataMap(context.data, moves.map((finding) => ({ from: finding.moveFrom!, to: finding.moveTo! })), F.machineOf(context));
         if (repointed) log(`ok     root-move: ${repointed.detail}`);
@@ -334,7 +335,8 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         result.fetchFile = report.fetchFile;
         result.fetch = report.fetch;
         if (report.failed) { result.failed = report.failed.detail; return result; }
-        const lines = reconnectOf(context, steps).map(reconnectLine);
+        // read from the registrations as the apply left them: a re-pointed helper names the moved root's key file
+        const lines = reconnectOf({ ...context, inventory: inventory.buildInventory({ project: context.inventory.project, env: context.env, data: context.data }) }, steps).map(reconnectLine);
         if (lines.length) log('', ...lines);
     }
 

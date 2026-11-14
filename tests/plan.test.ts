@@ -2708,6 +2708,7 @@ test('a root move renames mcp-remote-v1 and rewrites MCP_REMOTE_CONFIG_DIR in bo
 
 // ---- the rename: install and configure wait for the move (spec D3) ------------------------------------------------
 const MOVE_FIRST = ".preferred-tools is this plugin's old folder - run /alfred-tools:update first, which moves it";
+const REPOINT_FIRST = "a server still names .preferred-tools, this plugin's old folder - run /alfred-tools:update first, which points it at .alfred-tools";
 function oldFolders(state: 'move' | 'came-back')
 {
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plan-move-')));
@@ -2743,6 +2744,23 @@ test('configure stops the same way', () => {
         assert.deepStrictEqual([p.errors, p.steps], [[MOVE_FIRST], []]);
     }
     finally { f.clean(); }
+});
+
+test('install stops while a moved folder waits for its registrations to be re-pointed', () => {
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plan-repoint-')));
+    try
+    {
+        const project = path.join(dir, 'shop');
+        const home = path.join(dir, 'home');
+        fs.mkdirSync(path.join(project, '.alfred-tools'), { recursive: true });
+        fs.mkdirSync(home, { recursive: true });
+        const helper = path.join(project, '.preferred-tools', 'mcp-headers.js');
+        const gh = reg('github', 'local', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${helper} ACME_GH Bearer` }, 'github', 'remote');
+        const mine = reg('mine', 'local', { type: 'stdio', command: 'node', args: [path.join(project, '.preferred-tools', 'x.js')] });
+        assert.deepStrictEqual(plan(inv({ ...MAC, project }, { registrations: [gh] }), pickOne('serena'), opts(home)).errors, [REPOINT_FIRST]);
+        assert.deepStrictEqual(plan(inv({ ...MAC, project }, { registrations: [mine] }), pickOne('serena'), opts(home)).errors.filter((e) => e === REPOINT_FIRST), [], 'the user\'s own server does not stop it');
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('a came-back folder does not stop install', () => {

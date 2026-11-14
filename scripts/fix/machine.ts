@@ -40,7 +40,7 @@ export function retiredPluginDetect(context: FixCtx): Finding[]
             // so it waits while that folder's roots map has not come over
             const old = { id: 'retired-plugin', name: plugin.id, scope: plugin.scope, alfred: false, found: `${plugin.id} is this plugin under its former name, installed at ${plugin.scope} scope - alfred-tools replaces it`, proposal };
             if (declined.some((declinedPlugin) => declines.same(declinedPlugin, plugin))) return { ...old, declined: true, blocked: `${plugin.id} is kept at ${plugin.scope}; remove it with ${proposal.command}` };
-            return carry ? { ...old, blocked: `the roots map in ${path.dirname(carry.from)} comes over first; then run /alfred-tools:fix` } : old;
+            return carry && !carry.note ? { ...old, blocked: `the roots map in ${path.dirname(carry.from)} comes over first; then run /alfred-tools:fix` } : old;
         }
         const base = {
             id: 'retired-plugin', name: plugin.id, scope: plugin.scope, alfred,

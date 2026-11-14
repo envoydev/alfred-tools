@@ -134,7 +134,11 @@ export function renderUpdates(out: UpdateCheck): string
     {
         lines.push('New ways to pass data:');
         const labelWidth = Math.max(...upgrades.map((upgrade) => upgrade.label.length));
-        for (const upgrade of upgrades) lines.push(`  ${upgrade.label.padEnd(labelWidth)}  ${upgrade.fix}: ${upgrade.found}`);
+        for (const upgrade of upgrades)
+        {
+            lines.push(`  ${upgrade.label.padEnd(labelWidth)}  ${upgrade.fix}: ${upgrade.found}`);
+            for (const note of upgrade.notes || []) lines.push(`    ${note}`);
+        }
     }
     if (out.unchecked.length)
     {
