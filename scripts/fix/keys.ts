@@ -22,7 +22,7 @@ import type { Finding, FixCtx, MachineFixResult, ShippedFile } from './types.ts'
 // What roots.js needs to place a root, from a fix ctx.
 const rootCtx = (context: FixCtx) => ({ project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog });
 // The roots a fix writes into (R9): each family's root in use, else D2's recommended one.
-const rootsOf = (context: FixCtx) => roots.resolve(context.inventory, null, rootCtx(context)).roots;
+const rootsOf = (context: FixCtx) => roots.resolveRoots(context.inventory, null, rootCtx(context)).roots;
 
 // ---- key-to-helper --------------------------------------------------------------------------------------------------
 // A managed hosted registration whose Authorization header holds a ${VAR} or a key (0.1.x wrote both). The helper reads

@@ -120,7 +120,7 @@ export function writeList(file: string, doc: { version?: number | undefined; ser
 // The value a token field holds, from its template: '${VAR}' -> the whole value, 'Bearer ${VAR}' -> what follows.
 function valueOf(entry: ServerEntry, field: TokenField, tokenVar: string): string | null
 {
-    const value = field.at.reduce<unknown>((current, k) => (current == null ? undefined : (current as Record<string | number, unknown>)[k]), entry);
+    const value = field.at.reduce<unknown>((current, segment) => (current == null ? undefined : (current as Record<string | number, unknown>)[segment]), entry);
     if (typeof value !== 'string') return null;
     const [before, after] = field.template.split(`\${${tokenVar}}`);
     if (after === undefined || !value.startsWith(before!) || !value.endsWith(after)) return null;
@@ -140,7 +140,7 @@ export function fromRegistration(registration: Registration, row: CatalogRow | n
         const value = valueOf(registration.entry, fields[0]!, route!.tokenVar!);
         key = (value && keys.nameOfValue(files, value)) || route!.tokenVar!;
     }
-    return { name: registration.name, scope: registration.scope, row: row ? row.id : null, route: registration.route, clients: clients.slice(), entry: kept.keep(registration.entry, row), key };
+    return { name: registration.name, scope: registration.scope, row: row ? row.id : null, route: registration.route, clients: clients.slice(), entry: kept.maskCredentials(registration.entry, row), key };
 }
 
 // ---- the 0.4.x record, <root>/preferred-tools.json -------------------------------------------------------------------

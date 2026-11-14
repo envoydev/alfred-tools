@@ -184,7 +184,7 @@ export function cursorSteps(inventory: Inventory, context: ListCtx, out: PlanOut
         const projectOnly = (servers: ListServer[]) => cursorMcp.managedSet([{ file: target, scopes: ['project'], servers }]);
         const projectTouched = upserts.some((upsert) => forCursor(upsert.server) && upsert.server.scope === 'project');
         if (inWs && (projectTouched || !sameKeys(projectOnly(beforeServers), projectOnly(afterServers))))
-            for (const member of workspace.below(workspaceRecord!, context.project))
+            for (const member of workspace.membersBelow(workspaceRecord!, context.project))
             {
                 const mfile = cursorMcp.fileFor('project', { ...context, project: member.folder });
                 const mwhy = cursorMcp.refusal(cursorMcp.readCursor(mfile));
@@ -225,10 +225,10 @@ export function cursorSteps(inventory: Inventory, context: ListCtx, out: PlanOut
 }
 
 export const reapproveLine = (names: string[]): string => `Cursor asks you to approve ${names.join(', ')} again - it re-asks whenever an entry changes`;
-export const keepOf = (catalog: Catalog, value: ServerEntry, row: string | null): ServerEntry => kept.keep(value, catalog.byId.get(row!));
+export const keepOf = (catalog: Catalog, value: ServerEntry, row: string | null): ServerEntry => kept.maskCredentials(value, catalog.byId.get(row!));
 
 // The managed names a cursor-write leaves alone (spec D1, D9): each the file lacks (a hand removal) or holds with another
-// value than its list, compared after kept.keep. Named in the plan; the names this plan drops are not held.
+// value than its list, compared after kept.maskCredentials. Named in the plan; the names this plan drops are not held.
 export function heldCopies(file: string, before: Map<string, Managed>, after: Map<string, Managed>, context: { catalog?: Catalog | undefined }, out: Pick<PlanOut, 'notes'>): string[]
 {
     const catalog = context.catalog || catalogLib.load();

@@ -37,7 +37,7 @@ export function changeQuestions(inventory: Inventory, catalog: Catalog, context:
     }
     return {
         calls: packed(items, { id: 'change', question: 'which do you want to change?', none: 'change nothing' }),
-        keys: Object.fromEntries(items.map((i) => [i.label, i.target!.key || keyOf(i.target!.kind, i.target!.name!, i.target!.scope!)])),
+        keys: Object.fromEntries(items.map((item) => [item.label, item.target!.key || keyOf(item.target!.kind, item.target!.name!, item.target!.scope!)])),
     };
 }
 
@@ -47,7 +47,7 @@ export function routeQuestion(row: CatalogRow, current: string | null | undefine
     const ids = Object.keys(row.routes);
     if (ids.length < 2) return null;
     const first = current || row.recommendedRoute;
-    const order = [first, ...ids.filter((i) => i !== first)];
+    const order = [first, ...ids.filter((routeId) => routeId !== first)];
     const text: Record<string, string> = { remote: 'run by the vendor - no local runtime needed', local: 'runs on this machine', bridge: 'the hosted server at a URL filled from .mcps-secrets each start - a small proxy runs here through npx' };
     return {
         id: `route-${row.id}`, header: 'Route', multiSelect: false, question: ids.length > 2 ? `${row.label}: which route?` : `${row.label}: hosted or local?`,

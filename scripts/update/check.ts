@@ -112,8 +112,8 @@ export function renderUpdates(out: UpdateCheck): string
     {
         if (!items.length) return;
         lines.push(title);
-        const labelWidth = Math.max(...items.map((i) => i.label.length));
-        for (const i of items) lines.push(`  ${i.label.padEnd(labelWidth)}  ${i.from || '?'} -> ${i.to || '(not listed)'}${i.ageDays !== undefined ? `  (${i.ageDays} days old)` : ''}`);
+        const labelWidth = Math.max(...items.map((item) => item.label.length));
+        for (const item of items) lines.push(`  ${item.label.padEnd(labelWidth)}  ${item.from || '?'} -> ${item.to || '(not listed)'}${item.ageDays !== undefined ? `  (${item.ageDays} days old)` : ''}`);
     };
     table('Catalog plugins:', out.offers.filter((offer) => offer.kind === 'plugin' && offer.group === 'catalog'));
     table('Other plugins:', out.offers.filter((offer) => offer.kind === 'plugin' && offer.group === 'other'));

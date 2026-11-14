@@ -35,7 +35,7 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
     // `exists` reads the disk: alfred-code's .alfred/.gitignore and its 2.x data decide which folders are offered
     const context: AskCtx = { project: inventory.project, platform: inventory.os, arch: inventory.arch, home: home || homeDir(process.env), env, keyHome: home, exists: (filePath: string) => fs.existsSync(filePath) };
     // the roots answered so far (the walk asks them before a tool's folder), else the recommended ones
-    context.roots = roots.resolve(inventory, picks && picks.roots, { ...context, catalog }).roots;
+    context.roots = roots.resolveRoots(inventory, picks && picks.roots, { ...context, catalog }).roots;
     out.change = changeQuestions(inventory, catalog, context);
     // which apps (spec D3): asked once an install run, when it picked something
     out.clients = picks && (picks.rows || []).length ? clientsQuestion(cursorFound(context, inventory)) : null;
@@ -95,8 +95,8 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
         const routeId = routes[id] || row.recommendedRoute;
         if (!row.routes[routeId]) continue;
         const scope = scopes[id] || scopeOrder(row, inventory, { route: routeId, context: context, copyOf: installedOf(inventory, id) })[0]!;
-        const k = keyNameQuestion(row, routeId, scope, context);
-        if (k) out.keyNames[id] = k;
+        const keyNameAsk = keyNameQuestion(row, routeId, scope, context);
+        if (keyNameAsk) out.keyNames[id] = keyNameAsk;
         const urlQuestions = urlNameQuestions(row, routeId, scope, context);
         if (urlQuestions.length) out.urlNames[id] = urlBlock(urlQuestions);
         const settings = settingsQuestion(row, routeId);
@@ -123,8 +123,8 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
             const keyState = keyStateOf(row, routeId, context, null, scope);
             name = held && keyState ? keys.nameOfValue(keyState.files, held) : null;
         }
-        const k = keyNameQuestion(row, routeId, scope, context, { current: name });
-        if (k) out.keyNames[key] = k;
+        const keyNameAsk = keyNameQuestion(row, routeId, scope, context, { current: name });
+        if (keyNameAsk) out.keyNames[key] = keyNameAsk;
         const urlQuestions = urlNameQuestions(row, routeId, scope, context, { current: same ? current.urlNames : null, keyName: name });
         if (urlQuestions.length) out.urlNames[key] = urlBlock(urlQuestions);
         const settings = settingsQuestion(row, routeId, { entry: same ? (target!.item as InvRegistration).entry : null });

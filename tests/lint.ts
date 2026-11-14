@@ -200,10 +200,37 @@ const scan = (rel: string): void => {
 };
 scan('.');
 
-// Names that say what they hold (spec, Names): no one-letter binding or property in scripts/ but i, j, k as indexes and
+// Names that say what they hold (spec, Names): no one-letter binding or property in scripts/ but i, j, k and
 // _, and none of the abbreviations the plan names.
 const ONE_LETTER_OK = new Set(['i', 'j', 'k', '_']);
 const ABBREVIATIONS = new Set(['inv', 'res', 'ret', 'opts', 'cfg', 'fn', 'cb', 'obj', 'arr', 'str', 'val', 'acc', 'cur', 'idx', 'el', 'tmpl', 'rctx', 'ws', 'ctx']);
+// i, j and k name a numeric index only: a for loop's counter, the result of an index lookup, the index parameter of an
+// array callback, a parameter typed number, or the index of `for (const [i, item] of list.entries())` (never a key of
+// `Object.entries(object)`).
+const INDEX_LOOKUPS = new Set(['indexOf', 'lastIndexOf', 'findIndex', 'findLastIndex']);
+const INDEX_CALLBACKS: Record<string, number> = { map: 1, flatMap: 1, filter: 1, forEach: 1, find: 1, findIndex: 1, findLast: 1, findLastIndex: 1, some: 1, every: 1, reduce: 2 };
+const calledName = (call: ts.Node): string | null => ts.isCallExpression(call) && ts.isPropertyAccessExpression(call.expression) ? call.expression.name.text : null;
+const holdsLookup = (node: ts.Node): boolean => (calledName(node) !== null && INDEX_LOOKUPS.has(calledName(node)!)) || (ts.forEachChild(node, (child) => holdsLookup(child) || undefined) ?? false);
+function isIndex(node: ts.Node): boolean
+{
+    if (ts.isVariableDeclaration(node))
+        return (ts.isVariableDeclarationList(node.parent) && ts.isForStatement(node.parent.parent)) || (node.initializer !== undefined && holdsLookup(node.initializer));
+    if (ts.isParameter(node))
+    {
+        if (node.type && node.type.kind === ts.SyntaxKind.NumberKeyword) return true;
+        const callback = node.parent;
+        const call = callback.parent;
+        const at = INDEX_CALLBACKS[calledName(call) ?? ''];
+        return (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) && at !== undefined && callback.parameters.indexOf(node) === at;
+    }
+    if (ts.isBindingElement(node))
+    {
+        const pattern = node.parent;
+        const loop = pattern.parent && pattern.parent.parent && pattern.parent.parent.parent;
+        return ts.isArrayBindingPattern(pattern) && pattern.elements.indexOf(node) === 0 && loop !== undefined && ts.isForOfStatement(loop) && calledName(loop.expression) === 'entries' && (loop.expression as ts.CallExpression).arguments.length === 0;
+    }
+    return false;
+}
 const scriptFiles = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true })
     .flatMap((entry) => entry.isDirectory() ? scriptFiles(path.join(dir, entry.name)) : entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts') ? [path.join(dir, entry.name)] : []);
 for (const file of scriptFiles(path.join(root, 'scripts')))
@@ -224,6 +251,11 @@ for (const file of scriptFiles(path.join(root, 'scripts')))
         {
             const { line } = source.getLineAndCharacterOfPosition(binding.getStart(source));
             problems.push(`${path.relative(root, file)}:${line + 1}: '${bare}' is ${bare.length === 1 ? 'a one-letter name' : 'an abbreviation'} - name what it holds`);
+        }
+        else if (binding && /^[ijk]$/.test(bare) && (ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node)) && !isIndex(node))
+        {
+            const { line } = source.getLineAndCharacterOfPosition(binding.getStart(source));
+            problems.push(`${path.relative(root, file)}:${line + 1}: '${bare}' holds no index - name what it holds`);
         }
         ts.forEachChild(node, visit);
     };

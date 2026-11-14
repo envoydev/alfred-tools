@@ -67,7 +67,7 @@ export async function cursorPinOffers(context: UpdateCtx, out: UpdateCheck): Pro
             const copy = seen.entries[server.name];
             if (!copy) { out.skipped.push(`${at}: Cursor's copy is not in ${seen.file} - not checked; /preferred-tools:fix settles it`); continue; }
             const row = context.catalog.byId.get(server.row!);
-            if (JSON.stringify(copy) !== JSON.stringify(kept.keep(server.cursorEntry, row))) { out.skipped.push(`${at}: Cursor's copy in ${seen.file} differs from the list - not checked; /preferred-tools:fix settles it`); continue; }
+            if (JSON.stringify(copy) !== JSON.stringify(kept.maskCredentials(server.cursorEntry, row))) { out.skipped.push(`${at}: Cursor's copy in ${seen.file} differs from the list - not checked; /preferred-tools:fix settles it`); continue; }
             const from = pinnedVersion(server.cursorEntry, packageSpec.name);
             if (!from) continue;
             if (!versions)

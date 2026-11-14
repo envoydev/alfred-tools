@@ -339,7 +339,7 @@ function choiceIn(list: InvList | null | undefined, match: (ownEntry: OwnEntry) 
 // real values back from the registrations themselves.
 export function keptOf(inventory: Inventory, catalog: Catalog = catalogLib.load()): Inventory
 {
-    const keep = <Item extends { entry: ServerEntry; rowId: string | null }>(item: Item): Item => ({ ...item, entry: kept.keep(item.entry, item.rowId ? catalog.byId.get(item.rowId) : null) });
+    const keep = <Item extends { entry: ServerEntry; rowId: string | null }>(item: Item): Item => ({ ...item, entry: kept.maskCredentials(item.entry, item.rowId ? catalog.byId.get(item.rowId) : null) });
     return { ...inventory, registrations: inventory.registrations.map(keep), ...(inventory.pluginServers ? { pluginServers: inventory.pluginServers.map(keep) } : {}) };
 }
 

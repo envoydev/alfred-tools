@@ -18,7 +18,7 @@ export const MARKER = '${PREFERRED_TOOLS_KEPT}';
 const SECRET_KEY_RE = /(TOKEN|SECRET|KEY|PASSWORD|PASSWD|DSN|CREDENTIAL|AUTH)$/i;
 const FILE_KEY_EXTRA = /(?:^|[._-])pass(?:phrase)?$|(?:^|[._-])(?:client|private)[-_]?key[-_]?data$|^requirepass$/i;
 const CAMEL_PASS = /[a-z0-9](?:Pass(?:phrase)?|PWD|Pwd)$/;
-export const credKey = (k: string): boolean => SECRET_KEY_RE.test(k) || FILE_KEY_EXTRA.test(k) || CAMEL_PASS.test(k);
+export const credKey = (key: string): boolean => SECRET_KEY_RE.test(key) || FILE_KEY_EXTRA.test(key) || CAMEL_PASS.test(key);
 const SHAPE = /\b(?:sntryu_[0-9a-f]{16,}|ctx7sk-[0-9a-f-]{16,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/g;
 const PRIVATE_KEY_BLOCK = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----|$)/g;
 const PAIR = /((?:^|[;,])\s*(?:password|pwd)\s*=\s*)([^;,]*)/gi;
@@ -66,34 +66,34 @@ function keepNode(node: unknown, key: string, whole: boolean): unknown
     if (Array.isArray(node)) return keepArgs(node, whole || credKey(key));
     if (!node || typeof node !== 'object') return node;
     const below = whole || credKey(key);
-    return Object.fromEntries(Object.entries(node).map(([k, value]) => [k, keepNode(value, k, below)]));
+    return Object.fromEntries(Object.entries(node).map(([childKey, value]) => [childKey, keepNode(value, childKey, below)]));
 }
 
-// keep(entry, row) -> a copy with every credential value as MARKER. `row` is the catalog row the registration matched,
-// for its location keys; null for the user's own.
-export function keep<Entry>(entry: Entry, row?: RowOf): Entry
+// maskCredentials(entry, row) -> a copy with every credential value as MARKER. `row` is the catalog row the
+// registration matched, for its location keys; null for the user's own.
+export function maskCredentials<Entry>(entry: Entry, row?: RowOf): Entry
 {
     if (!entry || typeof entry !== 'object') return entry;
     const locations = locationKeys(row);
     const out: Record<string, unknown> = {};
-    for (const [k, value] of Object.entries(entry))
+    for (const [key, value] of Object.entries(entry))
     {
-        if (k === 'args' && Array.isArray(value)) out['args'] = keepArgs(value, false, locations.arg);
-        else if (k === 'headers' && value && typeof value === 'object' && !Array.isArray(value)) out['headers'] = Object.fromEntries(Object.entries(value).map(([headerName, headerValue]) => [headerName, keepNode(headerValue, headerName, true)]));
-        else if (k === 'env' && value && typeof value === 'object' && !Array.isArray(value)) out['env'] = Object.fromEntries(Object.entries(value).map(([variableName, variableValue]) => [variableName, locations.env.has(variableName) ? variableValue : keepNode(variableValue, variableName, false)]));
-        else out[k] = keepNode(value, k, false);
+        if (key === 'args' && Array.isArray(value)) out['args'] = keepArgs(value, false, locations.arg);
+        else if (key === 'headers' && value && typeof value === 'object' && !Array.isArray(value)) out['headers'] = Object.fromEntries(Object.entries(value).map(([headerName, headerValue]) => [headerName, keepNode(headerValue, headerName, true)]));
+        else if (key === 'env' && value && typeof value === 'object' && !Array.isArray(value)) out['env'] = Object.fromEntries(Object.entries(value).map(([variableName, variableValue]) => [variableName, locations.env.has(variableName) ? variableValue : keepNode(variableValue, variableName, false)]));
+        else out[key] = keepNode(value, key, false);
     }
     return out as Entry;
 }
 
-const at = (node: unknown, path: Path): unknown => path.reduce<unknown>((current, k) => (current == null ? undefined : (current as Record<string | number, unknown>)[k]), node);
+const at = (node: unknown, path: Path): unknown => path.reduce<unknown>((current, segment) => (current == null ? undefined : (current as Record<string | number, unknown>)[segment]), node);
 
 // restore(entry, source, row) -> { entry } | { error }. Each string holding MARKER takes the string at the same place in
 // `source` (the registration as it is now) whose kept text equals it; an arg takes the first unused source arg whose
 // kept text equals it, in order, so an arg a splice moved still finds its value.
 export function restore<Entry>(entry: Entry, source: ServerEntry | null | undefined, row?: RowOf): { entry: Entry; error?: undefined } | { error: string; entry?: undefined }
 {
-    const kept: { args?: unknown[] | undefined } = keep(source || {}, row);
+    const kept: { args?: unknown[] | undefined } = maskCredentials(source || {}, row);
     const sourceArgs = Array.isArray(source && source.args) ? source!.args! : [];
     const used = new Set<number>();
     let error: string | null = null;
@@ -114,7 +114,7 @@ export function restore<Entry>(entry: Entry, source: ServerEntry | null | undefi
         }
         if (Array.isArray(node)) return node.map((item, i) => walk(item, [...path, i]));
         if (!node || typeof node !== 'object') return node;
-        return Object.fromEntries(Object.entries(node).map(([k, value]) => [k, walk(value, [...path, k])]));
+        return Object.fromEntries(Object.entries(node).map(([key, value]) => [key, walk(value, [...path, key])]));
     };
     const out = walk(entry, []) as Entry;
     return error ? { error } : { entry: out };
@@ -126,12 +126,12 @@ export const holdsKept = (node: unknown): boolean => JSON.stringify(node === und
 // ('headers.X-API-Key', 'args.3', 'url'), for the check that a committed file never gets one.
 export function credentialPaths(entry: unknown, row?: RowOf): string[]
 {
-    const masked = keep(entry, row);
+    const masked = maskCredentials(entry, row);
     const out: string[] = [];
     const walk = (node: unknown, kept: unknown, path: string[]): void =>
     {
         if (typeof node === 'string') { if (node !== kept || node.includes(MARKER)) out.push(path.join('.')); return; }
-        if (node && typeof node === 'object') for (const k of Object.keys(node)) walk((node as Record<string, unknown>)[k], kept == null ? undefined : (kept as Record<string, unknown>)[k], [...path, k]);
+        if (node && typeof node === 'object') for (const key of Object.keys(node)) walk((node as Record<string, unknown>)[key], kept == null ? undefined : (kept as Record<string, unknown>)[key], [...path, key]);
     };
     walk(entry, masked, []);
     return out;

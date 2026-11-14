@@ -180,7 +180,7 @@ function cacheInForce(result: RunResult | null): string | null
 }
 
 // npm_config_cache in an environment, as npm reads it: the name in any case, an empty value skipped
-const cacheVar = (env: object | null | undefined) => Object.entries(env || {}).find(([k, value]) => k.toLowerCase() === 'npm_config_cache' && value !== '');
+const cacheVar = (env: object | null | undefined) => Object.entries(env || {}).find(([variableName, value]) => variableName.toLowerCase() === 'npm_config_cache' && value !== '');
 
 // The npm cache a registration's npx uses: its own npm_config_cache, else the environment's (npm's first source, ahead
 // of any .npmrc), else npm's, asked once per run.

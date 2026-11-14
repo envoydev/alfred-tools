@@ -156,7 +156,7 @@ function writeJson(file: string, doc: unknown, read: { state?: string | undefine
 const readNote = (read: { note?: string | undefined } | null | undefined, backupPath: string | null): string => (read && read.note ? ` - ${read.note}${backupPath ? `; the old file kept as ${backupPath}` : ''}` : '');
 
 // <root>/mcps.json as the plan computed it (spec D1): each upsert whose registration step was applied (`after` in
-// report.appliedKeys, or none), its entry the registration as read back through kept.keep; each drop whose step was
+// report.appliedKeys, or none), its entry the registration as read back through kept.maskCredentials; each drop whose step was
 // applied; the own entries by the 0.4.x record's rules (mcpsList.ownOf), or the list's own as it is. A family with no list
 // yet carries its 0.4.x record's own entries. After a failure (`failure`), cursor comes off a server whose Cursor file
 // was not written. Never names a key value: a stdio key field holds kept.MARKER.

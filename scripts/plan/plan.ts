@@ -44,7 +44,7 @@ export function plan(inventory: Inventory, answers: Answers, options: PlanOption
     const context: PlanCtx = { ...makeCtx(inventory, { ...options, machine: options.machine || answers.machine }), changing: new Set(Object.keys(answers.change || {})), uses: [], rootMoves: [] };
     const out: Plan = { version: 1, project: inventory.project, os: inventory.os, alfredCodeEnabled: Boolean(inventory.alfredCodeEnabled), steps: [], notes: [], errors: [], unchanged: [], keys: [], reconnect: [], oauth: [], dangerous: [], expect: [] };
     // the root folders (spec D2): every data folder, key file and helper of a family sits in its root
-    const resolved = roots.resolve(inventory, answers.roots, { ...context, catalog });
+    const resolved = roots.resolveRoots(inventory, answers.roots, { ...context, catalog });
     out.errors.push(...resolved.errors);
     context.roots = resolved.roots;
     out.roots = context.roots;

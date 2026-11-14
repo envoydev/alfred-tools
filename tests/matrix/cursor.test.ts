@@ -138,8 +138,8 @@ test('M1 install for both: each entry is the same in its app files and its list;
         const k = cursorEntry(hh, p, s);
         assert.ok(c, `${s.name}: in Claude Code at ${s.scope} scope`);
         assert.ok(k, `${s.name}: in ${cursorFile(hh, p, s.scope)}`);
-        assert.deepStrictEqual(kept.keep(c, ROW(s.row!)), s.entry, `${s.name}: Claude Code's entry is the list's`);
-        assert.deepStrictEqual(kept.keep(k, ROW(s.row!)), s.cursorEntry || s.entry, `${s.name}: Cursor's entry is the list's`);
+        assert.deepStrictEqual(kept.maskCredentials(c, ROW(s.row!)), s.entry, `${s.name}: Claude Code's entry is the list's`);
+        assert.deepStrictEqual(kept.maskCredentials(k, ROW(s.row!)), s.cursorEntry || s.entry, `${s.name}: Cursor's entry is the list's`);
     }
     const c7 = globalList.servers.find((s) => s.name === 'context7');
     assert.ok(claudeEntry(hh, p, c7!)!.headersHelper, 'context7 in Claude Code: the helper form');

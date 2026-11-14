@@ -205,7 +205,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
             if (!keys.NAME_RULE.test(String(urlName))) return out.errors.push(`${row.id}: '${urlName}' is not a name - a name matches ${keys.NAME_RULE.source}`);
             if (urlName === keyName || keys.credentialName(urlName)) return out.errors.push(`${row.id}: ${urlName} holds a key - a key never goes in a URL; pick another name for the ${urlVar.label}`);
             // one name per part: a template naming one twice never starts (review I4)
-            const twin = Object.keys(urlNames).find((k) => urlNames[k] === urlName);
+            const twin = Object.keys(urlNames).find((urlVarName) => urlNames[urlVarName] === urlName);
             if (twin) return out.errors.push(`${row.id}: ${urlName} already names the ${route.urlVars!.find((otherVar) => otherVar.var === twin)!.label} - each part of the URL needs its own name; pick another name for the ${urlVar.label}`);
             urlNames[urlVar.var] = urlName;
         }
@@ -216,11 +216,11 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
     if (pick.settings)
     {
         if (routeId === 'remote') return out.errors.push(`${row.id}: a hosted route takes no settings - its options are its route and host`);
-        for (const [k, value] of Object.entries(pick.settings))
+        for (const [settingName, value] of Object.entries(pick.settings))
         {
-            if (!keys.NAME_RULE.test(k)) return out.errors.push(`${row.id}: '${k}' is not a setting name - a name matches ${keys.NAME_RULE.source}`);
-            if (keys.credentialName(k)) return out.errors.push(`${row.id}: ${k} looks like a key - keep a key in .mcps-secrets and pick it as the key's name`);
-            if (kept.looksLikeKey(value)) return out.errors.push(`${row.id}: ${k}'s value looks like a key - keep a key in .mcps-secrets and pick its name as the key's name`);
+            if (!keys.NAME_RULE.test(settingName)) return out.errors.push(`${row.id}: '${settingName}' is not a setting name - a name matches ${keys.NAME_RULE.source}`);
+            if (keys.credentialName(settingName)) return out.errors.push(`${row.id}: ${settingName} looks like a key - keep a key in .mcps-secrets and pick it as the key's name`);
+            if (kept.looksLikeKey(value)) return out.errors.push(`${row.id}: ${settingName}'s value looks like a key - keep a key in .mcps-secrets and pick its name as the key's name`);
         }
     }
     const wantExec = pick.executablePath === undefined ? (current ? current.executablePath : undefined) : (pick.executablePath || undefined);
@@ -423,7 +423,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
     // the shared sign-in's folder sits in the family's root: the root is written (its .gitignore) like any other
     const signInRoot = () => { if (form === 'signin') context.uses.push({ family: roots.familyOf(scope), root: context.roots![roots.familyOf(scope)]! }); };
     // the apps and the form this registration is listed with (plan-lists.js)
-    const record = () => { const k = keyOf('mcp', name, scope); if (context.clientsFor) context.clientsFor.set(k, clients); if (context.formFor) context.formFor.set(k, form); };
+    const record = () => { const registrationKey = keyOf('mcp', name, scope); if (context.clientsFor) context.clientsFor.set(registrationKey, clients); if (context.formFor) context.formFor.set(registrationKey, form); };
     // a bridge step says whether its names are filled: the apply's background start skips one that cannot start yet
     const withFilled = bridge ? { filled: Boolean(bridgeFilled) } : {};
     // serena's base modes (D7): the edit runs after its first start, so the plan says what it does first

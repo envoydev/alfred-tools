@@ -28,7 +28,7 @@ const pathOf = (context: { platform: string }) => (context.platform === 'win32' 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 // The family's roots as install would take them: the root in use, else the recommended one.
-const rootsOf = (context: FixCtx) => roots.resolve(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
+const rootsOf = (context: FixCtx) => roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
 
 // -> [{ id, name: <list file>, scope: null, family, servers, record: <preferred-tools.json> | null, found }]
 export function listImportDetect(context: FixCtx): Finding[]
@@ -129,7 +129,7 @@ export const serenaBaseModesSteps = (finding: Finding): SerenaBaseModesStep[] =>
 
 // ---- client-drift and cursor-file (0.5.0, D9) -------------------------------------------------------------------------
 // A list entry whose copy in Claude Code or in Cursor was edited or removed by hand. Both sides are compared after
-// kept.keep, each app with its own form (cursorEntry || entry for Cursor), so a stdio keyed route whose copies hold the
+// kept.maskCredentials, each app with its own form (cursorEntry || entry for Cursor), so a stdio keyed route whose copies hold the
 // value while the list holds the marker is not drift. Never applied without an answer: --input drift:<app>:<name>~<scope>.
 
 const APP_LABELS: Record<string, string> = { claude: 'Claude Code', cursor: 'Cursor' };
@@ -146,7 +146,7 @@ function keyGuardOf(copy: ServerEntry, row: CatalogRow | null | undefined, route
     {
         if (hit) return;
         if (typeof node === 'string') { if (!field.has(at.join('.')) && kept.looksLikeKey(node)) hit = true; return; }
-        if (node && typeof node === 'object') for (const [k, child] of Object.entries(node)) walk(child, [...at, k]);
+        if (node && typeof node === 'object') for (const [key, child] of Object.entries(node)) walk(child, [...at, key]);
     };
     walk(copy, []);
     return hit;
@@ -186,7 +186,7 @@ export function clientDriftDetect(context: FixCtx): Finding[]
     {
         const row = catalog.byId.get(server.row!);
         if (copy === undefined) return out.push(driftOf(server, app, 'missing', where));
-        if (same(kept.keep(copy, row), kept.keep(want, row))) return undefined;
+        if (same(kept.maskCredentials(copy, row), kept.maskCredentials(want, row))) return undefined;
         return out.push(driftOf(server, app, 'differs', { ...where, keyGuard: keyGuardOf(copy, row, server.route), keyEmpty: keyEmptyOf(copy, want, row, server.route), rowGone: !cursorMcp.matchesRow(copy, row) }));
     };
     for (const family of ['project', 'global'] as const)
@@ -270,7 +270,7 @@ export function clientDriftSteps(finding: Finding, context: FixCtx, input: Recor
         if (kept.holdsKept(entry) && registration) { const restored = kept.restore(entry, registration.entry, row); if (!restored.error) entry = restored.entry!; }
         if (kept.holdsKept(entry) && listServer.key && row && row.routes[listServer.route!] && row.routes[listServer.route!]!.tokenVar)
         {
-            const resolvedRoots = roots.resolve(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog }).roots;
+            const resolvedRoots = roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog }).roots;
             const at = keys.valueIn(keys.stdioChain({ scope: finding.scope!, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global }), listServer.key);
             if (at) entry = keys.fillKeys(entry, row, listServer.route!, finding.scope!, { [row.routes[listServer.route!]!.tokenVar!]: at.value });
         }
@@ -286,15 +286,15 @@ export function clientDriftSteps(finding: Finding, context: FixCtx, input: Recor
     if (finding.rowGone) return [listStep(null)];
     if (finding.app === 'claude')
     {
-        const server = { ...listServer, entry: kept.keep(registration!.entry, row) };
+        const server = { ...listServer, entry: kept.maskCredentials(registration!.entry, row) };
         if (listServer.cursorEntry) server.cursorEntry = cursorMcp.bridgeFormOf(registration!.entry, catalog, listServer.cursorEntry) || listServer.cursorEntry;
         return [listStep(server), ...((listServer.clients || []).includes('cursor') ? [cursorStep()] : [])];
     }
     const copy = cursorCopy();
-    if (listServer.cursorEntry) return [listStep({ ...listServer, cursorEntry: kept.keep(copy!, row) })];
+    if (listServer.cursorEntry) return [listStep({ ...listServer, cursorEntry: kept.maskCredentials(copy!, row) })];
     // a one-form entry: Claude Code takes Cursor's copy, its key fields from the registration as read
-    const back = registration ? kept.restore(kept.keep(copy, row), registration.entry, row) : { error: 'none' };
-    return [claudeStep(back.error ? copy! : back.entry!), listStep({ ...listServer, entry: kept.keep(copy!, row) })];
+    const back = registration ? kept.restore(kept.maskCredentials(copy, row), registration.entry, row) : { error: 'none' };
+    return [claudeStep(back.error ? copy! : back.entry!), listStep({ ...listServer, entry: kept.maskCredentials(copy!, row) })];
 }
 
 // cursor-file (advice): a Cursor file preferred-tools will not write, with what to do.

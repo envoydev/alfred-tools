@@ -37,12 +37,12 @@ function placeText(root: Root, context: AskCtx): string
 }
 
 // The location question for a row with a data folder, at a known scope and registration name (the folder is named
-// after it). `ctx.roots` holds the roots answered so far (roots.resolve); none - the recommended ones. -> { question (or
+// after it). `context.roots` holds the roots answered so far (roots.resolveRoots); none - the recommended ones. -> { question (or
 // null when one place is left), answers: { <label as shown>: <location entry> }, only: the one location left when no
 // question is asked }.
 export function locationQuestion(row: CatalogRow, inventory: Inventory, { scope, name = null, current = null, copyOf: _copyOf = [], context: context }: ToolOpts & { scope: string; context: AskCtx }): { question: Question | null; answers: Record<string, LocationAnswer>; only: LocationAnswer | null }
 {
-    if (!context.roots) context = { ...context, roots: roots.resolve(inventory, null, context).roots };
+    if (!context.roots) context = { ...context, roots: roots.resolveRoots(inventory, null, context).roots };
     const locations = row.locations!;
     const folder = name || (current ? current.name! : row.name);
     const serenaWin = Boolean(locations.windowsAbsolute && context.platform === 'win32');

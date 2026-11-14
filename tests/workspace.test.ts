@@ -104,8 +104,8 @@ test('workspace: nested members walk down, and each one\'s folders above are nea
     const got = ws.workspaceOf(admin, {});
     assert.deepStrictEqual(got.members, [path.join(root, 'apps'), admin]);
     assert.deepStrictEqual(got.ancestors, [path.join(root, 'apps'), root]);
-    assert.deepStrictEqual(ws.below(got, root), [{ folder: path.join(root, 'apps'), ancestors: [root] }, { folder: admin, ancestors: [path.join(root, 'apps'), root] }]);
-    assert.deepStrictEqual(ws.below(got, path.join(root, 'apps')), [{ folder: admin, ancestors: [path.join(root, 'apps'), root] }]);
+    assert.deepStrictEqual(ws.membersBelow(got, root), [{ folder: path.join(root, 'apps'), ancestors: [root] }, { folder: admin, ancestors: [path.join(root, 'apps'), root] }]);
+    assert.deepStrictEqual(ws.membersBelow(got, path.join(root, 'apps')), [{ folder: admin, ancestors: [path.join(root, 'apps'), root] }]);
 });
 
 test('workspace: an absolute ALFRED_CODE_DATA_PATH reads as no workspace, with its note only where a record is', () => {

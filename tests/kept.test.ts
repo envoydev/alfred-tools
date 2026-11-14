@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
-import { MARKER, keep, restore } from '../scripts/core/kept.ts';
+import { MARKER, maskCredentials, restore } from '../scripts/core/kept.ts';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import type { CatalogRow } from '../scripts/catalog/types.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
@@ -33,7 +33,7 @@ function liveEntry()
 test('keep masks every value under a key the guard\'s credKey names, at any depth (API_KEY, DB_PASS, requirepass, userPass), every header, token shapes, PEM keys and embedded passwords - never a ${VAR} or a location key', () => {
     const { v, entry } = liveEntry();
     const before = clone(entry);
-    const kept = keep(entry, null);
+    const kept = maskCredentials(entry, null);
     assert.deepStrictEqual(entry, before, 'the entry handed in is not changed');
     assert.deepStrictEqual(kept.args, ['-y', 'some-server@1.0.0', '--api-key', MARKER, `--note=${MARKER}`]);
     assert.deepStrictEqual(kept.env, { API_KEY: MARKER, DB_PASS: MARKER, requirepass: MARKER, OTHER: 'plain', GH_TOKEN: '${GH_TOKEN}', FALLBACK_TOKEN: '${A:-b}', CERT: MARKER });
@@ -45,14 +45,14 @@ test('keep masks every value under a key the guard\'s credKey names, at any dept
     // a catalog row's location key is read by configure, so it stays as written whatever its value holds
     const memory = rowOf('memory');
     const odd = `/data/ctx7sk-${hex(8)}-${hex(8)}/memory.db`;
-    const loc = keep({ command: 'uvx', args: ['--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: odd, API_TOKEN: v.api } }, memory);
+    const loc = maskCredentials({ command: 'uvx', args: ['--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: odd, API_TOKEN: v.api } }, memory);
     assert.strictEqual(loc.env.MCP_MEMORY_SQLITE_PATH, odd);
     assert.strictEqual(loc.env.API_TOKEN, MARKER);
 });
 
 test('keep masks only the password part of a connection string or userinfo URL', () => {
     const pw = hex(8);
-    const kept = keep({
+    const kept = maskCredentials({
         type: 'http', url: `https://u:p${pw}@mcp.example.test/mcp`,
         args: [`postgresql://app:pw${pw}@localhost/db`, 'postgresql://app:${DB_PW}@localhost/db'],
         env: { DATABASE_URL: `Host=db;Username=app;Password=${pw};Port=5432` },
@@ -64,7 +64,7 @@ test('keep masks only the password part of a connection string or userinfo URL',
 
 test('restore puts the real values back from the source', () => {
     const { entry } = liveEntry();
-    const kept = keep(entry, null);
+    const kept = maskCredentials(entry, null);
     assert.deepStrictEqual(restore(kept, entry, null), { entry });
     // a change that keeps the kept fields as they were - a new env key, an extra arg - keeps the change
     const changed = clone(kept);
@@ -77,7 +77,7 @@ test('restore puts the real values back from the source', () => {
 
 test('restore refuses when the source changed a kept field', () => {
     const { entry } = liveEntry();
-    const kept = keep(entry, null);
+    const kept = maskCredentials(entry, null);
     const placeholder = clone(entry);
     placeholder.env.API_KEY = '${API_KEY}';
     assert.match(restore(kept, placeholder, null).error!, /env\.API_KEY/);
@@ -93,7 +93,7 @@ test('restore matches a kept arg a splice moved', () => {
     const key = hex(12);
     const pw = hex(8);
     const source = { command: 'npx', args: ['-y', 'pkg@1.0.0', '--api-key', key, `postgresql://app:${pw}@h/db`] };
-    const kept = keep(source, null);
+    const kept = maskCredentials(source, null);
     const moved = clone(kept);
     moved.args.splice(2, 0, '--user-data-dir', '/x');
     assert.deepStrictEqual(restore(moved, source, null), { entry: { command: 'npx', args: ['-y', 'pkg@1.0.0', '--user-data-dir', '/x', '--api-key', key, `postgresql://app:${pw}@h/db`] } });
@@ -107,7 +107,7 @@ test('an entry with nothing live is unchanged', () => {
     const remote = { type: 'http', url: 'https://mcp.context7.com/mcp', headers: { Authorization: 'Bearer ${CONTEXT7_API_KEY}' } };
     for (const [entry, row] of [[serena, rowOf('serena')], [remote, rowOf('context7')], [{}, null]] as [ServerEntry, CatalogRow | null | undefined][])
     {
-        assert.deepStrictEqual(keep(entry, row), entry);
-        assert.deepStrictEqual(restore(keep(entry, row), entry, row), { entry });
+        assert.deepStrictEqual(maskCredentials(entry, row), entry);
+        assert.deepStrictEqual(restore(maskCredentials(entry, row), entry, row), { entry });
     }
 });

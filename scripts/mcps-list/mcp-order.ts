@@ -36,7 +36,7 @@ function canon(value: unknown): string
     const sorted = (node: unknown): unknown =>
     {
         if (Array.isArray(node)) return node.map(sorted);
-        if (node && typeof node === 'object') return Object.fromEntries(Object.keys(node).sort().map((k) => [k, sorted((node as Record<string, unknown>)[k])]));
+        if (node && typeof node === 'object') return Object.fromEntries(Object.keys(node).sort().map((key) => [key, sorted((node as Record<string, unknown>)[key])]));
         return node;
     };
     return JSON.stringify(sorted(value));
@@ -56,7 +56,7 @@ export function reorderText(text: string, catalog: Catalog, own: Set<string> = n
     const order = sortedNames(servers, catalog, own);
     if (order.every((name, i) => name === names[i])) return { text, changed: false };
     // Object.fromEntries defines each key as its own property, '__proto__' included
-    const next = Object.fromEntries(Object.entries(doc).map(([k, value]) => [k, k === 'mcpServers' ? Object.fromEntries(order.map((name) => [name, servers[name]])) : value]));
+    const next = Object.fromEntries(Object.entries(doc).map(([key, value]) => [key, key === 'mcpServers' ? Object.fromEntries(order.map((name) => [name, servers[name]])) : value]));
     if (Object.keys(next['mcpServers'] as ServerMap).some((name, i) => name !== order[i])) return { error: 'has a server name JSON cannot place (an integer name)' };
     const indented = /\n([ \t]+)\S/.exec(text);
     const crlf = text.includes('\r\n');

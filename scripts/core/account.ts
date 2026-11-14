@@ -65,7 +65,7 @@ export function projectEntry(projects: Record<string, AccountProject>, project: 
     try { real = fs.realpathSync.native(project); } catch { /* a folder not on disk has no real path */ }
     const want = [path.win32.resolve(project), real].filter((folder): folder is string => Boolean(folder)).map((folder) => folder.replace(/\\/g, '/'));
     const key = want.find((candidate) => Object.hasOwn(projects, candidate))
-        ?? Object.keys(projects).find((k) => want.some((candidate) => candidate.toLowerCase() === k.toLowerCase()));
+        ?? Object.keys(projects).find((projectPath) => want.some((candidate) => candidate.toLowerCase() === projectPath.toLowerCase()));
     return key === undefined ? undefined : projects[key];
 }
 

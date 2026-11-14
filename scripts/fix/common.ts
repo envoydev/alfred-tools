@@ -66,7 +66,7 @@ export function pinnedVersion(entry: ServerEntry, packageSpec: string): string |
 
 export function onPath(name: string, env: Env, platform: string): string | null
 {
-    const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH');
+    const key = Object.keys(env).find((variableName) => variableName.toUpperCase() === 'PATH');
     const win = platform === 'win32';
     const names = win ? [name, `${name}.exe`, `${name}.cmd`, `${name}.bat`] : [name];
     for (const dir of String((key && env[key]) || '').split(win ? ';' : ':').filter(Boolean))

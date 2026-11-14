@@ -60,15 +60,15 @@ export function tokenFields(entry: ServerEntry | null | undefined, route: Catalo
     const ref = `\${${route.tokenVar}}`;
     const out: TokenField[] = [];
     for (const key of ['env', 'headers'])
-        for (const [k, template] of Object.entries((route as unknown as Record<string, Record<string, unknown> | undefined>)[key] || {}))
-            if (typeof template === 'string' && template.includes(ref) && entry[key] && Object.hasOwn(entry[key] as object, k)) out.push({ at: [key, k], template });
+        for (const [fieldName, template] of Object.entries((route as unknown as Record<string, Record<string, unknown> | undefined>)[key] || {}))
+            if (typeof template === 'string' && template.includes(ref) && entry[key] && Object.hasOwn(entry[key] as object, fieldName)) out.push({ at: [key, fieldName], template });
     const tokenArgs = route.optionalArgs && route.optionalArgs['token'];
     const i = tokenArgs && Array.isArray(entry.args) ? entry.args.indexOf(tokenArgs[0]!) : -1;
     if (i >= 0 && i + 1 < entry.args!.length) out.push({ at: ['args', i + 1], template: tokenArgs![1]! });
     return out;
 }
 
-export const valueAt = (entry: unknown, at: (string | number)[]): unknown => at.reduce<unknown>((current, k) => (current == null ? undefined : (current as Record<string | number, unknown>)[k]), entry);
+export const valueAt = (entry: unknown, at: (string | number)[]): unknown => at.reduce<unknown>((current, segment) => (current == null ? undefined : (current as Record<string | number, unknown>)[segment]), entry);
 export const PLACEHOLDER = /^\s*(?:[A-Za-z][\w-]*\s+)?(?:\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\})+\s*$/;
 
 // fillKeys(entry, row, routeId, scope, found) -> a copy with each token field set by the target scope: at project scope
@@ -133,7 +133,7 @@ export function valueIn(files: string[], name: string): KeyHit | null
 // The names each file holds with a value -> [{ file, names }]. Every value is dropped here.
 // The names a key file defines, filled or not - the values stay in this process. [] when the file cannot be read.
 export const namesIn = (file: string): string[] => Object.keys(readDotenv(file) || {});
-export const filledNames = (files: string[]): FileNames[] => files.map((file) => ({ file, names: Object.entries(readDotenv(file) || {}).filter(([, value]) => value !== '').map(([k]) => k) }));
+export const filledNames = (files: string[]): FileNames[] => files.map((file) => ({ file, names: Object.entries(readDotenv(file) || {}).filter(([, value]) => value !== '').map(([name]) => name) }));
 
 // The key files 0.1.x read, which 0.2.0 reads for names only: alfred-code's store in the project and in each parent folder
 // (its chain walks the parents, so a workspace root's store served its child repos), the project's

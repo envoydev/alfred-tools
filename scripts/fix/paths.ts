@@ -45,7 +45,7 @@ function absoluteOf(value: unknown, context: FixCtx)
 // serena takes (absolute, backslashes, no space), else the profile's .serena written out.
 function serenaHome(to: string, context: FixCtx): string
 {
-    const root = roots.resolve(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots.project;
+    const root = roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots.project;
     const home = root ? path.win32.join(root, 'serena') : null;
     return home && validWindowsSerenaHome(home) ? home : to;
 }

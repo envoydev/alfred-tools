@@ -9,7 +9,7 @@ import * as catalogLib from '../scripts/catalog/catalog.ts';
 import * as account from '../scripts/core/account.ts';
 import crypto from 'node:crypto';
 import { randomBytes } from 'node:crypto';
-import { MARKER, keep } from '../scripts/core/kept.ts';
+import { MARKER, maskCredentials } from '../scripts/core/kept.ts';
 import * as roots from '../scripts/roots/roots.ts';
 import { signInFormOf } from '../scripts/entries/sign-in.ts';
 import type { World } from './types.ts';
@@ -650,7 +650,7 @@ test('inv.cursor reads both Cursor files; entries hold only the names a list mar
         const file = path.join(w.project, '.cursor', 'mcp.json');
         assert.deepStrictEqual([i.cursor!.project.file, i.cursor!.project.state, i.cursor!.project.names], [file, 'ok', ['serena', 'memory', 'mine']]);
         assert.deepStrictEqual(Object.keys(i.cursor!.project.entries), ['serena']);
-        assert.deepStrictEqual((i.cursor!.project.entries as Record<string, ServerEntry> & { serena?: ServerEntry }).serena, keep(S, catalog.byId.get('serena')));
+        assert.deepStrictEqual((i.cursor!.project.entries as Record<string, ServerEntry> & { serena?: ServerEntry }).serena, maskCredentials(S, catalog.byId.get('serena')));
         assert.deepStrictEqual([i.cursor!.global.state, i.cursor!.global.names, i.cursor!.global.entries], ['absent', [], {}]);
         assert.strictEqual(i.cursor!.global.file, path.join(account.homeDir(w.env), '.cursor', 'mcp.json'));
     }

@@ -23,13 +23,13 @@ export function chunk<Item>(list: Item[], size: number): Item[][]
 export function packed(items: PickItem[], { id, question, none }: { id: string; question: string; none: string }): Question[][]
 {
     const parts: PickItem[][] = [];
-    for (const group of [...new Set(items.map((i) => i.group))])
+    for (const group of [...new Set(items.map((item) => item.group))])
     {
-        const mine = items.filter((i) => i.group === group);
-        const k = Math.ceil(mine.length / 4);
-        for (let partIndex = 0, at = 0; partIndex < k; partIndex++)
+        const mine = items.filter((item) => item.group === group);
+        const partCount = Math.ceil(mine.length / 4);
+        for (let partIndex = 0, at = 0; partIndex < partCount; partIndex++)
         {
-            const size = Math.floor(mine.length / k) + (partIndex < mine.length % k ? 1 : 0);
+            const size = Math.floor(mine.length / partCount) + (partIndex < mine.length % partCount ? 1 : 0);
             parts.push(mine.slice(at, at + size));
             at += size;
         }

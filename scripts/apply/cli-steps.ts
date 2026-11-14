@@ -13,8 +13,8 @@ export const restoreLine = (name: string, scope: string, entry: ServerEntry): st
 // the line that puts a registration back by hand, its credential values as the marker
 export function restoreBy(context: { catalog: Catalog }, step: { row?: string | null | undefined }, name: string, scope: string, entry: ServerEntry): string
 {
-    const k = kept.keep(entry, rowOf(context, step));
-    return `${restoreLine(name, scope, k)}${kept.holdsKept(k) ? ` - put the real value back in place of ${kept.MARKER}` : ''}`;
+    const keptEntry = kept.maskCredentials(entry, rowOf(context, step));
+    return `${restoreLine(name, scope, keptEntry)}${kept.holdsKept(keptEntry) ? ` - put the real value back in place of ${kept.MARKER}` : ''}`;
 }
 export const rowOf = (context: { catalog: Catalog }, step: { row?: string | null | undefined }): CatalogRow | null => (step.row ? context.catalog.byId.get(step.row) || null : null);
 
@@ -34,12 +34,12 @@ export function makeRunner({ project, env, runCli }: Pick<ApplyCtx, 'project' | 
 function masked(text: string, entry: ServerEntry, row: CatalogRow | null): string
 {
     const values: string[] = [];
-    const walk = (node: unknown, k: unknown): void =>
+    const walk = (node: unknown, keptNode: unknown): void =>
     {
-        if (typeof node === 'string') { if (node !== k && node) values.push(node, JSON.stringify(node).slice(1, -1)); return; }
-        if (node && typeof node === 'object') for (const key of Object.keys(node)) walk((node as Record<string, unknown>)[key], k == null ? undefined : (k as Record<string, unknown>)[key]);
+        if (typeof node === 'string') { if (node !== keptNode && node) values.push(node, JSON.stringify(node).slice(1, -1)); return; }
+        if (node && typeof node === 'object') for (const key of Object.keys(node)) walk((node as Record<string, unknown>)[key], keptNode == null ? undefined : (keptNode as Record<string, unknown>)[key]);
     };
-    walk(entry, kept.keep(entry, row));
+    walk(entry, kept.maskCredentials(entry, row));
     return [...new Set(values)].sort((left, right) => right.length - left.length).reduce((maskedText, value) => maskedText.split(value).join(kept.MARKER), text);
 }
 
@@ -70,7 +70,7 @@ export function restoreStep(step: PlanStep, context: ApplyCtx): { step: PlanStep
     const changed = { error: `'${from.name}' changed since it was read - run the command again` };
     const source = readRegistration(from.name, from.scope, context.project, context.env);
     const row = rowOf(context, step as McpReplaceStep);
-    if (!source || ((step as McpReplaceStep).old && !deepEqual(kept.keep(source, row), (step as McpReplaceStep).old))) return changed;
+    if (!source || ((step as McpReplaceStep).old && !deepEqual(kept.maskCredentials(source, row), (step as McpReplaceStep).old))) return changed;
     const entry = kept.restore((step as McpReplaceStep).entry, source, row);
     return entry.error ? changed : { step: { ...step, entry: entry.entry, old: (step as McpReplaceStep).old ? source : (step as McpReplaceStep).old } as PlanStep };
 }
@@ -92,7 +92,7 @@ export function fillStep(step: PlanStep, context: ApplyCtx): { step: PlanStep; n
     const fill = (value: string): PlanStep => ({ ...step, entry: keys.fillKeys((step as McpReplaceStep).entry, row, (step as McpReplaceStep).route!, to.scope, { [route.tokenVar!]: value }) } as PlanStep);
     const found = keys.valueIn(files, name);
     if (found) return { step: fill(found.value), note: `${name} for ${where} from ${found.file}` };
-    const held = (step as McpReplaceStep).old ? keys.tokenFields((step as McpReplaceStep).old, route).map((field) => field.at.reduce<unknown>((node, k) => (node == null ? undefined : (node as Record<string, unknown>)[k]), (step as McpReplaceStep).old)).find((candidate) => typeof candidate === 'string' && candidate !== '' && !keys.PLACEHOLDER.test(candidate) && !candidate.includes(kept.MARKER)) : undefined;
+    const held = (step as McpReplaceStep).old ? keys.tokenFields((step as McpReplaceStep).old, route).map((field) => field.at.reduce<unknown>((node, segment) => (node == null ? undefined : (node as Record<string, unknown>)[segment]), (step as McpReplaceStep).old)).find((candidate) => typeof candidate === 'string' && candidate !== '' && !keys.PLACEHOLDER.test(candidate) && !candidate.includes(kept.MARKER)) : undefined;
     if (held !== undefined) return { step: fill(held as string), note: `${name} for ${where} is in none of ${files.join(', ')} - the key it holds is kept; fill ${name} in ${files[0]} to replace it` };
     return { step: fill(''), note: `${name} for ${where} is in none of ${files.join(', ')} - written empty: fill ${name} in ${files[0]}, then run /preferred-tools:configure and keep ${name} as the key's name - it writes the key in` };
 }

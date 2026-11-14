@@ -159,7 +159,7 @@ export function workspaceOf(project: string, env: Env = process.env): Workspace
             if (visited.has(child)) { notes.push(`${child} is listed twice in the workspace - read once`); continue; }
             if (!inside(child, root!)) { notes.push(`${child} is listed as a child of ${folder} but lies outside the workspace root ${root} - not a member`); continue; }
             visited.add(child);
-            if (ignores.some((i) => child === i || inside(child, i))) continue;
+            if (ignores.some((ignoredFolder) => child === ignoredFolder || inside(child, ignoredFolder))) continue;
             if (!fs.existsSync(child)) { notes.push(`${child} is listed as a child of ${folder} but is missing - skipped`); continue; }
             const own = readRecord(child);
             if (!own || own.error || !own.parent || at(child, own.parent) !== folder) continue;
@@ -174,7 +174,7 @@ export function workspaceOf(project: string, env: Env = process.env): Workspace
 }
 
 // The folders below `folder` in the workspace, and for each its folders above, nearest first, root last.
-export function below(workspace: Workspace, folder: string): { folder: string; ancestors: string[] }[]
+export function membersBelow(workspace: Workspace, folder: string): { folder: string; ancestors: string[] }[]
 {
     const base = path.resolve(folder);
     return workspace.members.filter((member) => inside(member, base)).map((member) =>

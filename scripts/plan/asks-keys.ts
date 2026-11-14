@@ -135,7 +135,7 @@ export function settingsQuestion(row: CatalogRow, routeId: string, { entry = nul
     // a hosted route, and a bridge (0.4.0), take no settings
     if (routeId === 'remote' || !row.routes[routeId] || row.routes[routeId].runtime === 'bridge') return null;
     const pairs = settingsOf(row, routeId, entry);
-    const keep = pairs.length ? { label: `Keep these settings${RECOMMENDED_SUFFIX}`, description: pairs.map(([k, value]) => `${k}=${value}`).join(', ') } : { label: `No settings${RECOMMENDED_SUFFIX}`, description: "the server's own defaults" };
+    const keep = pairs.length ? { label: `Keep these settings${RECOMMENDED_SUFFIX}`, description: pairs.map(([settingName, value]) => `${settingName}=${value}`).join(', ') } : { label: `No settings${RECOMMENDED_SUFFIX}`, description: "the server's own defaults" };
     const change = { label: 'Change or add a setting', description: 'NAME=value pairs, asked next - a key goes in .mcps-secrets, never here' };
     return {
         question: { id: `settings-${row.id}`, header: 'Settings', multiSelect: false, question: `${row.label}'s settings`, options: [keep, change] },
@@ -151,7 +151,7 @@ export const liveReader = (project: string, env: Env | null | undefined): ((name
 export function heldKey(entry: ServerEntry, route: CatalogRoute | null | undefined): string | null
 {
     const field = keys.tokenFields(entry, route)[0];
-    const value = field ? field.at.reduce<unknown>((current, k) => (current == null ? undefined : (current as Record<string | number, unknown>)[k]), entry) : undefined;
+    const value = field ? field.at.reduce<unknown>((current, segment) => (current == null ? undefined : (current as Record<string | number, unknown>)[segment]), entry) : undefined;
     return typeof value === 'string' && value !== '' && !keys.PLACEHOLDER.test(value) ? value : null;
 }
 

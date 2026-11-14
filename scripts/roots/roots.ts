@@ -60,7 +60,7 @@ export function readMap(dataDir: string | null | undefined): MapRead
     if (doc.version !== MAP_VERSION) return { ...emptyMap(), note: `${versionNote(file, doc.version, MAP_VERSION)} - read as empty`, state: newerOrBad(doc.version, MAP_VERSION) };
     const projects: Record<string, string> = {};
     if (doc.projects && typeof doc.projects === 'object' && !Array.isArray(doc.projects))
-        for (const [k, value] of Object.entries(doc.projects)) if (typeof value === 'string' && value) projects[k] = value;
+        for (const [projectPath, value] of Object.entries(doc.projects)) if (typeof value === 'string' && value) projects[projectPath] = value;
     return { version: MAP_VERSION, global: typeof doc.global === 'string' && doc.global ? doc.global : null, projects };
 }
 
@@ -215,7 +215,7 @@ export function rootStrFor(root: string, scope: string, context: Machine): strin
 // The roots a run uses. `answers`: { project: { id, path? }, global: { id, path? } } - an option id from the root
 // question, `path` the folder typed for 'named'. No answer: the family's recommended root (D2's first option). ->
 // { roots: { project, global, globalNamed }, errors: [reason] }, the roots absolute.
-export function resolve(inventory: InventoryView, answers: Partial<Record<Family, RootAnswer | null>> | null | undefined, context: RootsCtx): Resolved
+export function resolveRoots(inventory: InventoryView, answers: Partial<Record<Family, RootAnswer | null>> | null | undefined, context: RootsCtx): Resolved
 {
     const out: Roots = {};
     const errors: string[] = [];

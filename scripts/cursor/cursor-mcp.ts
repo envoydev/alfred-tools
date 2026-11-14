@@ -93,7 +93,7 @@ export function compose(doc: CursorDoc | null, managed: Map<string, Managed>, { 
     }
     const base = doc && typeof doc === 'object' ? doc : {};
     const out: Record<string, unknown> = Object.hasOwn(base, 'mcpServers') ? {} : { mcpServers: next };
-    for (const [k, value] of Object.entries(base)) out[k] = k === 'mcpServers' ? next : value;
+    for (const [key, value] of Object.entries(base)) out[key] = key === 'mcpServers' ? next : value;
     return out;
 }
 
@@ -197,7 +197,7 @@ export function cursorOf(file: string, marked: { name: string; row: string | nul
     const servers: ServerMap = read.state === 'ok' ? read.doc!.mcpServers : {};
     const entries: Record<string, ServerEntry> = {};
     for (const markedServer of marked)
-        if (Object.hasOwn(servers, markedServer.name) && !Object.hasOwn(entries, markedServer.name)) entries[markedServer.name] = kept.keep(servers[markedServer.name]!, catalog.byId.get(markedServer.row!));
+        if (Object.hasOwn(servers, markedServer.name) && !Object.hasOwn(entries, markedServer.name)) entries[markedServer.name] = kept.maskCredentials(servers[markedServer.name]!, catalog.byId.get(markedServer.row!));
     return { file, state: read.state, names: Object.keys(servers), entries };
 }
 

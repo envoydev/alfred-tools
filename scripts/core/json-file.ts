@@ -28,7 +28,7 @@ export function blockingStdio(streams: NodeJS.WriteStream[] = [process.stdout, p
 export function sortKeys(value: unknown): unknown
 {
     if (Array.isArray(value)) return value.map(sortKeys);
-    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((k) => [k, sortKeys((value as Record<string, unknown>)[k])]));
+    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortKeys((value as Record<string, unknown>)[key])]));
     return value;
 }
 export const deepEqual = (left: unknown, right: unknown): boolean => JSON.stringify(sortKeys(left)) === JSON.stringify(sortKeys(right));

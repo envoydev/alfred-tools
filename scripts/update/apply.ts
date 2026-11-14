@@ -162,7 +162,7 @@ export function applyUpdates(context: UpdateCtx, ids: string[], out: UpdateCheck
     try { turnedDown = declines.parse(input['retired-declined']); }
     catch (caught) { const error = caught as NodeJS.ErrnoException; log(`FAILED ${error.message}`); result.failed.push('retired-declined'); return result; }
     const known = [...out.offers, ...out.unchecked];
-    const named = ids.filter((i) => i !== 'all' && i !== 'none');
+    const named = ids.filter((pickedId) => pickedId !== 'all' && pickedId !== 'none');
     let everything: Offer[] = [];
     if (ids.includes('all'))
     {
@@ -172,7 +172,7 @@ export function applyUpdates(context: UpdateCtx, ids: string[], out: UpdateCheck
         everything = out.offers.filter((offer) => !kept.includes(offer));
     }
     if (turnedDown.length) log(declines.add(context.data, turnedDown).detail);
-    const picked = ids.includes('all') ? [...everything, ...named.map((i) => known.find((offer) => offer.id === i)).filter((offer) => offer && !everything.includes(offer)) as Offer[]] : named.map((i) => known.find((offer) => offer.id === i) || i);
+    const picked = ids.includes('all') ? [...everything, ...named.map((pickedId) => known.find((offer) => offer.id === pickedId)).filter((offer) => offer && !everything.includes(offer)) as Offer[]] : named.map((pickedId) => known.find((offer) => offer.id === pickedId) || pickedId);
     // the new ways to pass data first - list-import, a registration's, then a file's or folder's - and the pins after
     // them (updateUpgrade)
     const chosen = ordered(picked, context.catalog);

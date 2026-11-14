@@ -1940,7 +1940,7 @@ test('a windows-npx-cmd repair on an entry with cursor ends with list-write and 
         const now = localEntry(w, 'serena');
         assert.ok(now!.args!.includes('--python'));
         const row = catalog.byId.get('serena');
-        assert.deepStrictEqual(readJson(listFile).servers[0].entry, kept5.keep(now, row), 'the list holds the repaired registration');
+        assert.deepStrictEqual(readJson(listFile).servers[0].entry, kept5.maskCredentials(now, row), 'the list holds the repaired registration');
         assert.deepStrictEqual(readJson(cursorFile).mcpServers.serena, readJson(listFile).servers[0].entry, 'Cursor holds the list\'s entry');
         assert.deepStrictEqual(detect(ctxOf(w), 'uvx-python').found, []);
     }

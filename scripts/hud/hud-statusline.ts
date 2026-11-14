@@ -34,14 +34,14 @@ const LAUNCHER_POSIX_RE = /^'((?:[^']|'\\'')+)'( --env-file \/dev\/null)? '((?:[
 const LAUNCHER_GITBASH = 'exec "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/statusline.cmd"';
 const unquote = (word: string): string => word.split("'\\''").join("'");
 
-export const fill = (template: string, vars: ShapeVars): string => template.replace(/\{(RUNTIME_PATH|SOURCE|CMD_PATH|WRAPPER_PATH)\}/g, (match, k) => (k in vars ? vars[k as keyof ShapeVars]! : match));
+export const fill = (template: string, vars: ShapeVars): string => template.replace(/\{(RUNTIME_PATH|SOURCE|CMD_PATH|WRAPPER_PATH)\}/g, (match, placeholder) => (placeholder in vars ? vars[placeholder as keyof ShapeVars]! : match));
 const escapeRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // A shape as a matcher: the placeholders become captures, everything else literal.
 function shapeRe(template: string, source: string): RegExp
 {
     const holes: Record<string, string> = { RUNTIME_PATH: '([^"]+)', SOURCE: escapeRe(source || ''), CMD_PATH: '([^"]*cmd\\.exe)', WRAPPER_PATH: '([^"]+)' };
     // Windows paths compare without case; the bash shapes byte for byte.
-    return new RegExp(`^${escapeRe(template).replace(/\\\{(RUNTIME_PATH|SOURCE|CMD_PATH|WRAPPER_PATH)\\\}/g, (_match, k) => holes[k]!)}$`, template === CMD_SHAPE ? 'i' : '');
+    return new RegExp(`^${escapeRe(template).replace(/\\\{(RUNTIME_PATH|SOURCE|CMD_PATH|WRAPPER_PATH)\\\}/g, (_match, placeholder) => holes[placeholder]!)}$`, template === CMD_SHAPE ? 'i' : '');
 }
 
 // setup.md:478-485 - the label a statusLine that is not claude-hud's is reported under.
@@ -64,7 +64,7 @@ function cmdPath(env: Env, exists: Exists): string
 // PATH's absolute entries, whatever the key's case (Windows spells it Path).
 function pathDirs(env: Env, platform: string): string[]
 {
-    const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH');
+    const key = Object.keys(env).find((variableName) => variableName.toUpperCase() === 'PATH');
     const pathApi = platform === 'win32' ? path.win32 : path.posix;
     return String((key && env[key]) || '').split(platform === 'win32' ? ';' : ':').filter((directory) => directory && pathApi.isAbsolute(directory));
 }

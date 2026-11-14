@@ -69,7 +69,7 @@ export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: P
     return [...listW, ...written];
 }
 
-// What changed outside preferred-tools (spec D1): each list entry whose Claude registration differs after kept.keep,
+// What changed outside preferred-tools (spec D1): each list entry whose Claude registration differs after kept.maskCredentials,
 // then each the list names that Claude Code no longer has. Install, configure and update print these first; only fix
 // changes either. -> [line]
 export function changedOutside(inventory: Inventory, catalog: Catalog = catalogLib.load()): string[]

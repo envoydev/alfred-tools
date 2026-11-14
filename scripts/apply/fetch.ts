@@ -36,7 +36,7 @@ const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVe
 // ${VAR} and ${VAR:-default}, as Claude Code expands them in an MCP entry (entries.js expandVars)
 export const expandedText = (text: unknown, env: Env): string => expandVars(text, env).value;
 // the first ${VAR} with no default that is not set: a start without it only fails
-export const unsetVar = (entry: ServerEntry, env: Env): string | null => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((match) => match[1]!).find((k) => env[k] === undefined) || null;
+export const unsetVar = (entry: ServerEntry, env: Env): string | null => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((match) => match[1]!).find((variableName) => env[variableName] === undefined) || null;
 
 // The runtime itself (npm, uvx, docker), never the claude CLI, and with no limit of Claude Code's. On Windows it goes
 // through the shell so npm.cmd resolves.
@@ -63,7 +63,7 @@ export function realStart(entry: ServerEntry, { cwd, env, ms: timeoutMillisecond
     return new Promise((resolve) =>
     {
         const childEnv: Env = { ...env };
-        for (const [k, value] of Object.entries(entry.env || {})) childEnv[k] = expandedText(value, env);
+        for (const [variableName, value] of Object.entries(entry.env || {})) childEnv[variableName] = expandedText(value, env);
         const startedAt = Date.now();
         let child: ChildProcessByStdio<Writable, Readable, Readable>;
         try { child = spawn(expandedText(entry.command, env), (entry.args || []).map((argument) => expandedText(argument, env)), { cwd, env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32', windowsHide: true }); }
@@ -105,21 +105,21 @@ export const fetchJob = (project: string, fetch: JobStep[], check: string[]): Fe
 // Each step's argv and env as kept.js keeps them, so the file a command line names holds no live credential: a download
 // needs none (a kept value expands to ''), and the first start reads the registration itself.
 // `append` adds to a fetch file already there (fix: a registration's fetch, then a machine fix's): its steps are kept
-// already, so only the new ones go through kept.keep.
-export function writeJob(file: string, j: FetchJob, { append = false }: { append?: boolean } = {}): string
+// already, so only the new ones go through kept.maskCredentials.
+export function writeJob(file: string, job: FetchJob, { append = false }: { append?: boolean } = {}): string
 {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const prior: FetchJob | null = append && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
-    const fetch = j.fetch.map((step) => { const k = kept.keep({ args: step.argv, env: step.env }, null); return { ...step, argv: k.args, env: k.env }; });
-    const out = prior ? { ...prior, fetch: [...prior.fetch, ...fetch], check: [...new Set([...prior.check, ...j.check])] } : { ...j, fetch };
+    const fetch = job.fetch.map((step) => { const keptStep = kept.maskCredentials({ args: step.argv, env: step.env }, null); return { ...step, argv: keptStep.args, env: keptStep.env }; });
+    const out = prior ? { ...prior, fetch: [...prior.fetch, ...fetch], check: [...new Set([...prior.check, ...job.check])] } : { ...job, fetch };
     fs.writeFileSync(file, `${JSON.stringify(out, null, 2)}\n`);
     return file;
 }
 
 // The lines apply.js prints for the command: the file, and what fetch.js will do with it.
-export const nextLines = (file: string, j: FetchJob): string[] => [
+export const nextLines = (file: string, job: FetchJob): string[] => [
     `Fetch next, in the background (a first download can take minutes): ${file}`,
-    `  fetches ${j.fetch.map((step) => step.what).join(', ')} and starts each once, then reports the status of ${j.check.join(', ')} (claude mcp get)`,
+    `  fetches ${job.fetch.map((step) => step.what).join(', ')} and starts each once, then reports the status of ${job.check.join(', ')} (claude mcp get)`,
 ];
 
 // Each server's status line as `claude mcp get` prints it - a health check of up to 30 s each. -> [{ name, out }]
@@ -138,16 +138,16 @@ export function serverStatus(names: string[], { cwd, env, runCli = cli.runClaude
 }
 
 // -> Promise<{ fetched: [what], started: [name], skipped: [line], warnings: [detail], status: [{ name, out }] }>
-export async function runFetchJob(j: FetchJob, { env = process.env, runFetch = realFetch, start = realStart, runCli = cli.runClaude, log = console.log }: FetchOptions = {}): Promise<FetchRun>
+export async function runFetchJob(job: FetchJob, { env = process.env, runFetch = realFetch, start = realStart, runCli = cli.runClaude, log = console.log }: FetchOptions = {}): Promise<FetchRun>
 {
     const report: FetchRun = { fetched: [], started: [], skipped: [], warnings: [], status: [] };
-    const cwd = j.project;
+    const cwd = job.project;
     const warn = (stepNumber: number, detail: string) => { report.warnings.push(detail); log(`${stepNumber}. warn   ${detail}`); };
-    for (const [i, step] of j.fetch.entries())
+    for (const [i, step] of job.fetch.entries())
     {
         const stepNumber = i + 1;
         const stepEnv: Env = { ...env };
-        for (const [k, value] of Object.entries(step.env || {})) stepEnv[k] = expandedText(value, env);
+        for (const [variableName, value] of Object.entries(step.env || {})) stepEnv[variableName] = expandedText(value, env);
         log(`${stepNumber}. ...    fetching ${step.what} for '${step.name}'`);
         const startedAt = Date.now();
         const result = runFetch(step.argv, { cwd, env: stepEnv });
@@ -201,7 +201,7 @@ export async function runFetchJob(j: FetchJob, { env = process.env, runFetch = r
         }
         else warn(stepNumber, `'${step.name}' did not answer its first start (${startResult.why}) - the registration stays; its first session start tries again`);
     }
-    report.status = serverStatus(j.check, { cwd, env, runCli, log });
+    report.status = serverStatus(job.check, { cwd, env, runCli, log });
     log('', report.warnings.length
         ? `Done, with ${report.warnings.length} warning${report.warnings.length > 1 ? 's' : ''}. Restart Claude Code now so the registrations load.`
         : 'Done. Restart Claude Code now so the registrations load.');

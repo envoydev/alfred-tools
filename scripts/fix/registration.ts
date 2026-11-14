@@ -187,12 +187,12 @@ export function appiumSdkEnvDetect(context: FixCtx): Finding[]
     {
         const env = registration.entry.env || {};
         // every scope holds this machine's SDK homes since 0.3.0, this folder's .mcp.json included
-        const missing = SDK_ENV.filter((k) => !env[k]);
+        const missing = SDK_ENV.filter((variableName) => !env[variableName]);
         if (!missing.length) return null;
         const what = `${missing.join(' and ')} not set in the registration`;
         const lookup = { ANDROID_HOME: missing.includes('ANDROID_HOME') ? androidSdk(context) : null, JAVA_HOME: missing.includes('JAVA_HOME') ? javaHome(context) : null };
         const proposal = Object.fromEntries(Object.entries(lookup).filter(([, value]) => value));
-        const notFound = missing.filter((k) => !proposal[k]);
+        const notFound = missing.filter((variableName) => !proposal[variableName]);
         if (!Object.keys(proposal).length) return C.finding('appium-sdk-env', registration, what, { blocked: `${notFound.join(' and ')} not found on this machine - install the Android SDK / a JDK first` });
         return C.finding('appium-sdk-env', registration, what, { proposal, note: notFound.length ? `${notFound.join(' and ')} not found on this machine and left unset` : undefined });
     });
@@ -222,7 +222,7 @@ export function serenaTelemetryFix(entry: ServerEntry): ServerEntry
 // file's write before the replace.
 export function serenaContextDetect(context: FixCtx): Finding[]
 {
-    const resolvedRoots = roots.resolve(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
+    const resolvedRoots = roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
     return eachReg(context, 'serena-context', (registration) =>
     {
         const root = resolvedRoots[roots.familyOf(registration.scope)];
@@ -264,7 +264,7 @@ function keyIn(value: unknown, template: string, tokenVar: string): string
 
 function stdioChainOf(context: FixCtx, scope: string): string[]
 {
-    const resolvedRoots = roots.resolve(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
+    const resolvedRoots = roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
     return keys.stdioChain({ scope, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global });
 }
 
@@ -276,7 +276,7 @@ export function tokenSyncDetect(context: FixCtx): Finding[]
         const fields = keys.tokenFields(registration.entry, route);
         if (!fields.length) return null;
         const tokenVar = route.tokenVar!;
-        const key = keyIn(fields[0]!.at.reduce<unknown>((node, k) => (node as Record<string | number, unknown>)[k], registration.entry), fields[0]!.template, tokenVar);
+        const key = keyIn(fields[0]!.at.reduce<unknown>((node, segment) => (node as Record<string | number, unknown>)[segment], registration.entry), fields[0]!.template, tokenVar);
         const chain = stdioChainOf(context, registration.scope);
         const extra = { route: registration.route, chain };
         if (key === '') return C.finding('token-sync', registration, `the registration's ${tokenVar} is empty`, { ...extra, blocked: PICK_NAME });
@@ -307,7 +307,7 @@ function cursorBehind(context: FixCtx, registration: InvRegistration, route: Cat
     const fields = copy ? keys.tokenFields(copy, route) : [];
     const at = keys.valueIn(chain, server.key);
     if (!fields.length || !at) return null;
-    const held = keyIn(fields[0]!.at.reduce<unknown>((node, k) => (node == null ? node : (node as Record<string | number, unknown>)[k]), copy), fields[0]!.template, route.tokenVar!);
+    const held = keyIn(fields[0]!.at.reduce<unknown>((node, segment) => (node == null ? node : (node as Record<string | number, unknown>)[segment]), copy), fields[0]!.template, route.tokenVar!);
     if (held === at.value) return null;
     return C.finding('token-sync', registration, `Cursor's copy in ${file} holds a key other than ${server.key} in ${at.file}`, { ...extra, keyName: server.key, cursorOnly: true });
 }

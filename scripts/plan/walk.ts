@@ -62,10 +62,10 @@ export function nextQuestion(inventory: Inventory, picks: Picks | null | undefin
     };
     const keyStep = (toolId: string) =>
     {
-        const k = tokens[toolId] === false ? null : builtQuestions.keyNames![toolId];
+        const keyNameAsk = tokens[toolId] === false ? null : builtQuestions.keyNames![toolId];
         const settingsAsk = builtQuestions.settings![toolId];
         const urlAsks = Object.values((builtQuestions.urlNames || {})[toolId] || {});
-        add(`${toolId}:keys`, toolId, [k && k.question, ...urlAsks.map((urlAsk) => urlAsk.question), settingsAsk && settingsAsk.question], { ...(k ? { [k.question.id]: k.answers } : {}), ...Object.fromEntries(urlAsks.map((urlAsk) => [urlAsk.question.id, urlAsk.answers])), ...(settingsAsk ? { [settingsAsk.question.id]: settingsAsk.answers } : {}) });
+        add(`${toolId}:keys`, toolId, [keyNameAsk && keyNameAsk.question, ...urlAsks.map((urlAsk) => urlAsk.question), settingsAsk && settingsAsk.question], { ...(keyNameAsk ? { [keyNameAsk.question.id]: keyNameAsk.answers } : {}), ...Object.fromEntries(urlAsks.map((urlAsk) => [urlAsk.question.id, urlAsk.answers])), ...(settingsAsk ? { [settingsAsk.question.id]: settingsAsk.answers } : {}) });
     };
     const located = (toolBlock: ToolBlock) => (toolBlock.first !== null && toolBlock.first !== undefined);
     const toolSteps = (toolBlock: ToolBlock, id: string, rootStep: (() => void) | null) =>
@@ -123,7 +123,7 @@ export function nextQuestion(inventory: Inventory, picks: Picks | null | undefin
         {
             const family = roots.familyOf(toolBlock.current!.scope!);
             const root = rootInUse(inventory, family, { home: options.home!, catalog });
-            const fallback = roots.resolve(inventory, picks.roots, { project: inventory.project, platform: inventory.os, home: options.home || homeDir(process.env), catalog }).roots[family];
+            const fallback = roots.resolveRoots(inventory, picks.roots, { project: inventory.project, platform: inventory.os, home: options.home || homeDir(process.env), catalog }).roots[family];
             const ownAsk = ownStep({ key, name: toolBlock.current!.name, scope: toolBlock.current!.scope }, root ? root.path : fallback!);
             add(`${key}:own`, key, [ownAsk.question], { [ownAsk.question.id]: ownAsk.answers });
             if ((picks.existing || {})[key] === 'own') continue;

@@ -57,7 +57,7 @@ const matches = (finding: Finding, only: string | undefined) => !only || [findin
 // scope fills it (spec F3) - the same reconnect line the plan prints.
 function reconnectOf(context: FixCtx, steps: McpReplaceStep[]): Pick<Reconnect, 'name' | 'variable' | 'file' | 'filled' | 'anonymous'>[]
 {
-    const resolvedRoots = roots.resolve(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
+    const resolvedRoots = roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
     return steps.filter((step) => step.entry && step.entry.headersHelper && helperNameOf(step.entry.headersHelper)).map((step) =>
     {
         const variable = helperNameOf(step.entry.headersHelper)!;
@@ -109,7 +109,7 @@ export function renderFixes(detected: Detected): string
     else
     {
         lines.push(`Known problems found (${found.length}):`, '');
-        const columnWidth = (k: (finding: Finding) => string) => Math.max(...found.map((finding) => k(finding).length));
+        const columnWidth = (cellText: (finding: Finding) => string) => Math.max(...found.map((finding) => cellText(finding).length));
         const idWidth = columnWidth((finding) => finding.id);
         const toolW = columnWidth(where);
         for (const finding of found)

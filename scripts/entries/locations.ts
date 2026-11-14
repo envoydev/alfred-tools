@@ -148,7 +148,7 @@ export function alfredNameProblem(name: string, context: Machine): string | null
     return isDir(at) ? null : `.alfred/${name} exists and is not a folder - pick another name or folder`;
 }
 
-// The root of a scope family (spec D2): ctx.roots when the plan or the questions resolved them, else the recommended
+// The root of a scope family (spec D2): context.roots when the plan or the questions resolved them, else the recommended
 // ones without alfred-code - <project>/.preferred-tools and <home>/.preferred-tools.
 export function rootOf(family: string, context: Machine): string
 {

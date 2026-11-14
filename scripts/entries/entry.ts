@@ -40,7 +40,7 @@ export function currentOf(row: CatalogRow, registration: Registration): Current
 
 export function subst(text: unknown, values: Record<string, string>): string
 {
-    return String(text).replace(/\{(\w+)\}/g, (match: string, k: string) => (k in values ? values[k]! : match));
+    return String(text).replace(/\{(\w+)\}/g, (match: string, placeholder: string) => (placeholder in values ? values[placeholder]! : match));
 }
 
 // ---- the server's settings (spec D9) ---------------------------------------------------------------------------------
@@ -56,7 +56,7 @@ export function settingsOf(row: CatalogRow, routeId: string, entry: ServerEntry 
     if (route.runtime === 'bridge') return [];
     const derived = new Set(((row.locations && row.locations.derived) || []).filter((derivedLocation) => derivedLocation.in === 'env').map((derivedLocation) => derivedLocation.key));
     const env = (entry ? entry.env : route.env) || {};
-    return Object.entries(env).filter(([k]) => k !== route.tokenVar && !derived.has(k) && !APPIUM_SDK_ENV.includes(k) && k !== 'npm_config_before' && !keys.credentialName(k));
+    return Object.entries(env).filter(([variableName]) => variableName !== route.tokenVar && !derived.has(variableName) && !APPIUM_SDK_ENV.includes(variableName) && variableName !== 'npm_config_before' && !keys.credentialName(variableName));
 }
 
 // `pairs` merged into the entry's env; a Docker route also passes each new name into the container (`-e NAME` before
@@ -69,7 +69,7 @@ export function mergeSettings(entry: ServerEntry, route: CatalogRoute, pairs: Re
     {
         const at = out.args.findIndex((argument) => typeof argument === 'string' && argument.startsWith(`${route.image!.name}:`));
         const passed = new Set(out.args.filter((_argument, i) => out.args![i - 1] === '-e'));
-        const add = Object.keys(pairs).filter((k) => !passed.has(k)).flatMap((k) => ['-e', k]);
+        const add = Object.keys(pairs).filter((variableName) => !passed.has(variableName)).flatMap((variableName) => ['-e', variableName]);
         if (at >= 0 && add.length) out.args.splice(at, 0, ...add);
     }
     return out;
@@ -256,7 +256,7 @@ export function buildEntry(row: CatalogRow, routeId: string, answers: BuildAnswe
         if (useBinary) entry = { command: route.fallback!.command, args: [...route.fallback!.args] };
         else
         {
-            const passEnv = Object.keys(route.env || {}).flatMap((k) => ['-e', k]);
+            const passEnv = Object.keys(route.env || {}).flatMap((variableName) => ['-e', variableName]);
             entry = { command: 'docker', args: ['run', '-i', '--rm', ...passEnv, `${route.image!.name}:${route.image!.tag}`, ...route.run!] };
         }
         if (Object.keys(route.env || {}).length) entry.env = { ...route.env };

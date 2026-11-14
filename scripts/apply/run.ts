@@ -67,7 +67,7 @@ export function runStep(step: PlanStep, context: ApplyCtx): StepResult
         case 'mcp-replace': {
             const file = path.join(context.tmp, 'rollback.json');
             fs.mkdirSync(context.tmp, { recursive: true });
-            fs.writeFileSync(file, JSON.stringify({ name: step.name, scope: step.scope, entry: kept.keep(step.old, rowOf(context, step)), project: context.project }, null, 2));
+            fs.writeFileSync(file, JSON.stringify({ name: step.name, scope: step.scope, entry: kept.maskCredentials(step.old, rowOf(context, step)), project: context.project }, null, 2));
             const removeResult = removeAndVerify(call, context, step.name, step.scope);
             if (!removeResult.ok) return { ok: false, detail: `${removeResult.detail} - the old entry is untouched or restored by hand: ${restoreBy(context, step, step.name, step.scope, step.old)}` };
             const add = addAndVerify(call, context, step.name, step.scope, step.entry, rowOf(context, step));

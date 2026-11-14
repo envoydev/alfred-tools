@@ -45,7 +45,7 @@ export function add(dataDir: string | null | undefined, items: Declined[]): Outc
     const tmp = `${file}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, `${JSON.stringify({ version: 1, declined }, null, 2)}\n`);
     fs.renameSync(tmp, file);
-    return { ok: true, detail: `recorded in ${file}: ${items.map((i) => `${i.id} (${i.scope})`).join(', ')} - not offered again` };
+    return { ok: true, detail: `recorded in ${file}: ${items.map((item) => `${item.id} (${item.scope})`).join(', ')} - not offered again` };
 }
 
 // `--input retired-declined=<id>~<scope>,...` -> [{ id, scope }]
