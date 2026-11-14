@@ -1,13 +1,12 @@
-'use strict';
 // The fix command: reads its flags and runs the detectors, the asks or the fixes.
-const path = require('node:path');
-const inventory = require('../inventory/inventory.ts');
-const tmpdir = require('../core/tmpdir.ts');
-const { makeCtx, applyFixes, detectAll, questions, render } = require('./fix.ts');
+import path from 'node:path';
+import * as inventory from '../inventory/inventory.ts';
+import * as tmpdir from '../core/tmpdir.ts';
+import { makeCtx, applyFixes, detectAll, questions, render } from './fix.ts';
 
 // ---- CLI ------------------------------------------------------------------------------------------------------------
 
-function parseArgs(argv)
+export function parseArgs(argv)
 {
     const args = { input: {} };
     const value = (i, flag) =>
@@ -40,7 +39,7 @@ function parseArgs(argv)
     return args;
 }
 
-function main(argv, { env = process.env, out = (s) => process.stdout.write(`${s}\n`), machine } = {})
+export function main(argv, { env = process.env, out = (s) => process.stdout.write(`${s}\n`), machine } = {})
 {
     let args;
     try { args = parseArgs(argv); }
@@ -64,4 +63,3 @@ function main(argv, { env = process.env, out = (s) => process.stdout.write(`${s}
     return 0;
 }
 
-module.exports = { parseArgs, main };

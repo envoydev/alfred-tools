@@ -1,29 +1,30 @@
-'use strict';
 // CURSOR'S FILES - <project>/.cursor/mcp.json and ~/.cursor/mcp.json, written from the lists (spec D2, 0.5.0). Cursor has
 // no CLI that adds a server, so this is the one writer of those files besides the user: it replaces only the names it
 // manages, keeps every other entry with its keys and values in their order, and refuses a file it does not recognise -
 // a symbolic link, text that is not JSON (comments and trailing commas included), or no mcpServers object - writing
 // nothing. A write goes through a temporary file and a rename, and is read back.
-const fs = require('node:fs');
-const path = require('node:path');
-const account = require('../core/account.ts');
-const lists = require('../mcps-list/mcps-list.ts');
-const { stripBom, deepEqual } = require('../core/json-file.ts');
-const { bridgeParts, helperParts } = require('../entries/entry.ts');
-const kept = require('../core/kept.ts');
-const keys = require('../keys/keys.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import * as account from '../core/account.ts';
+import * as lists from '../mcps-list/mcps-list.ts';
+import { stripBom, deepEqual } from '../core/json-file.ts';
+import { bridgeParts, helperParts } from '../entries/entry.ts';
+import * as kept from '../core/kept.ts';
+import * as keys from '../keys/keys.ts';
+import { load } from '../catalog/catalog.ts';
+import { matchesFingerprint } from '../inventory/inventory.ts';
 
 const pathFor = (platform) => (platform === 'win32' ? path.win32 : path.posix);
 
 // The Cursor file of a scope family: the project's for project and local scope, the home's for user scope.
-function fileFor(family, ctx)
+export function fileFor(family, ctx)
 {
     const P = pathFor(ctx.platform);
     return family === 'global' ? P.join(ctx.home || account.homeDir(ctx.env || process.env), '.cursor', 'mcp.json') : P.join(ctx.project, '.cursor', 'mcp.json');
 }
 
 // -> { state: 'absent' | 'ok' | 'symlink' | 'bad' | 'shape', doc, eol }
-function readCursor(file)
+export function readCursor(file)
 {
     let st;
     try { st = fs.lstatSync(file); }
@@ -41,7 +42,7 @@ function readCursor(file)
 }
 
 // Why a file is left as it is, or null when it can be written.
-function refusal(read)
+export function refusal(read)
 {
     if (read.state === 'symlink') return 'is a symbolic link - preferred-tools writes no file through a link; replace it with the file itself';
     if (read.state === 'bad') return read.error ? `cannot be read (${read.error})` : 'is not JSON (Cursor reads comments and trailing commas, preferred-tools does not) - remove them, then run the command again';
@@ -52,7 +53,7 @@ function refusal(read)
 // The servers this file holds from the lists: those set up for Cursor, the nearest list first. `lists`: [{ file,
 // scopes, servers }] - the family's own list (local and project scope; local wins one name) and, for a project, the
 // lists above it (project scope only). -> Map<name, { entry, scope, list, row }>
-function managedSet(sources)
+export function managedSet(sources)
 {
     const out = new Map();
     for (const src of sources)
@@ -68,7 +69,7 @@ function managedSet(sources)
 // keeps the file's own value (or stays out when the file lacks it), the managed names come first in catalog.order and
 // the user's after them in their order.
 // Every other top-level key keeps its place and value.
-function compose(doc, managed, { before = [], skip = [], order = [] } = {})
+export function compose(doc, managed, { before = [], skip = [], order = [] } = {})
 {
     const servers = (doc && doc.mcpServers) || {};
     const at = (name) => { const i = order.indexOf((managed.get(name) || {}).row); return i < 0 ? order.length : i; };
@@ -97,7 +98,7 @@ const textOf = (doc, eol) => `${JSON.stringify(doc, null, 2)}\n`.replace(/\n/g, 
 // The cursor-write step: the managed set from its lists, composed into the file, written, read back.
 // step: { file, family, lists: [{ file, scopes }], before, skip, replace, only? }. A name the file holds as the user's own
 // (not in `before`) is replaced only when `replace` names it.
-function cursorWrite(step, ctx)
+export function cursorWrite(step, ctx)
 {
     const read = readCursor(step.file);
     const why = refusal(read);
@@ -135,7 +136,7 @@ function cursorWrite(step, ctx)
 
 // Does this entry carry its key in the registration? The rule, not a list: the route has a tokenVar and the entry holds
 // a field keys.tokenFields reads (github's Docker route, sentry's npm route, context7 local with --api-key).
-function stdioKeyed(entry, row, routeId)
+export function stdioKeyed(entry, row, routeId)
 {
     const route = row && row.routes ? row.routes[routeId] : null;
     return Boolean(route && route.tokenVar && keys.tokenFields(entry, route).length);
@@ -148,7 +149,7 @@ function stdioKeyed(entry, row, routeId)
 // neither, the name is written empty, with fillStep's note. Changes `managed` in place. -> [note]
 function fillStdioKeys(managed, ctx)
 {
-    const catalog = (ctx && ctx.catalog) || require('../catalog/catalog.ts').load();
+    const catalog = (ctx && ctx.catalog) || load();
     const notes = [];
     for (const [name, m] of managed)
     {
@@ -174,9 +175,8 @@ function fillStdioKeys(managed, ctx)
 // Is this Cursor entry the row's server? A bridge copy (D5) is matched by its URL, as a plain http entry, against the
 // row's fingerprints, and by itself against a `bridge` fingerprint: inventory.matchesFingerprint alone returns false for
 // every bridge entry against a host or path fingerprint. inventory.js requires this file, so it is required here, late.
-function matchesRow(entry, row)
+export function matchesRow(entry, row)
 {
-    const { matchesFingerprint } = require('../inventory/inventory.ts');
     const fps = Object.values((row && row.routes) || {}).flatMap((r) => r.fingerprints || []);
     const bridge = bridgeParts(entry);
     if (!bridge) return fps.some((f) => matchesFingerprint(entry, f));
@@ -187,7 +187,7 @@ function matchesRow(entry, row)
 // The Cursor file of a family as the inventory gives it: its state, every name it holds, and the entries of the names
 // its list marks for Cursor, kept (every key value the marker) - what update and drift read Cursor's copy from.
 // `marked`: [{ name, row }] -> { file, state, names, entries }
-function cursorOf(file, marked, catalog)
+export function cursorOf(file, marked, catalog)
 {
     const read = readCursor(file);
     const servers = read.state === 'ok' ? read.doc.mcpServers : {};
@@ -200,14 +200,14 @@ function cursorOf(file, marked, catalog)
 // ---- hosted keyed routes: two forms (spec D5) -------------------------------------------------------------------------
 
 // The headers an entry sends besides the helper's: Cursor's bridge has no place for them.
-const otherHeaders = (entry) => Object.keys((entry && entry.headers) || {});
+export const otherHeaders = (entry) => Object.keys((entry && entry.headers) || {});
 
 // Cursor's copy of a hosted keyed entry: Cursor runs no headersHelper (F5), so it gets the bridge, which sends the key
 // (F6) - `node <root>/mcp-bridge.js <url> <NAME> <SCHEME> mcp-remote@<pin> [<global root>]`, the object buildEntry makes
 // for sentry's bridge route. The URL, the helper's arguments and the bridge path come from `entry`; a `prior` bridge
 // copy (the list's cursorEntry, or Cursor's copy as read) keeps its pin, its cut-off and every env pair and argument the
 // form does not set, so a pin update moved or an edit the user kept survives a Claude-side rewrite. -> entry | null
-function bridgeFormOf(entry, catalog, prior = null)
+export function bridgeFormOf(entry, catalog, prior = null)
 {
     if (!entry || typeof entry.headersHelper !== 'string' || otherHeaders(entry).length) return null;
     const h = helperParts(entry.headersHelper);
@@ -228,7 +228,7 @@ function bridgeFormOf(entry, catalog, prior = null)
 
 // Is Cursor on this machine (spec D3)? `~/.cursor` exists, `cursor-agent` or `cursor` is on PATH (with .exe or .cmd on
 // Windows), or a list already sets a server up for Cursor. Bare `agent` does not count: the name is too common.
-function cursorFound(ctx, inv)
+export function cursorFound(ctx, inv)
 {
     const P = pathFor(ctx.platform);
     const env = ctx.env || {};
@@ -240,4 +240,3 @@ function cursorFound(ctx, inv)
     return ['project', 'global'].some((f) => { const l = inv && inv.lists && inv.lists[f]; return Boolean(l) && (l.servers || []).some((x) => (x.clients || []).includes('cursor')); });
 }
 
-module.exports = { fileFor, readCursor, refusal, managedSet, compose, cursorWrite, matchesRow, cursorOf, cursorFound, bridgeFormOf, otherHeaders, stdioKeyed };

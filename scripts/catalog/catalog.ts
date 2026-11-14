@@ -1,12 +1,11 @@
-'use strict';
 // The catalog, loaded and indexed. Everything else reads rows through here, so the shape lives in one place.
-const fs = require('node:fs');
-const path = require('node:path');
+import fs from 'node:fs';
+import path from 'node:path';
 
-const CATALOG_DIR = path.join(__dirname, '..', '..', 'catalog');
-const readJson = (name) => JSON.parse(fs.readFileSync(path.join(CATALOG_DIR, name), 'utf8'));
+export const CATALOG_DIR = path.join(import.meta.dirname, '..', '..', 'catalog');
+export const readJson = (name) => JSON.parse(fs.readFileSync(path.join(CATALOG_DIR, name), 'utf8'));
 
-function load(dir = CATALOG_DIR)
+export function load(dir = CATALOG_DIR)
 {
     const read = (name) => JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
     const tools = read('tools.json');
@@ -16,7 +15,7 @@ function load(dir = CATALOG_DIR)
 }
 
 // One string per fingerprint, equal for two rows exactly when they would match the same registration.
-function fingerprintKey(f)
+export function fingerprintKey(f)
 {
     if (f.bridge) return `bridge:${f.bridge}`;
     if (f.pkg) return `pkg:${f.pkg}${f.flag ? `+${f.flag}=${f.value}` : ''}`;
@@ -24,7 +23,6 @@ function fingerprintKey(f)
     return `url:${f.host || '*'}${f.pathPrefix || ''}`;
 }
 
-const routesOf = (row) => (row.kind === 'mcp' ? Object.keys(row.routes) : []);
-const supportedOn = (row, platform) => row.os.includes(platform);
+export const routesOf = (row) => (row.kind === 'mcp' ? Object.keys(row.routes) : []);
+export const supportedOn = (row, platform) => row.os.includes(platform);
 
-module.exports = { CATALOG_DIR, readJson, load, fingerprintKey, routesOf, supportedOn };

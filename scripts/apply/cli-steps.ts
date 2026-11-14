@@ -1,23 +1,22 @@
-'use strict';
 // The CLI steps of an apply: quoting, the calls through the claude CLI, and a key taken back for a replace or a move.
-const account = require('../core/account.ts');
-const { deepEqual } = require('../plan/plan.ts');
-const kept = require('../core/kept.ts');
-const keys = require('../keys/keys.ts');
+import * as account from '../core/account.ts';
+import { deepEqual } from '../plan/plan.ts';
+import * as kept from '../core/kept.ts';
+import * as keys from '../keys/keys.ts';
 
 const quote = (s) => (/^[A-Za-z0-9_\-./:=@,+]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`);
-const restoreLine = (name, scope, entry) => `claude mcp add-json ${quote(name)} ${quote(JSON.stringify(entry))} -s ${scope}`;
+export const restoreLine = (name, scope, entry) => `claude mcp add-json ${quote(name)} ${quote(JSON.stringify(entry))} -s ${scope}`;
 // the line that puts a registration back by hand, its credential values as the marker
-function restoreBy(ctx, step, name, scope, entry)
+export function restoreBy(ctx, step, name, scope, entry)
 {
     const k = kept.keep(entry, rowOf(ctx, step));
     return `${restoreLine(name, scope, k)}${kept.holdsKept(k) ? ` - put the real value back in place of ${kept.MARKER}` : ''}`;
 }
-const rowOf = (ctx, step) => (step.row ? ctx.catalog.byId.get(step.row) || null : null);
+export const rowOf = (ctx, step) => (step.row ? ctx.catalog.byId.get(step.row) || null : null);
 
-const readRegistration = account.readRegistration;
+export const readRegistration = account.readRegistration;
 
-function makeRunner({ project, env, runCli })
+export function makeRunner({ project, env, runCli })
 {
     return (argv) =>
     {
@@ -40,7 +39,7 @@ function masked(text, entry, row)
     return [...new Set(values)].sort((a, b) => b.length - a.length).reduce((t, v) => t.split(v).join(kept.MARKER), text);
 }
 
-function addAndVerify(call, ctx, name, scope, entry, row = null)
+export function addAndVerify(call, ctx, name, scope, entry, row = null)
 {
     const a = call(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope]);
     if (!a.ok) return { ok: false, detail: `claude mcp add-json ${name} -s ${scope} failed: ${masked(a.out, entry, row)}` };
@@ -49,7 +48,7 @@ function addAndVerify(call, ctx, name, scope, entry, row = null)
     return { ok: true, detail: `added '${name}' at ${scope} scope` };
 }
 
-function removeAndVerify(call, ctx, name, scope)
+export function removeAndVerify(call, ctx, name, scope)
 {
     const r = call(['mcp', 'remove', name, '-s', scope]);
     if (!r.ok) return { ok: false, detail: `claude mcp remove ${name} -s ${scope} failed: ${r.out}` };
@@ -59,7 +58,7 @@ function removeAndVerify(call, ctx, name, scope)
 
 // A replace or a move read from a kept plan gets its real values back from the registration it was read from: the old
 // name and scope for a move, its own for a replace. -> { step } | { error }
-function restoreStep(step, ctx)
+export function restoreStep(step, ctx)
 {
     if (!['mcp-add', 'mcp-replace', 'mcp-move'].includes(step.op) || !(kept.holdsKept(step.entry) || kept.holdsKept(step.old))) return { step };
     if (step.op === 'mcp-add') return { error: `'${step.name}' holds a kept value and no registration to take it from - run the command again` };
@@ -77,7 +76,7 @@ function restoreStep(step, ctx)
 // registration holds now (its `old`, restored from the live registration) - a value of nothing but ${VAR} placeholders
 // is no key - else the field is written empty, never a ${VAR} (spec D5). A step without `key` is written as planned.
 // -> { step, note } - the note names the key and the files, never a value.
-function fillStep(step, ctx)
+export function fillStep(step, ctx)
 {
     if (!step.key || !['mcp-add', 'mcp-replace', 'mcp-move'].includes(step.op)) return { step, note: null };
     const row = rowOf(ctx, step);
@@ -94,4 +93,3 @@ function fillStep(step, ctx)
     return { step: fill(''), note: `${name} for ${where} is in none of ${files.join(', ')} - written empty: fill ${name} in ${files[0]}, then run /preferred-tools:configure and keep ${name} as the key's name - it writes the key in` };
 }
 
-module.exports = { restoreStep, fillStep, readRegistration, restoreLine, rowOf, addAndVerify, removeAndVerify, restoreBy, makeRunner };

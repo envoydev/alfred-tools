@@ -1,9 +1,11 @@
-'use strict';
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
-const { parseAskBlocks, problemsOf } = require('./ask-blocks.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { parseAskBlocks, problemsOf, staticAsk } from './ask-blocks.ts';
+import { logicalRoot } from '../scripts/entries/locations.ts';
+import { currentOf } from '../scripts/entries/entry.ts';
+import { STATIC } from '../scripts/plan/asks-other.ts';
 
 const block = (body, id = 'menu') => parseAskBlocks(`\`\`\`ask${id ? ` ${id}` : ''}\n${body}\n\`\`\``)[0];
 const GOOD = "What do you want to change?\n- 'Change tools (Recommended)' - a\n- 'Remove tools' - b\n- 'Done' - d";
@@ -35,7 +37,7 @@ test('every way a block can break the limits is named', () =>
 });
 
 test('a command file with CRLF line endings - a Windows checkout under Git\'s default autocrlf - parses as with LF', () => {
-    const lf = fs.readFileSync(path.join(__dirname, '..', 'commands', 'configure.md'), 'utf8').replace(/\r\n/g, '\n');
+    const lf = fs.readFileSync(path.join(import.meta.dirname, '..', 'commands', 'configure.md'), 'utf8').replace(/\r\n/g, '\n');
     const crlf = lf.replace(/\n/g, '\r\n');
     assert.deepStrictEqual(parseAskBlocks(crlf), parseAskBlocks(lf));
     assert.deepStrictEqual(parseAskBlocks(crlf).flatMap(problemsOf), []);
@@ -43,7 +45,7 @@ test('a command file with CRLF line endings - a Windows checkout under Git\'s de
 
 test('the commands hold every ask block to the limits', () =>
 {
-    const root = path.join(__dirname, '..');
+    const root = path.join(import.meta.dirname, '..');
     let seen = 0;
     const walk = (d) => fs.existsSync(d) && fs.readdirSync(d, { withFileTypes: true }).forEach((e) =>
     {
@@ -62,7 +64,7 @@ test('the commands hold every ask block to the limits', () =>
 });
 
 test('the walks write what the step sets (`next.set`, the one location left) and make no call for an empty one', () => {
-    const root = path.join(__dirname, '..');
+    const root = path.join(import.meta.dirname, '..');
     for (const file of ['install.md', 'configure.md'])
     {
         const text = fs.readFileSync(path.join(root, 'commands', file), 'utf8').replace(/\s+/g, ' ');
@@ -72,7 +74,7 @@ test('the walks write what the step sets (`next.set`, the one location left) and
 });
 
 test("install maps both API key answers: 'No key' is written, since 'Use a key from .mcps-secrets' is the default when a key is found", () => {
-    const text = fs.readFileSync(path.join(__dirname, '..', 'commands', 'install.md'), 'utf8');
+    const text = fs.readFileSync(path.join(import.meta.dirname, '..', 'commands', 'install.md'), 'utf8');
     const row = text.split('\n').find((l) => l.startsWith('| API key'));
     // the labels toolAsk prints (scripts/plan/asks-other.ts), each mapped
     for (const label of ['Use a key from .mcps-secrets', 'No key - lower rate limits', 'Sign in with OAuth']) assert.ok(row && row.includes(`'${label}'`), `${label}: ${row}`);
@@ -80,26 +82,23 @@ test("install maps both API key answers: 'No key' is written, since 'Use a key f
 });
 
 test('install has no step for servers already set up', () => {
-    const text = fs.readFileSync(path.join(__dirname, '..', 'commands', 'install.md'), 'utf8');
+    const text = fs.readFileSync(path.join(import.meta.dirname, '..', 'commands', 'install.md'), 'utf8');
     assert.deepStrictEqual(text.split('\n').filter((l) => /^## /.test(l) && /already set up/.test(l)), []);
     assert.ok(!text.includes('existing.calls'));
 });
 
 test('asks.js never requires plan.js: the shared readers (currentOf, logicalRoot) live in entries.js, so there is no require cycle', () => {
-    const fs = require('node:fs');
-    const plan = path.join(__dirname, '..', 'scripts', 'plan');
-    for (const f of fs.readdirSync(plan).filter((x) => /^(asks-.*|walk)\.js$/.test(x)))
-        assert.doesNotMatch(fs.readFileSync(path.join(plan, f), 'utf8'), /require\('\.\/(plan|context|pick|change|render|command)\.js'\)/, f);
-    const { logicalRoot } = require('../scripts/entries/locations.ts');
-    const { currentOf } = require('../scripts/entries/entry.ts');
+    const plan = path.join(import.meta.dirname, '..', 'scripts', 'plan');
+    const asks = fs.readdirSync(plan).filter((x) => /^(asks-.*|walk)\.ts$/.test(x));
+    assert.ok(asks.length >= 8, `the asks split: ${asks.join(', ')}`);
+    for (const f of asks)
+        assert.doesNotMatch(fs.readFileSync(path.join(plan, f), 'utf8'), /^\s*(?:import|export)\b[^;]*?\bfrom\s+'(?:\.\/|\.\.\/plan\/)(plan|context|pick|change|render|command)\.ts'/m, f);
     assert.strictEqual(typeof currentOf, 'function');
     assert.deepStrictEqual(logicalRoot('/work/shop/.preferred-tools/serena', { platform: 'darwin', project: '/work/shop', home: '/Users/me' }), { kind: 'project', rel: '.preferred-tools/serena' });
     assert.deepStrictEqual(logicalRoot('/Users/me/.preferred-tools/serena', { platform: 'darwin', project: '/work/shop', home: '/Users/me' }), { kind: 'home', rel: '.preferred-tools/serena' });
 });
 
 test('staticAsk fills a STATIC function\'s own placeholders', () => {
-    const { staticAsk } = require('./ask-blocks.ts');
-    const { STATIC } = require('../scripts/plan/asks-other.ts');
     assert.deepStrictEqual(STATIC['cursor-name-taken'].placeholders, ['<file>', '<name>']);
     const q = staticAsk('cursor-name-taken');
     assert.match(q.question, /^Cursor's <file> already has a server named <name> that preferred-tools did not write/);
@@ -109,7 +108,7 @@ test('staticAsk fills a STATIC function\'s own placeholders', () => {
     // install and configure both carry the block, and it is sound
     for (const cmd of ['install.md', 'configure.md'])
     {
-        const blocks = parseAskBlocks(fs.readFileSync(path.join(__dirname, '..', 'commands', cmd), 'utf8')).filter((b) => b.id === 'cursor-name-taken');
+        const blocks = parseAskBlocks(fs.readFileSync(path.join(import.meta.dirname, '..', 'commands', cmd), 'utf8')).filter((b) => b.id === 'cursor-name-taken');
         assert.strictEqual(blocks.length, 1, cmd);
         assert.deepStrictEqual(problemsOf(blocks[0]), [], cmd);
     }

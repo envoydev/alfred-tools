@@ -1,18 +1,19 @@
-'use strict';
 // client-drift and cursor-file (spec D9, 0.5.0): a list entry whose copy in Claude Code or Cursor was edited or removed
 // by hand, asked per entry - never in 'Apply all found' - and a Cursor file preferred-tools cannot read, as advice.
 // Every case runs against the fake claude in a throwaway world.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const { world, readJson, writeJson } = require('./helpers.ts');
-const inventory = require('../scripts/inventory/inventory.ts');
-const { makeCtx, detectAll, applyFixes, questions } = require('../scripts/fix/fix.ts');
-const cli = require('../scripts/core/claude-cli.ts');
-const { plan } = require('../scripts/plan/plan.ts');
-const { apply } = require('../scripts/apply/run.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { world, readJson, writeJson } from './helpers.ts';
+import * as inventory from '../scripts/inventory/inventory.ts';
+import { makeCtx, detectAll, applyFixes, questions } from '../scripts/fix/fix.ts';
+import * as cli from '../scripts/core/claude-cli.ts';
+import { plan } from '../scripts/plan/plan.ts';
+import { apply } from '../scripts/apply/run.ts';
+import { accountFile } from '../scripts/core/account.ts';
 
 const noMachine = () => ({ exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1, stdout: '', stderr: '' }), nodeVersion: '24.0.0' });
 
@@ -56,11 +57,12 @@ const labels = (q) => q.options.map((o) => o.label);
 
 test('fixes/lists.js loads before plan-lists.js and both export every function', () =>
 {
-    const scripts = path.join(__dirname, '..', 'scripts');
+    const scripts = path.join(import.meta.dirname, '..', 'scripts');
     for (const order of [['fix/lists.ts', 'plan/lists.ts', 'plan/cursor-steps.ts', 'plan/repair-tail.ts'], ['plan/repair-tail.ts', 'plan/cursor-steps.ts', 'plan/lists.ts', 'fix/lists.ts']])
     {
-        const code = `const out = ${JSON.stringify(order)}.map((f) => require(${JSON.stringify(scripts)} + '/' + f)); const bad = out.flatMap((m, i) => Object.entries(m).filter(([, v]) => v === undefined).map(([k]) => ${JSON.stringify(order)}[i] + ':' + k)); if (bad.length) { console.log(bad.join(',')); process.exit(1); }`;
-        const r = spawnSync(process.execPath, ['-e', code], { encoding: 'utf8' });
+        const urls = order.map((f) => pathToFileURL(path.join(scripts, f)).href);
+        const code = `const out = []; for (const u of ${JSON.stringify(urls)}) out.push(await import(u)); const bad = out.flatMap((m, i) => Object.entries(m).filter(([, v]) => v === undefined).map(([k]) => ${JSON.stringify(order)}[i] + ':' + k)); if (bad.length) { console.log(bad.join(',')); process.exit(1); }`;
+        const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8' });
         assert.strictEqual(r.status, 0, `${order.join(' then ')}: ${r.stdout}${r.stderr}`);
     }
 });
@@ -164,7 +166,7 @@ test('a Cursor copy whose key field is empty where the list holds the key offers
         assert.deepStrictEqual(labels(q), ['Restore from the list (Recommended)', 'Leave Cursor\'s copy as it is']);
         const keep = run(w, ['none'], { 'drift:cursor:sentry~user': 'keep' });
         assert.match(keep.text, /its key field is empty, so Keep is not offered - answer restore or leave/);
-        assert.strictEqual(sentryKey(readJson(require('../scripts/core/account.ts').accountFile(w.env)).mcpServers.sentry), value, 'Claude Code keeps its key');
+        assert.strictEqual(sentryKey(readJson(accountFile(w.env)).mcpServers.sentry), value, 'Claude Code keeps its key');
         const r = run(w, ['none'], { 'drift:cursor:sentry~user': 'restore' });
         assert.strictEqual(r.res.failed, null, r.text);
         assert.strictEqual(sentryKey(copyOf(globalCursor(w), 'sentry')), value);

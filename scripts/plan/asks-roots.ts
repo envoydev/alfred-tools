@@ -1,8 +1,7 @@
-'use strict';
-const { installedOf } = require('../inventory/inventory.ts');
-const roots = require('../roots/roots.ts');
-const { REC } = require('./asks-keys.ts');
-const { scopeOrder } = require('./asks-tool.ts');
+import { installedOf } from '../inventory/inventory.ts';
+import * as roots from '../roots/roots.ts';
+import { REC } from './asks-keys.ts';
+import { scopeOrder } from './asks-tool.ts';
 
 // ---- the root questions (spec D2) ----------------------------------------------------------------------------------
 // One question per scope family a pick or a recorded answer needs, never per tool. 'A folder you name' is asked next, in
@@ -14,7 +13,7 @@ const ROOT_TEXT = {
 };
 
 // A pick needs a root when it has a data folder or a key: the key file and the helper live in the root.
-function needsRoot(row, routeId)
+export function needsRoot(row, routeId)
 {
     if (row.kind !== 'mcp') return false;
     const route = row.routes && row.routes[routeId];
@@ -22,7 +21,7 @@ function needsRoot(row, routeId)
 }
 
 // The families the questions input needs a root for: each pick at its answered (else recommended) scope.
-function rootFamilies(inv, picks, catalog, ctx)
+export function rootFamilies(inv, picks, catalog, ctx)
 {
     const out = new Set();
     const routes = (picks && picks.routes) || {};
@@ -40,7 +39,7 @@ function rootFamilies(inv, picks, catalog, ctx)
 }
 
 // -> { question, answers: { <label as shown>: { family, id, root } } }
-function rootQuestion(inv, family, ctx)
+export function rootQuestion(inv, family, ctx)
 {
     const opts = roots.options(inv, family, ctx).map((o, i) => ({ ...o, label: `${o.label}${i === 0 ? REC : ''}` }));
     return {
@@ -49,7 +48,7 @@ function rootQuestion(inv, family, ctx)
     };
 }
 
-function rootsBlock(inv, picks, catalog, ctx)
+export function rootsBlock(inv, picks, catalog, ctx)
 {
     const out = { questions: [], answers: {} };
     for (const family of rootFamilies(inv, picks, catalog, ctx))
@@ -61,4 +60,3 @@ function rootsBlock(inv, picks, catalog, ctx)
     return out;
 }
 
-module.exports = { needsRoot, rootFamilies, rootQuestion, rootsBlock };

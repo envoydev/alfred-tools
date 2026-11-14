@@ -1,8 +1,27 @@
-'use strict';
 // plan-lists.js - the list-write steps a plan writes into each family's mcps.json (spec D1).
-const test = require('node:test');
-const assert = require('node:assert');
-const { listSteps } = require('../scripts/plan/lists.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import { listSteps } from '../scripts/plan/lists.ts';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { cursorSteps, takenNames } from '../scripts/plan/cursor-steps.ts';
+import { renderLine, changedOutside } from '../scripts/plan/repair-tail.ts';
+import { cursorNameQuestion } from '../scripts/plan/asks-other.ts';
+import { listWrite } from '../scripts/apply/file-steps.ts';
+import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
+import { load } from '../scripts/catalog/catalog.ts';
+import { plan } from '../scripts/plan/plan.ts';
+import { render } from '../scripts/plan/render.ts';
+import { signInParts, signInFormOf } from '../scripts/entries/sign-in.ts';
+import { READ_GUARD } from '../scripts/roots/roots.ts';
+import * as wsLib from '../scripts/roots/workspace.ts';
+import * as kept from '../scripts/core/kept.ts';
+import { world } from './helpers.ts';
+import * as inventoryLib from '../scripts/inventory/inventory.ts';
+import { apply } from '../scripts/apply/run.ts';
+import * as cli from '../scripts/core/claude-cli.ts';
 
 const POSIX_FIXTURE = process.platform === 'win32' && 'NOT RUN: a darwin fixture meets node\'s win32 path module on this host (the matrix covers Windows)';
 const PROJECT_LIST = '/work/shop/.preferred-tools/mcps.json';
@@ -60,16 +79,7 @@ test('install over 0.4.x registrations imports the family it writes', { skip: PO
 });
 
 // ---- Cursor's files (spec D2, D4, D4a): cursor-write steps and the cursor-name-taken question --------------------------
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const { cursorSteps, takenNames } = require('../scripts/plan/cursor-steps.ts');
-const { renderLine } = require('../scripts/plan/repair-tail.ts');
-const { cursorNameQuestion } = require('../scripts/plan/asks-other.ts');
-const { listWrite } = require('../scripts/apply/file-steps.ts');
-const cursorMcp = require('../scripts/cursor/cursor-mcp.ts');
-const catalogAll = require('../scripts/catalog/catalog.ts').load();
+const catalogAll = load();
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plcur-')));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -169,7 +179,7 @@ test('no answer for a taken name is a plan error and nothing is written', () => 
     assert.deepStrictEqual(out.taken, [{ file: w.cursorFile, name: 'serena', sameRow: false }], 'plan.js turns each into a cursor-name question in plan.json');
     const planFile = path.join(w.dir, 'plan.json');
     fs.writeFileSync(planFile, JSON.stringify({ version: 1, project: w.project, steps: [...out.steps, ...steps], notes: out.notes, errors: out.errors }));
-    const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'apply.ts'), planFile], { encoding: 'utf8' });
+    const r = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'apply.ts'), planFile], { encoding: 'utf8' });
     assert.strictEqual(r.status, 1, r.stderr);
     assert.strictEqual(fs.readFileSync(w.cursorFile, 'utf8'), text);
     assert.ok(!fs.existsSync(w.listFile));
@@ -281,10 +291,6 @@ test('a member file holding the name asks for that file, keyed <name>@<file>', (
 });
 
 // ---- hosted routes in both apps (spec D5, ruling 12, ruling 13) -----------------------------------------------------
-const { plan } = require('../scripts/plan/plan.ts');
-const { render } = require('../scripts/plan/render.ts');
-const { signInParts, signInFormOf } = require('../scripts/entries/sign-in.ts');
-const { READ_GUARD } = require('../scripts/roots/roots.ts');
 const MR = catalogAll.byId.get('sentry').routes.bridge.package;
 const hinv = (extra = {}) => ({ version: 1, os: 'darwin', arch: 'arm64', project: '/work/shop', cli: { ok: true }, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, roots: { map: null }, lists: { project: null, global: null }, ...extra });
 const HOPTS = { env: {}, home: '/Users/me' };
@@ -433,7 +439,6 @@ test('deny-read\'s file sits under the isolated CLAUDE_CONFIG_DIR, never the rea
 });
 
 // ---- a workspace in Cursor (spec D4a) ----------------------------------------------------------------------------------
-const wsLib = require('../scripts/roots/workspace.ts');
 const wsRec = (folder, doc) => { fs.mkdirSync(path.join(folder, '.alfred'), { recursive: true }); fs.writeFileSync(path.join(folder, '.alfred', 'workspace.json'), JSON.stringify(doc)); };
 const MEMORY_A = { command: 'uvx', args: ['mcp-memory-service', '--a'] };
 // a root (the project, `shop`) listing a, b and c, c ignored; each member's record names the root. `own`: a's own list.
@@ -628,7 +633,6 @@ test('at global scope the value goes in ~/.cursor/mcp.json from .mcps-secrets an
     const secret = `ghp_${'q'.repeat(36)}`;
     fs.mkdirSync(groot, { recursive: true });
     fs.writeFileSync(path.join(groot, '.mcps-secrets'), `WORK_GH=${secret}\n`);
-    const kept = require('../scripts/core/kept.ts');
     const GH = { command: 'docker', args: ['run', '-i', '--rm', '-e', 'GITHUB_PERSONAL_ACCESS_TOKEN', 'ghcr.io/github/github-mcp-server:v1.0.0'], env: { GITHUB_PERSONAL_ACCESS_TOKEN: kept.MARKER } };
     fs.writeFileSync(glist, JSON.stringify({ version: 1, own: [], servers: [{ name: 'github', scope: 'user', row: 'github', route: 'local', clients: ['claude', 'cursor'], entry: GH, key: 'WORK_GH' }] }));
     const cfile = path.join(w.home, '.cursor', 'mcp.json');
@@ -648,11 +652,6 @@ test('at global scope the value goes in ~/.cursor/mcp.json from .mcps-secrets an
 // ---- 0.5.0: what changed outside preferred-tools (spec D1) -----------------------------------------------------------
 test('install names a listed server missing from Claude Code and re-adds nothing', () =>
 {
-    const { world } = require('./helpers.ts');
-    const { changedOutside } = require('../scripts/plan/repair-tail.ts');
-    const inventoryLib = require('../scripts/inventory/inventory.ts');
-    const { apply } = require('../scripts/apply/run.ts');
-    const cli = require('../scripts/core/claude-cli.ts');
     const w = world();
     try
     {

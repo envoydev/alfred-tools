@@ -1,17 +1,22 @@
-'use strict';
 // The walk (spec F1, F2): `asks.next` hands the command one step of one tool at a time - settings first, then each
 // tool's route, scope and name, its root when this run has not answered it, its location and extras, its key name and
 // settings - and `done` once nothing is left. Each step is answered with its recommended option here, and recorded into
 // picks.json as the commands do.
-const test = require('node:test');
-const assert = require('node:assert');
-const { scopeOfLabel, recommendedScope, PARENT_HELPER_IN_CHILD, settingsQuestion } = require('../scripts/plan/asks-keys.ts');
-const { routeQuestion, scopesFor } = require('../scripts/plan/asks-tool.ts');
-const { STATIC, clientsQuestion } = require('../scripts/plan/asks-other.ts');
-const { all } = require('../scripts/plan/asks-all.ts');
-const { next, ownStep } = require('../scripts/plan/walk.ts');
-const { plan } = require('../scripts/plan/plan.ts');
-const catalog = require('../scripts/catalog/catalog.ts').load();
+import test from 'node:test';
+import assert from 'node:assert';
+import { scopeOfLabel, recommendedScope, PARENT_HELPER_IN_CHILD, settingsQuestion } from '../scripts/plan/asks-keys.ts';
+import { routeQuestion, scopesFor } from '../scripts/plan/asks-tool.ts';
+import { STATIC, clientsQuestion } from '../scripts/plan/asks-other.ts';
+import { all } from '../scripts/plan/asks-all.ts';
+import { next, ownStep } from '../scripts/plan/walk.ts';
+import { plan } from '../scripts/plan/plan.ts';
+import { load } from '../scripts/catalog/catalog.ts';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
+import { render } from '../scripts/plan/render.ts';
+const catalog = load();
 
 const MAC = { os: 'darwin', arch: 'arm64', project: '/work/shop' };
 const LINUX = { os: 'linux', arch: 'x64', project: '/work/shop' };
@@ -217,9 +222,6 @@ test('the recommended scope for a hosted key follows M1', () => {
 
 // ---- the bridge (0.4.0) ---------------------------------------------------------------------------------------------
 
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
 
 test('sentry offers three routes, Hosted first, and the bridge recommends Project', () => {
     const sentry = catalog.byId.get('sentry');
@@ -294,7 +296,6 @@ test('every bridge step asks at most four questions with two to four options', (
 });
 
 // ---- which apps (spec D3) -------------------------------------------------------------------------------------------
-const cursorMcp = require('../scripts/cursor/cursor-mcp.ts');
 
 const appsDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-apps-')));
 test.after(() => fs.rmSync(appsDir, { recursive: true, force: true }));
@@ -357,16 +358,16 @@ test('install for both writes the list with both clients and one cursor-write pe
     assert.deepStrictEqual(lw.flatMap((s) => s.upserts.map((u) => [u.server.name, u.server.clients])).sort(), [['context7', ['claude', 'cursor']], ['memory', ['claude', 'cursor']]]);
     const cw = p.steps.filter((s) => s.op === 'cursor-write');
     assert.deepStrictEqual(cw.map((s) => s.file).sort(), ['/Users/me/.cursor/mcp.json', '/work/shop/.cursor/mcp.json']);
-    const text = require('../scripts/plan/render.ts').render(p);
+    const text = render(p);
     assert.ok(text.includes('Apps: Claude Code and Cursor'), text);
     // Claude Code only: no cursor-write, and the plan says so
     const only = plan(inv(MAC), { ...answers, clients: ['claude'] }, { env: {}, home: '/Users/me' });
     assert.deepStrictEqual(only.steps.filter((s) => s.op === 'cursor-write'), []);
-    assert.ok(require('../scripts/plan/render.ts').render(only).includes('Apps: Claude Code\n'), require('../scripts/plan/render.ts').render(only));
+    assert.ok(render(only).includes('Apps: Claude Code\n'), render(only));
     // no answer (an older answers file): Claude Code only, no Apps line
     const none = plan(inv(MAC), { picks: answers.picks }, { env: {}, home: '/Users/me' });
     assert.deepStrictEqual(none.steps.filter((s) => s.op === 'list-write').flatMap((s) => s.upserts.map((u) => u.server.clients)), [['claude'], ['claude']]);
-    assert.ok(!require('../scripts/plan/render.ts').render(none).includes('Apps:'));
+    assert.ok(!render(none).includes('Apps:'));
 });
 
 test('configure: a clients change alone plans no mcp step', { skip: process.platform === 'win32' && 'NOT RUN: a darwin fixture on a win32 host' }, () => {

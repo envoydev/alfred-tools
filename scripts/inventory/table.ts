@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // THE TABLE - the whole catalog for this OS as one numbered table, with what is installed at each scope.
 //
 //   node table.js <inventory.json>
@@ -7,14 +6,14 @@
 // Printed to the tool result, never written to a file. A cell holds, for each server installed at that scope,
 // `<name> [<route>, <pin>]`. A registration that matches no row is the user's: it is named under the table and nothing
 // in this plugin touches it.
-const catalogLib = require('../catalog/catalog.ts');
-const { fromHere } = require('./inventory.ts');
-const { pinnedVersion, launchArgs } = require('../fix/common.ts');
+import * as catalogLib from '../catalog/catalog.ts';
+import { fromHere } from './inventory.ts';
+import { pinnedVersion, launchArgs } from '../fix/common.ts';
 
 const SCOPES = ['local', 'project', 'user'];
 
 // The pin a registration carries: the package version, the image tag, or null (a hosted URL, a binary).
-function pinOf(row, routeId, entry)
+export function pinOf(row, routeId, entry)
 {
     const def = (row.routes || {})[routeId];
     if (!def) return null;
@@ -28,7 +27,7 @@ function pinOf(row, routeId, entry)
 
 const cellOf = (items) => (items.length ? items.join('; ') : '-');
 
-function render(inv, catalog = catalogLib.load())
+export function render(inv, catalog = catalogLib.load())
 {
     const rows = catalog.tools.filter((r) => r.os.includes(inv.os));
     const body = rows.map((row, i) =>
@@ -62,4 +61,3 @@ function render(inv, catalog = catalogLib.load())
     return [...out, ...(notes.length ? ['', ...notes] : [])].join('\n');
 }
 
-module.exports = { render, pinOf };

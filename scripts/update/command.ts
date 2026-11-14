@@ -1,16 +1,15 @@
-'use strict';
 // The update command: reads its flags and runs the check, the asks or the apply.
-const path = require('node:path');
-const inventory = require('../inventory/inventory.ts');
-const cli = require('../core/claude-cli.ts');
-const tmpdir = require('../core/tmpdir.ts');
-const { makeCtx, check, render } = require('./check.ts');
-const { questions } = require('./asks.ts');
-const { applyUpdates } = require('./apply.ts');
+import path from 'node:path';
+import * as inventory from '../inventory/inventory.ts';
+import * as cli from '../core/claude-cli.ts';
+import * as tmpdir from '../core/tmpdir.ts';
+import { makeCtx, check, render } from './check.ts';
+import { questions } from './asks.ts';
+import { applyUpdates } from './apply.ts';
 
 // ---- CLI -------------------------------------------------------------------------------------------------------------
 
-function parseArgs(argv)
+export function parseArgs(argv)
 {
     const args = { input: {} };
     for (let i = 0; i < argv.length; i++)
@@ -36,7 +35,7 @@ function parseArgs(argv)
     return args;
 }
 
-async function main(argv, { env = process.env, out = (s) => process.stdout.write(`${s}\n`), machine, registry, now, runCli } = {})
+export async function main(argv, { env = process.env, out = (s) => process.stdout.write(`${s}\n`), machine, registry, now, runCli } = {})
 {
     let args;
     try { args = parseArgs(argv); }
@@ -60,4 +59,3 @@ async function main(argv, { env = process.env, out = (s) => process.stdout.write
     return 0;
 }
 
-module.exports = { parseArgs, main };

@@ -1,14 +1,13 @@
-'use strict';
 // Location roots: a logical root, where it is written, and the entry's location arguments and env.
-const fs = require('node:fs');
-const path = require('node:path');
-const { slashes, pathFor } = require('./platform.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import { slashes, pathFor } from './platform.ts';
 
 // ---- location roots -------------------------------------------------------------------------------------------------
 // A root is logical until it is written: { kind: 'project', rel } (under the project), { kind: 'home', rel } (under the
 // account home) or { kind: 'abs', path }.
 
-function parseRoot(text, ctx)
+export function parseRoot(text, ctx)
 {
     const t = String(text).trim();
     if (t === '~' || /^~[\\/]/.test(t)) return { kind: 'home', rel: slashes(t.slice(2)) };
@@ -19,7 +18,7 @@ function parseRoot(text, ctx)
 
 // A written root read back as a logical one: an absolute path under the project or the account home becomes that side
 // again, so a move to project scope can write it relative.
-function logicalRoot(text, ctx)
+export function logicalRoot(text, ctx)
 {
     const root = parseRoot(text, ctx);
     if (root.kind !== 'abs') return root;
@@ -31,12 +30,12 @@ function logicalRoot(text, ctx)
     return root;
 }
 
-const homeVar = (platform) => (platform === 'win32' ? '${USERPROFILE}' : '${HOME}');
+export const homeVar = (platform) => (platform === 'win32' ? '${USERPROFILE}' : '${HOME}');
 
 // ${NAME} and ${NAME:-fallback} in an MCP entry, as Claude Code expands them (2.1.322, read from its own expander): a
 // variable that is set gives its value, an empty one included; the fallback is used only when it is unset; an unset
 // ${NAME} with no fallback stays as written and is named. -> { value, unset: [NAME] }
-function expandVars(text, env)
+export function expandVars(text, env)
 {
     const unset = [];
     const value = String(text).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (m, name, fallback) =>
@@ -52,7 +51,7 @@ function expandVars(text, env)
 // The string written into the registration: an absolute path at every scope, project scope included (the user's ruling,
 // 2026-11-11: the .mcp.json names this machine's paths), with `~` expanded here, never left for the server. `scope` is
 // kept for the callers that pass it.
-function formatRoot(root, scope, ctx)
+export function formatRoot(root, scope, ctx)
 {
     const P = pathFor(ctx.platform);
     if (root.kind === 'abs') return { value: P.normalize(root.path) };
@@ -61,14 +60,14 @@ function formatRoot(root, scope, ctx)
 }
 
 // root + sub, in the written form: joined with the OS's separator at every scope
-function withSub(rootStr, sub, scope, ctx)
+export function withSub(rootStr, sub, scope, ctx)
 {
     if (!sub) return rootStr;
     return pathFor(ctx.platform).join(rootStr, sub);
 }
 
 // serena on Windows: SERENA_HOME absolute, in backslashes and space-free (fix row serena-windows-home).
-function serenaWindowsHome(ctx)
+export function serenaWindowsHome(ctx)
 {
     const profile = ctx.home || '';
     if (profile && !/\s/.test(profile)) return { root: { kind: 'abs', path: path.win32.join(profile, '.serena') } };
@@ -77,13 +76,13 @@ function serenaWindowsHome(ctx)
 
 // A profile path with a space leaves serena no home under it: the space-free folder offered and taken by default in its
 // place, on the system drive.
-function serenaSpaceFree(ctx)
+export function serenaSpaceFree(ctx)
 {
     const drive = (ctx.env && ctx.env.SystemDrive) || '';
     return { kind: 'abs', path: `${/^[A-Za-z]:$/.test(drive) ? drive : 'C:'}\\serena-home` };
 }
 
-function validWindowsSerenaHome(rootStr)
+export function validWindowsSerenaHome(rootStr)
 {
     return path.win32.isAbsolute(rootStr) && !/\s/.test(rootStr) && !rootStr.includes('/') && /^[A-Za-z]:\\/.test(rootStr);
 }
@@ -91,7 +90,7 @@ function validWindowsSerenaHome(rootStr)
 // The default root for a row (before the user's answer), as a logical root: the project folder (memory: the account
 // folder), never alfred-code's - the plugin stands alone. alfred-code data already on disk comes back as `alfred`, an
 // answer of its own. serena on Windows overrides both.
-function defaultRoot(row, name, ctx)
+export function defaultRoot(row, name, ctx)
 {
     const loc = row.locations;
     if (loc.windowsAbsolute && ctx.platform === 'win32') return serenaWindowsHome(ctx);
@@ -102,7 +101,7 @@ function defaultRoot(row, name, ctx)
 }
 
 // The row's alfred-code data folder when it is on disk (its old root from original-mcps.json), else null.
-function alfredRoot(row, ctx)
+export function alfredRoot(row, ctx)
 {
     if (!row.locations || !row.locations.alfred) return null;
     const exists = ctx.exists || ((p) => fs.existsSync(p));
@@ -114,19 +113,19 @@ function alfredRoot(row, ctx)
 // ---- alfred-code's folder -------------------------------------------------------------------------------------------
 // alfred-code's own entries under .alfred, never a data folder (3.9.2 stack/hooks/layout.js: the docs root, state and
 // statistics, the workspace link file, and flow, a 2.x folder its migration still reads).
-const ALFRED_ENTRIES = ['docs', 'state', 'statistics', 'workspace', 'flow'];
+export const ALFRED_ENTRIES = ['docs', 'state', 'statistics', 'workspace', 'flow'];
 
 // alfred-code is set up in this project: enabled for it AND <project>/.alfred/.gitignore is there, the file that keeps
 // its data out of git.
 // A value that names this machine: an absolute path (POSIX, a drive, UNC) or ~, with no ${VAR} in it. Every scope
 // takes one since 0.3.0 (project scope names this machine's paths); fix rows still read it to tell such a value apart.
-function machinePath(value)
+export function machinePath(value)
 {
     if (typeof value !== 'string' || value.includes('${')) return false;
     return /^(\/|~|\\\\)/.test(value) || /^[A-Za-z]:[\\/]/.test(value);
 }
 
-function alfredData(ctx, enabled)
+export function alfredData(ctx, enabled)
 {
     if (!enabled) return false;
     const exists = ctx.exists || ((p) => fs.existsSync(p));
@@ -134,7 +133,7 @@ function alfredData(ctx, enabled)
 }
 
 // Why .alfred/<name> cannot hold this tool's data, or null.
-function alfredNameProblem(name, ctx)
+export function alfredNameProblem(name, ctx)
 {
     // macOS and Windows file systems ignore case: '.alfred/Docs' is alfred-code's docs folder there
     if (ALFRED_ENTRIES.includes(String(name).toLowerCase())) return `'${name}' is one of alfred-code's own entries under .alfred (${ALFRED_ENTRIES.join(', ')}) - pick another name or folder`;
@@ -148,7 +147,7 @@ function alfredNameProblem(name, ctx)
 
 // The root of a scope family (spec D2): ctx.roots when the plan or the questions resolved them, else the recommended
 // ones without alfred-code - <project>/.preferred-tools and <home>/.preferred-tools.
-function rootOf(family, ctx)
+export function rootOf(family, ctx)
 {
     const P = pathFor(ctx.platform);
     const set = ctx.roots && ctx.roots[family];
@@ -160,7 +159,7 @@ function rootOf(family, ctx)
 // family - 'project' (the project root) at project and local scope, 'account' (the global root) at global scope. serena
 // on Windows needs an absolute, space-free home: a root with a space gives 'default' (the profile's .serena, else a
 // space-free folder).
-function recommendedSide(row, scope, ctx)
+export function recommendedSide(row, scope, ctx)
 {
     const side = scope === 'user' ? 'account' : 'project';
     if (row.locations.windowsAbsolute && ctx.platform === 'win32') return validWindowsSerenaHome(rootOf(side === 'account' ? 'global' : 'project', ctx)) ? side : 'default';
@@ -168,17 +167,17 @@ function recommendedSide(row, scope, ctx)
 }
 
 // A tool's folder in a root, as a logical root: 'account' - the global root's, else the project root's (spec D2).
-function otherPlace(row, name, side, ctx = null)
+export function otherPlace(row, name, side, ctx = null)
 {
     if (ctx && ctx.platform && (ctx.roots || ctx.project)) return logicalRoot(pathFor(ctx.platform).join(rootOf(side === 'account' ? 'global' : 'project', ctx), name), ctx);
     return side === 'account' ? { kind: 'home', rel: `.preferred-tools/${name}` } : { kind: 'project', rel: `.preferred-tools/${name}` };
 }
 
 // The other place from 'Locations': the account folder for a project default, the project folder for memory.
-const otherSide = (row, name, ctx = null) => otherPlace(row, name, row.locations.defaultSide === 'account' ? 'project' : 'account', ctx);
+export const otherSide = (row, name, ctx = null) => otherPlace(row, name, row.locations.defaultSide === 'account' ? 'project' : 'account', ctx);
 
 // The root an installed entry carries, in written form, from the row's first derived key.
-function rootOfEntry(row, entry)
+export function rootOfEntry(row, entry)
 {
     const d = row.locations.derived[0];
     let value;
@@ -197,7 +196,7 @@ function rootOfEntry(row, entry)
 }
 
 // Write the location root into an entry (fresh build or an edit of an installed one): every derived key.
-function applyRoot(entry, row, rootStr, scope, ctx)
+export function applyRoot(entry, row, rootStr, scope, ctx)
 {
     const out = { ...entry, env: { ...(entry.env || {}) } };
     if (entry.args) out.args = [...entry.args];
@@ -215,4 +214,3 @@ function applyRoot(entry, row, rootStr, scope, ctx)
     return out;
 }
 
-module.exports = { parseRoot, logicalRoot, formatRoot, withSub, homeVar, serenaWindowsHome, serenaSpaceFree, validWindowsSerenaHome, defaultRoot, alfredRoot, otherSide, otherPlace, rootOfEntry, applyRoot, ALFRED_ENTRIES, alfredData, alfredNameProblem, recommendedSide, rootOf, machinePath, expandVars };

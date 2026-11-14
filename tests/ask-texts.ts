@@ -1,16 +1,15 @@
-'use strict';
 // Every question the walk can put, for the 'no text sends the user to Other' rule (spec D8): tests/lint.ts checks the
 // texts, tests/plan.test.ts and tests/roots.test.ts use the same pattern. One home for the pattern and the fixtures.
-const catalogLib = require('../scripts/catalog/catalog.ts');
-const { all } = require('../scripts/plan/asks-all.ts');
-const { ownStep } = require('../scripts/plan/walk.ts');
-const existing = require('../scripts/inventory/existing.ts');
-const { plan } = require('../scripts/plan/plan.ts');
+import * as catalogLib from '../scripts/catalog/catalog.ts';
+import { all } from '../scripts/plan/asks-all.ts';
+import { ownStep } from '../scripts/plan/walk.ts';
+import * as existing from '../scripts/inventory/existing.ts';
+import { plan } from '../scripts/plan/plan.ts';
 
 // alfred-code 3.9.2 stack/hooks/guard-stop-contract.js: an ask that sends the user to the Other field. 'under Other',
 // which today's three typed values used, is not matched by it and is checked beside it.
-const OTHER_RE = /\b(?:in|into|via|through|using) (?:the )?['‘’]?Other\b|\btype (?:it|them|\w+) (?:in|into)\b[^.]{0,20}\bOther\b/;
-const sendsToOther = (text) => OTHER_RE.test(String(text)) || /under Other/.test(String(text));
+export const OTHER_RE = /\b(?:in|into|via|through|using) (?:the )?['‘’]?Other\b|\btype (?:it|them|\w+) (?:in|into)\b[^.]{0,20}\bOther\b/;
+export const sendsToOther = (text) => OTHER_RE.test(String(text)) || /under Other/.test(String(text));
 
 const MAC = { os: 'darwin', arch: 'arm64', project: '/work/shop' };
 const WIN = { os: 'win32', arch: 'x64', project: 'C:\\my work\\shop' };
@@ -25,7 +24,7 @@ const qOf = (x) => (x && x.question ? [x.question] : []);
 // -> [{ where, question }] over the four fixtures: the static asks, the picks, configure's groups and removes, every tool's
 // and every target's questions, the roots, the key names, the settings, a bridge's URL names, the servers already set up
 // and those on their own.
-function walkQuestions()
+export function walkQuestions()
 {
     const catalog = catalogLib.load();
     const out = [];
@@ -64,7 +63,6 @@ function walkQuestions()
 }
 
 // -> [{ where, text }]: each question's text, header, and each option's label and description
-const walkTexts = () => walkQuestions().flatMap(({ where, question: x }) =>
+export const walkTexts = () => walkQuestions().flatMap(({ where, question: x }) =>
     [x.question, x.header, ...x.options.flatMap((o) => [o.label, o.description])].filter(Boolean).map((text) => ({ where, text })));
 
-module.exports = { OTHER_RE, sendsToOther, walkQuestions, walkTexts };

@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // THE FIX ENGINE - known problems and their recorded fixes (catalog/fixes.json, detectors in scripts/fix/).
 //
 //   node fix.js --detect [--only <fix id | tool | registration name>] [--json] [--project <dir>] [--data <dir>]
@@ -16,30 +15,30 @@
 // its detector again, and the restart line comes last - unless every fix applied was one a session does not need to restart
 // for (a data folder's .gitignore). A finding with `blocked` is shown and never applied; a row with
 // `hold` in the catalog is listed as held and never detected.
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const catalogLib = require('../catalog/catalog.ts');
-const inventory = require('../inventory/inventory.ts');
-const account = require('../core/account.ts');
-const { apply } = require('../apply/run.ts');
-const cli = require('../core/claude-cli.ts');
-const { writeJob, job, nextLines } = require('../apply/fetch.ts');
-const F = require('./fix-functions.ts');
-const { realMachine, clone } = require('./common.ts');
-const { deepEqual } = require('../plan/plan.ts');
-const { useRoots, fileSteps } = require('../plan/pick.ts');
-const { reconnectLine } = require('../plan/render.ts');
-const { helperNameOf, contextArgAt } = require('../entries/entry.ts');
-const { fetchStep } = require('../entries/names.ts');
-const mcpOrder = require('../mcps-list/mcp-order.ts');
-const keys = require('../keys/keys.ts');
-const roots = require('../roots/roots.ts');
-const declines = require('../core/declines.ts');
-const { repairTail } = require('../plan/repair-tail.ts');
-const { driftQuestion } = require('../plan/asks-other.ts');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as catalogLib from '../catalog/catalog.ts';
+import * as inventory from '../inventory/inventory.ts';
+import * as account from '../core/account.ts';
+import { apply } from '../apply/run.ts';
+import * as cli from '../core/claude-cli.ts';
+import { writeJob, job, nextLines } from '../apply/fetch.ts';
+import * as F from './fix-functions.ts';
+import { realMachine, clone } from './common.ts';
+import { deepEqual } from '../plan/plan.ts';
+import { useRoots, fileSteps } from '../plan/pick.ts';
+import { reconnectLine } from '../plan/render.ts';
+import { helperNameOf, contextArgAt } from '../entries/entry.ts';
+import { fetchStep } from '../entries/names.ts';
+import * as mcpOrder from '../mcps-list/mcp-order.ts';
+import * as keys from '../keys/keys.ts';
+import * as roots from '../roots/roots.ts';
+import * as declines from '../core/declines.ts';
+import { repairTail } from '../plan/repair-tail.ts';
+import { driftQuestion } from '../plan/asks-other.ts';
 
-function makeCtx({ inv, catalog = catalogLib.load(), env = process.env, machine, platform, arch, data = null })
+export function makeCtx({ inv, catalog = catalogLib.load(), env = process.env, machine, platform, arch, data = null })
 {
     const p = platform || inv.os;
     return { inv, catalog, platform: p, arch: arch || inv.arch, env, home: account.homeDir(env), rules: catalog.rules, machine: machine || realMachine({ env, platform: p }), data };
@@ -74,7 +73,7 @@ function trustNotes(ctx, only)
 
 // -> { found: [finding + { kind, symptom }], held: [{ id, why }], own: [{ name, scope }], notes: [line] } - `own`: the
 // registrations left on their own (spec D6), which no detector reads
-function detectAll(ctx, { only } = {})
+export function detectAll(ctx, { only } = {})
 {
     const own = (ctx.inv.registrations || []).filter((r) => r.choice === 'own' && (!only || [r.name, r.rowId].includes(only)));
     const out = { found: [], held: [], own: own.map((r) => ({ name: r.name, scope: r.scope })), notes: trustNotes(ctx, only) };
@@ -95,7 +94,7 @@ function detectAll(ctx, { only } = {})
 
 const where = (f) => (f.kind === 'registration' || f.id === 'client-drift' ? `${f.name} (${f.scope})` : f.name);
 
-function render(detected)
+export function render(detected)
 {
     const lines = [];
     const { found, held } = detected;
@@ -120,7 +119,7 @@ function render(detected)
 }
 
 // The asks as data: the three-way choice, then, for 'Pick which', one multi-select per four fixes (grouped shape).
-function questions(detected)
+export function questions(detected)
 {
     // a drifted copy is never in 'Apply all found' or 'Pick which': each is its own question, four a call (spec D9);
     // when both apps drifted, Cursor's is put only after a Restore or Leave in Claude Code
@@ -176,7 +175,7 @@ function driftSkip(f, picked, input)
 // servers of one row would both match) - update applies one at a time; `fetchFile: false` writes no fetch file and
 // returns the launches to fetch as `fetch`, for update to hand on in its own (apply.js). `gone`: nothing picked is found
 // any more - an earlier step did it.
-function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = console.log, runCli = cli.run, fetchFile } = {})
+export function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = console.log, runCli = cli.run, fetchFile } = {})
 {
     const res = { applied: [], skipped: [], failed: null, remaining: [], steps: 0, fetchFile: null, fetch: null, gone: false, tmp: tmp || null };
     const known = new Set(ctx.catalog.fixes.map((f) => f.id));
@@ -327,4 +326,3 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
     return res;
 }
 
-module.exports = { makeCtx, detectAll, applyFixes, render, questions };

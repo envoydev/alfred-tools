@@ -1,4 +1,3 @@
-'use strict';
 // One sign-in for both apps (spec D5, ruling 12): the mcp-remote form with its sign-in kept in the family's root.
 
 // ---- one sign-in for both apps (spec D5, ruling 12) ----------------------------------------------------------------
@@ -6,7 +5,7 @@
 // A hosted route picked with no key, for Claude Code and Cursor: mcp-remote with its sign-in kept in the family's root
 // (MCP_REMOTE_CONFIG_DIR), so both apps share one OAuth sign-in. The pin and cut-off are the catalog's mcp-remote, the
 // bridge route's package. Windows launches npx through cmd /c, as every npx entry.
-function signInFormOf(url, root, catalog, ctx)
+export function signInFormOf(url, root, catalog, ctx)
 {
     const p = catalog.byId.get('sentry').routes.bridge.package;
     const args = ['-y', `${p.name}@${p.version}`, url];
@@ -16,7 +15,7 @@ function signInFormOf(url, root, catalog, ctx)
 
 // The shared sign-in form's parts: npx (through cmd /c too) running mcp-remote@<v> on an http(s) URL, with
 // MCP_REMOTE_CONFIG_DIR set. A hand-made mcp-remote entry without that folder is not the plugin's. -> { url, dir, pin } | null
-function signInParts(entry)
+export function signInParts(entry)
 {
     if (!entry || typeof entry !== 'object' || typeof entry.command !== 'string' || !Array.isArray(entry.args)) return null;
     let cmd = entry.command;
@@ -33,4 +32,3 @@ function signInParts(entry)
     return typeof dir === 'string' && dir ? { url, dir, pin: args[at] } : null;
 }
 
-module.exports = { signInFormOf, signInParts };

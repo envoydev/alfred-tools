@@ -1,18 +1,18 @@
-'use strict';
 // The 0.2.0 key rows (spec D7): a hosted key moved out of a registration into the header helper, the helper on disk kept
 // present and current, and a root's .gitignore that keeps its key file out of git. token-sync (stdio keys) is in
 // registration.js.
 //
 // A key is compared in this process only: a finding names a key and a file, never a value.
-const fs = require('node:fs');
-const path = require('node:path');
-const { pathFor } = require('../entries/platform.ts');
-const { helperFor, contextArgAt, bridgeParts } = require('../entries/entry.ts');
-const keys = require('../keys/keys.ts');
-const roots = require('../roots/roots.ts');
-const { HELPER_VERSION } = require('../copied/mcp-headers.js');
-const { BRIDGE_VERSION } = require('../copied/mcp-bridge.js');
-const C = require('./common.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import { pathFor } from '../entries/platform.ts';
+import { helperFor, contextArgAt, bridgeParts } from '../entries/entry.ts';
+import * as keys from '../keys/keys.ts';
+import * as roots from '../roots/roots.ts';
+import { HELPER_VERSION } from '../copied/mcp-headers.js';
+import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
+import * as C from './common.ts';
+import { ensureCommonjs, rootIgnoreLines, rootIgnore } from '../apply/file-steps.ts';
 
 // What roots.js needs to place a root, from a fix ctx.
 const rootCtx = (ctx) => ({ project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog });
@@ -32,7 +32,7 @@ function authOf(entry)
     return header && typeof headers[header] === 'string' ? { header, value: headers[header] } : null;
 }
 
-function keyToHelperDetect(ctx)
+export function keyToHelperDetect(ctx)
 {
     const out = [];
     for (const reg of C.registrationsOf(ctx, 'key-to-helper'))
@@ -65,7 +65,7 @@ function keyToHelperDetect(ctx)
 }
 
 // The entry as read, with `headersHelper` and without the header. fix.js writes the root's file steps before it (R9).
-function keyToHelperFix(entry, f, ctx)
+export function keyToHelperFix(entry, f, ctx)
 {
     const out = C.clone(entry);
     const auth = authOf(out);
@@ -119,17 +119,17 @@ const kindOf = (f) => (f.shipped === 'bridge' || f.shipped === 'serenaContext' ?
 const withCommonjs = (root, r, kind) =>
 {
     if (kind === 'serenaContext') return r;
-    const pkg = require('../apply/file-steps.ts').ensureCommonjs(root);
+    const pkg = ensureCommonjs(root);
     return { ...r, detail: [r.detail, pkg.wrote ? `wrote ${path.join(root, 'package.json')} (type commonjs)` : null, pkg.note].filter(Boolean).join('; ') };
 };
 
-function helperMissingDetect(ctx)
+export function helperMissingDetect(ctx)
 {
     return shippedFiles(ctx, 'helper-missing').filter((h) => !fs.existsSync(h.file))
         .map((h) => helperFinding('helper-missing', h, `${nameOf(h)} is missing - ${h.reg.name} (${h.reg.scope}) ${bridgeParts(h.reg.entry) || h.kind === 'serenaContext' ? 'does not start' : 'connects without its key'}`));
 }
 
-function helperMissingFix(f)
+export function helperMissingFix(f)
 {
     const kind = kindOf(f);
     fs.mkdirSync(path.dirname(f.path), { recursive: true });
@@ -137,7 +137,7 @@ function helperMissingFix(f)
     return withCommonjs(path.dirname(f.path), { ok: roots.shippedState(kind, f.path).state === 'same', detail: `wrote ${f.path} (${SHIPPED[kind].word} ${SHIPPED[kind].version})`, restart: Boolean(f.bridged) }, kind);
 }
 
-function helperStaleDetect(ctx)
+export function helperStaleDetect(ctx)
 {
     const out = [];
     for (const h of shippedFiles(ctx, 'helper-stale').filter((x) => fs.existsSync(x.file)))
@@ -153,7 +153,7 @@ function helperStaleDetect(ctx)
     return out;
 }
 
-function helperStaleFix(f)
+export function helperStaleFix(f)
 {
     const kind = kindOf(f);
     const { word, version } = SHIPPED[kind];
@@ -166,9 +166,8 @@ function helperStaleFix(f)
 // A root in use inside a git work tree where git would commit its key file, or - a project root other than .alfred -
 // would ignore the helper a project-scope server needs committed (R13), or would commit mcp-remote's sign-in folder (0.5.0). The fix appends what rootIgnore writes; a gap no
 // appended line can close is blocked and named.
-function rootIgnoreDetect(ctx)
+export function rootIgnoreDetect(ctx)
 {
-    const { rootIgnoreLines } = require('../apply/file-steps.ts');
     const out = [];
     for (const family of ['project', 'global'])
     {
@@ -202,9 +201,9 @@ function rootIgnoreDetect(ctx)
     return out;
 }
 
-function rootIgnoreFix(f)
+export function rootIgnoreFix(f)
 {
-    const r = require('../apply/file-steps.ts').rootIgnore(f.path);
+    const r = rootIgnore(f.path);
     const still = [
         f.fixes.secrets && roots.gitIgnores(path.join(f.path, roots.FILES.secrets)) === false && `git would still commit ${path.join(f.path, roots.FILES.secrets)}`,
         f.fixes.helper && roots.gitIgnores(path.join(f.path, roots.FILES.helper)) === true && `git still ignores ${path.join(f.path, roots.FILES.helper)}`,
@@ -214,4 +213,3 @@ function rootIgnoreFix(f)
     return { ok: !still.length, detail: still.length ? `${r.detail}; ${still.join('; ')}` : r.detail, restart: false };
 }
 
-module.exports = { keyToHelperDetect, keyToHelperFix, helperMissingDetect, helperMissingFix, helperStaleDetect, helperStaleFix, rootIgnoreDetect, rootIgnoreFix };

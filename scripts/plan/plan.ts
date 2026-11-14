@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // THE PLAN - answers in, an ordered list of operations out. Nothing here changes anything.
 //
 //   node plan.js <inventory.json> <answers.json> [--out <plan.json>]     the plan, printed, and written for apply.js
@@ -19,22 +18,23 @@
 //   registration of the row at another scope or name is left as it is, so a project gets its own copy beside one
 //   installed for every project. change comes from configure, keyed `mcp:<name>~<scope>`: it
 //   renames, moves or rewrites that ONE registration, and another of the same row is left. Its `row` is for prereq.js.
-const catalogLib = require('../catalog/catalog.ts');
-const { alsoProvided } = require('./asks-picks.ts');
-const { cursorNameQuestion } = require('./asks-other.ts');
-const roots = require('../roots/roots.ts');
-const existing = require('../inventory/existing.ts');
-const mcpOrder = require('../mcps-list/mcp-order.ts');
-const { cursorSteps } = require('./cursor-steps.ts');
-const { changedOutside, denyReadSteps } = require('./repair-tail.ts');
-const { deepEqual } = require('../core/json-file.ts');
-const { makeCtx } = require('./context.ts');
-const { planMcp, fileSteps } = require('./pick.ts');
-const { planChange, planRemove, planExisting, planRootChange, movedLists } = require('./change.ts');
+import * as catalogLib from '../catalog/catalog.ts';
+import { alsoProvided } from './asks-picks.ts';
+import { cursorNameQuestion } from './asks-other.ts';
+import * as roots from '../roots/roots.ts';
+import * as existing from '../inventory/existing.ts';
+import * as mcpOrder from '../mcps-list/mcp-order.ts';
+import { cursorSteps } from './cursor-steps.ts';
+import { changedOutside, denyReadSteps } from './repair-tail.ts';
+import { deepEqual } from '../core/json-file.ts';
+import { makeCtx } from './context.ts';
+import { planMcp, fileSteps } from './pick.ts';
+import { planChange, planRemove, planExisting, planRootChange, movedLists } from './change.ts';
+export { deepEqual };
 
 // ---- the plan -------------------------------------------------------------------------------------------------------
 
-function plan(inv, answers, opts = {})
+export function plan(inv, answers, opts = {})
 {
     const catalog = opts.catalog || catalogLib.load();
     // answers.machine: what prereq.js found (docker: false picks github's binary fallback); an explicit option wins
@@ -99,4 +99,3 @@ function plan(inv, answers, opts = {})
     return out;
 }
 
-module.exports = { plan, deepEqual };

@@ -1,17 +1,18 @@
-'use strict';
 // Servers already set up (spec D6, F4): a matching registration, a plugin's server and a claude.ai connector. One the user
 // leaves on its own is recorded in the root's preferred-tools.json; a managed one has no record.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
-const { world, writeJson, readJson } = require('./helpers.ts');
-const catalog = require('../scripts/catalog/catalog.ts').load();
-const X = require('../scripts/inventory/existing.ts');
-const inventory = require('../scripts/inventory/inventory.ts');
-const { plan } = require('../scripts/plan/plan.ts');
-const { apply } = require('../scripts/apply/run.ts');
-const cli = require('../scripts/core/claude-cli.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { world, writeJson, readJson } from './helpers.ts';
+import { load } from '../scripts/catalog/catalog.ts';
+import * as X from '../scripts/inventory/existing.ts';
+import * as inventory from '../scripts/inventory/inventory.ts';
+import { plan } from '../scripts/plan/plan.ts';
+import { apply } from '../scripts/apply/run.ts';
+import * as cli from '../scripts/core/claude-cli.ts';
+import { helperSource } from '../scripts/roots/roots.ts';
+const catalog = load();
 
 const GH = { type: 'http', url: 'https://api.githubcopilot.com/mcp/' };
 const C7 = { type: 'http', url: 'https://mcp.context7.com/mcp' };
@@ -93,7 +94,7 @@ test("a helper file of the user's own - no preferred-tools number line, or not t
         assert.deepStrictEqual(X.items(invOf({ registrations: [hand] }), [], catalog, real).map((x) => x.key), ['mcp:github~local'], 'a hand-made file in place');
         const shape = regOf('github', 'local', { ...GH, headersHelper: 'node /work/shop/.alfred/mcp-headers.js github' }, 'github', 'remote');
         assert.deepStrictEqual(X.items(invOf({ registrations: [shape] }), [], catalog, ctx).map((x) => x.key), ['mcp:github~local'], "no file, and not this plugin's <NAME> <SCHEME>");
-        fs.writeFileSync(own, require('../scripts/roots/roots.ts').helperSource());
+        fs.writeFileSync(own, helperSource());
         const ours = regOf('github', 'local', { ...GH, headersHelper: `node ${own} GITHUB_PERSONAL_ACCESS_TOKEN Bearer` }, 'github', 'remote');
         assert.deepStrictEqual(X.items(invOf({ registrations: [ours] }), [], catalog, real), [], "this plugin's helper in place: not asked");
     }

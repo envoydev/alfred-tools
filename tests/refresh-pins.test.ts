@@ -1,11 +1,10 @@
-'use strict';
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const refreshPins = require('../scripts/catalog/refresh-pins.ts');
-const catalogLib = require('../scripts/catalog/catalog.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as refreshPins from '../scripts/catalog/refresh-pins.ts';
+import * as catalogLib from '../scripts/catalog/catalog.ts';
 
 const DAY = 86400000;
 const NOW = Date.parse('2026-10-27T12:00:00Z');

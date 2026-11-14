@@ -1,13 +1,18 @@
 #!/usr/bin/env node
-'use strict';
 // JSON shape checks that need no test runner: every shipped JSON file parses, the manifest has the one version and the
 // id that must never change, and no component path in a command or skill points outside ${CLAUDE_PLUGIN_ROOT}.
-const fs = require('node:fs');
-const path = require('node:path');
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { parseAskBlocks, problemsOf } from './ask-blocks.ts';
+import { sendsToOther, walkTexts } from './ask-texts.ts';
 
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(import.meta.dirname, '..');
 const problems = [];
 const need = (cond, msg) => { if (!cond) problems.push(msg); };
+// The copied files stay CommonJS, so they load through a require; an ES module loads by its file URL.
+const requireCopied = createRequire(import.meta.url);
 
 const jsonFiles = ['.claude-plugin/plugin.json', 'catalog/tools.json', 'catalog/fixes.json', 'catalog/reserved-names.json', 'package.json'];
 const docs = {};
@@ -55,7 +60,6 @@ for (const file of textFiles)
 }
 
 // Ask blocks: 2 to 4 options, one '(Recommended)' and it first, labels equal to asks.STATIC (tests/ask-blocks.ts).
-const { parseAskBlocks, problemsOf } = require('./ask-blocks.ts');
 for (const file of textFiles)
     for (const block of parseAskBlocks(fs.readFileSync(file, 'utf8')))
         for (const p of problemsOf(block)) problems.push(`${path.relative(root, file)}: ${p}`);
@@ -103,7 +107,6 @@ for (const file of fs.readdirSync(path.join(root, 'commands')).filter((f) => f.e
 
 // No text sends the user to the Other field (spec D8): every question the walk can put (tests/ask-texts.ts, Task 4's
 // four fixtures), and every line of a command or skill, its ask blocks included - the model repeats what a command says.
-const { sendsToOther, walkTexts } = require('./ask-texts.ts');
 for (const { where, text } of walkTexts()) if (sendsToOther(text)) problems.push(`asks.all (${where}): sends the user to Other: ${text}`);
 for (const file of textFiles)
     fs.readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
@@ -121,7 +124,7 @@ const HELPER_SHA256 = {
 {
     const rel = path.join('scripts', 'copied', 'mcp-headers.js');
     const text = fs.readFileSync(path.join(root, rel), 'utf8');
-    const helper = require(path.join(root, rel));
+    const helper = requireCopied(path.join(root, rel));
     const first = /^\/\/ preferred-tools mcp-headers (\d+)\r?$/m.exec(text.split('\n')[0]);
     need(first, `${rel}: the first line must be '// preferred-tools mcp-headers <version>'`);
     if (first)
@@ -143,14 +146,14 @@ const BRIDGE_SHA256 = {
 {
     const rel = path.join('scripts', 'copied', 'mcp-bridge.js');
     const text = fs.readFileSync(path.join(root, rel), 'utf8');
-    const bridge = require(path.join(root, rel));
+    const bridge = requireCopied(path.join(root, rel));
     const first = /^\/\/ preferred-tools mcp-bridge (\d+)\r?$/m.exec(text.split('\n')[0]);
     need(first, `${rel}: the first line must be '// preferred-tools mcp-bridge <version>'`);
     if (first)
     {
         const version = Number(first[1]);
         need(version === bridge.BRIDGE_VERSION, `${rel}: the first line says version ${version}, BRIDGE_VERSION is ${bridge.BRIDGE_VERSION}`);
-        const digest = require(path.join(root, 'scripts', 'copied', 'mcp-headers.js')).digestOf(text);
+        const digest = requireCopied(path.join(root, 'scripts', 'copied', 'mcp-headers.js')).digestOf(text);
         need(digest === BRIDGE_SHA256[version], `${rel}: SHA-256 ${digest} is not BRIDGE_SHA256[${version}] in tests/lint.ts - a changed bridge bumps its version`);
     }
     for (const m of text.matchAll(/\brequire\(\s*(['"])([^'"]+)\1\s*\)/g))
@@ -172,9 +175,9 @@ const SERENA_CONTEXT_SHA256 = {
     if (first)
     {
         const version = Number(first[1]);
-        const want = require(path.join(root, 'scripts', 'roots', 'roots.ts')).SERENA_CONTEXT_VERSION;
+        const want = (await import(pathToFileURL(path.join(root, 'scripts', 'roots', 'roots.ts')).href)).SERENA_CONTEXT_VERSION;
         need(version === want, `${rel}: the first line says version ${version}, SERENA_CONTEXT_VERSION is ${want}`);
-        const digest = require(path.join(root, 'scripts', 'copied', 'mcp-headers.js')).digestOf(text);
+        const digest = requireCopied(path.join(root, 'scripts', 'copied', 'mcp-headers.js')).digestOf(text);
         need(digest === SERENA_CONTEXT_SHA256[version], `${rel}: SHA-256 ${digest} is not SERENA_CONTEXT_SHA256[${version}] in tests/lint.ts - a changed context bumps its version`);
     }
 }

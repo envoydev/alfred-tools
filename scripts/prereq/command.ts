@@ -1,11 +1,10 @@
-'use strict';
 // The prereq command: checks what this machine has and prints it.
-const catalogLib = require('../catalog/catalog.ts');
-const account = require('../core/account.ts');
-const { realMachine } = require('../fix/common.ts');
-const { picksFrom, check, render } = require('./prereq.ts');
+import * as catalogLib from '../catalog/catalog.ts';
+import * as account from '../core/account.ts';
+import { realMachine } from '../fix/common.ts';
+import { picksFrom, check, render } from './prereq.ts';
 
-function main(argv, { env = process.env, machine, platform = process.platform, out = (s) => process.stdout.write(`${s}\n`) } = {})
+export function main(argv, { env = process.env, machine, platform = process.platform, out = (s) => process.stdout.write(`${s}\n`) } = {})
 {
     const catalog = catalogLib.load();
     let picks;
@@ -20,4 +19,3 @@ function main(argv, { env = process.env, machine, platform = process.platform, o
     return 0;
 }
 
-module.exports = { main };

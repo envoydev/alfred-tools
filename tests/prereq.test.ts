@@ -1,13 +1,12 @@
-'use strict';
 // prereq.js: read-only checks of the machine, a missing one named with its install line or its vendor page.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const catalogLib = require('../scripts/catalog/catalog.ts');
-const { CHECKS, check, render } = require('../scripts/prereq/prereq.ts');
-const { main } = require('../scripts/prereq/command.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as catalogLib from '../scripts/catalog/catalog.ts';
+import { CHECKS, check, render } from '../scripts/prereq/prereq.ts';
+import { main } from '../scripts/prereq/command.ts';
 
 const catalog = catalogLib.load();
 

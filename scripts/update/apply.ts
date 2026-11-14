@@ -1,20 +1,25 @@
-'use strict';
 // Applying the picked offers: plugins, pins, files and the new ways to pass data.
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const inventory = require('../inventory/inventory.ts');
-const { fetchStep } = require('../entries/names.ts');
-const fetchLib = require('../apply/fetch.ts');
-const { apply } = require('../apply/run.ts');
-const { pinnedVersion } = require('../fix/common.ts');
-const mcpOrder = require('../mcps-list/mcp-order.ts');
-const { reapproveLine } = require('../plan/cursor-steps.ts');
-const { repairTail } = require('../plan/repair-tail.ts');
-const account = require('../core/account.ts');
-const { bumpEntry } = require('./offers-plugins.ts');
-const { upgradeCatalog } = require('./offers-files.ts');
-const { ordered } = require('./check.ts');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as inventory from '../inventory/inventory.ts';
+import { fetchStep } from '../entries/names.ts';
+import * as fetchLib from '../apply/fetch.ts';
+import { apply } from '../apply/run.ts';
+import { pinnedVersion } from '../fix/common.ts';
+import * as mcpOrder from '../mcps-list/mcp-order.ts';
+import { reapproveLine } from '../plan/cursor-steps.ts';
+import { repairTail } from '../plan/repair-tail.ts';
+import * as account from '../core/account.ts';
+import { bumpEntry } from './offers-plugins.ts';
+import { upgradeCatalog } from './offers-files.ts';
+import { ordered } from './check.ts';
+import { readCursor } from '../cursor/cursor-mcp.ts';
+import * as roots from '../roots/roots.ts';
+import { ensureCommonjs } from '../apply/file-steps.ts';
+import * as fixLib from '../fix/fix.ts';
+import { plan } from '../plan/plan.ts';
+import * as declines from '../core/declines.ts';
 
 // ---- apply -----------------------------------------------------------------------------------------------------------
 
@@ -73,7 +78,7 @@ function updateCursorPin(ctx, offer, tmp, log)
     ];
     const report = apply({ project: ctx.project, steps }, { env: ctx.env, tmp, runCli: ctx.runCli, fetchFile: false, log: (...a) => log(a.join(' ')) });
     if (report.failed) return false;
-    const got = require('../cursor/cursor-mcp.ts').readCursor(offer.file);
+    const got = readCursor(offer.file);
     const pin = got.state === 'ok' ? pinnedVersion(got.doc.mcpServers[offer.name] || {}, offer.package) : null;
     log(`${pin === offer.to ? 'ok    ' : 'CHECK '} ${offer.label}: ${offer.package} ${offer.from} -> ${pin || '?'} (read back from ${offer.file}), cut-off ${offer.cutoff}`);
     return pin === offer.to;
@@ -83,13 +88,12 @@ function updateCursorPin(ctx, offer, tmp, log)
 // root's package.json says CommonJS when it has none (apply.js ensureCommonjs).
 function updateHelper(offer, log)
 {
-    const roots = require('../roots/roots.ts');
     const kind = offer.kind === 'bridge' ? 'bridge' : offer.kind === 'context' ? 'serenaContext' : 'helper';
     const before = roots.shippedState(kind, offer.file);
     if (before.state !== 'lower') { log(`CHECK  ${offer.label}: now ${before.state} - left as it is`); return false; }
     fs.writeFileSync(offer.file, roots.shippedSource(kind));
     // a YAML file needs no package.json
-    const pkg = kind === 'serenaContext' ? {} : require('../apply/file-steps.ts').ensureCommonjs(path.dirname(offer.file));
+    const pkg = kind === 'serenaContext' ? {} : ensureCommonjs(path.dirname(offer.file));
     if (pkg.note) log(`note   ${pkg.note}`);
     const ok = roots.shippedState(kind, offer.file).state === 'same';
     log(`${ok ? 'ok    ' : 'CHECK '} ${offer.label}: ${kind} ${offer.from} -> ${offer.to} (read back)`);
@@ -102,7 +106,6 @@ function updateHelper(offer, log)
 // this run's fetch file.
 function updateUpgrade(ctx, offer, dir, log)
 {
-    const fixLib = require('../fix/fix.ts');
     const inv = inventory.buildInventory({ project: ctx.project, env: ctx.env, run: ctx.runCli, data: ctx.data, catalog: ctx.catalog });
     const fctx = fixLib.makeCtx({ inv, catalog: upgradeCatalog(ctx.catalog), env: ctx.env, machine: ctx.machine, data: ctx.data });
     const r = fixLib.applyFixes(fctx, [offer.fix], { only: offer.name, name: offer.name, scope: offer.scope || undefined, tmp: dir, log, runCli: ctx.runCli, fetchFile: false });
@@ -128,7 +131,6 @@ function applyCursorOffer(ctx, o, answer, input, dir, log)
         log(`${r.failed ? 'FAILED' : 'ok    '} ${o.id}: not now - kept in ${o.list}`);
         return !r.failed;
     }
-    const { plan } = require('../plan/plan.ts');
     const inv = inventory.buildInventory({ project: ctx.project, env: ctx.env, run: ctx.runCli, data: ctx.data, catalog: ctx.catalog });
     const change = Object.fromEntries(o.servers.map((x) => [`mcp:${x.name}~${x.scope}`, { clients: ['claude', 'cursor'] }]));
     const cursorNames = {};
@@ -146,11 +148,10 @@ function applyCursorOffer(ctx, o, answer, input, dir, log)
 }
 
 // -> { applied: [id], failed: [id], unknown: [id], fetchFile }
-function applyUpdates(ctx, ids, out, { tmp, log = console.log, input = {} } = {})
+export function applyUpdates(ctx, ids, out, { tmp, log = console.log, input = {} } = {})
 {
     const res = { applied: [], failed: [], unknown: [], fetchFile: null, dir: null };
     // the uninstall offers turned down (spec D9): shown and left unpicked, or kept out of 'All of them' for alfred-code
-    const declines = require('../core/declines.ts');
     let turnedDown;
     try { turnedDown = declines.parse(input['retired-declined']); }
     catch (e) { log(`FAILED ${e.message}`); res.failed.push('retired-declined'); return res; }
@@ -208,4 +209,3 @@ function applyUpdates(ctx, ids, out, { tmp, log = console.log, input = {} } = {}
     return res;
 }
 
-module.exports = { applyUpdates };

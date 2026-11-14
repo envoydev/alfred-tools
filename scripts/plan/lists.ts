@@ -1,4 +1,3 @@
-'use strict';
 // THE LIST STEPS - what a plan writes into each family's <root>/mcps.json (spec D1, 0.5.0). Nothing here changes
 // anything: apply.js's list-write step does, and only for the registrations the apply wrote and read back.
 //
@@ -7,17 +6,17 @@
 // servers the user left on their own (`own`), with this run's answers applied - the 0.4.x record's rules (spec F4).
 // The first plan that writes a family with no list yet imports it, as list-import does: every managed registration of
 // the family joins the list as read, and the 0.4.x record's own entries move into it, the record itself moved aside.
-const { pathFor } = require('../entries/platform.ts');
-const catalogLib = require('../catalog/catalog.ts');
-const roots = require('../roots/roots.ts');
-const keys = require('../keys/keys.ts');
-const lists = require('../mcps-list/mcps-list.ts');
+import { pathFor } from '../entries/platform.ts';
+import * as catalogLib from '../catalog/catalog.ts';
+import * as roots from '../roots/roots.ts';
+import * as keys from '../keys/keys.ts';
+import * as lists from '../mcps-list/mcps-list.ts';
 
-const REG_OPS = ['mcp-add', 'mcp-replace', 'mcp-move', 'mcp-remove'];
+export const REG_OPS = ['mcp-add', 'mcp-replace', 'mcp-move', 'mcp-remove'];
 
 // A list as found: the inventory's read for its file, else the disk's; a family with no list yet reads its 0.4.x record
 // beside it. -> null | { servers, own, state? }
-function foundList(inv, file, P)
+export function foundList(inv, file, P)
 {
     for (const family of ['project', 'global'])
     {
@@ -34,7 +33,7 @@ function foundList(inv, file, P)
 // The managed registrations of a family that its list does not name yet (list-import, and a plan's first touch): each
 // as read, kept (every key value the marker), with clients claude. A registration on its own is not one, unless this
 // run's `answers` (mcp key -> 'own' | 'manage') hand it back. opts: { answers, roots: { project, global } }
-function importUnlisted(inv, family, catalog, { answers = {}, roots: r = {} } = {})
+export function importUnlisted(inv, family, catalog, { answers = {}, roots: r = {} } = {})
 {
     const l = inv.lists && inv.lists[family];
     const listed = new Set(l && !l.old && !l.note ? (l.servers || []).map(lists.serverKey) : []);
@@ -53,7 +52,7 @@ const ownChanged = (rec, next) => (!rec || rec.state ? next.length > 0 : JSON.st
 
 // The list-write steps of a plan. `regSteps`: the plan's steps; its registration steps give the upserts and drops. The
 // own part runs only for a plan that read the answers (`ctx.recordLive`): fix.js has none.
-function listSteps(inv, ctx, out, regSteps = [])
+export function listSteps(inv, ctx, out, regSteps = [])
 {
     const P = pathFor(ctx.platform);
     const fileIn = (dir) => P.join(dir, roots.FILES.list);
@@ -215,4 +214,3 @@ function listSteps(inv, ctx, out, regSteps = [])
     return [...steps, ...retire];
 }
 
-module.exports = { listSteps, foundList, importUnlisted, REG_OPS };

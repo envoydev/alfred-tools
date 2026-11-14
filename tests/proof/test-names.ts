@@ -1,11 +1,10 @@
-'use strict';
 // The unit suite's test names, keyed by file (without its extension, so a .js and its .ts compare equal) and the path
 // of names from the top-level test down. Used as a node:test reporter (its events carry the file; TAP output does
 // not), and run by proof.js beside the spec reporter, so the suite runs once.
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawn } = require('node:child_process');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
 
 const keyOf = (file, tree) => path.relative(tree, file).split(path.sep).join('/').replace(/\.(?:js|ts)$/, '');
 
@@ -42,7 +41,7 @@ function run(tree, { env = process.env } = {})
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-names-'));
     const log = path.join(dir, 'spec.log');
     const namesFile = path.join(dir, 'names.txt');
-    const args = ['--test', '--test-reporter=spec', `--test-reporter-destination=${log}`, `--test-reporter=${__filename}`, `--test-reporter-destination=${namesFile}`, ...unitFiles(tree)];
+    const args = ['--test', '--test-reporter=spec', `--test-reporter-destination=${log}`, `--test-reporter=${import.meta.filename}`, `--test-reporter-destination=${namesFile}`, ...unitFiles(tree)];
     return new Promise((resolve) =>
     {
         const child = spawn(process.execPath, args, { cwd: tree, env, stdio: 'ignore' });
@@ -54,7 +53,5 @@ function run(tree, { env = process.env } = {})
     });
 }
 
-module.exports = reporter;
-module.exports.namesOf = namesOf;
-module.exports.run = run;
-module.exports.unitFiles = unitFiles;
+export default reporter;
+export { namesOf, run, unitFiles };

@@ -1,12 +1,11 @@
-'use strict';
 // A WORKSPACE, AS ALFRED-CODE RECORDS IT (spec D4a, 0.5.0). Cursor never reads a parent folder's .cursor/mcp.json (F12),
 // so the project servers of a workspace folder are written into each member's file below it. Which folders form a
 // workspace is alfred-code's to say (ruling 10): this reads its record, read-only, the way alfred-code's own reader does
 // (stack/hooks/workspace-file.js) - `<folder>/.alfred/workspace.json`, and the old line file `<folder>/.alfred/workspace`
 // beside or instead of it. With alfred-code absent there is no record, and no workspace. Nothing here is ever written.
-const fs = require('node:fs');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const DATA = '.alfred';
 const JSON_NAME = 'workspace.json';
@@ -32,7 +31,7 @@ function parseLine(raw)
 }
 
 // The old line file's text as a record: a BOM dropped, CRLF as LF, a duplicate keeping its first spelling.
-function parseLegacy(text)
+export function parseLegacy(text)
 {
     const rec = { parent: null, role: null, children: [], ignoredChildren: [] };
     let parentSeen = false;
@@ -74,7 +73,7 @@ const finish = (rec) => (rec.parent ? { ...rec, role: null } : rec);
 const shape = (rec) => { const out = { children: rec.children, ignoredChildren: rec.ignoredChildren }; if (rec.parent) out.parent = rec.parent; if (rec.role) out.role = rec.role; return out; };
 
 // -> { parent?, role?, children, ignoredChildren } | { error, file } | null (no record)
-function readRecord(folder)
+export function readRecord(folder)
 {
     const jsonFile = path.join(folder, DATA, JSON_NAME);
     const legacyFile = path.join(folder, DATA, LEGACY_NAME);
@@ -121,7 +120,7 @@ function anyRecordAbove(folder)
 }
 
 // The workspace a project is in. -> { root, members, ancestors (nearest first, root last), notes }
-function of(project, env = process.env)
+export function of(project, env = process.env)
 {
     const start = path.resolve(project);
     if (movedData(env)) return NONE(anyRecordAbove(start) ? ['alfred-code\'s data is moved by ALFRED_CODE_DATA_PATH - its workspace record is not read'] : []);
@@ -173,7 +172,7 @@ function of(project, env = process.env)
 }
 
 // The folders below `folder` in the workspace, and for each its folders above, nearest first, root last.
-function below(ws, folder)
+export function below(ws, folder)
 {
     const base = path.resolve(folder);
     return ws.members.filter((m) => inside(m, base)).map((m) =>
@@ -189,11 +188,10 @@ function below(ws, folder)
 }
 
 // The git top-level folder of `dir`, real path, or null (no git, not a repo).
-function gitTop(dir)
+export function gitTop(dir)
 {
     const r = spawnSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' });
     if (r.error || r.status !== 0) return null;
     try { return fs.realpathSync(r.stdout.trim()); } catch { return null; }
 }
 
-module.exports = { readRecord, of, below, gitTop, parseLegacy };

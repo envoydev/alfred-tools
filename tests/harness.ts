@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // THE TEMP-PROJECT HARNESS - runs the plugin's scripts against the REAL `claude` CLI in a throwaway world, with no model
 // in the loop. The walk's asks are stood in for by an answers object fed to plan.js and apply.js, so every matrix case is
 // a script run.
@@ -10,21 +9,22 @@
 // there. Before anything runs, `isolationCheck` proves it: a probe registration at user scope must land in the throwaway
 // account file and leave the real account files byte-identical (hashed here, never printed). If the CLI wrote to the
 // real account, user-scope cases are not run.
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const inventory = require('../scripts/inventory/inventory.ts');
-const { plan } = require('../scripts/plan/plan.ts');
-const { render } = require('../scripts/plan/render.ts');
-const { apply } = require('../scripts/apply/run.ts');
-const { run } = require('../scripts/apply/fetch.ts');
-const account = require('../scripts/core/account.ts');
-const cli = require('../scripts/core/claude-cli.ts');
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import * as inventory from '../scripts/inventory/inventory.ts';
+import { plan } from '../scripts/plan/plan.ts';
+import { render } from '../scripts/plan/render.ts';
+import { apply } from '../scripts/apply/run.ts';
+import { run } from '../scripts/apply/fetch.ts';
+import * as account from '../scripts/core/account.ts';
+import * as cli from '../scripts/core/claude-cli.ts';
+import { TOKEN_VARS } from './helpers.ts';
 
 // the REAL home, taken from the OS (not from HOME, which the harness overrides for its children)
-const REAL_HOME = os.userInfo().homedir;
+export const REAL_HOME = os.userInfo().homedir;
 const REAL_FILES = [
     path.join(REAL_HOME, '.claude.json'),
     path.join(REAL_HOME, '.claude', 'settings.json'),
@@ -37,7 +37,7 @@ const HUD_DIR = path.join(REAL_HOME, '.claude', 'plugins', 'claude-hud');
 REAL_FILES.push(path.join(HUD_DIR, 'config.json'), path.join(HUD_DIR, 'previous-statusline.txt'));
 const REAL_TREES = [];
 
-function hashTree(p)
+export function hashTree(p)
 {
     const h = crypto.createHash('sha256');
     const walk = (d) =>
@@ -60,9 +60,9 @@ function hashFile(f)
     try { return crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex'); } catch { return 'missing'; }
 }
 
-const snapshot = () => Object.fromEntries([...REAL_FILES.map((f) => [f, hashFile(f)]), ...REAL_TREES.map((t) => [t, hashTree(t)])]);
+export const snapshot = () => Object.fromEntries([...REAL_FILES.map((f) => [f, hashFile(f)]), ...REAL_TREES.map((t) => [t, hashTree(t)])]);
 
-class Harness
+export class Harness
 {
     constructor({ root })
     {
@@ -77,7 +77,7 @@ class Harness
         this.env = { ...process.env, HOME: this.home, USERPROFILE: this.home, CLAUDE_CONFIG_DIR: this.account };
         for (const k of Object.keys(this.env)) if (k.startsWith('FAKE_CLAUDE') || k.startsWith('FAKE_RUNTIME')) delete this.env[k];
         // the key variables come from a case itself, never from the shell running the matrix (the plan's defaults read them)
-        for (const k of require('./helpers.ts').TOKEN_VARS) delete this.env[k];
+        for (const k of TOKEN_VARS) delete this.env[k];
         this.before = snapshot();
     }
 
@@ -136,7 +136,7 @@ class Harness
 }
 
 // Proves the isolation before any case runs. Returns { ok, lines }.
-function isolationCheck(h)
+export function isolationCheck(h)
 {
     const lines = [];
     const project = h.project('isolation');
@@ -166,5 +166,4 @@ function main(argv)
     return r.ok ? 0 : 1;
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { Harness, isolationCheck, snapshot, hashTree, REAL_HOME };
+if (import.meta.main) process.exit(main(process.argv.slice(2)));

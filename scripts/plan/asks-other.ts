@@ -1,16 +1,15 @@
-'use strict';
 // The other questions: a tool's own ask, remove, Cursor, drift, the apps, and the static ones.
-const { REC, keyStateOf } = require('./asks-keys.ts');
-const { installedItems, packed } = require('./asks-picks.ts');
-const { scopeQuestion, nameQuestion, scopeOrder, nameFor } = require('./asks-tool.ts');
-const { locationQuestion } = require('./asks-location.ts');
+import { REC, keyStateOf } from './asks-keys.ts';
+import { installedItems, packed } from './asks-picks.ts';
+import { scopeQuestion, nameQuestion, scopeOrder, nameFor } from './asks-tool.ts';
+import { locationQuestion } from './asks-location.ts';
 
 // The questions for one tool. A row with a data folder asks scope and name `first`, in a call of their own, because its
 // folder is named after the registration and depends on the scope; then `questions` holds the location (built for
 // `scope` and `name`, else the recommended scope and the name it has now or the original) and one tool-specific extra,
 // and `answers` maps each location label to its entry; `only` is the location when one place is left and none is
 // asked. Any other row has `first` null and asks scope, name and its extra in one call, as before.
-function toolAsk(row, inv, { route, scope = null, name = null, current = null, ctx = null, catalog, copyOf = [] } = {})
+export function toolAsk(row, inv, { route, scope = null, name = null, current = null, ctx = null, catalog, copyOf = [] } = {})
 {
     const routeId = route || (current && current.route) || row.recommendedRoute;
     const scopeQ = scopeQuestion(row, inv, { route: routeId, current, copyOf, ctx });
@@ -79,11 +78,11 @@ function toolAsk(row, inv, { route, scope = null, name = null, current = null, c
 }
 
 // The questions toolAsk gives after `first`: for a row without a data folder, its whole call.
-const toolQuestions = (row, inv, opts = {}) => toolAsk(row, inv, opts).questions;
+export const toolQuestions = (row, inv, opts = {}) => toolAsk(row, inv, opts).questions;
 
 // Remove: one option per registration (a row at two scopes is two options), grouped; the description is the exact
 // command, which the walk reads the target from.
-function removeQuestions(inv, catalog)
+export function removeQuestions(inv, catalog)
 {
     const items = installedItems(inv, catalog, (row, h) => `claude mcp remove ${h.name} -s ${h.scope}`);
     return packed(items, { id: 'remove', question: 'which do you want to remove?', none: 'remove nothing' });
@@ -93,7 +92,7 @@ function removeQuestions(inv, catalog)
 // for it - the user's own, or one from before this design. 'Replace' is recommended when the entry there is the same
 // row's server (`sameRow`), 'Keep' when it is another server under that name. The id carries the file, since each
 // workspace member's file can hold the name. -> { question, answers: { <label>: 'replace' | 'keep' } }
-function cursorNameQuestion({ file, name, sameRow })
+export function cursorNameQuestion({ file, name, sameRow })
 {
     const replace = { label: "Replace it with the plugin's", description: 'Cursor gets the same entry as Claude Code; the old one is dropped, not saved', value: 'replace' };
     const keep = { label: "Keep Cursor's own", description: `${name} is set up for Claude Code only, and Cursor's entry stays as it is`, value: 'keep' };
@@ -108,7 +107,7 @@ function cursorNameQuestion({ file, name, sameRow })
 // is recommended - a hand edit is deliberate - unless the copy holds a key-shaped string outside its key field: then
 // Restore or Leave. An inherited copy (a workspace member's, D4a) is the folder above's: Restore from it or Leave.
 // f: { name, scope, app, change, keyGuard, keyEmpty, rowGone, inherited } -> { question, answers: { <label>: value } }
-function driftQuestion(f)
+export function driftQuestion(f)
 {
     const app = f.appLabel || (f.app === 'cursor' ? 'Cursor' : 'Claude Code');
     const restore = { label: 'Restore from the list', description: `${app} gets the list's entry back`, value: 'restore' };
@@ -136,7 +135,7 @@ function driftQuestion(f)
 
 // cursor-offer (spec D9): update's offer, once per root, to set up for Cursor the servers its list has for Claude Code
 // only. The id names the root, so the answer goes back as --input cursor-offer:<root>=set|declined.
-function cursorOfferQuestion(root, n)
+export function cursorOfferQuestion(root, n)
 {
     const opts = [
         { label: `Set them up for Cursor too${REC}`, description: "each server is written to Cursor's mcp.json, as configure's app change would do", value: 'set' },
@@ -159,20 +158,20 @@ function clientsOptions(firstIsCursor)
     const opts = (firstIsCursor ? CLIENTS : [...CLIENTS].reverse()).map((o, i) => ({ ...o, label: `${o.label}${i === 0 ? REC : ''}` }));
     return { options: opts.map(({ label, description }) => ({ label, description })), answers: Object.fromEntries(opts.map((o) => [o.label, o.value])) };
 }
-function clientsQuestion(found)
+export function clientsQuestion(found)
 {
     const { options, answers } = clientsOptions(found);
     return { question: { id: 'clients', header: 'Apps', multiSelect: false, question: 'Which apps should these servers be set up for?', options }, answers };
 }
 // configure: `current` is the list entry's clients (none listed yet: Claude Code only)
-function targetClientsQuestion(key, name, current)
+export function targetClientsQuestion(key, name, current)
 {
     const { options, answers } = clientsOptions((current || []).includes('cursor'));
     return { question: { id: `clients-${key}`, header: 'Apps', multiSelect: false, question: `Set up ${name} for which apps?`, options }, answers };
 }
 
 // The fixed asks of the commands, here so a test holds them to the limits.
-const STATIC = {
+export const STATIC = {
     menu: { id: 'menu', header: 'Action', multiSelect: false, question: 'What do you want to change?', options: [
         { label: `Change tools${REC}`, description: 'pick installed tools, servers on their own or a root folder, then what to change' },
         { label: 'Remove tools', description: 'choose the servers to remove' },
@@ -211,4 +210,3 @@ const STATIC = {
     'drift-missing': Object.assign((name, app) => driftQuestion({ name, scope: 'local', app: 'claude', appLabel: app, change: 'missing' }).question, { placeholders: ['<name>', '<app>'] }),
 };
 
-module.exports = { cursorNameQuestion, cursorOfferQuestion, driftQuestion, clientsQuestion, targetClientsQuestion, toolQuestions, toolAsk, removeQuestions, STATIC };

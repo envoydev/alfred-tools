@@ -1,4 +1,3 @@
-'use strict';
 // Step 10 check: a fresh install for every catalog row and route, from an answers file, through the REAL claude CLI in
 // the throwaway world (tests/harness.ts), then read back from the files the CLI wrote - never from an exit code.
 //
@@ -6,19 +5,20 @@
 //
 // A case whose OS the row is not offered on, and a case with no network, is reported as skipped with the reason
 // ('NOT RUN'), never as passed.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const cli = require('../../scripts/core/claude-cli.ts');
-const account = require('../../scripts/core/account.ts');
-const catalog = require('../../scripts/catalog/catalog.ts').load();
-const keys = require('../../scripts/keys/keys.ts');
-const { Harness } = require('../harness.ts');
-const spec = require('./fresh-answers.json');
-const { keepWritten } = require('../proof/matrix-keep.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import * as cli from '../../scripts/core/claude-cli.ts';
+import * as account from '../../scripts/core/account.ts';
+import { load } from '../../scripts/catalog/catalog.ts';
+import * as keys from '../../scripts/keys/keys.ts';
+import { Harness } from '../harness.ts';
+import { keepWritten } from '../proof/matrix-keep.ts';
+const catalog = load();
+const spec = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'fresh-answers.json'), 'utf8'));
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-fresh-'));

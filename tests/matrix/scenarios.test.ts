@@ -1,4 +1,3 @@
-'use strict';
 // Step 12: the temp-project matrix beyond a fresh install. Every case runs the REAL claude CLI in a throwaway home and
 // account (tests/harness.ts) and reads the result back from the files the CLI wrote - never from an exit code alone.
 //
@@ -7,21 +6,21 @@
 // A case with no network is reported as skipped with the reason ('NOT RUN'). Windows behaviour is exercised by
 // simulating the platform in the detectors and the plan (the CLI rewrite itself is the real one); it is proved on a real
 // Windows machine only in the user's own live check.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const cli = require('../../scripts/core/claude-cli.ts');
-const account = require('../../scripts/core/account.ts');
-const catalogLib = require('../../scripts/catalog/catalog.ts');
-const { buildEntry } = require('../../scripts/entries/entry.ts');
-const { makeCtx, detectAll, applyFixes, questions } = require('../../scripts/fix/fix.ts');
-const { main } = require('../../scripts/update/command.ts');
-const { pinnedVersion } = require('../../scripts/fix/common.ts');
-const { Harness } = require('../harness.ts');
-const { keepWritten } = require('../proof/matrix-keep.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import * as cli from '../../scripts/core/claude-cli.ts';
+import * as account from '../../scripts/core/account.ts';
+import * as catalogLib from '../../scripts/catalog/catalog.ts';
+import { buildEntry } from '../../scripts/entries/entry.ts';
+import { makeCtx, detectAll, applyFixes, questions } from '../../scripts/fix/fix.ts';
+import { main } from '../../scripts/update/command.ts';
+import { pinnedVersion } from '../../scripts/fix/common.ts';
+import { Harness } from '../harness.ts';
+import { keepWritten } from '../proof/matrix-keep.ts';
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-scn-'));

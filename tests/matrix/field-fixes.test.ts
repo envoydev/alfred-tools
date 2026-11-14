@@ -1,4 +1,3 @@
-'use strict';
 // The 0.3.0 field fixes end to end: the REAL claude CLI in throwaway homes and accounts (tests/harness.ts), a stub HTTP
 // MCP server on 127.0.0.1 (tests/fake-mcp-http.ts) standing in for a hosted server, every result read back from the
 // files the CLI wrote.
@@ -12,23 +11,23 @@
 //   X5  a 0.2.0 record of managed servers: the install plan cleans it, and the file is gone after the apply
 //   X6  configure answered 'Leave it on its own': one record in the family root; update and fix list it, not checked
 //   X7  a refused key: what `claude mcp get` prints for a 401 and a 403 from a hosted server whose key is filled
-const test = require('node:test');
-const assert = require('node:assert');
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const cli = require('../../scripts/core/claude-cli.ts');
-const roots = require('../../scripts/roots/roots.ts');
-const catalogLib = require('../../scripts/catalog/catalog.ts');
-const { shellArg, buildEntry } = require('../../scripts/entries/entry.ts');
-const existing = require('../../scripts/inventory/existing.ts');
-const { makeCtx, detectAll, applyFixes, render } = require('../../scripts/fix/fix.ts');
-const update = require('../../scripts/update/check.ts');
-const { REFUSED } = require('../../scripts/apply/run.ts');
-const fake = require('../fake-mcp-http.ts');
-const { Harness } = require('../harness.ts');
-const { keepWritten } = require('../proof/matrix-keep.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as cli from '../../scripts/core/claude-cli.ts';
+import * as roots from '../../scripts/roots/roots.ts';
+import * as catalogLib from '../../scripts/catalog/catalog.ts';
+import { shellArg, buildEntry } from '../../scripts/entries/entry.ts';
+import * as existing from '../../scripts/inventory/existing.ts';
+import { makeCtx, detectAll, applyFixes, render } from '../../scripts/fix/fix.ts';
+import * as update from '../../scripts/update/check.ts';
+import { REFUSED } from '../../scripts/apply/run.ts';
+import * as fake from '../fake-mcp-http.ts';
+import { Harness } from '../harness.ts';
+import { keepWritten } from '../proof/matrix-keep.ts';
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const T = { skip: skipAll, timeout: 900000 };

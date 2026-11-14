@@ -1,19 +1,21 @@
-'use strict';
 // mcp-bridge.js - the bridge a hosted route of runtime 'bridge' registers (0.4.0): it fills the URL template from
 // .mcps-secrets at each start and runs a pinned mcp-remote through npx, the key in mcp-remote's environment only.
 // Each process case copies the bridge and the helper into a throwaway root and runs it with PATH led by this file's own
 // `npx` shim (tests/fake-runtime.ts), which logs its argv and a SHA-256 of the key, never the key.
-const test = require('node:test');
-const assert = require('node:assert');
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawn, spawnSync } = require('node:child_process');
+import test from 'node:test';
+import assert from 'node:assert';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { spawn, spawnSync } from 'node:child_process';
 
-const BRIDGE = path.join(__dirname, '..', 'scripts', 'copied', 'mcp-bridge.js');
-const HELPER = path.join(__dirname, '..', 'scripts', 'copied', 'mcp-headers.js');
-const RUNTIME = path.join(__dirname, 'fake-runtime.ts');
+const BRIDGE = path.join(import.meta.dirname, '..', 'scripts', 'copied', 'mcp-bridge.js');
+const HELPER = path.join(import.meta.dirname, '..', 'scripts', 'copied', 'mcp-headers.js');
+// The copied files stay CommonJS: a test that loads one by its path loads it through a require.
+const requireCopied = createRequire(import.meta.url);
+const RUNTIME = path.join(import.meta.dirname, 'fake-runtime.ts');
 const T = 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}';
 const LOCAL = 'http://127.0.0.1:9/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}';
 const KEY = 'pt-key-7q';
@@ -24,8 +26,8 @@ const sha = (t) => crypto.createHash('sha256').update(t).digest('hex');
 const put = (file, text) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
 const sec = (dir) => path.join(dir, '.mcps-secrets');
 
-const bridge = () => require(BRIDGE);
-const helper = () => require(HELPER);
+const bridge = () => requireCopied(BRIDGE);
+const helper = () => requireCopied(HELPER);
 
 function world()
 {

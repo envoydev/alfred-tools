@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // THE INVENTORY - what is installed, read-only, no server started.
 //
 //   node inventory.js --project <dir> --json <out> [--data <plugin data dir>]   (--data: the roots map, spec D2)
@@ -9,22 +8,26 @@
 // registration to a catalog row by what it LAUNCHES - the package in its
 // args, or the URL host and path - never by its name. So a tool under a custom name is still recognised, and a
 // registration that matches no row is the user's: it is listed as `own` and nothing in this plugin touches it.
-const fs = require('node:fs');
-const path = require('node:path');
-const catalogLib = require('../catalog/catalog.ts');
-const account = require('../core/account.ts');
-const cli = require('../core/claude-cli.ts');
-const kept = require('../core/kept.ts');
-const roots = require('../roots/roots.ts');
-const { bridgeParts } = require('../entries/entry.ts');
-const { signInParts } = require('../entries/sign-in.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import * as catalogLib from '../catalog/catalog.ts';
+import * as account from '../core/account.ts';
+import * as cli from '../core/claude-cli.ts';
+import * as kept from '../core/kept.ts';
+import * as roots from '../roots/roots.ts';
+import { bridgeParts } from '../entries/entry.ts';
+import { signInParts } from '../entries/sign-in.ts';
+import * as existing from './existing.ts';
+import { of } from '../roots/workspace.ts';
+import * as lists from '../mcps-list/mcps-list.ts';
+import * as cursorMcp from '../cursor/cursor-mcp.ts';
 
 const { readState } = account;
 
 // ---- matching a registration to a row -------------------------------------------------------------------------------
 
 // `cmd /c npx ...` and `cmd.exe /d /s /c npx ...` are the Windows spelling of `npx ...`: look through the wrapper.
-function launchTokens(entry)
+export function launchTokens(entry)
 {
     const command = String(entry.command || '');
     let args = Array.isArray(entry.args) ? entry.args.map(String) : [];
@@ -37,7 +40,7 @@ function launchTokens(entry)
 }
 
 // 'serena-agent@2.1.0', 'mcp-memory-service[sqlite]==12.1.1', '@playwright/mcp@0.0.83', 'ghcr.io/x/y:v2' -> the bare name.
-function bareName(token)
+export function bareName(token)
 {
     const lead = token.startsWith('@') ? '@' : '';
     const body = lead ? token.slice(1) : token;
@@ -55,7 +58,7 @@ const flagValue = (args, flag) =>
     return undefined;
 };
 
-function matchesFingerprint(entry, f)
+export function matchesFingerprint(entry, f)
 {
     // a bridge (0.4.0): `node <root>/mcp-bridge.js <template> ...`, matched by the file's exact name and the template's host
     // and path - never by the URL branch below, which would take every hosted URL for a fingerprint with no host
@@ -85,7 +88,7 @@ function matchesFingerprint(entry, f)
 }
 
 // The catalog row and route a registration's launch belongs to, or null (the user's own).
-function matchEntry(entry, catalog)
+export function matchEntry(entry, catalog)
 {
     if (!entry || typeof entry !== 'object') return null;
     for (const row of catalog.tools)
@@ -111,7 +114,7 @@ const settingsOf = (scope, project, env) => path.join(
 const realOf = (p) => { try { return fs.realpathSync.native(p); } catch { return path.resolve(p); } };
 
 // -> [{ dir, file }], nearest first, the project's own file left out
-function ancestorMcpFiles(project)
+export function ancestorMcpFiles(project)
 {
     const out = [];
     for (let dir = realOf(project), up = path.dirname(dir); up !== dir; dir = up, up = path.dirname(dir))
@@ -153,7 +156,7 @@ function approvalOf(name, a)
     return 'pending';
 }
 
-function pluginRows(listJson, project, env, catalog, alfredCheck)
+export function pluginRows(listJson, project, env, catalog, alfredCheck)
 {
     const rows = [];
     const here = [...hereSettings(project), settingsOf('user', project, env)].map((f) => readState(f).doc);
@@ -185,7 +188,7 @@ function pluginRows(listJson, project, env, catalog, alfredCheck)
     return rows;
 }
 
-function buildInventory({ project, env = process.env, platform = process.platform, arch = process.arch, catalog = catalogLib.load(), run = cli.run, data = null })
+export function buildInventory({ project, env = process.env, platform = process.platform, arch = process.arch, catalog = catalogLib.load(), run = cli.run, data = null })
 {
     const proj = path.resolve(project);
     const out = {
@@ -248,11 +251,10 @@ function buildInventory({ project, env = process.env, platform = process.platfor
     out.roots.global = roots.inUse(out, 'global', rootCtx);
     // the answers about servers already set up (spec D6): each family's list (0.5.0; the 0.4.x record while it has none),
     // and each registration's choice - null when never answered or when its launch changed since
-    const existing = require('./existing.ts');
     out.lists = { project: listOf(out, 'project', rootCtx), global: listOf(out, 'global', rootCtx) };
     out.cursor = cursorFiles(out, { platform, env, project: proj }, catalog);
     // the workspace alfred-code records (spec D4a): the folders whose Cursor files take this folder's project servers
-    out.workspace = require('../roots/workspace.ts').of(proj, env);
+    out.workspace = of(proj, env);
     const fp = (entry) => existing.fingerprintOf(entry, catalog);
     for (const r of out.registrations)
     {
@@ -290,7 +292,6 @@ function buildInventory({ project, env = process.env, platform = process.platfor
 // skipped from the first 0.5.0 run. -> { file, servers, own, cursorOffer?, note?, old? } | null
 function listOf(inv, family, ctx)
 {
-    const lists = require('../mcps-list/mcps-list.ts');
     for (const file of lists.listFiles(inv, family, ctx))
     {
         const l = lists.readList(file);
@@ -309,7 +310,6 @@ function listOf(inv, family, ctx)
 // name it holds, and the entries of the names its family's list marks for Cursor, kept.
 function cursorFiles(inv, ctx, catalog)
 {
-    const cursorMcp = require('../cursor/cursor-mcp.ts');
     const marked = (family) =>
     {
         const l = inv.lists[family];
@@ -331,17 +331,17 @@ function choiceIn(list, match, fingerprint, allowed)
 // The inventory as a file or a print holds it: every credential value as kept.js's marker, so no command line names a
 // file with a live one (alfred-code's guard refuses it) and nothing printed puts one in the chat. apply.js takes the
 // real values back from the registrations themselves.
-function keptOf(inv, catalog = catalogLib.load())
+export function keptOf(inv, catalog = catalogLib.load())
 {
     const keep = (x) => ({ ...x, entry: kept.keep(x.entry, x.rowId ? catalog.byId.get(x.rowId) : null) });
     return { ...inv, registrations: inv.registrations.map(keep), ...(inv.pluginServers ? { pluginServers: inv.pluginServers.map(keep) } : {}) };
 }
 
 // A parent folder as the project names it: '..', '../..', from the real folder, as the walk found it.
-const fromHere = (inv, dir) => path.relative(realOf(inv.project), dir).split(path.sep).join('/') || '.';
+export const fromHere = (inv, dir) => path.relative(realOf(inv.project), dir).split(path.sep).join('/') || '.';
 
 // What a row looks like installed: every registration or plugin that belongs to it, with its scope.
-function installedOf(inv, rowId)
+export function installedOf(inv, rowId)
 {
     return [
         ...inv.registrations.filter((r) => r.rowId === rowId && !r.alfredRetired).map((r) => (r.scope === 'inherited'
@@ -360,7 +360,7 @@ function installedOf(inv, rowId)
 // -> [{ name, scope, kind, owner: 'catalog' | 'alfred-code', from }]
 const WINDOWS_MCP_PLUGINS = ['windows-control', 'windows-desktop'];
 const NEAREST = { local: 0, project: 1, inherited: 2, user: 3 };
-function windowsMcpServers(inv)
+export function windowsMcpServers(inv)
 {
     const starts = inv.registrations.filter((r) => (r.scope === 'inherited' ? r.approval === 'approved' && !r.shadowed : r.scope !== 'project' || !r.approval || r.approval === 'approved'));
     const wins = new Map();
@@ -378,12 +378,12 @@ function windowsMcpServers(inv)
 
 // The windows-mcp servers here that a new registration under `name` does not replace - one of the same name is the same
 // server, whichever scope wins - as 'name (scope)'.
-const otherWindowsMcp = (inv, name) => windowsMcpServers(inv).filter((s) => s.kind === 'plugin' || s.name !== name).map((s) => `${s.name} (${s.scope})`);
+export const otherWindowsMcp = (inv, name) => windowsMcpServers(inv).filter((s) => s.kind === 'plugin' || s.name !== name).map((s) => `${s.name} (${s.scope})`);
 
 // One installed thing, by the key configure asks with: `mcp:<name>~<scope>` or `plugin:<plugin id>~<scope>` (the same
 // shape as update.js's offer ids). -> { kind, item } or null when nothing is installed under that key.
-const keyOf = (kind, name, scope) => `${kind}:${name}~${scope}`;
-function targetOf(inv, key)
+export const keyOf = (kind, name, scope) => `${kind}:${name}~${scope}`;
+export function targetOf(inv, key)
 {
     const m = /^(mcp|plugin):(.+)~(local|project|user)$/.exec(key || '');
     if (!m) return null;
@@ -393,4 +393,3 @@ function targetOf(inv, key)
     return item ? { kind: m[1], item } : null;
 }
 
-module.exports = { launchTokens, bareName, matchEntry, matchesFingerprint, ancestorMcpFiles, buildInventory, keptOf, fromHere, installedOf, windowsMcpServers, otherWindowsMcp, keyOf, targetOf, pluginRows };

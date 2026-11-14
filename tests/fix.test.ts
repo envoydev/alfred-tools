@@ -1,21 +1,40 @@
-'use strict';
 // Step 9: the fix engine - every detector found and not found, the fixes as pure edits of the entry as read, the
 // composition into one replace per registration, the asks, and the apply path against the fake claude.
-const test = require('node:test');
-const assert = require('node:assert');
-const path = require('node:path');
-const { world, readJson, helperCmd } = require('./helpers.ts');
-const catalogLib = require('../scripts/catalog/catalog.ts');
-const inventory = require('../scripts/inventory/inventory.ts');
-const { pythonRequest } = require('../scripts/entries/platform.ts');
-const { expandVars } = require('../scripts/entries/locations.ts');
-const { buildEntry } = require('../scripts/entries/entry.ts');
-const cli = require('../scripts/core/claude-cli.ts');
-const account = require('../scripts/core/account.ts');
-const F = require('../scripts/fix/fix-functions.ts');
-const { makeCtx, detectAll, applyFixes, questions, render } = require('../scripts/fix/fix.ts');
-const { main } = require('../scripts/fix/command.ts');
-const C = require('../scripts/fix/common.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import path from 'node:path';
+import { world, readJson, helperCmd, writeJson, files } from './helpers.ts';
+import * as catalogLib from '../scripts/catalog/catalog.ts';
+import * as inventory from '../scripts/inventory/inventory.ts';
+import { pythonRequest } from '../scripts/entries/platform.ts';
+import { expandVars } from '../scripts/entries/locations.ts';
+import { buildEntry } from '../scripts/entries/entry.ts';
+import * as cli from '../scripts/core/claude-cli.ts';
+import * as account from '../scripts/core/account.ts';
+import * as F from '../scripts/fix/fix-functions.ts';
+import { makeCtx, detectAll, applyFixes, questions, render } from '../scripts/fix/fix.ts';
+import { main } from '../scripts/fix/command.ts';
+import * as C from '../scripts/fix/common.ts';
+import fs from 'node:fs';
+import fsx from 'node:fs';
+import { existsSync } from 'node:fs';
+import cryptox from 'node:crypto';
+import { createHash } from 'node:crypto';
+import os from 'node:os';
+import * as declines from '../scripts/core/declines.ts';
+import { add } from '../scripts/core/declines.ts';
+import { spawnSync, spawnSync as spawnx } from 'node:child_process';
+import { fill, SHAPES } from '../scripts/hud/hud-statusline.ts';
+import * as rootsLib from '../scripts/roots/roots.ts';
+import { HELPER_VERSION as HV } from '../scripts/copied/mcp-headers.js';
+import { expand } from '../scripts/apply/fetch.ts';
+import { PARENT_HELPER_IN_CHILD } from '../scripts/plan/asks-keys.ts';
+import * as existingLib from '../scripts/inventory/existing.ts';
+import * as X from '../scripts/inventory/existing.ts';
+import { BRIDGE_VERSION as BV } from '../scripts/copied/mcp-bridge.js';
+import { plan } from '../scripts/plan/plan.ts';
+import { apply } from '../scripts/apply/run.ts';
+import * as kept5 from '../scripts/core/kept.ts';
 
 const catalog = catalogLib.load();
 const row = (id) => catalog.byId.get(id);
@@ -306,7 +325,6 @@ test('serena-telemetry: an absent variable is set to false; a value the user cho
 
 test('data-folder-ignore: a relative folder here with no ignore is found and fixed; its own .gitignore or alfred-code\'s covers it', () =>
 {
-    const fs = require('node:fs');
     const w = world();
     try
     {
@@ -358,11 +376,11 @@ test('data-folder-ignore: a relative folder here with no ignore is found and fix
 // ---- npx-cache-entry ------------------------------------------------------------------------------------------------
 
 // npx's folder for one package spec, as npm 11.6.1's libnpmexec names it: sha512 of the spec, hex, the first 16
-const npxFolder = (cache, spec) => path.join(cache, '_npx', require('node:crypto').createHash('sha512').update(spec).digest('hex').slice(0, 16));
+const npxFolder = (cache, spec) => path.join(cache, '_npx', createHash('sha512').update(spec).digest('hex').slice(0, 16));
 // npm in force with this cache, as npm 10.9.2 and 11.6.1 answer (measured): `config get cache` is refused, and
 // `config ls -l` prints each source's value, all but the one in force commented out; any other call fails
 const npmAt = (cache, over = {}) => noMachine({
-    exists: (p) => require('node:fs').existsSync(p),
+    exists: (p) => existsSync(p),
     run: (cmd, args) =>
     {
         const a = `${cmd} ${args.join(' ')}`;
@@ -375,7 +393,6 @@ const npmAt = (cache, over = {}) => noMachine({
 
 test('npx-cache-entry: an npx server whose cache folder lost its package.json is found; the fix removes that folder only and fetches it again', () =>
 {
-    const fs = require('node:fs');
     const w = world();
     try
     {
@@ -458,7 +475,6 @@ test('npx-cache-entry: an npx server whose cache folder lost its package.json is
 
 test('apply: npx-cache-entry removes the folder and hands the package to fetch.js; the restart waits for the fetch', () =>
 {
-    const fs = require('node:fs');
     const w = world();
     try
     {
@@ -507,12 +523,10 @@ test('retired-plugin offers an uninstall per installed id and scope', () =>
 
 test('fix reports a declined id with no apply step', () =>
 {
-    const fs = require('node:fs');
-    const os = require('node:os');
     const data = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-declined-'));
     try
     {
-        require('../scripts/core/declines.ts').add(data, [{ id: RETIRED.hud, scope: 'user' }]);
+        add(data, [{ id: RETIRED.hud, scope: 'user' }]);
         const ctx = makeCtx({ ...ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }), inv: ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }).inv, catalog, machine: noMachine(), data });
         const [f] = detect(ctx).found.filter((x) => x.id === 'retired-plugin');
         assert.strictEqual(f.declined, true);
@@ -566,8 +580,6 @@ test('questions: only NOT APPLICABLE findings give no apply ask', () =>
 
 test('data-folder-ignore: in a git work tree git decides - the project\'s own ignore covers the folder, a .gitignore that leaves its data out does not', () =>
 {
-    const fs = require('node:fs');
-    const { spawnSync } = require('node:child_process');
     const w = world();
     try
     {
@@ -792,7 +804,6 @@ test('apply: a failing add puts the old registration back; if that fails too, th
 // A world whose fake claude has these plugins installed, alfred-code among them when `alfred`.
 function plugWorld(w, installed, { alfred = false } = {})
 {
-    const fs = require('node:fs');
     const all = alfred ? [...installed, ['alfred-code@envoydev', 'user']] : installed;
     const file = path.join(w.dir, 'state', 'plugins.json');
     fs.writeFileSync(file, JSON.stringify({
@@ -812,7 +823,6 @@ function plugWorld(w, installed, { alfred = false } = {})
 
 test('the machine fix runs after the registration edits and is read back; its failure stops the run', () =>
 {
-    const fs = require('node:fs');
     const w = world();
     try
     {
@@ -820,7 +830,7 @@ test('the machine fix runs after the registration edits and is read back; its fa
         // claude-hud's own statusLine in the account settings
         const settings = path.join(w.account, 'settings.json');
         const doc = JSON.parse(fs.readFileSync(settings, 'utf8'));
-        doc.statusLine = { type: 'command', command: `${require('../scripts/hud/hud-statusline.ts').fill(require('../scripts/hud/hud-statusline.ts').SHAPES.sortV, { RUNTIME_PATH: process.execPath, SOURCE: 'dist/index.js' })}` };
+        doc.statusLine = { type: 'command', command: `${fill(SHAPES.sortV, { RUNTIME_PATH: process.execPath, SOURCE: 'dist/index.js' })}` };
         fs.writeFileSync(settings, JSON.stringify(doc, null, 2));
         const lines = [];
         const res = applyFixes(ctxOf(w), ['retired-plugin'], { log: (...a) => lines.push(a.join(' ')) });
@@ -844,8 +854,6 @@ test('the machine fix runs after the registration edits and is read back; its fa
 
 test('declines per answer: unpicked recorded; kept out for alfred-code recorded and named; Skip records nothing; fix with one id', () =>
 {
-    const fs = require('node:fs');
-    const declines = require('../scripts/core/declines.ts');
     const w = world();
     const data = path.join(w.dir, 'data');
     try
@@ -881,7 +889,6 @@ test('declines per answer: unpicked recorded; kept out for alfred-code recorded 
 
 test('a fix that only writes a data folder\'s .gitignore asks for no restart', () =>
 {
-    const fs = require('node:fs');
     const w = world();
     try
     {
@@ -928,11 +935,6 @@ test('CLI: --detect and --questions print; --apply applies; bad arguments exit 2
 
 // ---- the 0.2.0 key rows (D7): key-to-helper, helper-missing, helper-stale, root-ignore, token-sync on stdio -----------
 
-const fsx = require('node:fs');
-const cryptox = require('node:crypto');
-const { spawnSync: spawnx } = require('node:child_process');
-const { writeJson, files } = require('./helpers.ts');
-const rootsLib = require('../scripts/roots/roots.ts');
 const SK = 'SENTRY_ACCESS_TOKEN';
 const GK = 'GITHUB_PERSONAL_ACCESS_TOKEN';
 const SENTRY = (value) => ({ command: 'npx', args: ['-y', '@sentry/mcp-server@0.42.0'], env: { [SK]: value } });
@@ -948,7 +950,6 @@ const localEntry = (w, name) => account.readAccount(w.env, w.project).local[name
 const ctxData = (w, data) => makeCtx({ inv: inventory.buildInventory({ project: w.project, env: w.env, data }), env: w.env, machine: noMachine(), data });
 const logged = () => { const lines = []; return { lines, log: (...a) => lines.push(a.join(' ')), text: () => lines.join('\n') }; };
 const gitInit = (dir) => { fsx.mkdirSync(dir, { recursive: true }); assert.strictEqual(spawnx('git', ['init', '-q', dir]).status, 0); };
-const HV = require('../scripts/copied/mcp-headers.js').HELPER_VERSION;
 const helperAt = (root, number, extra = '') => put(path.join(root, 'mcp-headers.js'), rootsLib.helperSource().replace(/^\/\/ preferred-tools mcp-headers \d+/, `// preferred-tools mcp-headers ${number}`) + extra);
 const shownOf = (d) => `${render(d)}${JSON.stringify(d)}`;
 
@@ -1260,7 +1261,6 @@ test('fix notes an untrusted declaring folder', () =>
 });
 
 test('expandVars: ${NAME} from the environment, ${NAME:-fallback} when unset, null when a bare name is unset', () => {
-    const C = require('../scripts/fix/common.ts');
     assert.strictEqual(C.expandVars('${A}\\x', { A: 'C:\\a' }), 'C:\\a\\x');
     assert.strictEqual(C.expandVars('${B:-C:\\b}', {}), 'C:\\b');
     assert.strictEqual(C.expandVars('${B:-C:\\b}', { B: 'D:\\d' }), 'D:\\d');
@@ -1269,8 +1269,6 @@ test('expandVars: ${NAME} from the environment, ${NAME:-fallback} when unset, nu
 });
 
 test('one ${VAR} expander, Claude Code\'s rule (2.1.322): a variable set to empty is empty, the fallback only when unset - fix and fetch agree', () => {
-    const C = require('../scripts/fix/common.ts');
-    const { expand } = require('../scripts/apply/fetch.ts');
     assert.strictEqual(expandVars('${B:-C:\\b}', { B: '' }).value, '');
     assert.deepStrictEqual(expandVars('${A}/${MISSING}', { A: 'a' }), { value: 'a/${MISSING}', unset: ['MISSING'] });
     assert.strictEqual(C.expandVars('${B:-C:\\b}', { B: '' }), '', 'set to empty: no fallback');
@@ -1323,8 +1321,6 @@ test('appium-sdk-env at project scope finds and proposes the SDK homes as at loc
 
 // ---- 0.3.0: 0.2.0's relative project paths, the .mcp.json order and a parent's helper (F7, F8, F3a) -------------------
 
-const { PARENT_HELPER_IN_CHILD } = require('../scripts/plan/asks-keys.ts');
-const existingLib = require('../scripts/inventory/existing.ts');
 const GH = { type: 'http', url: 'https://api.githubcopilot.com/mcp/' };
 const C7 = { type: 'http', url: 'https://mcp.context7.com/mcp' };
 const ctxIn = (w, dir, machine = noMachine()) => makeCtx({ inv: inventory.buildInventory({ project: dir, env: w.env }), env: w.env, machine });
@@ -1373,7 +1369,6 @@ test('project-relative-path: relative, ${HOME}, ${USERPROFILE}\\.serena and a re
 
 test('project-relative-path and mcp-order in a child folder name the parent', () =>
 {
-    const fs = require('node:fs');
     const w = world();
     try
     {
@@ -1397,7 +1392,6 @@ test('project-relative-path and mcp-order in a child folder name the parent', ()
 
 test('mcp-order: found when out of order, not found when in order or when a server left on its own sits among the user\'s', () =>
 {
-    const fs = require('node:fs');
     const w = world();
     try
     {
@@ -1425,7 +1419,6 @@ test('mcp-order: found when out of order, not found when in order or when a serv
 
 test('helper-child-folder: found from a child for an inherited helper, not found at the root', () =>
 {
-    const fs = require('node:fs');
     if (PARENT_HELPER_IN_CHILD) { assert.ok(!catalog.fixes.some((f) => f.id === 'helper-child-folder')); return; }
     const w = world();
     try
@@ -1445,8 +1438,6 @@ test('helper-child-folder: found from a child for an inherited helper, not found
 
 test('data-folder-ignore: after the paths are absolute, a 0.2.0 copy in a child is found once and gets its .gitignore; an ignored one is not', () =>
 {
-    const fs = require('node:fs');
-    const { spawnSync } = require('node:child_process');
     const w = world();
     try
     {
@@ -1500,7 +1491,6 @@ test('fix prints the reconnect line for each hosted keyed registration it rewrot
 
 // ---- the bridge (0.4.0): its file and the helper beside it, and its mcp-remote cache folder -------------------------
 
-const BV = require('../scripts/copied/mcp-bridge.js').BRIDGE_VERSION;
 const BRIDGE = (root, pin = '0.16.0') => ({ command: 'node', args: [path.join(root, 'mcp-bridge.js'), 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}', SK, 'Sentry-Bearer', `mcp-remote@${pin}`], env: { npm_config_before: '2026-11-11T23:59:59Z' } });
 const bridgeAt = (root, number, extra = '') => put(path.join(root, 'mcp-bridge.js'), rootsLib.shippedSource('bridge').replace(/^\/\/ preferred-tools mcp-bridge \d+/, `// preferred-tools mcp-bridge ${number}`) + extra);
 
@@ -1579,8 +1569,6 @@ test("npx-cache-entry finds a bridge registration's mcp-remote folder without pa
 // ---- 0.5.0: a 0.4.x server left on its own, before list-import (spec D1) ----------------------------------------------
 test('a 0.4.x own server is skipped before list-import: fix all leaves it byte-identical and list-import moves it to own', () =>
 {
-    const fs = require('node:fs');
-    const X = require('../scripts/inventory/existing.ts');
     const w = world();
     try
     {
@@ -1698,9 +1686,6 @@ test('the file pass runs after the registration pass, detects on what it wrote, 
 
 test("install's first touch retires the old record, and a configure 'manage' answer given then survives a later fix run", () =>
 {
-    const { plan } = require('../scripts/plan/plan.ts');
-    const { apply } = require('../scripts/apply/run.ts');
-    const X = require('../scripts/inventory/existing.ts');
     const w = world();
     try
     {
@@ -1902,11 +1887,8 @@ test('a root of the user\'s own files gets the advice to add !<file> for the bri
 });
 
 // ---- 0.5.0: a repair reaches the list and Cursor in the same run (spec D1) --------------------------------------------
-const kept5 = require('../scripts/core/kept.ts');
 const installBoth = (w, answers) =>
 {
-    const { plan } = require('../scripts/plan/plan.ts');
-    const { apply } = require('../scripts/apply/run.ts');
     const p = plan(inventory.buildInventory({ project: w.project, env: w.env }), { clients: ['claude', 'cursor'], ...answers }, { home: w.home, env: w.env });
     assert.deepStrictEqual(p.errors, []);
     assert.strictEqual(apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);

@@ -1,12 +1,13 @@
-'use strict';
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
-const { load, fingerprintKey, CATALOG_DIR } = require('../scripts/catalog/catalog.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { load, fingerprintKey, CATALOG_DIR } from '../scripts/catalog/catalog.ts';
+import { reservedFrom } from '../scripts/catalog/refresh-reserved.ts';
+import * as bridge from '../scripts/copied/mcp-bridge.js';
 
 const cat = load();
-const ROOT = path.join(__dirname, '..');
+const ROOT = path.join(import.meta.dirname, '..');
 
 const MCP_ROW = ['id', 'kind', 'group', 'label', 'summary', 'name', 'os', 'recommendedRoute', 'routes', 'dangerous'];
 const OSES = ['darwin', 'linux', 'win32'];
@@ -21,7 +22,7 @@ test('the catalog has 14 rows and no plugin kind', () => {
     assert.deepStrictEqual([...ids].sort(), ['appium', 'atlassian', 'context7', 'github', 'gitlab', 'macos-control',
         'memory', 'playwright-chrome', 'playwright-firefox', 'playwright-msedge', 'playwright-webkit', 'sentry', 'serena', 'windows-control']);
     // the rule for a later row (spec D8)
-    assert.match(require('../catalog/tools.json').note, /A plugin row is added only when it works in Claude Code and Cursor/);
+    assert.match(JSON.parse(fs.readFileSync(path.join(ROOT, 'catalog', 'tools.json'), 'utf8')).note, /A plugin row is added only when it works in Claude Code and Cursor/);
 });
 
 test('every row has the fields its kind needs', () => {
@@ -182,7 +183,6 @@ test('no catalog default name is in the reserved set, and the shipped set is the
     for (const n of ['sentry', 'context7-local', 'angular-cli', 'chrome-devtools']) assert.ok(!cat.reserved.has(n), n);
     const alfred = path.join(ROOT, '..', 'alfred-code');
     if (!fs.existsSync(path.join(alfred, 'meta', 'retired-plugins.json'))) return t.skip('no alfred-code checkout beside this repo');
-    const { reservedFrom } = require('../scripts/catalog/refresh-reserved.ts');
     assert.deepStrictEqual([...cat.reserved].sort(), reservedFrom(alfred));
 });
 
@@ -269,7 +269,6 @@ test('gitlab and atlassian take a key through the helper, with OAuth as the keyl
 test('memory keeps its data in the root of its scope', () => assert.strictEqual(cat.byId.get('memory').locations.defaultSide, 'project'));
 
 test('a bridge route: template names equal urlVars, a key helper, a pinned mcp-remote and a bridge fingerprint', () => {
-    const bridge = require('../scripts/copied/mcp-bridge.js');
     const routes = cat.tools.filter((r) => r.kind === 'mcp').flatMap((r) => Object.entries(r.routes).filter(([, x]) => x.runtime === 'bridge').map(([id, x]) => [`${r.id}/${id}`, x]));
     assert.deepStrictEqual(routes.map(([at]) => at), ['sentry/bridge']);
     for (const [at, route] of routes)

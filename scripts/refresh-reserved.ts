@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-'use strict';
 // The entry that rebuilds catalog/reserved-names.json; the work is in catalog/refresh-reserved.js.
-const { main } = require('./catalog/refresh-reserved.ts');
+import { main } from './catalog/refresh-reserved.ts';
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
+process.exit(main(process.argv.slice(2)));

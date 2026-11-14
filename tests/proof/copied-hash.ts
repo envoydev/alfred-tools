@@ -1,13 +1,12 @@
-'use strict';
 // The SHA-256 of the three files the plugin copies into a root, wherever the tree keeps them: scripts/copied/ once
 // they move there, else scripts/. They must not change a byte (docs/superpowers/specs, Decision 2).
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
-const COPIED = ['mcp-headers.js', 'mcp-bridge.js', 'serena-context.yml'];
+export const COPIED = ['mcp-headers.js', 'mcp-bridge.js', 'serena-context.yml'];
 
-function copiedHashes(tree)
+export function copiedHashes(tree)
 {
     const out = {};
     for (const name of COPIED)
@@ -18,4 +17,3 @@ function copiedHashes(tree)
     return out;
 }
 
-module.exports = { COPIED, copiedHashes };

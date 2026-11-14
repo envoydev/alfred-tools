@@ -1,4 +1,3 @@
-'use strict';
 // KEPT - no live credential in a file a command line names.
 //
 // alfred-code's secret guard (v3.2.1 stack/hooks/guard-secret-value.js) refuses a script run that names a JSON file
@@ -11,13 +10,13 @@
 // else: a known token shape, a PEM private key, a connection string's `Password=` and a URL's userinfo password. Never
 // masked: a value of nothing but ${NAME} / ${NAME:-default} placeholders after at most one scheme word (`Bearer
 // ${CONTEXT7_API_KEY}`), and a catalog row's location keys, which configure reads.
-const MARKER = '${PREFERRED_TOOLS_KEPT}';
+export const MARKER = '${PREFERRED_TOOLS_KEPT}';
 
 // the guard's tests (v3.2.1 :63-67, :143-156), copied so this file masks at least what it blocks
 const SECRET_KEY_RE = /(TOKEN|SECRET|KEY|PASSWORD|PASSWD|DSN|CREDENTIAL|AUTH)$/i;
 const FILE_KEY_EXTRA = /(?:^|[._-])pass(?:phrase)?$|(?:^|[._-])(?:client|private)[-_]?key[-_]?data$|^requirepass$/i;
 const CAMEL_PASS = /[a-z0-9](?:Pass(?:phrase)?|PWD|Pwd)$/;
-const credKey = (k) => SECRET_KEY_RE.test(k) || FILE_KEY_EXTRA.test(k) || CAMEL_PASS.test(k);
+export const credKey = (k) => SECRET_KEY_RE.test(k) || FILE_KEY_EXTRA.test(k) || CAMEL_PASS.test(k);
 const SHAPE = /\b(?:sntryu_[0-9a-f]{16,}|ctx7sk-[0-9a-f-]{16,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/g;
 const PEM = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----|$)/g;
 const PAIR = /((?:^|[;,])\s*(?:password|pwd)\s*=\s*)([^;,]*)/gi;
@@ -70,7 +69,7 @@ function keepNode(node, key, whole)
 
 // keep(entry, row) -> a copy with every credential value as MARKER. `row` is the catalog row the registration matched,
 // for its location keys; null for the user's own.
-function keep(entry, row)
+export function keep(entry, row)
 {
     if (!entry || typeof entry !== 'object') return entry;
     const loc = locationKeys(row);
@@ -90,7 +89,7 @@ const at = (node, path) => path.reduce((o, k) => (o == null ? undefined : o[k]),
 // restore(entry, source, row) -> { entry } | { error }. Each string holding MARKER takes the string at the same place in
 // `source` (the registration as it is now) whose kept text equals it; an arg takes the first unused source arg whose
 // kept text equals it, in order, so an arg a splice moved still finds its value.
-function restore(entry, source, row)
+export function restore(entry, source, row)
 {
     const kept = keep(source || {}, row);
     const sourceArgs = Array.isArray(source && source.args) ? source.args : [];
@@ -119,11 +118,11 @@ function restore(entry, source, row)
     return error ? { error } : { entry: out };
 }
 
-const holdsKept = (node) => JSON.stringify(node === undefined ? null : node).includes(MARKER);
+export const holdsKept = (node) => JSON.stringify(node === undefined ? null : node).includes(MARKER);
 
 // credentialPaths(entry, row) -> the dotted path of every credential value the entry holds, live or already MARKER
 // ('headers.X-API-Key', 'args.3', 'url'), for the check that a committed file never gets one.
-function credentialPaths(entry, row)
+export function credentialPaths(entry, row)
 {
     const masked = keep(entry, row);
     const out = [];
@@ -137,6 +136,5 @@ function credentialPaths(entry, row)
 }
 
 // A value shaped like a known key (SHAPE) or a PEM block - tested in this process, never returned.
-const looksLikeKey = (v) => new RegExp(SHAPE.source).test(String(v)) || new RegExp(PEM.source).test(String(v));
+export const looksLikeKey = (v) => new RegExp(SHAPE.source).test(String(v)) || new RegExp(PEM.source).test(String(v));
 
-module.exports = { MARKER, keep, restore, holdsKept, credKey, credentialPaths, looksLikeKey };

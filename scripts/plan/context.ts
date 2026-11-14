@@ -1,15 +1,14 @@
-'use strict';
 // The context a plan is made in: the machine, the project, the roots and the catalog.
-const { alfredData } = require('../entries/locations.ts');
-const { liveReader } = require('./asks-keys.ts');
-const account = require('../core/account.ts');
+import { alfredData } from '../entries/locations.ts';
+import { liveReader } from './asks-keys.ts';
+import * as account from '../core/account.ts';
 
 // 'A', 'A and B', 'A, B and C'
-const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+export const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
-const SCOPES = ['local', 'project', 'user'];
+export const SCOPES = ['local', 'project', 'user'];
 
-function makeCtx(inv, opts = {})
+export function makeCtx(inv, opts = {})
 {
     const ctx = {
         platform: inv.os, arch: inv.arch, project: inv.project, env: opts.env || process.env,
@@ -22,4 +21,3 @@ function makeCtx(inv, opts = {})
     return ctx;
 }
 
-module.exports = { makeCtx, SCOPES, andList };

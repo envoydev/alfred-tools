@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // REFRESH THE CATALOG'S PINS - a repo script (`npm run refresh-pins`), never run by an install or an update.
 //
 //   node scripts/refresh-pins.ts            print what would move
@@ -8,16 +7,16 @@
 // Each package route moves to the newest stable release that is 7 or more days old (scripts/registry.js), and its cut-off
 // moves to the end of today (UTC). A pin already at or past that release stays, and so does its cut-off. A Docker image
 // tag is not looked up. Moving a pin is a release: the output ends with what to do next.
-const fs = require('node:fs');
-const path = require('node:path');
-const catalogLib = require('./catalog.ts');
-const registryLib = require('./registry.ts');
-const { blockingStdio } = require('../core/json-file.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import * as catalogLib from './catalog.ts';
+import * as registryLib from './registry.ts';
+import { blockingStdio } from '../core/json-file.ts';
 
 const FILE = path.join(catalogLib.CATALOG_DIR, 'tools.json');
 
 // -> { next (the catalog object, moved), changes: [{ row, route, package, from, to, ageDays }], held: [], errors: [] }
-async function refresh(tools, { registry, now = Date.now() })
+export async function refresh(tools, { registry, now = Date.now() })
 {
     const next = JSON.parse(JSON.stringify(tools));
     const out = { next, changes: [], held: [], errors: [] };
@@ -46,9 +45,9 @@ async function refresh(tools, { registry, now = Date.now() })
     return out;
 }
 
-const serialize = (tools) => `${JSON.stringify(tools, null, 2)}\n`;
+export const serialize = (tools) => `${JSON.stringify(tools, null, 2)}\n`;
 
-function render(out, { write })
+export function render(out, { write })
 {
     const lines = [];
     if (out.changes.length)
@@ -69,7 +68,7 @@ function render(out, { write })
     return lines.join('\n');
 }
 
-async function main(argv, { out = (s) => process.stdout.write(`${s}\n`), registry, now, file = FILE, env = process.env } = {})
+export async function main(argv, { out = (s) => process.stdout.write(`${s}\n`), registry, now, file = FILE, env = process.env } = {})
 {
     const unknown = argv.filter((a) => a !== '--write');
     if (unknown.length) { out(`refresh-pins: unknown argument '${unknown[0]}'\nusage: node scripts/refresh-pins.ts [--write]`); return 2; }
@@ -81,4 +80,3 @@ async function main(argv, { out = (s) => process.stdout.write(`${s}\n`), registr
     return result.errors.length ? 1 : 0;
 }
 
-module.exports = { refresh, serialize, render, main };

@@ -1,10 +1,11 @@
-'use strict';
 // The pick questions: which tools, in calls of at most four, and which apps.
-const { installedOf, fromHere, otherWindowsMcp } = require('../inventory/inventory.ts');
-const roots = require('../roots/roots.ts');
-const { HEADER } = require('./asks-keys.ts');
+import { installedOf, fromHere, otherWindowsMcp } from '../inventory/inventory.ts';
+import * as roots from '../roots/roots.ts';
+import { HEADER } from './asks-keys.ts';
+import * as X from '../inventory/existing.ts';
+import { homeDir } from '../core/account.ts';
 
-function chunk(list, n)
+export function chunk(list, n)
 {
     const out = [];
     for (let i = 0; i < list.length; i += n) out.push(list.slice(i, i + n));
@@ -15,7 +16,7 @@ function chunk(list, n)
 // most four options, a bigger group split evenly (5 is 3 + 2, never 4 + 1). AskUserQuestion takes 2 to 4 options, so a
 // question left with one joins a neighbour that has room, else takes one from it, and a single item in all gets
 // `none` beside it. -> calls of at most four questions.
-function packed(items, { id, question, none })
+export function packed(items, { id, question, none })
 {
     const qs = [];
     for (const g of [...new Set(items.map((i) => i.group))])
@@ -64,9 +65,8 @@ const offeredForInstall = (row, inv) =>
 
 // Who else provides a row here (spec F4): a claude.ai connector this session has loaded, or an enabled plugin's server.
 // -> [{ owner, tag }]
-function alsoProvided(inv, rowId, connectors)
+export function alsoProvided(inv, rowId, connectors)
 {
-    const X = require('../inventory/existing.ts');
     const out = [];
     if ((connectors || []).some((n) => X.matchConnector(n) === rowId)) out.push({ owner: 'claude.ai', tag: 'also connected through claude.ai' });
     const enabled = new Set((inv.plugins || []).filter((p) => p.enabledHere ?? p.enabled).map((p) => p.id));
@@ -78,9 +78,8 @@ function alsoProvided(inv, rowId, connectors)
 // `existing`: answers about servers already set up (spec D6). A row whose server was left on its own - answered or
 // recorded - is not offered; one answered 'add' is, with the two servers named. `connectors`: the claude.ai connectors
 // this session has loaded; a row one of them, or an enabled plugin, provides says so in its label (spec F4).
-function pickQuestions(inv, catalog, existing = {}, connectors = null)
+export function pickQuestions(inv, catalog, existing = {}, connectors = null)
 {
-    const X = require('../inventory/existing.ts');
     const rule = X.offerRule(inv, catalog, existing);
     const items = [];
     for (const g of catalog.groups)
@@ -107,7 +106,7 @@ const leftAlone = (inv, h) => h.kind === 'mcp' && inv.registrations.some((r) => 
 // Every catalog registration installed here, one item each (a row at two scopes is two), grouped. An
 // inherited server is not here: it is changed by running the command in its own folder, and one left on its own is in
 // its own group (changeQuestions).
-function installedItems(inv, catalog, describe)
+export function installedItems(inv, catalog, describe)
 {
     const items = [];
     for (const g of catalog.groups)
@@ -118,13 +117,12 @@ function installedItems(inv, catalog, describe)
 }
 
 // The root each family uses now (spec D2): the inventory's, else found from the registrations and the standard folders.
-function rootInUse(inv, family, ctx = {})
+export function rootInUse(inv, family, ctx = {})
 {
     if (inv.roots && Object.hasOwn(inv.roots, family)) return inv.roots[family] || null;
-    return roots.inUse(inv, family, { project: inv.project, platform: inv.os, home: ctx.home || require('../core/account.ts').homeDir(process.env), exists: ctx.exists, catalog: ctx.catalog });
+    return roots.inUse(inv, family, { project: inv.project, platform: inv.os, home: ctx.home || homeDir(process.env), exists: ctx.exists, catalog: ctx.catalog });
 }
 
-const ROOT_LABEL = { project: 'Project root folder', global: 'Global root folder' };
-const ROOT_MOVES = { project: "this project's keys, key helper and tool data", global: 'the keys, key helper and tool data for every project' };
+export const ROOT_LABEL = { project: 'Project root folder', global: 'Global root folder' };
+export const ROOT_MOVES = { project: "this project's keys, key helper and tool data", global: 'the keys, key helper and tool data for every project' };
 
-module.exports = { alsoProvided, pickQuestions, packed, chunk, installedItems, rootInUse, ROOT_LABEL, ROOT_MOVES };

@@ -1,13 +1,12 @@
-'use strict';
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const catalogLib = require('../scripts/catalog/catalog.ts');
-const { buildEntry } = require('../scripts/entries/entry.ts');
-const { render } = require('../scripts/inventory/table.ts');
-const { main } = require('../scripts/inventory/table-command.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as catalogLib from '../scripts/catalog/catalog.ts';
+import { buildEntry } from '../scripts/entries/entry.ts';
+import { render } from '../scripts/inventory/table.ts';
+import { main } from '../scripts/inventory/table-command.ts';
 
 const catalog = catalogLib.load();
 

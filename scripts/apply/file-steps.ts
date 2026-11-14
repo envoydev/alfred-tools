@@ -1,14 +1,15 @@
-'use strict';
 // The file steps of an apply (spec D2-D4, D6, D8): each skips what is in place.
-const fs = require('node:fs');
-const path = require('node:path');
-const { stripBom } = require('../core/json-file.ts');
-const keys = require('../keys/keys.ts');
-const catalogLib = require('../catalog/catalog.ts');
-const roots = require('../roots/roots.ts');
-const lists = require('../mcps-list/mcps-list.ts');
-const cursorMcp = require('../cursor/cursor-mcp.ts');
-const { readRegistration, rowOf } = require('./cli-steps.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import { stripBom } from '../core/json-file.ts';
+import * as keys from '../keys/keys.ts';
+import * as catalogLib from '../catalog/catalog.ts';
+import * as roots from '../roots/roots.ts';
+import * as lists from '../mcps-list/mcps-list.ts';
+import * as cursorMcp from '../cursor/cursor-mcp.ts';
+import { readRegistration, rowOf } from './cli-steps.ts';
+import { HELPER_VERSION } from '../copied/mcp-headers.js';
+import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 
 // ---- the file steps (spec D2-D4, D6, D8): each skips what is in place, so a re-run after a failed add writes nothing again
 
@@ -28,7 +29,7 @@ function pluginWritten(root, name)
 
 // What rootIgnore would do in `root`, read only: { file, text (null when absent), mine, want, lack } - `mine` false for a
 // folder holding the user's own files.
-function rootIgnoreLines(root)
+export function rootIgnoreLines(root)
 {
     let names = [];
     try { names = fs.readdirSync(root); } catch { /* a new root */ }
@@ -43,7 +44,7 @@ function rootIgnoreLines(root)
 
 // <root>/.gitignore: GITIGNORE when absent, else each of its lines the file lacks appended; in a folder holding the
 // user's own files, only the key file and the record - never `*`, so their files stay visible to git. Never under .alfred.
-function rootIgnore(root)
+export function rootIgnore(root)
 {
     if (path.basename(root) === '.alfred') return { ok: true, detail: `${root} is alfred-code's - its own .gitignore covers it; nothing written` };
     const { file, text, want, lack } = rootIgnoreLines(root);
@@ -61,7 +62,7 @@ function rootIgnore(root)
 // <root>/package.json, {"type":"commonjs"}, when absent (0.4.0 Ruling 12): a package.json above the root that says
 // "type": "module" would load mcp-headers.js and mcp-bridge.js as ES modules, where `require` does not exist. One that is
 // there is never changed; a "module" one is named. -> { wrote, note }
-function ensureCommonjs(root)
+export function ensureCommonjs(root)
 {
     const file = path.join(root, 'package.json');
     let text = null;
@@ -80,12 +81,12 @@ function ensureCommonjs(root)
 // A file this plugin copies into a root - <root>/mcp-headers.js (D4) or <root>/mcp-bridge.js (0.4.0): copied when absent
 // or its number is lower; a hand edit or a newer copy is left. package.json beside it either way.
 const SHIPPED = {
-    helper: { word: 'helper', version: () => require('../copied/mcp-headers.js').HELPER_VERSION },
-    bridge: { word: 'bridge', version: () => require('../copied/mcp-bridge.js').BRIDGE_VERSION },
+    helper: { word: 'helper', version: () => HELPER_VERSION },
+    bridge: { word: 'bridge', version: () => BRIDGE_VERSION },
     // serena's context (D7): YAML, so no package.json beside it
     serenaContext: { word: 'context', version: () => roots.SERENA_CONTEXT_VERSION, plain: true },
 };
-function writeShipped(kind, root)
+export function writeShipped(kind, root)
 {
     const file = path.join(root, roots.FILES[kind]);
     const { state, number } = roots.shippedState(kind, file);
@@ -99,12 +100,12 @@ function writeShipped(kind, root)
     fs.writeFileSync(file, roots.shippedSource(kind));
     return withPkg(state === 'lower' ? `rewrote ${file} (${word} ${number} -> ${version()})` : `wrote ${file} (${word} ${version()})`);
 }
-const writeHelper = (root) => writeShipped('helper', root);
+export const writeHelper = (root) => writeShipped('helper', root);
 
 // The key file's names (D3): created with its comment line, readable by its owner only; `NAME=` appended for each name it
 // lacks. Its values are never read out of this process, and no line is rewritten. Refused where git would commit it.
 const KEY_HEAD = '# preferred-tools MCP keys - fill in each value; this file is never committed';
-function ensureKeyName(file, names)
+export function ensureKeyName(file, names)
 {
     if (roots.gitIgnores(file) === false) return { ok: false, detail: `git would commit ${file} - not written; /preferred-tools:fix (root-ignore) covers it` };
     let buf = null;
@@ -155,7 +156,7 @@ const readNote = (read, bak) => (read && read.note ? ` - ${read.note}${bak ? `; 
 // applied; the own entries by the 0.4.x record's rules (mcpsList.ownOf), or the list's own as it is. A family with no list
 // yet carries its 0.4.x record's own entries. After a failure (`failure`), cursor comes off a server whose Cursor file
 // was not written. Never names a key value: a stdio key field holds kept.MARKER.
-function listWrite(step, ctx, { failure = false } = {})
+export function listWrite(step, ctx, { failure = false } = {})
 {
     const read = lists.readList(step.file);
     let base = read;
@@ -201,7 +202,7 @@ function listWrite(step, ctx, { failure = false } = {})
 // The read guard (ruling 13): each rule permissions.deny lacks, appended in Claude Code's settings file - every other key,
 // value and order kept, written through a temporary file and a rename. An absent file reads as {}; one that is not a JSON
 // object is left as it is. -> { ok, detail, unchanged? }
-function denyRead(file, rules)
+export function denyRead(file, rules)
 {
     let text = null;
     try { text = fs.readFileSync(file, 'utf8'); } catch (err) { if (err.code !== 'ENOENT') return { ok: false, detail: `${file} cannot be read (${err.code}) - left as it is` }; }
@@ -224,7 +225,7 @@ function denyRead(file, rules)
 // A root's own file or folder to its new root (configure's root change, D1): renamed when the new one is absent; a file the
 // new root holds with the same bytes is the same file, so the old one goes; anything else stops the apply with both named,
 // before any registration moves. A folder (mcp-remote-v1, whose files are sign-in tokens) is renamed whole, never opened.
-function moveRootFile(from, to)
+export function moveRootFile(from, to)
 {
     let st;
     try { st = fs.lstatSync(from); } catch { return { ok: true, detail: `${from}: not there - nothing to move` }; }
@@ -252,7 +253,7 @@ function moveRootFile(from, to)
 
 // A 0.4.x preferred-tools.json whose entries the list holds now: moved aside as <file>.0.4.bak, or .0.4.bak.2 and on
 // when an earlier backup is there - never over one, so the record always leaves and list-import finds nothing next run.
-function retireRecord(file)
+export function retireRecord(file)
 {
     if (!fs.existsSync(file)) return { ok: true, detail: `${file}: not there - nothing to move` };
     let to = `${file}.0.4.bak`;
@@ -263,7 +264,7 @@ function retireRecord(file)
 
 // After a stop: every list-write of the plan again, so each list holds what was applied before the stop and nothing
 // after it. A failure here is reported and never masks the stop's. -> [{ ok, detail }]
-function failureLists(plan, report, ctx, log = () => {})
+export function failureLists(plan, report, ctx, log = () => {})
 {
     const out = [];
     for (const step of plan.steps.filter((s) => s.op === 'list-write'))
@@ -278,7 +279,7 @@ function failureLists(plan, report, ctx, log = () => {})
 }
 
 // <data>/roots.json: the family's root for this project (D2). No data folder given: nothing to write (R8).
-function recordRoot(step, data)
+export function recordRoot(step, data)
 {
     if (!data) return { ok: true, detail: `${step.family} root ${step.root}: no plugin data folder given - the root is found from its files next time` };
     const map = roots.readMap(data);
@@ -291,4 +292,3 @@ function recordRoot(step, data)
     return { ok: true, detail: `recorded the ${step.family} root ${step.root} in ${file}${readNote(map, bak)}` };
 }
 
-module.exports = { listWrite, failureLists, denyRead, rootIgnore, rootIgnoreLines, writeHelper, writeShipped, ensureCommonjs, ensureKeyName, moveRootFile, retireRecord, recordRoot };

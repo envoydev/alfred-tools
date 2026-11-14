@@ -1,9 +1,8 @@
-'use strict';
-const test = require('node:test');
-const assert = require('node:assert');
-const crypto = require('node:crypto');
-const { MARKER, keep, restore } = require('../scripts/core/kept.ts');
-const catalogLib = require('../scripts/catalog/catalog.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import crypto from 'node:crypto';
+import { MARKER, keep, restore } from '../scripts/core/kept.ts';
+import * as catalogLib from '../scripts/catalog/catalog.ts';
 
 // live-shaped values are made per run, so no file here holds one a guard would read as a credential
 const hex = (n) => crypto.randomBytes(n).toString('hex');

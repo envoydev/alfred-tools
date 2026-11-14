@@ -1,14 +1,13 @@
-'use strict';
 // Printing a plan: each step as the command it runs, and the notes.
-const { pathFor } = require('../entries/platform.ts');
-const roots = require('../roots/roots.ts');
-const { renderLine } = require('./repair-tail.ts');
+import { pathFor } from '../entries/platform.ts';
+import * as roots from '../roots/roots.ts';
+import { renderLine } from './repair-tail.ts';
 
 // ---- printing -------------------------------------------------------------------------------------------------------
 
 const shq = (s) => (/^[A-Za-z0-9_\-./:=@,+]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`);
 
-function argvOf(step)
+export function argvOf(step)
 {
     switch (step.op)
     {
@@ -33,13 +32,13 @@ function keyLine(k)
 // for a server whose helper printed {}: nothing has measured it. An unfilled one names what the key must be - the
 // route's hint (atlassian's email:api_token, gitlab's fine-grained token) - since the recommended path asks nothing
 // that would show it (0.3.0 review, Important 1).
-function reconnectLine({ name, variable, file, filled, anonymous, hint = null })
+export function reconnectLine({ name, variable, file, filled, anonymous, hint = null })
 {
     if (filled) return `${name}: connects with its key at the next session start; in a session already running, /mcp -> ${name} -> Reconnect`;
     return `${name}: fill ${variable} in ${file}${hint ? ` (${hint})` : ''}, then Reconnect it in /mcp - until then ${anonymous ? 'it runs without the key, at lower rate limits' : 'it connects without the key, and /mcp shows needs authentication'}`;
 }
 
-function render(p)
+export function render(p)
 {
     const lines = [];
     const P = pathFor(p.os);
@@ -86,10 +85,9 @@ function render(p)
 
 // The prose says Global for user scope (spec D1): 'global (user scope)' the first time, 'global scope' after. The commands
 // keep the value (`-s user`, `--scope user`).
-function globalWords(text)
+export function globalWords(text)
 {
     let first = true;
     return text.replace(/\buser scope\b/g, () => { if (!first) return 'global scope'; first = false; return 'global (user scope)'; });
 }
 
-module.exports = { render, reconnectLine, argvOf, globalWords };

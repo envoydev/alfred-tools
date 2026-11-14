@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // THE HOOK REPLAY - does alfred-code break preferred-tools' commands? Every step the four commands take is put through
 // the hooks alfred-code registers, at each released version, in a plain alfred-code project and (from 2.11.0, the first
 // release with workspaces) in a workspace root and its child. No model, no login.
@@ -25,16 +24,16 @@
 // from its text; a line the replay does not take is reported NOT RUN with its reason, so a new step cannot slip past.
 // The files the steps name are built for real, from a folder seeded with every catalog server for this OS plus
 // registrations that hold live-shaped values.
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const crypto = require('node:crypto');
-const { spawnSync } = require('node:child_process');
-const cli = require('../../scripts/core/claude-cli.ts');
-const catalogLib = require('../../scripts/catalog/catalog.ts');
-const { buildAlfred } = require('./alfred-workspace.ts');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import * as cli from '../../scripts/core/claude-cli.ts';
+import * as catalogLib from '../../scripts/catalog/catalog.ts';
+import { buildAlfred } from './alfred-workspace.ts';
 
-const REPO = path.resolve(__dirname, '..', '..');
+const REPO = path.resolve(import.meta.dirname, '..', '..');
 const VERSIONS = ['2.9.0', '2.11.0', '3.0.0', '3.2.1'];
 const WORKSPACE_FROM = '2.11.0';
 const COMMANDS = ['install', 'configure', 'fix', 'update'];
@@ -44,7 +43,7 @@ const newer = (a, b) => { const x = a.split('.').map(Number); const y = b.split(
 
 // ---- the commands' own lines ----------------------------------------------------------------------------------------
 
-function commandLines(name)
+export function commandLines(name)
 {
     const text = fs.readFileSync(path.join(REPO, 'commands', `${name}.md`), 'utf8');
     const body = text.replace(/^---[\s\S]*?\n---\n/, '');
@@ -55,7 +54,7 @@ function commandLines(name)
 
 // ---- the hooks a version registers ------------------------------------------------------------------------------------
 
-function hooksOf(alfred)
+export function hooksOf(alfred)
 {
     const doc = JSON.parse(fs.readFileSync(path.join(alfred, '.claude-plugin', 'marketplace.json'), 'utf8'));
     const entry = doc.plugins.find((p) => p.name === 'alfred-code');
@@ -69,7 +68,7 @@ const hookName = (h) => { const m = /([\w.-]+\.js)"?\s*[^/\\]*$/.exec(h.command)
 
 // The hooks docs' matcher rules: '*', '' or none matches all; else a regex tested on the tool name (tool events), the
 // source (SessionStart) or the command name (UserPromptExpansion). `if: "Tool(pattern)"` narrows a tool event further.
-function matches(h, payload)
+export function matches(h, payload)
 {
     const on = { PreToolUse: payload.tool_name, PostToolUse: payload.tool_name, SessionStart: payload.source, UserPromptExpansion: payload.command_name }[h.event];
     if (h.matcher && h.matcher !== '*' && on !== undefined && !new RegExp(h.matcher).test(on)) return false;
@@ -90,7 +89,7 @@ function matches(h, payload)
 const ACTS = /\bre-ask\b|\bask whether\b|\bbefore acting\b|\bBefore this turn closes\b|\bend the turn with\b/i;
 const contextOf = (detail) => ({ verdict: ACTS.test(detail) ? 'FINDING' : 'CONTEXT', detail });
 
-function judge(event, r)
+export function judge(event, r)
 {
     const err = (r.stderr || '').trim();
     if (r.error) return { verdict: 'FINDING', detail: `error ${r.error.code || r.error.message}` };
@@ -408,5 +407,4 @@ function main(argv)
     return findings ? 1 : 0;
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { hooksOf, matches, judge, commandLines };
+if (import.meta.main) process.exit(main(process.argv.slice(2)));

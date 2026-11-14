@@ -1,4 +1,3 @@
-'use strict';
 // ROOT FOLDERS (spec D2) - one root per scope family: the project root serves project and local scope, the global root
 // serves global (user) scope. A root holds each tool's data folder `<root>/<name>`, the key file, the header helper, the
 // record of the user's answers and, unless it is `.alfred`, a `.gitignore`. The roots map in the plugin's data folder
@@ -6,29 +5,31 @@
 //
 // Nothing here writes: the apply's file steps do. A ctx stands in for the machine - { project, home, platform, exists,
 // catalog } - so the options and the root in use are tested without a disk.
-const fs = require('node:fs');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const account = require('../core/account.ts');
-const { rootOfEntry, alfredData } = require('../entries/locations.ts');
-const { helperParts, bridgeParts, helperNameOf } = require('../entries/entry.ts');
-const helper = require('../copied/mcp-headers.js');
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import * as account from '../core/account.ts';
+import { rootOfEntry, alfredData } from '../entries/locations.ts';
+import { helperParts, bridgeParts, helperNameOf } from '../entries/entry.ts';
+import * as helper from '../copied/mcp-headers.js';
+import { load } from '../catalog/catalog.ts';
+import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 
-const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json', signIns: 'mcp-remote-v1', serenaContext: 'serena-context.yml' };
+export const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json', signIns: 'mcp-remote-v1', serenaContext: 'serena-context.yml' };
 // The read guard (0.5.0, ruling 13): two deny rules in Claude Code's settings that keep a session's Read tool out of
 // mcp-remote's sign-in tokens and the key file, wherever a root sits.
-const READ_GUARD = { signIns: 'Read(//**/mcp-remote-v1/**)', secrets: 'Read(//**/.mcps-secrets)' };
-const GITIGNORE = '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n';
+export const READ_GUARD = { signIns: 'Read(//**/mcp-remote-v1/**)', secrets: 'Read(//**/.mcps-secrets)' };
+export const GITIGNORE = '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n';
 // serena's context file (spec D7): its number, on its first line
-const SERENA_CONTEXT_VERSION = 1;
+export const SERENA_CONTEXT_VERSION = 1;
 const MAP_VERSION = 1;
 
 const pathFor = (platform) => (platform === 'win32' ? path.win32 : path.posix);
-const familyOf = (scope) => (scope === 'user' ? 'global' : 'project');
+export const familyOf = (scope) => (scope === 'user' ? 'global' : 'project');
 const SCOPES_OF = { project: ['project', 'local'], global: ['user'] };
 const existsOf = (ctx) => ctx.exists || ((p) => fs.existsSync(p));
 let loaded = null;
-const catalogOf = (ctx) => ctx.catalog || (loaded = loaded || require('../catalog/catalog.ts').load());
+const catalogOf = (ctx) => ctx.catalog || (loaded = loaded || load());
 
 // ---- the roots map --------------------------------------------------------------------------------------------------
 
@@ -42,7 +43,7 @@ const versionNote = (file, version, current) => (newerOrBad(version, current) ==
 
 // The map in the plugin's data folder. Missing: empty. Malformed or another version: empty with a note and its state.
 // Never throws.
-function readMap(dataDir)
+export function readMap(dataDir)
 {
     if (!dataDir) return emptyMap();
     const file = path.join(dataDir, FILES.map);
@@ -61,10 +62,10 @@ function readMap(dataDir)
 }
 
 // The map's key for a project: its trust root (the git root, else the folder), as the account file keys it.
-const mapKey = (project) => account.projectKey(account.localRoot(project));
+export const mapKey = (project) => account.projectKey(account.localRoot(project));
 
 // A new map with the family's root set; the input is left as it was.
-function withRoot(map, family, project, root)
+export function withRoot(map, family, project, root)
 {
     const base = map && map.version === MAP_VERSION ? map : emptyMap();
     if (family === 'global') return { version: MAP_VERSION, global: root, projects: { ...base.projects } };
@@ -74,7 +75,7 @@ function withRoot(map, family, project, root)
 // ---- the root in use ------------------------------------------------------------------------------------------------
 
 // The family's standard folders, in option order before alfred-code's set-up decides: [{ id, root }]
-function standard(family, ctx)
+export function standard(family, ctx)
 {
     const P = pathFor(ctx.platform);
     if (family === 'global') return [{ id: 'preferred-tools', root: P.join(ctx.home, '.preferred-tools') }, { id: 'home-alfred', root: P.join(ctx.home, '.alfred') }];
@@ -82,7 +83,7 @@ function standard(family, ctx)
 }
 
 // A written path as an absolute one: `~`, `${HOME}` / `${USERPROFILE}`, absolute, else relative to the project.
-function absOf(text, ctx)
+export function absOf(text, ctx)
 {
     const P = pathFor(ctx.platform);
     const t = String(text).trim().replace(/^\.[\\/]/, '');
@@ -94,7 +95,7 @@ function absOf(text, ctx)
 }
 
 // The helper file a `headersHelper` command names, or null.
-function helperPathOf(command)
+export function helperPathOf(command)
 {
     const h = helperParts(command);
     return h ? h.path : null;
@@ -105,7 +106,7 @@ const managed = (r, family) => r.rowId && !r.alfredRetired && r.choice !== 'own'
 // The roots the family's managed registrations point into, helpers first, then data folders: [{ path }]. A data folder
 // counts only when its parent is a standard folder or holds one of the root's files - a tool's default folder in the home
 // (~/.serena) is not a root.
-function registrationRoots(inv, family, ctx)
+export function registrationRoots(inv, family, ctx)
 {
     const P = pathFor(ctx.platform);
     const exists = existsOf(ctx);
@@ -134,7 +135,7 @@ function registrationRoots(inv, family, ctx)
 
 // The root already in use for a family (D2's order): the roots map's, else the folder a managed registration's helper or
 // data folder sits in, else the standard folder that holds the key file. -> { path, from } | null
-function inUse(inv, family, ctx)
+export function inUse(inv, family, ctx)
 {
     const exists = existsOf(ctx);
     const map = (inv.roots && inv.roots.map) || emptyMap();
@@ -153,7 +154,7 @@ const NAMED_GLOBAL_TAIL = "a project-scope helper does not read keys here - keep
 
 // The root question's options, the recommended first (D2's table): [{ id, label, description, root }]. Labels name the
 // place in words; descriptions give the exact folder on this machine. 'A folder you name' has no root: it is asked next.
-function options(inv, family, ctx)
+export function options(inv, family, ctx)
 {
     const exists = existsOf(ctx);
     const [alfred, preferred] = standard('project', ctx);
@@ -180,7 +181,7 @@ function options(inv, family, ctx)
 
 // A folder the user named for a root. Project: inside the project - relative, no `..`, not `.git` or `.claude`. Global:
 // absolute or under `~`, `~` expanded. -> { root } | { error }
-function resolveNamed(family, text, ctx)
+export function resolveNamed(family, text, ctx)
 {
     const P = pathFor(ctx.platform);
     const t = String(text == null ? '' : text).trim();
@@ -201,7 +202,7 @@ function resolveNamed(family, text, ctx)
 }
 
 // A root as a registration writes it: relative to the project with `/` at project scope, absolute otherwise.
-function rootStrFor(root, scope, ctx)
+export function rootStrFor(root, scope, ctx)
 {
     if (scope !== 'project') return root;
     const P = pathFor(ctx.platform);
@@ -211,7 +212,7 @@ function rootStrFor(root, scope, ctx)
 // The roots a run uses. `answers`: { project: { id, path? }, global: { id, path? } } - an option id from the root
 // question, `path` the folder typed for 'named'. No answer: the family's recommended root (D2's first option). ->
 // { roots: { project, global, globalNamed }, errors: [reason] }, the roots absolute.
-function resolve(inv, answers, ctx)
+export function resolve(inv, answers, ctx)
 {
     const out = {};
     const errors = [];
@@ -239,7 +240,7 @@ function resolve(inv, answers, ctx)
 
 // D6's 'not asked': the root a registration's helper or data folder points into - a standard root, a mapped one, or a
 // folder holding one of a root's files - else null. A tool's default folder in the home (~/.serena) is not a root.
-function pointsIntoRoot(reg, inv, ctx)
+export function pointsIntoRoot(reg, inv, ctx)
 {
     const P = pathFor(ctx.platform);
     // a bridge (0.4.0): this plugin's when its file has a number line, or - no file yet - when its launch names a key
@@ -277,7 +278,7 @@ function pointsIntoRoot(reg, inv, ctx)
 
 // The record's key for one entry (R6): `mcp:<name>~<scope>`, `plugin-mcp:<plugin>/<server>`, `connector:<Name>`; null
 // for an entry of none of those shapes.
-function recordKey(e)
+export function recordKey(e)
 {
     if (!e || typeof e !== 'object') return null;
     if (typeof e.name === 'string' && typeof e.scope === 'string') return `mcp:${e.name}~${e.scope}`;
@@ -288,9 +289,9 @@ function recordKey(e)
 
 // The scope family whose root holds an entry's record (spec F4): a user registration and a connector the global root's, a
 // project or local registration and a plugin's server the project root's.
-const recordFamily = (e) => (typeof e.connector === 'string' || e.scope === 'user' ? 'global' : 'project');
+export const recordFamily = (e) => (typeof e.connector === 'string' || e.scope === 'user' ? 'global' : 'project');
 // The entries a record keeps (spec F4): the servers left on their own.
-const ownOnly = (servers) => (servers || []).filter((e) => e && typeof e === 'object' && e.choice === 'own');
+export const ownOnly = (servers) => (servers || []).filter((e) => e && typeof e === 'object' && e.choice === 'own');
 
 // ---- git and the helper on disk -------------------------------------------------------------------------------------
 
@@ -298,7 +299,7 @@ const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { retu
 
 // Would git ignore this path? Run from its nearest folder on disk, so a file not written yet is asked about too. -> true,
 // false, or null outside a git work tree or with git absent.
-function gitIgnores(file)
+export function gitIgnores(file)
 {
     let dir = path.dirname(file);
     while (!isDir(dir))
@@ -316,7 +317,7 @@ function gitIgnores(file)
 // would ignore the helper a project-scope server needs committed (`helper`; `excluded` when a .gitignore above excludes
 // the root folder itself, which no line inside it can undo). -> null | { reason, secrets?, helper?, excluded? }; null
 // outside a work tree or with no git.
-function ignoreGap(root, family, { writes = [] } = {})
+export function ignoreGap(root, family, { writes = [] } = {})
 {
     const secrets = path.join(root, FILES.secrets);
     const s = gitIgnores(secrets);
@@ -339,15 +340,15 @@ function ignoreGap(root, family, { writes = [] } = {})
 // The files this plugin copies into a root: the key helper (D4), the URL bridge (0.4.0) and serena's context (0.5.0,
 // D7). Each carries its version on its first line.
 const SHIPPED_LINE = { helper: /^\/\/ preferred-tools mcp-headers (\d+)\s*$/, bridge: /^\/\/ preferred-tools mcp-bridge (\d+)\s*$/, serenaContext: /^# preferred-tools serena-context (\d+)\s*$/ };
-const shippedVersion = (kind) => (kind === 'bridge' ? require('../copied/mcp-bridge.js').BRIDGE_VERSION : kind === 'serenaContext' ? SERENA_CONTEXT_VERSION : helper.HELPER_VERSION);
+const shippedVersion = (kind) => (kind === 'bridge' ? BRIDGE_VERSION : kind === 'serenaContext' ? SERENA_CONTEXT_VERSION : helper.HELPER_VERSION);
 const shippedText = {};
-const shippedSource = (kind) => (shippedText[kind] = shippedText[kind] || fs.readFileSync(path.join(__dirname, '..', 'copied', FILES[kind]), 'utf8'));
-const helperSource = () => shippedSource('helper');
+export const shippedSource = (kind) => (shippedText[kind] = shippedText[kind] || fs.readFileSync(path.join(import.meta.dirname, '..', 'copied', FILES[kind]), 'utf8'));
+export const helperSource = () => shippedSource('helper');
 
 // The file at `file` against this plugin's copy of `kind` ('helper' or 'bridge'): 'absent', 'lower' (rewrite it), 'same',
 // 'edited' (the same number with other bytes, or no number line - a hand edit, left), 'higher' (a newer plugin wrote it -
 // left). A CRLF copy of the same text is the same file (digestOf). -> { state, number }
-function shippedState(kind, file, exists = (p) => fs.existsSync(p))
+export function shippedState(kind, file, exists = (p) => fs.existsSync(p))
 {
     if (!exists(file)) return { state: 'absent', number: null };
     let text;
@@ -361,11 +362,5 @@ function shippedState(kind, file, exists = (p) => fs.existsSync(p))
     if (number > version) return { state: 'higher', number };
     return { state: helper.digestOf(text) === helper.digestOf(shippedSource(kind)) ? 'same' : 'edited', number };
 }
-const helperState = (file, exists) => shippedState('helper', file, exists);
+export const helperState = (file, exists) => shippedState('helper', file, exists);
 
-module.exports = {
-    READ_GUARD, SERENA_CONTEXT_VERSION,
-    FILES, GITIGNORE, familyOf, readMap, mapKey, withRoot, inUse, options, resolveNamed, resolve, rootStrFor,
-    helperPathOf, registrationRoots, standard, pointsIntoRoot, absOf, recordKey, recordFamily, ownOnly, gitIgnores, ignoreGap, helperState, helperSource,
-    shippedState, shippedSource,
-};

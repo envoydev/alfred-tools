@@ -1,18 +1,17 @@
-'use strict';
 // A stub HTTP MCP server on 127.0.0.1, in the calling process: it answers initialize and tools/list, and records per
 // request the path, the JSON-RPC method and whether the `Authorization` header equals the expected value - never the
 // value itself. Used by tests/probes/headers-helper.ts and the matrix's key cases (keys.test.js, workspace.test.js W4).
-const fs = require('node:fs');
-const http = require('node:http');
-const { execFile } = require('node:child_process');
-const account = require('../scripts/core/account.ts');
-const catalogLib = require('../scripts/catalog/catalog.ts');
+import fs from 'node:fs';
+import http from 'node:http';
+import { execFile } from 'node:child_process';
+import * as account from '../scripts/core/account.ts';
+import * as catalogLib from '../scripts/catalog/catalog.ts';
 
 // -> Promise<{ server, port, seen: [{ path, rpc, auth: 'none' | 'expected' | 'other' }], close }>. `expected`: the whole
 // header value a request must carry to count as 'expected'. `status`: 401 answers every POST with 401 and
 // `WWW-Authenticate: Bearer` (a key the server refused), 403 with 403 (gitlab's answer to a legacy token), any other
 // status with that status.
-function stub({ expected, status = null })
+export function stub({ expected, status = null })
 {
     const seen = [];
     const server = http.createServer((req, res) =>
@@ -40,7 +39,7 @@ function stub({ expected, status = null })
 }
 
 // `claude` without blocking this process, so the stub can answer while it runs -> Promise<{ status, out }>
-function claude(cwd, argv, env, timeout = 90000)
+export function claude(cwd, argv, env, timeout = 90000)
 {
     return new Promise((resolve) =>
     {
@@ -52,7 +51,7 @@ function claude(cwd, argv, env, timeout = 90000)
 // What the stub saw on the last initialize of one `claude mcp get <name>` in `cwd` - the connection the server keeps:
 // 'expected', 'other', 'none' or 'no request'. The first get in a fresh world was seen to connect twice, first without
 // the helper's header and then with it, the second followed by tools/list (2.1.322, 2026-11-10); `inits` lists each.
-async function authOnGet(s, cwd, name, env)
+export async function authOnGet(s, cwd, name, env)
 {
     const s0 = s.seen.length;
     const res = await claude(cwd, ['mcp', 'get', name], env);
@@ -61,7 +60,7 @@ async function authOnGet(s, cwd, name, env)
 }
 
 // A copy of the catalog, `edit` applied to its raw rows
-function catalogWith(edit)
+export function catalogWith(edit)
 {
     const c = catalogLib.load();
     const raw = JSON.parse(JSON.stringify({ ...c, reserved: [...c.reserved], byId: undefined }));
@@ -70,7 +69,7 @@ function catalogWith(edit)
 }
 
 // The catalog with github's hosted route pointed at a stub: its URL and the fingerprint the inventory matches it by
-const stubCatalog = (port) => catalogWith((raw) =>
+export const stubCatalog = (port) => catalogWith((raw) =>
 {
     const remote = raw.tools.find((r) => r.id === 'github').routes.remote;
     remote.url = `http://127.0.0.1:${port}/mcp/`;
@@ -79,7 +78,7 @@ const stubCatalog = (port) => catalogWith((raw) =>
 
 // The catalog with sentry's bridge route pointed at a stub (0.4.0): its URL template - http on 127.0.0.1, which
 // mcp-bridge.js and mcp-remote take - and the fingerprint the inventory matches it by
-const stubBridgeCatalog = (port) => catalogWith((raw) =>
+export const stubBridgeCatalog = (port) => catalogWith((raw) =>
 {
     const bridge = raw.tools.find((r) => r.id === 'sentry').routes.bridge;
     bridge.url = `http://127.0.0.1:${port}/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}`;
@@ -89,7 +88,7 @@ const stubBridgeCatalog = (port) => catalogWith((raw) =>
 // A folder's trust, as the trust dialog writes it in the account file of a harness world (tests/harness.ts), under the
 // key Claude Code reads: on Windows the folder with `/` (account.js projectEntry) - a `\` key leaves the folder untrusted,
 // so a project-scope headersHelper never runs (measured, Windows 11 ARM64, 2.1.309, 2026-11-12)
-function trust(h, dir, on = true)
+export function trust(h, dir, on = true)
 {
     const file = account.accountFile(h.env);
     const doc = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
@@ -100,11 +99,10 @@ function trust(h, dir, on = true)
 }
 
 // The user fills a name the apply wrote (`NAME=`), or adds it
-function fill(file, name, value)
+export function fill(file, name, value)
 {
     const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
     const re = new RegExp(`^${name}=.*$`, 'm');
     fs.writeFileSync(file, re.test(text) ? text.replace(re, () => `${name}=${value}`) : `${text}${text && !text.endsWith('\n') ? '\n' : ''}${name}=${value}\n`);
 }
 
-module.exports = { stub, claude, authOnGet, catalogWith, stubCatalog, stubBridgeCatalog, trust, fill };

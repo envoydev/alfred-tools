@@ -1,14 +1,13 @@
-'use strict';
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const { world, writeJson, tempOf } = require('./helpers.ts');
-const { fetchStep } = require('../scripts/entries/names.ts');
-const { writeJob, job, run, realStart } = require('../scripts/apply/fetch.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { world, writeJson, tempOf } from './helpers.ts';
+import { fetchStep } from '../scripts/entries/names.ts';
+import { writeJob, job, run, realStart } from '../scripts/apply/fetch.ts';
 
-const SCRIPT = path.join(__dirname, '..', 'scripts', 'fetch.ts');
+const SCRIPT = path.join(import.meta.dirname, '..', 'scripts', 'fetch.ts');
 const NPX = { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '/p/a'] };
 const UVX = { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server', '--context', 'claude-code'] };
 
@@ -97,7 +96,7 @@ test('the CLI form: a real first start is answered and stopped; a failed fetch o
     const w = world();
     try
     {
-        const server = (mode) => ({ command: process.execPath, args: [path.join(__dirname, 'fake-mcp-server.ts'), mode] });
+        const server = (mode) => ({ command: process.execPath, args: [path.join(import.meta.dirname, 'fake-mcp-server.ts'), mode] });
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { pw: server('answer'), bad: server('exit') } });
         const pw = { ...fetchStep('pw', NPX, 'playwright-chrome'), scope: 'project' };
         const bad = { ...fetchStep('bad', UVX, 'serena'), name: 'bad', scope: 'project' };
@@ -167,7 +166,7 @@ test('the fake server logs its tag and working folder when it starts, and only w
     try
     {
         const log = path.join(w.dir, 'starts.log');
-        const fake = path.join(__dirname, 'fake-mcp-server.ts');
+        const fake = path.join(import.meta.dirname, 'fake-mcp-server.ts');
         const init = `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } })}\n`;
         const r = spawnSync(process.execPath, [fake, 'answer', '--log', log, '--tag', 'p-api'], { cwd: w.dir, input: init, encoding: 'utf8', timeout: 5000 });
         assert.match(r.stdout, /"serverInfo"/, 'it still answers initialize');

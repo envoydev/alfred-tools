@@ -1,11 +1,10 @@
-'use strict';
 // The apply command: reads the plan file and its flags, applies it and releases <tmp>.
-const fs = require('node:fs');
-const { blockingStdio } = require('../core/json-file.ts');
-const tmpdir = require('../core/tmpdir.ts');
-const { apply } = require('./run.ts');
+import fs from 'node:fs';
+import { blockingStdio } from '../core/json-file.ts';
+import * as tmpdir from '../core/tmpdir.ts';
+import { apply } from './run.ts';
 
-function main(argv)
+export function main(argv)
 {
     blockingStdio();
     const file = argv[0];
@@ -20,4 +19,3 @@ function main(argv)
     return report.failed ? 1 : 0;
 }
 
-module.exports = { main };

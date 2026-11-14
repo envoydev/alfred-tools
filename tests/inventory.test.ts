@@ -1,13 +1,17 @@
-'use strict';
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const { world, writeJson, accountKey } = require('./helpers.ts');
-const inv = require('../scripts/inventory/inventory.ts');
-const catalogLib = require('../scripts/catalog/catalog.ts');
-const account = require('../scripts/core/account.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { world, writeJson, accountKey } from './helpers.ts';
+import * as inv from '../scripts/inventory/inventory.ts';
+import * as catalogLib from '../scripts/catalog/catalog.ts';
+import * as account from '../scripts/core/account.ts';
+import crypto from 'node:crypto';
+import { randomBytes } from 'node:crypto';
+import { MARKER, keep } from '../scripts/core/kept.ts';
+import * as roots from '../scripts/roots/roots.ts';
+import { signInFormOf } from '../scripts/entries/sign-in.ts';
 
 const catalog = catalogLib.load();
 const SERENA = { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20T23:59:59Z', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'], env: { SERENA_HOME: '/x' } };
@@ -285,7 +289,7 @@ test('the CLI form writes the JSON file and prints one line; a missing claude st
     {
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { a: SERENA, b: { command: 'node' } } });
         const out = path.join(w.dir, 'inv.json');
-        const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'inventory.ts'), '--project', w.project, '--json', out], { encoding: 'utf8', env: w.env });
+        const r = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'inventory.ts'), '--project', w.project, '--json', out], { encoding: 'utf8', env: w.env });
         assert.strictEqual(r.status, 0, r.stderr);
         assert.match(r.stdout, /inventory: 2 registrations \(1 match a catalog row, 1 are your own\), 0 plugins/);
         assert.strictEqual(JSON.parse(fs.readFileSync(out, 'utf8')).registrations.length, 2);
@@ -293,7 +297,7 @@ test('the CLI form writes the JSON file and prints one line; a missing claude st
         const empty = path.join(w.dir, 'empty-bin');
         fs.mkdirSync(empty);
         const bare = { ...w.env, PATH: empty };
-        const r2 = spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'inventory.ts'), '--project', w.project], { encoding: 'utf8', env: bare });
+        const r2 = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'inventory.ts'), '--project', w.project], { encoding: 'utf8', env: bare });
         assert.strictEqual(r2.status, 3);
         assert.match(r2.stderr, /the claude CLI is not on PATH/);
         assert.strictEqual(r2.stderr.trim().split('\n').length, 1);
@@ -305,15 +309,13 @@ test('the CLI form writes every credential value as the marker; nothing it print
     const w = world();
     try
     {
-        const crypto = require('node:crypto');
-        const { MARKER } = require('../scripts/core/kept.ts');
         const token = `sntryu_${crypto.randomBytes(16).toString('hex')}`;
         const key = `sk-live-${crypto.randomBytes(16).toString('hex')}`;
         accountWith(w, { local: {
             'sentry-live': { command: 'npx', args: ['-y', '@sentry/mcp-server@0.42.0'], env: { SENTRY_ACCESS_TOKEN: token } },
             mine: { command: 'node', args: ['srv.js'], env: { API_KEY: key, MODE: 'x' } },
         } });
-        const script = path.join(__dirname, '..', 'scripts', 'inventory.ts');
+        const script = path.join(import.meta.dirname, '..', 'scripts', 'inventory.ts');
         const out = path.join(w.dir, 'inv.json');
         const r = spawnSync(process.execPath, [script, '--project', w.project, '--json', out], { encoding: 'utf8', env: w.env });
         assert.strictEqual(r.status, 0, r.stderr);
@@ -563,7 +565,6 @@ test('the inventory reads trust and the roots map from --data', () => {
     const w = world();
     try
     {
-        const roots = require('../scripts/roots/roots.ts');
         const data = path.join(w.dir, 'data');
         const named = path.join(w.project, 'tools', 'keys');
         const g = path.join(w.dir, 'global-keys');
@@ -581,7 +582,7 @@ test('the inventory reads trust and the roots map from --data', () => {
         assert.strictEqual(build(w, { data }).trusted, false);
         // the CLI passes --data through
         const out = path.join(w.dir, 'inv.json');
-        const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'inventory.ts'), '--project', w.project, '--json', out, '--data', data], { encoding: 'utf8', env: w.env });
+        const r = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'inventory.ts'), '--project', w.project, '--json', out, '--data', data], { encoding: 'utf8', env: w.env });
         assert.strictEqual(r.status, 0, r.stderr);
         const file = JSON.parse(fs.readFileSync(out, 'utf8'));
         assert.deepStrictEqual([file.trusted, file.roots.project], [false, { path: named, from: 'map' }]);
@@ -593,7 +594,7 @@ test("the inventory reads each enabled plugin's MCP servers, matched to a row, a
     const w = world();
     try
     {
-        const value = `fake-${require('node:crypto').randomBytes(8).toString('hex')}`;
+        const value = `fake-${randomBytes(8).toString('hex')}`;
         const docs = path.join(w.dir, 'cache', 'docs');
         writeJson(path.join(docs, '.mcp.json'), { mcpServers: { c7: { ...URL_('https://mcp.context7.com/mcp'), headers: { Authorization: `Bearer ${value}` } }, mine: { command: 'my-server' } } });
         const off = path.join(w.dir, 'cache', 'off');
@@ -646,7 +647,7 @@ test('inv.cursor reads both Cursor files; entries hold only the names a list mar
         const file = path.join(w.project, '.cursor', 'mcp.json');
         assert.deepStrictEqual([i.cursor.project.file, i.cursor.project.state, i.cursor.project.names], [file, 'ok', ['serena', 'memory', 'mine']]);
         assert.deepStrictEqual(Object.keys(i.cursor.project.entries), ['serena']);
-        assert.deepStrictEqual(i.cursor.project.entries.serena, require('../scripts/core/kept.ts').keep(S, catalog.byId.get('serena')));
+        assert.deepStrictEqual(i.cursor.project.entries.serena, keep(S, catalog.byId.get('serena')));
         assert.deepStrictEqual([i.cursor.global.state, i.cursor.global.names, i.cursor.global.entries], ['absent', [], {}]);
         assert.strictEqual(i.cursor.global.file, path.join(account.homeDir(w.env), '.cursor', 'mcp.json'));
     }
@@ -654,7 +655,6 @@ test('inv.cursor reads both Cursor files; entries hold only the names a list mar
 });
 
 test('inventory matches the shared sign-in form to its row\'s remote route, and a hand-made mcp-remote entry to no row', () => {
-    const { signInFormOf } = require('../scripts/entries/sign-in.ts');
     for (const [id, url] of [['gitlab', 'https://gitlab.com/api/v4/mcp'], ['atlassian', 'https://mcp.atlassian.com/v2/mcp'], ['sentry', 'https://mcp.sentry.dev/mcp']])
         assert.deepStrictEqual(inv.matchEntry(signInFormOf(url, '/r', catalog, { platform: 'darwin' }), catalog), { rowId: id, route: 'remote' }, id);
     assert.strictEqual(inv.matchEntry({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0', 'https://mcp.atlassian.com/v2/mcp'] }, catalog), null);

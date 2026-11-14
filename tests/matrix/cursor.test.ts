@@ -1,24 +1,27 @@
-'use strict';
 // CURSOR AND CLAUDE CODE FROM ONE LIST (spec 2026-11-13). Real-CLI cases in a throwaway home and account, each reading
 // the written files, never the exit code alone.
 //
 //   npm run matrix
 //
 // A missing runtime or no network is NOT RUN, with the reason.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawn, spawnSync } = require('node:child_process');
-const cli = require('../../scripts/core/claude-cli.ts');
-const account = require('../../scripts/core/account.ts');
-const kept = require('../../scripts/core/kept.ts');
-const catalogLib = require('../../scripts/catalog/catalog.ts');
-const fake = require('../fake-mcp-http.ts');
-const fakeOauth = require('../fake-oauth-http.ts');
-const { Harness } = require('../harness.ts');
-const { keepWritten } = require('../proof/matrix-keep.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import * as cli from '../../scripts/core/claude-cli.ts';
+import * as account from '../../scripts/core/account.ts';
+import * as kept from '../../scripts/core/kept.ts';
+import * as catalogLib from '../../scripts/catalog/catalog.ts';
+import * as fake from '../fake-mcp-http.ts';
+import * as fakeOauth from '../fake-oauth-http.ts';
+import { Harness } from '../harness.ts';
+import { keepWritten } from '../proof/matrix-keep.ts';
+import { makeCtx, check } from '../../scripts/update/check.ts';
+import { applyUpdates } from '../../scripts/update/apply.ts';
+import * as inventory from '../../scripts/inventory/inventory.ts';
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-cursor-'));
@@ -356,7 +359,7 @@ const TSL = 'typescript-lsp@claude-plugins-official';
 
 test('M6 update from 0.4.x: the list with the own entry, serena\'s context and base modes, two uninstall offers with one declined, Cursor offered once and declined, the key-file deny rule', { skip: skipAll, timeout: START_MS * 2 }, async (t) =>
 {
-    const repo = path.join(__dirname, '..', '..');
+    const repo = path.join(import.meta.dirname, '..', '..');
     const old = path.join(root, 'm6-040');
     fs.mkdirSync(old, { recursive: true });
     // no shell: git writes the tarball and tar (bsdtar on Windows 10 and later) unpacks it
@@ -365,7 +368,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     const unpack = archive.status === 0 ? spawnSync('tar', ['-xf', tarball, '-C', old], { encoding: 'utf8' }) : null;
     if (archive.status !== 0) return t.skip(`NOT RUN: 0.4.0 (${V040.slice(0, 7)}) is not in this checkout: ${String(archive.stderr || archive.error || '').trim().slice(0, 160)}`);
     if (unpack.status !== 0) return t.skip(`NOT RUN: tar could not unpack 0.4.0: ${String(unpack.stderr || unpack.error || '').trim().slice(0, 160)}`);
-    const { Harness: Harness040 } = require(path.join(old, 'tests', 'harness.js'));
+    const { Harness: Harness040 } = createRequire(import.meta.url)(path.join(old, 'tests', 'harness.js')); // 0.4.0 is CommonJS
     const world = path.join(root, 'm6');
     const oh = new Harness040({ root: world });
     const hh = new Harness({ root: world });
@@ -400,9 +403,6 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     fs.mkdirSync(path.join(hh.home, '.cursor'), { recursive: true }); // Cursor is on this machine
 
     // 2. 0.5.0's update, as the command runs it
-    const { makeCtx, check } = require('../../scripts/update/check.ts');
-    const { applyUpdates } = require('../../scripts/update/apply.ts');
-    const inventory = require('../../scripts/inventory/inventory.ts');
     const checkNow = async () =>
     {
         const inv = inventory.buildInventory({ project: p, env: hh.env, run: cli.run, data: hh.data });

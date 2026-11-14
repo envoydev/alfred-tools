@@ -1,4 +1,3 @@
-'use strict';
 // The fenced `ask` blocks in commands and skills, held to the AskUserQuestion limits and to scripts/plan/asks-other.ts STATIC.
 //
 //   ```ask <id>
@@ -9,11 +8,11 @@
 //
 // <id> is a key of asks.STATIC, and the block's labels must equal that ask's labels in order, so the command's text and
 // the data the tests hold to the limits cannot drift apart. 2 to 4 options, exactly one '(Recommended)', and it is first.
-const { STATIC } = require('../scripts/plan/asks-other.ts');
+import { STATIC } from '../scripts/plan/asks-other.ts';
 
 const OPTION = /^- '(.+)' - (.+)$/;
 
-function parseAskBlocks(text)
+export function parseAskBlocks(text)
 {
     const blocks = [];
     const lines = text.split(/\r?\n/);
@@ -39,7 +38,7 @@ function parseAskBlocks(text)
     return blocks;
 }
 
-const staticAsk = (id) =>
+export const staticAsk = (id) =>
 {
     const q = STATIC[id];
     if (!q) return null;
@@ -48,7 +47,7 @@ const staticAsk = (id) =>
 }
 
 // -> problems as strings, empty when the block is sound
-function problemsOf(block)
+export function problemsOf(block)
 {
     const out = [];
     const at = `ask block at line ${block.line}${block.id ? ` (${block.id})` : ''}`;
@@ -74,4 +73,3 @@ function problemsOf(block)
     return out;
 }
 
-module.exports = { parseAskBlocks, problemsOf, staticAsk };

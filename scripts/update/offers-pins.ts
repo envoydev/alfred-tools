@@ -1,14 +1,14 @@
-'use strict';
 // The pin offers: each pinned MCP server behind a release at least 7 days old.
-const inventory = require('../inventory/inventory.ts');
-const registryLib = require('../catalog/registry.ts');
-const { signInParts } = require('../entries/sign-in.ts');
-const { pinnedVersion } = require('../fix/common.ts');
-const { bumpEntry } = require('./offers-plugins.ts');
+import * as inventory from '../inventory/inventory.ts';
+import * as registryLib from '../catalog/registry.ts';
+import { signInParts } from '../entries/sign-in.ts';
+import { pinnedVersion } from '../fix/common.ts';
+import { bumpEntry } from './offers-plugins.ts';
+import * as kept from '../core/kept.ts';
 
 // ---- MCP pins --------------------------------------------------------------------------------------------------------
 
-async function mcpOffers(ctx, out)
+export async function mcpOffers(ctx, out)
 {
     const cache = new Map();
     const latest = (registry, name) =>
@@ -48,9 +48,8 @@ async function mcpOffers(ctx, out)
 // Cursor's bridge copy of a two-form entry (D5): its mcp-remote pin, which mcpOffers never sees (Claude Code's side is a
 // hosted URL). One offer per list server with a cursorEntry, from Cursor's copy as read; a copy that is missing or drifted
 // from the list is named and left to fix.
-async function cursorPinOffers(ctx, out)
+export async function cursorPinOffers(ctx, out)
 {
-    const kept = require('../core/kept.ts');
     const pkg = ctx.catalog.byId.get('sentry').routes.bridge.package;
     let versions = null;
     for (const family of ['project', 'global'])
@@ -83,4 +82,3 @@ async function cursorPinOffers(ctx, out)
     }
 }
 
-module.exports = { mcpOffers, cursorPinOffers };

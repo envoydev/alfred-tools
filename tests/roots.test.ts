@@ -1,21 +1,22 @@
-'use strict';
 // roots.js - one root folder per scope family (spec D2): the options, the root in use, a named folder, the roots map and
 // the record file. Pure where a ctx stands in for the disk; the map and record tests use a throwaway folder.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import * as roots from '../scripts/roots/roots.ts';
+import * as asks from '../scripts/plan/asks-all.ts';
+import * as catalogLib from '../scripts/catalog/catalog.ts';
+import { OTHER_RE } from './ask-texts.ts';
+import * as lists from '../scripts/mcps-list/mcps-list.ts';
+import { BRIDGE_VERSION } from '../scripts/copied/mcp-bridge.js';
 // POSIX fixture paths (/work/shop): on a Windows host node's path module resolves them under a drive
 const POSIX_FIXTURE = process.platform === 'win32' && 'NOT RUN: POSIX fixture paths meet node\'s win32 path module on this host';
-const { spawnSync } = require('node:child_process');
-const roots = require('../scripts/roots/roots.ts');
-const asks = require('../scripts/plan/asks-all.ts');
-const catalogLib = require('../scripts/catalog/catalog.ts');
 
 const catalog = catalogLib.load();
 // alfred-code 3.9.2's pattern, cited where it lives
-const { OTHER_RE } = require('./ask-texts.ts');
 const inv = (extra = {}) => ({ version: 1, project: '/work/shop', os: 'darwin', arch: 'arm64', cli: { ok: true }, unreadable: [], registrations: [], plugins: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, ...extra });
 const ctxOf = (present = [], extra = {}) => ({ project: '/work/shop', home: '/Users/me', platform: 'darwin', catalog, exists: (p) => present.includes(p), ...extra });
 const ids = (list) => list.map((o) => o.id);
@@ -144,7 +145,6 @@ test('roots map: missing or malformed reads empty with a note; a second project 
 });
 
 test('a 0.4.x record file: missing is null, malformed or another version reads empty with a note', { skip: POSIX_FIXTURE }, () => {
-    const lists = require('../scripts/mcps-list/mcps-list.ts');
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-record-')));
     try
     {
@@ -215,7 +215,6 @@ test('shippedState reads the bridge like the helper: absent, lower, same, edited
         const file = path.join(dir, roots.FILES.bridge);
         assert.strictEqual(roots.FILES.bridge, 'mcp-bridge.js');
         const src = roots.shippedSource('bridge');
-        const { BRIDGE_VERSION } = require('../scripts/copied/mcp-bridge.js');
         assert.deepStrictEqual(roots.shippedState('bridge', file), { state: 'absent', number: null });
         fs.writeFileSync(file, src.replace(/^\/\/ preferred-tools mcp-bridge \d+/, '// preferred-tools mcp-bridge 0'));
         assert.deepStrictEqual(roots.shippedState('bridge', file), { state: 'lower', number: 0 });

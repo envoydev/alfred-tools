@@ -1,20 +1,20 @@
-'use strict';
 // The Cursor steps of a plan: what it writes into each Cursor file, from the list.
-const fs = require('node:fs');
-const { pathFor } = require('../entries/platform.ts');
-const catalogLib = require('../catalog/catalog.ts');
-const roots = require('../roots/roots.ts');
-const lists = require('../mcps-list/mcps-list.ts');
-const cursorMcp = require('../cursor/cursor-mcp.ts');
-const workspace = require('../roots/workspace.ts');
-const kept = require('../core/kept.ts');
-const { deepEqual } = require('../core/json-file.ts');
-const { foundList, REG_OPS } = require('./lists.ts');
+import fs from 'node:fs';
+import { realpathSync } from 'node:fs';
+import { pathFor } from '../entries/platform.ts';
+import * as catalogLib from '../catalog/catalog.ts';
+import * as roots from '../roots/roots.ts';
+import * as lists from '../mcps-list/mcps-list.ts';
+import * as cursorMcp from '../cursor/cursor-mcp.ts';
+import * as workspace from '../roots/workspace.ts';
+import * as kept from '../core/kept.ts';
+import { deepEqual } from '../core/json-file.ts';
+import { foundList, REG_OPS } from './lists.ts';
 
 // ---- Cursor's files (spec D2, D4, D4a) ------------------------------------------------------------------------------
 
 const forCursor = (s) => (s.clients || []).includes('cursor');
-const SCOPES = { project: ['local', 'project'], global: ['user'] };
+export const SCOPES = { project: ['local', 'project'], global: ['user'] };
 
 // A list's servers after a list-write step: its drops out, its upserts in, as apply's mergeList does.
 function afterWrite(servers, step)
@@ -28,7 +28,7 @@ function afterWrite(servers, step)
 // The names a Cursor file already holds that its list does not mark for Cursor, among the upserts set up for Cursor:
 // each the user's own, or one from before this design. `sameRow`: the entry there is the upsert's row's server.
 // upserts: [{ server, cursorFile }] -> [{ file, name, sameRow }]
-function takenNames(inv, ctx, upserts)
+export function takenNames(inv, ctx, upserts)
 {
     const catalog = ctx.catalog || catalogLib.load();
     const reads = new Map();
@@ -66,7 +66,7 @@ function outsideItsRepo(project, P)
 
 // A workspace folder's list, as a member's cursor-write reads it (D4a): the first mcps.json the commands' order finds for
 // that folder. A folder with none has no root, and none is made. -> { file, servers } | null
-function folderList(inv, folder, ctx)
+export function folderList(inv, folder, ctx)
 {
     const fctx = { project: folder, home: ctx.home, platform: ctx.platform };
     for (const file of lists.listFiles({ roots: inv.roots, registrations: [] }, 'project', fctx))
@@ -103,7 +103,7 @@ const sameKeys = (a, b) => a.size === b.size && [...a.keys()].every((n) => b.has
 //
 // In a workspace (D4a, alfred-code's record), the project file also takes the project scope of each folder above, and
 // a change to this folder's project scope writes each member below it too: no member gets a root or a list.
-function cursorSteps(inv, ctx, out, answers = {})
+export function cursorSteps(inv, ctx, out, answers = {})
 {
     const P = pathFor(ctx.platform);
     const named = answers.cursorNames || {};
@@ -203,7 +203,7 @@ function cursorSteps(inv, ctx, out, answers = {})
             const own = cursorMcp.managedSet([{ file: target, scopes, servers: afterServers }]);
             const top = ctx.project !== ws.root && own.size ? workspace.gitTop(ctx.project) : null;
             let rootReal = null;
-            try { rootReal = require('node:fs').realpathSync(ws.root); } catch { /* none */ }
+            try { rootReal = realpathSync(ws.root); } catch { /* none */ }
             if (top && top === rootReal)
                 out.notes.push(`${ctx.project} is a folder of ${ws.root}'s git repo; Cursor's CLI reads ${P.join(ws.root, '.cursor', 'mcp.json')} there, so these servers reach the editor opened at ${ctx.project} only. Install them at the root or at Global scope for the CLI`);
         }
@@ -215,12 +215,12 @@ function cursorSteps(inv, ctx, out, answers = {})
     return steps;
 }
 
-const reapproveLine = (names) => `Cursor asks you to approve ${names.join(', ')} again - it re-asks whenever an entry changes`;
-const keepOf = (catalog, value, row) => kept.keep(value, catalog.byId.get(row));
+export const reapproveLine = (names) => `Cursor asks you to approve ${names.join(', ')} again - it re-asks whenever an entry changes`;
+export const keepOf = (catalog, value, row) => kept.keep(value, catalog.byId.get(row));
 
 // The managed names a cursor-write leaves alone (spec D1, D9): each the file lacks (a hand removal) or holds with another
 // value than its list, compared after kept.keep. Named in the plan; the names this plan drops are not held.
-function heldCopies(file, before, after, ctx, out)
+export function heldCopies(file, before, after, ctx, out)
 {
     const catalog = ctx.catalog || catalogLib.load();
     const read = cursorMcp.readCursor(file);
@@ -273,4 +273,3 @@ function changedCopies(file, before, after, hold, upserts, ctx, out)
     return names;
 }
 
-module.exports = { cursorSteps, takenNames, reapproveLine, folderList, SCOPES, heldCopies, keepOf };

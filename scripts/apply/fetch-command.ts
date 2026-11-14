@@ -1,12 +1,11 @@
-'use strict';
 // The fetch command: runs a fetch file and releases its <tmp>.
-const fs = require('node:fs');
-const path = require('node:path');
-const tmpdir = require('../core/tmpdir.ts');
-const { blockingStdio } = require('../core/json-file.ts');
-const { VERSION, run } = require('./fetch.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import * as tmpdir from '../core/tmpdir.ts';
+import { blockingStdio } from '../core/json-file.ts';
+import { VERSION, run } from './fetch.ts';
 
-async function main(argv)
+export async function main(argv)
 {
     blockingStdio();
     const file = argv[0];
@@ -22,4 +21,3 @@ async function main(argv)
     return res.warnings.length ? 1 : 0;
 }
 
-module.exports = { main };

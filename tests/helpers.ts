@@ -1,14 +1,15 @@
-'use strict';
 // Shared test scaffolding: a throwaway project and account dir, and the fake `claude` on PATH.
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { load } from '../scripts/catalog/catalog.ts';
+import { shellArg } from '../scripts/entries/entry.ts';
 
 // every ${VAR} a catalog route reads its key from
-const TOKEN_VARS = [...new Set(require('../scripts/catalog/catalog.ts').load().tools.flatMap((r) => Object.values(r.routes || {}).map((x) => x.tokenVar).filter(Boolean)))];
+export const TOKEN_VARS = [...new Set(load().tools.flatMap((r) => Object.values(r.routes || {}).map((x) => x.tokenVar).filter(Boolean)))];
 
-const FAKE = path.join(__dirname, 'fake-claude.ts');
-const RUNTIME = path.join(__dirname, 'fake-runtime.ts');
+export const FAKE = path.join(import.meta.dirname, 'fake-claude.ts');
+const RUNTIME = path.join(import.meta.dirname, 'fake-runtime.ts');
 const SHIMMED = ['claude', 'npm', 'uvx', 'docker'];
 
 // The PATH a world puts after its `bin`. On Windows a spawn looks for `<name>.exe` or `.com` on PATH and never for the
@@ -22,7 +23,7 @@ function basePath(platform = process.platform, envPath = process.env.PATH || '')
 }
 
 // A throwaway world: { dir, project, account, home, bin, log, env, calls() }. `claude` on its PATH is the fake.
-function world(prefix = 'pt-')
+export function world(prefix = 'pt-')
 {
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
     const project = path.join(dir, 'project');
@@ -62,16 +63,16 @@ function world(prefix = 'pt-')
     return { dir, project, account, home, bin, log, env, calls, writes, fetches, clean };
 }
 
-const writeJson = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`); };
-const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
+export const writeJson = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`); };
+export const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 // The account `projects` key the real CLI writes for a folder (docs/sources.md): its real path, or on Windows the cwd as
 // typed, in `/`. fake-claude.js writes the same.
-const accountKey = (project) => (process.platform === 'win32' ? path.resolve(project).replace(/\\/g, '/') : fs.realpathSync.native(project));
+export const accountKey = (project) => (process.platform === 'win32' ? path.resolve(project).replace(/\\/g, '/') : fs.realpathSync.native(project));
 
 // A temp folder of the world's own, for a script run as a child: TMPDIR (TEMP and TMP on Windows) point into it, so the
 // script's os.tmpdir() is there and nothing in the machine's temp folder is made, swept or removed. `made()` is a folder
 // as tmpdir.js makes one; `files(dir)` every file below a folder.
-function tempOf(w)
+export function tempOf(w)
 {
     const root = path.join(w.dir, 'temp');
     fs.mkdirSync(root, { recursive: true });
@@ -79,7 +80,7 @@ function tempOf(w)
     const made = (prefix = 'preferred-tools-') => fs.mkdtempSync(path.join(fs.realpathSync(root), prefix));
     return { root, env, made };
 }
-function files(dir)
+export function files(dir)
 {
     const out = [];
     const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : out.push(path.join(d, e.name))));
@@ -89,6 +90,5 @@ function files(dir)
 
 // The headersHelper a registration names for the helper at `file`, as this platform's apply writes it: the path in
 // forward slashes on Windows (entries.js shellArg, style 'win32'), as it is elsewhere
-const helperCmd = (file, name, scheme) => `node ${require('../scripts/entries/entry.ts').shellArg(file, process.platform === 'win32' ? 'win32' : 'posix')} ${name} ${scheme}`;
+export const helperCmd = (file, name, scheme) => `node ${shellArg(file, process.platform === 'win32' ? 'win32' : 'posix')} ${name} ${scheme}`;
 
-module.exports = { world, writeJson, readJson, accountKey, tempOf, files, helperCmd, FAKE, TOKEN_VARS };

@@ -1,39 +1,38 @@
-'use strict';
 // Shared pieces of the fix detectors. A detector is `detect(ctx) -> findings[]`; a registration fix is
 // `fix(entry, finding, ctx, input) -> entry` (a pure edit of the entry AS READ, so the user's pin, cut-off and added
 // args or env survive); a machine fix is `fix(finding, ctx) -> { ok, detail }` and changes the machine.
 //
 // ctx = { inv, catalog, platform, arch, env, home, rules, machine } - `machine` is the only way a detector looks at the
 // machine, so a test replaces it.
-const fs = require('node:fs');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const { launchTokens, bareName } = require('../inventory/inventory.ts');
-const E = require('../entries/locations.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { launchTokens, bareName } from '../inventory/inventory.ts';
+import * as E from '../entries/locations.ts';
 
-const fixOf = (ctx, id) => ctx.catalog.fixes.find((f) => f.id === id);
-const rowOf = (ctx, id) => ctx.catalog.byId.get(id);
+export const fixOf = (ctx, id) => ctx.catalog.fixes.find((f) => f.id === id);
+export const rowOf = (ctx, id) => ctx.catalog.byId.get(id);
 
 // The registrations a fix row covers: matched to one of its tools by what they launch, not the user's own, not an
 // alfred-code leftover, not one left on its own (spec D6), and not inherited from a parent folder (fixed by running fix
 // there).
-const registrationsOf = (ctx, fixId) => ctx.inv.registrations.filter((r) => !r.own && !r.alfredRetired && r.choice !== 'own' && r.scope !== 'inherited' && fixOf(ctx, fixId).tool.includes(r.rowId));
-const routeOf = (ctx, reg) => rowOf(ctx, reg.rowId).routes[reg.route];
+export const registrationsOf = (ctx, fixId) => ctx.inv.registrations.filter((r) => !r.own && !r.alfredRetired && r.choice !== 'own' && r.scope !== 'inherited' && fixOf(ctx, fixId).tool.includes(r.rowId));
+export const routeOf = (ctx, reg) => rowOf(ctx, reg.rowId).routes[reg.route];
 
 // The executable a registration launches, looking through a `cmd /c` wrapper.
-const launcher = (entry) => path.basename(launchTokens(entry).command).replace(/\.(exe|cmd)$/i, '');
-const launchArgs = (entry) => launchTokens(entry).args;
+export const launcher = (entry) => path.basename(launchTokens(entry).command).replace(/\.(exe|cmd)$/i, '');
+export const launchArgs = (entry) => launchTokens(entry).args;
 
 // A committed value read against an environment, as Claude Code expands .mcp.json from the one it starts with
 // (entries.js expandVars). -> the expanded text, or null when a ${NAME} with no fallback is unset (`firstUnset` names it).
-const expandVars = (text, env) => { const r = E.expandVars(text, env); return r.unset.length ? null : r.value; };
-const firstUnset = (text, env) => E.expandVars(text, env).unset[0] || null;
+export const expandVars = (text, env) => { const r = E.expandVars(text, env); return r.unset.length ? null : r.value; };
+export const firstUnset = (text, env) => E.expandVars(text, env).unset[0] || null;
 
-const finding = (fixId, reg, what, extra = {}) => ({ id: fixId, row: reg.rowId, name: reg.name, scope: reg.scope, found: what, ...extra });
-const clone = (value) => JSON.parse(JSON.stringify(value));
+export const finding = (fixId, reg, what, extra = {}) => ({ id: fixId, row: reg.rowId, name: reg.name, scope: reg.scope, found: what, ...extra });
+export const clone = (value) => JSON.parse(JSON.stringify(value));
 
 // '0.0.83' vs '0.0.9': numeric, part by part. Anything that is not dotted numbers (a dist-tag) compares as unknown (null).
-function compareVersions(a, b)
+export function compareVersions(a, b)
 {
     const parts = (v) => (/^\d+(\.\d+)*$/.test(v) ? v.split('.').map(Number) : null);
     const [x, y] = [parts(a), parts(b)];
@@ -48,7 +47,7 @@ function compareVersions(a, b)
 
 // The version a launch pins for a package: '@playwright/mcp@0.0.83' -> '0.0.83', '--from serena-agent@2.1.0' -> '2.1.0',
 // 'mcp-memory-service[sqlite]==12.1.1' -> '12.1.1'. null when the launch names the package with no version.
-function pinnedVersion(entry, pkg)
+export function pinnedVersion(entry, pkg)
 {
     for (const a of launchArgs(entry).filter((x) => !x.startsWith('-')))
     {
@@ -61,7 +60,7 @@ function pinnedVersion(entry, pkg)
 
 // ---- the machine ---------------------------------------------------------------------------------------------------
 
-function onPath(name, env, platform)
+export function onPath(name, env, platform)
 {
     const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH');
     const win = platform === 'win32';
@@ -75,7 +74,7 @@ function onPath(name, env, platform)
     return null;
 }
 
-function realMachine({ env = process.env, platform = process.platform } = {})
+export function realMachine({ env = process.env, platform = process.platform } = {})
 {
     return {
         exists: (p) => fs.existsSync(p),
@@ -88,4 +87,3 @@ function realMachine({ env = process.env, platform = process.platform } = {})
     };
 }
 
-module.exports = { fixOf, rowOf, registrationsOf, routeOf, launcher, launchArgs, finding, clone, compareVersions, pinnedVersion, onPath, realMachine, expandVars, firstUnset };

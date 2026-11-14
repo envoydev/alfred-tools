@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // APPLY - runs a plan's operations in order through the `claude` CLI, reads each back, and stops at the first failure.
 //
 //   node apply.js <plan.json> [--tmp <dir>] [--data <plugin data dir>]
@@ -19,23 +18,24 @@
 // Before a replace or a move, the real values are taken back in this process from the registration as it is now, and a
 // registration that changed since it was read stops the step. No file under <tmp> and no printed line holds a live value:
 // rollback.json is kept, and a restore line shows the marker in place of the key.
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const cli = require('../core/claude-cli.ts');
-const inventory = require('../inventory/inventory.ts');
-const { job, status, writeJob, nextLines } = require('./fetch.ts');
-const { reconnectLine } = require('../plan/render.ts');
-const kept = require('../core/kept.ts');
-const catalogLib = require('../catalog/catalog.ts');
-const mcpOrder = require('../mcps-list/mcp-order.ts');
-const lists = require('../mcps-list/mcps-list.ts');
-const cursorMcp = require('../cursor/cursor-mcp.ts');
-const { addAndVerify, rowOf, removeAndVerify, restoreBy, makeRunner, restoreStep, fillStep } = require('./cli-steps.ts');
-const { rootIgnore, writeHelper, writeShipped, moveRootFile, ensureKeyName, listWrite, retireRecord, denyRead, recordRoot, failureLists } = require('./file-steps.ts');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as cli from '../core/claude-cli.ts';
+import * as inventory from '../inventory/inventory.ts';
+import { job, status, writeJob, nextLines } from './fetch.ts';
+import { reconnectLine } from '../plan/render.ts';
+import * as kept from '../core/kept.ts';
+import * as catalogLib from '../catalog/catalog.ts';
+import * as mcpOrder from '../mcps-list/mcp-order.ts';
+import * as lists from '../mcps-list/mcps-list.ts';
+import * as cursorMcp from '../cursor/cursor-mcp.ts';
+import { addAndVerify, rowOf, removeAndVerify, restoreBy, makeRunner, restoreStep, fillStep } from './cli-steps.ts';
+import { rootIgnore, writeHelper, writeShipped, moveRootFile, ensureKeyName, listWrite, retireRecord, denyRead, recordRoot, failureLists } from './file-steps.ts';
+import { emptyBaseModes } from './serena-config.ts';
 
 // One operation. { ok, detail, extra[] }
-function runStep(step, ctx)
+export function runStep(step, ctx)
 {
     const call = ctx.call;
     switch (step.op)
@@ -51,7 +51,7 @@ function runStep(step, ctx)
         case 'write-bridge': return writeShipped('bridge', step.path);
         case 'write-serena-context': return writeShipped('serenaContext', step.path);
         case 'move-root-file': return moveRootFile(step.from, step.to);
-        case 'serena-base-modes': { const r = require('./serena-config.ts').emptyBaseModes(step.file); return { ok: true, detail: r.detail }; }
+        case 'serena-base-modes': { const r = emptyBaseModes(step.file); return { ok: true, detail: r.detail }; }
         case 'ensure-key-name': return ensureKeyName(step.file, step.names);
         case 'list-write': return listWrite(step, ctx);
         case 'retire-record': return retireRecord(step.file);
@@ -88,7 +88,7 @@ function runStep(step, ctx)
 // halfway. The slow half - the fetch steps and the `claude mcp get` status, minutes on a first install - goes to
 // <tmp>/fetch.json (or `fetchFile`; false writes none, for a caller that collects several applies) for fetch.js, which
 // the command runs in the background.
-function apply(plan, { env = process.env, tmp, runCli = cli.run, log = console.log, fetchFile, data = null } = {})
+export function apply(plan, { env = process.env, tmp, runCli = cli.run, log = console.log, fetchFile, data = null } = {})
 {
     const project = plan.project;
     const report = { applied: [], failed: null, notRun: [], readback: [], keys: [], noop: false, toFetch: [], fetch: null, fetchFile: null, tmp: tmp || null, appliedKeys: new Set(), cursorFiles: new Set(), lists: [] };
@@ -175,12 +175,12 @@ function apply(plan, { env = process.env, tmp, runCli = cli.run, log = console.l
 // The CLI's reason when the server answered 401 or 403 to the key the helper sent (claude 2.1.322, measured by
 // tests/matrix/field-fixes.test.ts X7, docs/sources.md 'Claude Code - a refused key'): a server that is down, errs or
 // asks for OAuth gives another reason.
-const REFUSED = /Server rejected the Authorization header minted by the configured headersHelper \(HTTP 40[13]\)/;
-const refusedLine = ({ name, variable, hint }) => `${name}: the server refused the key in ${variable} - ${hint || 'check the value'}`;
+export const REFUSED = /Server rejected the Authorization header minted by the configured headersHelper \(HTTP 40[13]\)/;
+export const refusedLine = ({ name, variable, hint }) => `${name}: the server refused the key in ${variable} - ${hint || 'check the value'}`;
 
 // After the read-back: each hosted keyed server's reconnect line, then a refused key named - or, in a folder whose trust
 // is not accepted, the trust line, since the helper never ran and the key never left the file.
-function reconnectLines(reconnect, statuses, project)
+export function reconnectLines(reconnect, statuses, project)
 {
     const lines = reconnect.map(reconnectLine);
     for (const r of reconnect.filter((x) => x.filled))
@@ -192,4 +192,3 @@ function reconnectLines(reconnect, statuses, project)
     return lines;
 }
 
-module.exports = { REFUSED, refusedLine, reconnectLines, apply, runStep };

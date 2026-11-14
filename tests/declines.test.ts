@@ -1,11 +1,10 @@
-'use strict';
 // declines.js - the retired-plugin uninstall offers the user declined (spec D9), in <plugin data>/retired-declined.json.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const declines = require('../scripts/core/declines.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as declines from '../scripts/core/declines.ts';
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-declines-')));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

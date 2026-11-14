@@ -1,4 +1,3 @@
-'use strict';
 // KEYS - the key files, and how a key goes into a stdio registration (spec D3, D7).
 //
 // A key is read here, in the process that writes the registration, and goes nowhere else: never printed, never in a file
@@ -9,8 +8,8 @@
 //                      the apply (stdioChain); project scope takes no stdio key.
 //   the 0.1.x files    alfred-code's two stores and preferred-tools' own key files: read for a name only (oldHolding),
 //                      so a blocked fix can say where a key still sits.
-const fs = require('node:fs');
-const path = require('node:path');
+import fs from 'node:fs';
+import path from 'node:path';
 
 const KEY_FILE = path.join('.preferred-tools', '.secrets');
 const projectFile = (project) => path.join(project, KEY_FILE);
@@ -28,7 +27,7 @@ const unquote = (raw) =>
     const q = /^\s*(["'])(.*?)\1(?:\s+#.*)?\s*$/.exec(raw);
     return q ? q[2] : raw.replace(/\s+#.*$/, '').trim();
 };
-function readDotenv(file)
+export function readDotenv(file)
 {
     let buf;
     try { buf = fs.readFileSync(file); }
@@ -49,10 +48,10 @@ function readDotenv(file)
 // client id is not one.
 const KEY_SHAPED = /(?:TOKEN|KEY|PAT)$/;
 const nearMiss = (n, name, word) => n !== name && Boolean(word) && n.toUpperCase().includes(word) && KEY_SHAPED.test(n.toUpperCase());
-const offeredName = (n, name, word) => n === name || nearMiss(n, name, word);
+export const offeredName = (n, name, word) => n === name || nearMiss(n, name, word);
 
 // The token fields a catalog route defines and an entry holds: [{ at: ['env', K] | ['headers', H] | ['args', i], template }]
-function tokenFields(entry, route)
+export function tokenFields(entry, route)
 {
     if (!route || !route.tokenVar || !entry) return [];
     const ref = `\${${route.tokenVar}}`;
@@ -66,13 +65,13 @@ function tokenFields(entry, route)
     return out;
 }
 
-const valueAt = (entry, at) => at.reduce((o, k) => (o == null ? undefined : o[k]), entry);
-const PLACEHOLDER = /^\s*(?:[A-Za-z][\w-]*\s+)?(?:\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\})+\s*$/;
+export const valueAt = (entry, at) => at.reduce((o, k) => (o == null ? undefined : o[k]), entry);
+export const PLACEHOLDER = /^\s*(?:[A-Za-z][\w-]*\s+)?(?:\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\})+\s*$/;
 
 // fillKeys(entry, row, routeId, scope, found) -> a copy with each token field set by the target scope: at project scope
 // the route's ${VAR} form, whatever the entry held; at local and user scope the found value in the route's form, or, when
 // the key is missing, what the entry holds.
-function fillKeys(entry, row, routeId, scope, found = {})
+export function fillKeys(entry, row, routeId, scope, found = {})
 {
     const route = row && row.routes ? row.routes[routeId] : null;
     const fields = tokenFields(entry, route);
@@ -93,15 +92,15 @@ function fillKeys(entry, row, routeId, scope, found = {})
 // route's key is read by the header helper (mcp-headers.js) when Claude Code connects, a stdio route's by the apply; each
 // chain below is the order its reader takes, so a plan reads what the registration will read. A value leaves this file
 // only through valueIn, in the process that asked.
-const SECRETS = '.mcps-secrets';
-const NAME_RULE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+export const SECRETS = '.mcps-secrets';
+export const NAME_RULE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const secretsIn = (dir) => path.join(dir, SECRETS);
 const uniq = (list) => [...new Set(list)];
 
 // hostedChain({ scope, projectRoot, globalRoot, globalNamed, home }) -> the files the helper reads, in order: the root
 // beside it (the project root at project and local scope, the global root at user scope); at local scope the global root
 // when it is a named folder (the helper's third argument); then ~/.preferred-tools, then ~/.alfred.
-function hostedChain({ scope, projectRoot, globalRoot, globalNamed = false, home })
+export function hostedChain({ scope, projectRoot, globalRoot, globalNamed = false, home })
 {
     const beside = scope === 'user' ? globalRoot : projectRoot;
     const named = scope === 'local' && globalNamed ? globalRoot : null;
@@ -110,7 +109,7 @@ function hostedChain({ scope, projectRoot, globalRoot, globalNamed = false, home
 
 // stdioChain({ scope, projectRoot, globalRoot }) -> the files the apply reads a stdio key from: local scope the project
 // root's, then the global root's; user scope the global root's. Project scope takes no stdio key (spec D5).
-function stdioChain({ scope, projectRoot, globalRoot })
+export function stdioChain({ scope, projectRoot, globalRoot })
 {
     if (scope === 'local') return uniq([projectRoot, globalRoot].filter(Boolean).map(secretsIn));
     if (scope === 'user') return globalRoot ? [secretsIn(globalRoot)] : [];
@@ -118,7 +117,7 @@ function stdioChain({ scope, projectRoot, globalRoot })
 }
 
 // The first non-empty value of `name` in `files` -> { value, file } | null. An empty value counts as missing.
-function valueIn(files, name)
+export function valueIn(files, name)
 {
     for (const file of files)
     {
@@ -130,13 +129,13 @@ function valueIn(files, name)
 
 // The names each file holds with a value -> [{ file, names }]. Every value is dropped here.
 // The names a key file defines, filled or not - the values stay in this process. [] when the file cannot be read.
-const namesIn = (file) => Object.keys(readDotenv(file) || {});
-const filledNames = (files) => files.map((file) => ({ file, names: Object.entries(readDotenv(file) || {}).filter(([, v]) => v !== '').map(([k]) => k) }));
+export const namesIn = (file) => Object.keys(readDotenv(file) || {});
+export const filledNames = (files) => files.map((file) => ({ file, names: Object.entries(readDotenv(file) || {}).filter(([, v]) => v !== '').map(([k]) => k) }));
 
 // The key files 0.1.x read, which 0.2.0 reads for names only: alfred-code's store in the project and in each parent folder
 // (its chain walks the parents, so a workspace root's store served its child repos), the project's
 // .preferred-tools/.secrets, then the home one.
-function oldFiles(project, home)
+export function oldFiles(project, home)
 {
     const stores = [];
     for (let dir = path.resolve(project); ; dir = path.dirname(dir))
@@ -148,14 +147,14 @@ function oldFiles(project, home)
 }
 
 // The first old file holding `name` with a value -> its path | null. The value is never returned.
-function oldHolding(project, home, name)
+export function oldHolding(project, home, name)
 {
     return oldFiles(project, home).find((file) => Boolean((readDotenv(file) || {})[name])) || null;
 }
 
 // The first name in `files` whose value equals `value` -> its name | null. Compared in this process; the value is never
 // returned or printed.
-function nameOfValue(files, value)
+export function nameOfValue(files, value)
 {
     if (typeof value !== 'string' || value === '') return null;
     for (const file of files)
@@ -167,9 +166,5 @@ function nameOfValue(files, value)
 }
 
 // A name that looks like a credential (spec D9, the docs' own test): a key belongs in .mcps-secrets, never in a setting.
-const credentialName = (n) => /TOKEN|SECRET|PASSWORD|KEY|AUTH/i.test(String(n));
+export const credentialName = (n) => /TOKEN|SECRET|PASSWORD|KEY|AUTH/i.test(String(n));
 
-module.exports = {
-    readDotenv, tokenFields, fillKeys, PLACEHOLDER, SECRETS, NAME_RULE, hostedChain, stdioChain, valueIn, filledNames, namesIn, oldFiles, oldHolding,
-    offeredName, nameOfValue, credentialName, valueAt,
-};

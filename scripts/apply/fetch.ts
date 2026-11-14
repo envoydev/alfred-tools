@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // FETCH - the slow half of an apply: fills the runtime caches for what apply.js just registered, starts each new server
 // once, then asks the CLI for each status.
 //
@@ -16,28 +15,28 @@
 // cache entry left without its package.json). A failed fetch or start is a warning, never a change: the registration
 // stays, and its first session start tries again. `claude mcp get` comes last, so its own 30-second health check meets a
 // filled cache instead of starting a download it then kills.
-const fs = require('node:fs');
-const path = require('node:path');
-const { spawn, spawnSync } = require('node:child_process');
-const cli = require('../core/claude-cli.ts');
-const account = require('../core/account.ts');
-const kept = require('../core/kept.ts');
-const { expandVars } = require('../entries/locations.ts');
-const { bridgeParts } = require('../entries/entry.ts');
-const { signInParts } = require('../entries/sign-in.ts');
-const serenaConfig = require('./serena-config.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
+import * as cli from '../core/claude-cli.ts';
+import * as account from '../core/account.ts';
+import * as kept from '../core/kept.ts';
+import { expandVars } from '../entries/locations.ts';
+import { bridgeParts } from '../entries/entry.ts';
+import { signInParts } from '../entries/sign-in.ts';
+import * as serenaConfig from './serena-config.ts';
 
-const VERSION = 1;
+export const VERSION = 1;
 const START_MS = 600000;
 const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'preferred-tools', version: '0' } } };
 // ${VAR} and ${VAR:-default}, as Claude Code expands them in an MCP entry (entries.js expandVars)
-const expand = (s, env) => expandVars(s, env).value;
+export const expand = (s, env) => expandVars(s, env).value;
 // the first ${VAR} with no default that is not set: a start without it only fails
-const unsetVar = (entry, env) => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((m) => m[1]).find((k) => env[k] === undefined) || null;
+export const unsetVar = (entry, env) => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((m) => m[1]).find((k) => env[k] === undefined) || null;
 
 // The runtime itself (npm, uvx, docker), never the claude CLI, and with no limit of Claude Code's. On Windows it goes
 // through the shell so npm.cmd resolves.
-const realFetch = (argv, { cwd, env }) => spawnSync(argv[0], argv.slice(1), { cwd, env, encoding: 'utf8', timeout: 1800000, windowsHide: true, shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
+export const realFetch = (argv, { cwd, env }) => spawnSync(argv[0], argv.slice(1), { cwd, env, encoding: 'utf8', timeout: 1800000, windowsHide: true, shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
 
 // A server and everything it started: TERM, then KILL after 5 s (Windows: taskkill /T /F). -> Promise, once it is gone
 function stopTree(child)
@@ -55,7 +54,7 @@ function stopTree(child)
 
 // The server started exactly as written - command, args and env, ${VAR} expanded - and sent `initialize` over stdio,
 // as Claude Code's first start sends it. -> Promise<{ ok, ms, why? }>
-function realStart(entry, { cwd, env, ms = START_MS })
+export function realStart(entry, { cwd, env, ms = START_MS })
 {
     return new Promise((resolve) =>
     {
@@ -97,13 +96,13 @@ function realStart(entry, { cwd, env, ms = START_MS })
 }
 
 // -> the job apply.js hands over: { version, project, fetch: [fetch steps, each with the scope it was written at], check: [server names] }
-const job = (project, fetch, check) => ({ version: VERSION, project, fetch, check: [...new Set(check)] });
+export const job = (project, fetch, check) => ({ version: VERSION, project, fetch, check: [...new Set(check)] });
 
 // Each step's argv and env as kept.js keeps them, so the file a command line names holds no live credential: a download
 // needs none (a kept value expands to ''), and the first start reads the registration itself.
 // `append` adds to a fetch file already there (fix: a registration's fetch, then a machine fix's): its steps are kept
 // already, so only the new ones go through kept.keep.
-function writeJob(file, j, { append = false } = {})
+export function writeJob(file, j, { append = false } = {})
 {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const prior = append && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
@@ -114,13 +113,13 @@ function writeJob(file, j, { append = false } = {})
 }
 
 // The lines apply.js prints for the command: the file, and what fetch.js will do with it.
-const nextLines = (file, j) => [
+export const nextLines = (file, j) => [
     `Fetch next, in the background (a first download can take minutes): ${file}`,
     `  fetches ${j.fetch.map((s) => s.what).join(', ')} and starts each once, then reports the status of ${j.check.join(', ')} (claude mcp get)`,
 ];
 
 // Each server's status line as `claude mcp get` prints it - a health check of up to 30 s each. -> [{ name, out }]
-function status(names, { cwd, env, runCli = cli.run, log = console.log })
+export function status(names, { cwd, env, runCli = cli.run, log = console.log })
 {
     if (names.length) log('', 'Status, from the CLI:');
     return names.map((name) =>
@@ -135,7 +134,7 @@ function status(names, { cwd, env, runCli = cli.run, log = console.log })
 }
 
 // -> Promise<{ fetched: [what], started: [name], skipped: [line], warnings: [detail], status: [{ name, out }] }>
-async function run(j, { env = process.env, runFetch = realFetch, start = realStart, runCli = cli.run, log = console.log } = {})
+export async function run(j, { env = process.env, runFetch = realFetch, start = realStart, runCli = cli.run, log = console.log } = {})
 {
     const res = { fetched: [], started: [], skipped: [], warnings: [], status: [] };
     const cwd = j.project;
@@ -205,4 +204,3 @@ async function run(j, { env = process.env, runFetch = realFetch, start = realSta
     return res;
 }
 
-module.exports = { job, writeJob, nextLines, run, status, realFetch, realStart, expand, unsetVar, VERSION };

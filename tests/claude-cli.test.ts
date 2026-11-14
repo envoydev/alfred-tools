@@ -1,12 +1,11 @@
-'use strict';
 // claude-cli.js: the cmd.exe route npm's claude.cmd takes on Windows. Every argument must reach the CLI as written - a
 // JSON quote, %VAR%, carets, & and |, backslashes before a quote or the end, an empty argument.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const cli = require('../scripts/core/claude-cli.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as cli from '../scripts/core/claude-cli.ts';
 
 test('argvQuote: the Windows argv rules - backslashes before a quote doubled plus one, before the end doubled, others kept', () =>
 {

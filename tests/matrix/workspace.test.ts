@@ -1,4 +1,3 @@
-'use strict';
 // The workspace cases end to end: the REAL claude CLI in throwaway homes and accounts (tests/harness.ts), alfred-code
 // built by its own installer where a case needs it (tests/probes/alfred-workspace.ts), every result read back from the
 // files the CLI wrote.
@@ -15,25 +14,25 @@
 //
 // alfred-code's source is --alfred, else PREFERRED_TOOLS_ALFRED, else ../alfred-code (Global Constraints); a version it
 // cannot resolve is NOT RUN, named.
-const test = require('node:test');
-const assert = require('node:assert');
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const cli = require('../../scripts/core/claude-cli.ts');
-const account = require('../../scripts/core/account.ts');
-const { pickQuestions } = require('../../scripts/plan/asks-picks.ts');
-const { changeQuestions } = require('../../scripts/plan/asks-tool.ts');
-const { all } = require('../../scripts/plan/asks-all.ts');
-const catalogLib = require('../../scripts/catalog/catalog.ts');
-const { makeCtx, detectAll, applyFixes } = require('../../scripts/fix/fix.ts');
-const roots = require('../../scripts/roots/roots.ts');
-const fake = require('../fake-mcp-http.ts');
-const { Harness, hashTree } = require('../harness.ts');
-const { buildAlfred } = require('../probes/alfred-workspace.ts');
-const { keepWritten } = require('../proof/matrix-keep.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import * as cli from '../../scripts/core/claude-cli.ts';
+import * as account from '../../scripts/core/account.ts';
+import { pickQuestions } from '../../scripts/plan/asks-picks.ts';
+import { changeQuestions } from '../../scripts/plan/asks-tool.ts';
+import { all } from '../../scripts/plan/asks-all.ts';
+import * as catalogLib from '../../scripts/catalog/catalog.ts';
+import { makeCtx, detectAll, applyFixes } from '../../scripts/fix/fix.ts';
+import * as roots from '../../scripts/roots/roots.ts';
+import * as fake from '../fake-mcp-http.ts';
+import { Harness, hashTree } from '../harness.ts';
+import { buildAlfred } from '../probes/alfred-workspace.ts';
+import { keepWritten } from '../proof/matrix-keep.ts';
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-ws-')));
@@ -355,7 +354,7 @@ test('W5 - a root\'s project-scope tool in alfred-code\'s folder, absolute: the 
 
 // What a `claude -p` needs and nothing more (tests/probes/mcp-tree.ts): no credential of the shell running the matrix.
 const KEEP = new Set(['PATH', 'PATHEXT', 'SYSTEMROOT', 'SYSTEMDRIVE', 'COMSPEC', 'WINDIR', 'PROGRAMFILES', 'PROGRAMDATA', 'TEMP', 'TMP', 'TMPDIR', 'LANG', 'TERM']);
-const FAKE = path.resolve(__dirname, '..', 'fake-mcp-server.ts');
+const FAKE = path.resolve(import.meta.dirname, '..', 'fake-mcp-server.ts');
 
 test('W5 - a stdio server inherits the environment Claude Code starts with: a parent\'s project server started from its child', T, (t) =>
 {

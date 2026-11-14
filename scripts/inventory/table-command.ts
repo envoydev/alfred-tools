@@ -1,9 +1,8 @@
-'use strict';
 // The table command: reads the inventory file and prints the table.
-const fs = require('node:fs');
-const { render } = require('./table.ts');
+import fs from 'node:fs';
+import { render } from './table.ts';
 
-function main(argv, { out = (s) => process.stdout.write(`${s}\n`) } = {})
+export function main(argv, { out = (s) => process.stdout.write(`${s}\n`) } = {})
 {
     if (!argv[0]) { out('usage: table.ts <inventory.json>'); return 2; }
     let inv;
@@ -13,4 +12,3 @@ function main(argv, { out = (s) => process.stdout.write(`${s}\n`) } = {})
     return 0;
 }
 
-module.exports = { main };

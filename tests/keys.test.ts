@@ -1,14 +1,13 @@
-'use strict';
 // keys.js - the key files' grammar and chains (D3), and how a key is written into a stdio registration by scope.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const crypto = require('node:crypto');
-const { world } = require('./helpers.ts');
-const catalogLib = require('../scripts/catalog/catalog.ts');
-const keys = require('../scripts/keys/keys.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { world } from './helpers.ts';
+import * as catalogLib from '../scripts/catalog/catalog.ts';
+import * as keys from '../scripts/keys/keys.ts';
 
 const catalog = catalogLib.load();
 const row = (id) => catalog.byId.get(id);

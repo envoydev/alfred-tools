@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // The proof that nothing changed (docs/superpowers/specs, Proof 1-4): record a tree's base, then compare a later tree
 // against it.
 //   node tests/proof/proof.ts --record <dir>         the golden, test names, copied hashes, lint and validate results
@@ -7,16 +6,16 @@
 //                                                    tsconfig.json exists), the golden and its start times, the hashes
 //   node tests/proof/proof.ts --compare <dir> --matrix-only   the matrix's written files against <dir>/matrix
 // Exit 0 only when every part equals the base (tests/proof/allowed.json's lines aside).
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const golden = require('./golden.ts');
-const testNames = require('./test-names.ts');
-const { copiedHashes } = require('./copied-hash.ts');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import * as golden from './golden.ts';
+import * as testNames from './test-names.ts';
+import { copiedHashes } from './copied-hash.ts';
 
 const TREE = golden.TREE;
-const ALLOWED = path.join(__dirname, 'allowed.json');
+const ALLOWED = path.join(import.meta.dirname, 'allowed.json');
 const USAGE = 'usage: proof.js --record <dir> | --compare <dir> [--matrix-only]';
 
 const testsFile = (name) => [`${name}.ts`, `${name}.js`].map((f) => path.join(TREE, 'tests', f)).find((f) => fs.existsSync(f));
@@ -33,7 +32,7 @@ const validate = () => check(node(testsFile('validate-plugin')));
 
 // lint and validate pass when they exit 0, or fail exactly as the base did (validate fails on an untracked file the
 // owner keeps beside the tree, which this run must not touch).
-const sameCheck = (base, now) => now.code === 0 || (base && now.code === base.code && now.out === base.out);
+export const sameCheck = (base, now) => now.code === 0 || (base && now.code === base.code && now.out === base.out);
 
 async function record(dir)
 {
@@ -133,7 +132,7 @@ function matrixOnly(dir)
     return ok ? 0 : 1;
 }
 
-async function main(argv)
+export async function main(argv)
 {
     const at = (flag) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : null; };
     const known = new Set(['--record', '--compare', '--matrix-only']);
@@ -146,5 +145,4 @@ async function main(argv)
     return 2;
 }
 
-if (require.main === module) main(process.argv.slice(2)).then((code) => process.exit(code));
-module.exports = { main, sameCheck };
+if (import.meta.main) main(process.argv.slice(2)).then((code) => process.exit(code));

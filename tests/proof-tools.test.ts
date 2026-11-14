@@ -1,13 +1,14 @@
-'use strict';
 // The proof harness (tests/proof/): what it masks, what it compares, and that its inputs reach every form the
 // commands run.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import * as golden from './proof/golden.ts';
+import * as testNames from './proof/test-names.ts';
+import os from 'node:os';
+import { keepWritten } from './proof/matrix-keep.ts';
 
-const golden = require('./proof/golden.ts');
-const testNames = require('./proof/test-names.ts');
 
 test('normalise replaces the world root, mkdtemp suffixes, ISO times and 127.0.0.1 ports', () =>
 {
@@ -28,7 +29,6 @@ test('normalise replaces the tree root and a tests file\'s extension', () =>
 
 test('collect keeps every file two temp folders hold under one name, in the order of their text', () =>
 {
-    const os = require('node:os');
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-collect-'));
     try
     {
@@ -48,8 +48,6 @@ test('collect keeps every file two temp folders hold under one name, in the orde
 
 test('keepWritten masks what changes from run to run: a generated key, the temp folder in a case-folded rule, update- folders, the uv cache', () =>
 {
-    const os = require('node:os');
-    const { keepWritten } = require('./proof/matrix-keep.ts');
     const run = (suffix, hex) =>
     {
         const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-keep-'));
@@ -108,7 +106,7 @@ test('the account file keeps only mcpServers and each project\'s mcpServers', ()
 
 test('every answers fixture plans cleanly', async () =>
 {
-    const fixtures = path.join(__dirname, 'proof', 'fixtures');
+    const fixtures = path.join(import.meta.dirname, 'proof', 'fixtures');
     const read = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
     const names = (answers) => [...Object.keys(answers.picks || {}), ...Object.values(answers.change || {}).map((c) => c.name).filter(Boolean), ...(answers.remove || []).map((r) => r.name)];
     const { registry, ctx } = await golden.openWorld();

@@ -1,14 +1,13 @@
-'use strict';
 // THE DECLINED UNINSTALL OFFERS (spec D9, 0.5.0). typescript-lsp, csharp-lsp and claude-hud left the catalog; update and
 // fix offer once to uninstall each at each scope it is installed. A decline is kept here, in the plugin's persistent
 // folder beside roots.json - `${CLAUDE_PLUGIN_DATA}/retired-declined.json`, `{ version: 1, declined: [{ id, scope }] }` -
 // so update offers it no more and fix lists it as advice only. Written through a temporary file.
-const fs = require('node:fs');
-const path = require('node:path');
+import fs from 'node:fs';
+import path from 'node:path';
 
-const FILE = 'retired-declined.json';
+export const FILE = 'retired-declined.json';
 const fileOf = (dataDir) => path.join(dataDir, FILE);
-const same = (a, b) => a.id === b.id && a.scope === b.scope;
+export const same = (a, b) => a.id === b.id && a.scope === b.scope;
 
 // -> { declined } | { bad } | null (no file)
 function load(dataDir)
@@ -25,7 +24,7 @@ function load(dataDir)
 }
 
 // -> [{ id, scope }]; none with no data folder or a file that is not JSON
-function read(dataDir)
+export function read(dataDir)
 {
     if (!dataDir) return [];
     const doc = load(dataDir);
@@ -33,7 +32,7 @@ function read(dataDir)
 }
 
 // -> { ok, detail }
-function add(dataDir, items)
+export function add(dataDir, items)
 {
     if (!dataDir) return { ok: false, detail: 'no plugin data folder given - the decline is not recorded, so the offer comes back next time' };
     const doc = load(dataDir);
@@ -49,7 +48,7 @@ function add(dataDir, items)
 }
 
 // `--input retired-declined=<id>~<scope>,...` -> [{ id, scope }]
-function parse(value)
+export function parse(value)
 {
     return String(value || '').split(',').filter(Boolean).map((item) =>
     {
@@ -59,4 +58,3 @@ function parse(value)
     });
 }
 
-module.exports = { FILE, read, add, parse, same };

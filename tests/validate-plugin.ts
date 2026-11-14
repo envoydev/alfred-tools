@@ -1,15 +1,14 @@
 #!/usr/bin/env node
-'use strict';
 // `claude plugin validate` on what an install receives: a scratch copy of the files git would ship (tracked,
 // plus untracked ones not ignored), never the folder on disk. The validator reads the folder as it is, so a file git
 // ignores - a Finder .DS_Store - would be reported although it never reaches an install. `--profile directory --strict`:
 // any error or warning fails, the checks Anthropic's plugin directory makes (an icon, no OS metadata files) included.
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(import.meta.dirname, '..');
 const ls = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8' });
 if (ls.error || ls.status !== 0) { console.error(`validate: cannot list the repo's files (${ls.error ? ls.error.message : ls.stderr.trim()})`); process.exit(2); }
 

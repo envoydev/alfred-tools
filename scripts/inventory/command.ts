@@ -1,10 +1,9 @@
-'use strict';
 // The inventory command: reads its flags, builds the inventory and writes or prints it.
-const fs = require('node:fs');
-const { blockingStdio } = require('../core/json-file.ts');
-const { buildInventory, keptOf } = require('./inventory.ts');
+import fs from 'node:fs';
+import { blockingStdio } from '../core/json-file.ts';
+import { buildInventory, keptOf } from './inventory.ts';
 
-function main(argv)
+export function main(argv)
 {
     blockingStdio();
     const val = (flag) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : undefined; };
@@ -26,4 +25,3 @@ function main(argv)
     return 0;
 }
 
-module.exports = { main };

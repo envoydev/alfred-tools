@@ -1,9 +1,8 @@
-'use strict';
 // The plugin offers: each installed plugin behind its marketplace's release.
-const fs = require('node:fs');
-const path = require('node:path');
-const inventory = require('../inventory/inventory.ts');
-const { clone, compareVersions, pinnedVersion } = require('../fix/common.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import * as inventory from '../inventory/inventory.ts';
+import { clone, compareVersions, pinnedVersion } from '../fix/common.ts';
 
 const { bareName } = inventory;
 
@@ -11,7 +10,7 @@ const { bareName } = inventory;
 
 // The entry with `pkg`'s pin moved to `to` and its cut-off to `cutoff`. Only a cut-off the entry already carries moves: a
 // user who removed it keeps it removed. null when the entry pins no version of `pkg`.
-function bumpEntry(entry, pkg, to, cutoff)
+export function bumpEntry(entry, pkg, to, cutoff)
 {
     const from = pinnedVersion(entry, pkg);
     if (!from) return null;
@@ -32,7 +31,7 @@ function bumpEntry(entry, pkg, to, cutoff)
 
 // The version a marketplace lists for a plugin, from its clone: the plugin's own plugin.json when the entry points at a
 // folder in the clone (that file wins over the entry), else the entry's `version`. null: not listed.
-function listedVersion(installLocation, pluginName)
+export function listedVersion(installLocation, pluginName)
 {
     if (!installLocation) return null;
     let file = installLocation;
@@ -50,7 +49,7 @@ function listedVersion(installLocation, pluginName)
     return entry.version ? String(entry.version) : null;
 }
 
-function pluginOffers(ctx, out)
+export function pluginOffers(ctx, out)
 {
     const refreshed = new Map();
     for (const p of ctx.inv.plugins)
@@ -76,4 +75,3 @@ function pluginOffers(ctx, out)
     }
 }
 
-module.exports = { bumpEntry, listedVersion, pluginOffers };

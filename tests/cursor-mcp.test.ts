@@ -1,12 +1,15 @@
-'use strict';
 // cursor-mcp.js - Cursor's mcp.json from the list (spec D2): read, refuse, compose, write, read back.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const catalogLib = require('../scripts/catalog/catalog.ts');
-const C = require('../scripts/cursor/cursor-mcp.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import * as catalogLib from '../scripts/catalog/catalog.ts';
+import * as C from '../scripts/cursor/cursor-mcp.ts';
+import { spawnSync } from 'node:child_process';
+import { buildEntry, helperParts, bridgeParts } from '../scripts/entries/entry.ts';
+import { signInFormOf, signInParts } from '../scripts/entries/sign-in.ts';
 
 const catalog = catalogLib.load();
 const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-cursor-')));
@@ -178,22 +181,20 @@ test('matchesRow matches context7\'s bridge copy to the context7 row and an unre
 });
 
 test('cursor-mcp loads before and after inventory without a partial export', () => {
-    const { spawnSync } = require('node:child_process');
-    const root = path.join(__dirname, '..', 'scripts');
-    const probe = (first, second) => `const a = require(${JSON.stringify(path.join(root, first))}); const b = require(${JSON.stringify(path.join(root, second))});`
-        + ' const c = require(' + JSON.stringify(path.join(root, 'cursor', 'cursor-mcp.ts')) + '); const i = require(' + JSON.stringify(path.join(root, 'inventory', 'inventory.ts')) + ');'
+    const root = path.join(import.meta.dirname, '..', 'scripts');
+    const url = (...parts) => JSON.stringify(pathToFileURL(path.join(root, ...parts)).href);
+    const probe = (first, second) => `await import(${url(first)}); await import(${url(second)});`
+        + ` const c = await import(${url('cursor', 'cursor-mcp.ts')}); const i = await import(${url('inventory', 'inventory.ts')});`
         + " if (typeof c.matchesRow !== 'function' || typeof c.readCursor !== 'function' || typeof i.buildInventory !== 'function' || typeof i.matchesFingerprint !== 'function') { process.exit(3); }"
-        + " if (!c.matchesRow({ type: 'http', url: 'https://mcp.context7.com/mcp' }, require(" + JSON.stringify(path.join(root, 'catalog', 'catalog.ts')) + ").load().byId.get('context7'))) process.exit(4);";
+        + ` if (!c.matchesRow({ type: 'http', url: 'https://mcp.context7.com/mcp' }, (await import(${url('catalog', 'catalog.ts')})).load().byId.get('context7'))) process.exit(4);`;
     for (const [a, b] of [['cursor/cursor-mcp.ts', 'inventory/inventory.ts'], ['inventory/inventory.ts', 'cursor/cursor-mcp.ts']])
     {
-        const r = spawnSync(process.execPath, ['-e', probe(a, b)], { encoding: 'utf8' });
+        const r = spawnSync(process.execPath, ['--input-type=module', '-e', probe(a, b)], { encoding: 'utf8' });
         assert.strictEqual(r.status, 0, `${a} first: ${r.stderr}`);
     }
 });
 
 // ---- hosted routes (spec D5) ----------------------------------------------------------------------------------------
-const { buildEntry, helperParts, bridgeParts } = require('../scripts/entries/entry.ts');
-const { signInFormOf, signInParts } = require('../scripts/entries/sign-in.ts');
 const HOSTED_CTX = { platform: 'darwin', project: '/work/shop', home: '/Users/me', roots: { project: '/work/shop/.preferred-tools', global: '/Users/me/.preferred-tools' } };
 const helperEntry = (id, scope = 'user', ctx = HOSTED_CTX) => buildEntry(catalog.byId.get(id), 'remote', { scope, token: true, params: { host: 'gitlab.com' } }, ctx, catalog.rules);
 const MR = catalog.byId.get('sentry').routes.bridge.package;

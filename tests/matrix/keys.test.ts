@@ -1,4 +1,3 @@
-'use strict';
 // The key cases end to end (spec D3-D7): the REAL claude CLI in throwaway homes and accounts (tests/harness.ts), a stub
 // HTTP MCP server on 127.0.0.1 (tests/fake-mcp-http.ts) standing in for github's hosted server, and a fake key in the
 // throwaway root's .mcps-secrets, filled after the apply wrote its name - as the user does. Every result is read back
@@ -11,23 +10,24 @@
 //   K5  a server matching atlassian at global scope, recorded on its own: update and fix leave it byte-identical
 //   K6  update moves a 0.1.x key header to the helper and ignores the key file in git (the user's ruling, 2026-11-12):
 //       offered, applied, the key arrives, nothing left to move
-const test = require('node:test');
-const assert = require('node:assert');
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const cli = require('../../scripts/core/claude-cli.ts');
-const account = require('../../scripts/core/account.ts');
-const roots = require('../../scripts/roots/roots.ts');
-const { shellArg } = require('../../scripts/entries/entry.ts');
-const { detectAll, makeCtx, applyFixes, render } = require('../../scripts/fix/fix.ts');
-const update = require('../../scripts/update/check.ts');
-const { applyUpdates } = require('../../scripts/update/apply.ts');
-const fake = require('../fake-mcp-http.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as cli from '../../scripts/core/claude-cli.ts';
+import * as account from '../../scripts/core/account.ts';
+import * as roots from '../../scripts/roots/roots.ts';
+import { shellArg } from '../../scripts/entries/entry.ts';
+import { detectAll, makeCtx, applyFixes, render } from '../../scripts/fix/fix.ts';
+import * as update from '../../scripts/update/check.ts';
+import { applyUpdates } from '../../scripts/update/apply.ts';
+import * as fake from '../fake-mcp-http.ts';
+import { Harness } from '../harness.ts';
+import { keepWritten } from '../proof/matrix-keep.ts';
+import { spawnSync } from 'node:child_process';
 const { stubCatalog, trust, fill } = fake;
-const { Harness } = require('../harness.ts');
-const { keepWritten } = require('../proof/matrix-keep.ts');
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const T = { skip: skipAll, timeout: 600000 };
@@ -225,7 +225,7 @@ test('K6 - update moves a 0.1.x key header to the helper and keeps the key file 
         const lines = [];
         const res = applyUpdates(uctx, ids, out, { tmp: path.join(h.root, 'tmp', 'update'), log: (...a) => lines.push(a.join(' ')) });
         assert.deepStrictEqual([...res.applied].sort(), [...ids].sort(), lines.join('\n'));
-        const ignored = (f) => require('node:child_process').spawnSync('git', ['check-ignore', '-q', f], { cwd: dir }).status === 0;
+        const ignored = (f) => spawnSync('git', ['check-ignore', '-q', f], { cwd: dir }).status === 0;
         assert.ok(ignored(path.join(root, roots.FILES.secrets)), 'git ignores the key file');
         assert.ok(!ignored(path.join(root, roots.FILES.helper)), 'git keeps the helper a project-scope server would need');
         helperOnly(written(h, dir, 'local', 'github'));

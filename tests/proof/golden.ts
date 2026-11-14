@@ -1,15 +1,15 @@
-'use strict';
 // The golden: every entry the commands run, in fixed worlds over the fake CLI, with its stdout, stderr, exit code and
 // every file it leaves, normalised so two runs on one machine compare equal. The base is recorded before the
 // restructure moves anything; each later task compares against it (docs/superpowers/specs, Proof 2).
-const fs = require('node:fs');
-const http = require('node:http');
-const path = require('node:path');
-const { spawn } = require('node:child_process');
+import fs from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
-const TREE = path.resolve(__dirname, '..', '..');
-const FLOWS = path.join(__dirname, 'flows.json');
-const FIXTURES = path.join(__dirname, 'fixtures');
+export const TREE = path.resolve(import.meta.dirname, '..', '..');
+const FLOWS = path.join(import.meta.dirname, 'flows.json');
+const FIXTURES = path.join(import.meta.dirname, 'fixtures');
 
 // The files a step can leave, by base name: the registrations, the lists, the settings, the roots map, the account
 // file, the ignore files, the key file (names only) and what the copy step puts in a root.
@@ -29,7 +29,7 @@ function spellings(p)
 
 // One machine's text made comparable: a world root and the tree root by token, a tests file's extension, mkdtemp
 // suffixes, times, ports, elapsed seconds, age counts and the node binary.
-function normalise(text, { root = null, tree = null, extra = [] } = {})
+export function normalise(text, { root = null, tree = null, extra = [] } = {})
 {
     let out = String(text);
     const tokens = [...extra];
@@ -50,7 +50,7 @@ function normalise(text, { root = null, tree = null, extra = [] } = {})
 }
 
 // The account file keeps what the scripts write: the servers at user scope and each project's servers.
-function accountView(doc)
+export function accountView(doc)
 {
     const out = {};
     if (doc && doc.mcpServers) out.mcpServers = doc.mcpServers;
@@ -63,7 +63,7 @@ function accountView(doc)
 }
 
 // A file's comparable text: the account file by its view, the key file by its names, the rest as written.
-function fileText(file)
+export function fileText(file)
 {
     const base = path.basename(file);
     const text = fs.readFileSync(file, 'utf8');
@@ -73,7 +73,7 @@ function fileText(file)
 }
 
 // Every kept file below a folder, keyed by its path relative to it, in '/'.
-function collect(dir, norm)
+export function collect(dir, norm)
 {
     const out = {};
     const walk = (d) =>
@@ -97,10 +97,10 @@ function collect(dir, norm)
 }
 
 // The entry file a name runs: scripts/<name>.ts once it exists, else scripts/<name>.js - one harness for every phase.
-const entryPath = (tree, name) => [`${name}.ts`, `${name}.js`].map((f) => path.join(tree, 'scripts', f)).find((f) => fs.existsSync(f))
+export const entryPath = (tree, name) => [`${name}.ts`, `${name}.js`].map((f) => path.join(tree, 'scripts', f)).find((f) => fs.existsSync(f))
     || path.join(tree, 'scripts', `${name}.js`);
 
-function runEntry(tree, name, argv, { cwd, env })
+export function runEntry(tree, name, argv, { cwd, env })
 {
     return new Promise((resolve) =>
     {
@@ -134,10 +134,13 @@ function startRegistry()
     return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) })));
 }
 
+// tests/helpers.ts, or helpers.js in a tree from before the move, loaded by its file URL.
+const helpers = await import(pathToFileURL(path.join(TREE, 'tests', fs.existsSync(path.join(TREE, 'tests', 'helpers.ts')) ? 'helpers.ts' : 'helpers.js')).href);
+
 // The world a flow runs in: tests/helpers.ts's world, its temp folder and plugin data folder, Cursor present.
 function makeWorld(registry)
 {
-    const { world, tempOf } = require(path.join(TREE, 'tests', fs.existsSync(path.join(TREE, 'tests', 'helpers.ts')) ? 'helpers.ts' : 'helpers.js'));
+    const { world, tempOf } = helpers;
     const w = world('pt-golden-');
     const temp = tempOf(w);
     const data = path.join(w.dir, 'data');
@@ -215,7 +218,7 @@ function fill(argv, ctx)
 
 // The first id a --questions printed, for a step that applies one id: the first option whose description is an id
 // (`mcp:serena~local`, `cursor-pin:sentry~project`).
-function firstId(stdout)
+export function firstId(stdout)
 {
     let doc;
     try { doc = JSON.parse(stdout); }
@@ -267,7 +270,7 @@ async function runFlow(flow, tree, all = [flow])
 const errorArgv = (name, dir) => (name === 'refresh-reserved' ? ['--alfred', path.join(dir, 'no-alfred-code')] : ['--bogus']);
 
 // The start cost of each entry: five runs of its error path in a world of fakes, the median in milliseconds.
-async function timeEntries(tree, entries, runs = 5)
+export async function timeEntries(tree, entries, runs = 5)
 {
     const out = {};
     const registry = await startRegistry();
@@ -290,10 +293,10 @@ async function timeEntries(tree, entries, runs = 5)
     return out;
 }
 
-const readFlows = () => JSON.parse(fs.readFileSync(FLOWS, 'utf8'));
+export const readFlows = () => JSON.parse(fs.readFileSync(FLOWS, 'utf8'));
 
 // The golden record of a tree: each flow's steps, and each entry's median start time.
-async function record(tree = TREE)
+export async function record(tree = TREE)
 {
     const { flows, entries } = readFlows();
     const out = { flows: [] };
@@ -304,7 +307,7 @@ async function record(tree = TREE)
 
 // Two records compared: every difference, as one line each. An allowed line is the base's text with `from` read as
 // `to` in that entry's output only.
-function compare(base, now, allowed = [])
+export function compare(base, now, allowed = [])
 {
     const diffs = [];
     const allow = (entry, text) => allowed.filter((a) => a.entry === entry).reduce((t, a) => t.split(a.from).join(a.to), text);
@@ -334,18 +337,17 @@ function compare(base, now, allowed = [])
 }
 
 // Entries over the base's median start time by more than the budget (the spec's 100 ms).
-const slower = (base, now, budgetMs = 100) => Object.keys(base.ms || {}).filter((e) => now.ms && Number.isFinite(now.ms[e]) && now.ms[e] - base.ms[e] > budgetMs);
+export const slower = (base, now, budgetMs = 100) => Object.keys(base.ms || {}).filter((e) => now.ms && Number.isFinite(now.ms[e]) && now.ms[e] - base.ms[e] > budgetMs);
 
 // A world of fakes with its registry, for a test that runs entries itself; closeWorld stops and removes both.
-async function openWorld()
+export async function openWorld()
 {
     const registry = await startRegistry();
     return { registry, ctx: makeWorld(registry) };
 }
-async function closeWorld({ registry, ctx })
+export async function closeWorld({ registry, ctx })
 {
     await registry.close();
     ctx.w.clean();
 }
 
-module.exports = { TREE, openWorld, closeWorld, normalise, accountView, fileText, collect, entryPath, runEntry, record, compare, slower, readFlows, timeEntries, firstId };

@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // hud-statusline.js - what is left of claude-hud's setup once 0.5.0 dropped the claude-hud row (spec D8, D9): the
 // recognisers that tell claude-hud's own statusLine from any other, and the removal the `retired-plugin` uninstall runs.
 // Ported from alfred-code scripts/hud-statusline.js; MOUNT_RE is copied below.
@@ -9,11 +8,11 @@
 // `buildCommand`) writes a launcher line instead - the runtime and a copy of its statusline.mjs at
 // <account>/plugins/claude-hud/ (POSIX), a statusline.cmd shim there (Git Bash), or the same cmd.exe line as 0.8.0
 // (PowerShell). Re-read on 0.15.0 (2026-11-10): /hud replaces /claude-hud:setup and writes the same launcher lines.
-const fs = require('node:fs');
-const path = require('node:path');
+import fs from 'node:fs';
+import path from 'node:path';
+import { configDir as accountDir } from '../core/account.ts';
+import { parseJson } from '../core/json-file.ts';
 
-const { configDir: accountDir } = require('../core/account.ts');
-const { parseJson } = require('../core/json-file.ts');
 
 const HUD = 'claude-hud';
 
@@ -26,14 +25,14 @@ const AWK_NODE = 'bash -c \'cols=${COLUMNS:-}; case "$cols" in ""|*[!0-9]*) cols
 const AWK_BUN = AWK_NODE.replace('exec "{RUNTIME_PATH}" "', 'exec "{RUNTIME_PATH}" --env-file /dev/null "');
 // Windows (setup.md:369, the cmd path per :375-377): the launcher below, through the absolute cmd.exe.
 const CMD = '{CMD_PATH} /d /s /c ""{RUNTIME_PATH}" "{WRAPPER_PATH}""';
-const SHAPES = { sortV: SORT_V, awkNode: AWK_NODE, awkBun: AWK_BUN, cmd: CMD };
+export const SHAPES = { sortV: SORT_V, awkNode: AWK_NODE, awkBun: AWK_BUN, cmd: CMD };
 // claude-hud 0.11's own lines (setup.mjs buildCommand), read as current, never written here: POSIX quotes the runtime and
 // the launcher in single quotes (a quote inside as '\''), Bun adding --env-file /dev/null; Git Bash runs the shim.
 const LAUNCHER_POSIX_RE = /^'((?:[^']|'\\'')+)'( --env-file \/dev\/null)? '((?:[^']|'\\'')+)'$/;
 const LAUNCHER_GITBASH = 'exec "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/statusline.cmd"';
 const unquote = (word) => word.split("'\\''").join("'");
 
-const fill = (template, vars) => template.replace(/\{(RUNTIME_PATH|SOURCE|CMD_PATH|WRAPPER_PATH)\}/g, (m, k) => (k in vars ? vars[k] : m));
+export const fill = (template, vars) => template.replace(/\{(RUNTIME_PATH|SOURCE|CMD_PATH|WRAPPER_PATH)\}/g, (m, k) => (k in vars ? vars[k] : m));
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // A shape as a matcher: the placeholders become captures, everything else literal.
 function shapeRe(template, source)
@@ -44,7 +43,7 @@ function shapeRe(template, source)
 }
 
 // setup.md:478-485 - the label a statusLine that is not claude-hud's is reported under.
-function sourceLabel(command)
+export function sourceLabel(command)
 {
     if (command.includes('claude-pace')) return 'claude-pace';
     if (command.includes('cc-statusline') || command.includes('ccstatusline')) return 'cc-statusline';
@@ -74,7 +73,7 @@ function pathDirs(env, platform)
 // CLAUDE_CODE_GIT_BASH_PATH when it names an existing bash / sh, the two Program Files installs,
 // then bin\bash.exe of the git on PATH - skipping, as it does, a git in the launch folder (`cwd`), or
 // below it in a path holding node_modules or a virtual-environment folder (.venv, env).
-function gitBash(env, exists, cwd = process.cwd())
+export function gitBash(env, exists, cwd = process.cwd())
 {
     if (env.MSYSTEM || /^(msys|cygwin)/.test(env.OSTYPE || '')) return true;
     const pinned = env.CLAUDE_CODE_GIT_BASH_PATH;
@@ -100,7 +99,7 @@ function projectGit(git, cwd)
 
 // What this platform's line should be: the bash form (POSIX, or Windows with Git Bash - forward slashes,
 // which bash does not eat as escapes), else the cmd.exe line with `launcher`, the file it runs.
-function expected({ platform, configDir, runtime, env, exists, bash })
+export function expected({ platform, configDir, runtime, env, exists, bash })
 {
     // Where claude-hud 0.11's own setup puts its launcher (and, under Git Bash, its statusline.cmd shim).
     const hudDir = path.join(configDir, 'plugins', HUD);
@@ -129,7 +128,7 @@ const winRuntimeExists = (runtime, exists) =>
 
 // absent | current | stale | foreign. Current = a shape claude-hud 0.8.0 or 0.11 writes on this platform,
 // whose runtime (and launcher, where the line runs one) is on disk.
-function classify(statusLine, { platform, want, exists })
+export function classify(statusLine, { platform, want, exists })
 {
     if (statusLine !== undefined && (statusLine === null || typeof statusLine !== 'object' || Array.isArray(statusLine)))
         return { state: 'foreign', label: 'custom' };
@@ -164,7 +163,7 @@ function classify(statusLine, { platform, want, exists })
     return { state: 'stale' };
 }
 
-function resolveConfigDir({ flag, env = process.env })
+export function resolveConfigDir({ flag, env = process.env })
 {
     return flag ? path.resolve(flag) : accountDir(env);
 }
@@ -172,7 +171,7 @@ function resolveConfigDir({ flag, env = process.env })
 // The account settings.json's statusLine taken out when it is claude-hud's own - a line of a shape claude-hud writes,
 // current or stale - and every other key kept; any other line is left and named. Written through a temporary file.
 // -> { removed, detail }
-function removeHudStatusLine(configDir, { platform = process.platform, env = process.env, exists = fs.existsSync, cwd = process.cwd() } = {})
+export function removeHudStatusLine(configDir, { platform = process.platform, env = process.env, exists = fs.existsSync, cwd = process.cwd() } = {})
 {
     const file = path.join(configDir, 'settings.json');
     let text;
@@ -195,4 +194,3 @@ function removeHudStatusLine(configDir, { platform = process.platform, env = pro
     return { removed: true, detail: `removed claude-hud's statusLine from ${file}` };
 }
 
-module.exports = { SHAPES, fill, classify, expected, sourceLabel, gitBash, resolveConfigDir, removeHudStatusLine };

@@ -1,17 +1,19 @@
-'use strict';
 // EVERY QUESTION THE WALK ASKS, as data. A question is { id, header, question, multiSelect, options: [{ label, description }] }:
 // 2 to 4 options, exactly one marked '(Recommended)' and listed first on a single-select; a call carries 1 to 4 questions.
 // 'Other' is added by AskUserQuestion itself and never listed here.
-const fs = require('node:fs');
-const { currentOf } = require('../entries/entry.ts');
-const { installedOf, targetOf } = require('../inventory/inventory.ts');
-const keys = require('../keys/keys.ts');
-const roots = require('../roots/roots.ts');
-const { liveReader, keyNameQuestion, urlNameQuestions, settingsQuestion, heldKey, keyStateOf } = require('./asks-keys.ts');
-const { pickQuestions, rootInUse } = require('./asks-picks.ts');
-const { changeQuestions, routeQuestion, scopeOrder } = require('./asks-tool.ts');
-const { STATIC, removeQuestions, clientsQuestion, toolAsk, targetClientsQuestion } = require('./asks-other.ts');
-const { rootQuestion, rootsBlock } = require('./asks-roots.ts');
+import fs from 'node:fs';
+import { currentOf } from '../entries/entry.ts';
+import { installedOf, targetOf } from '../inventory/inventory.ts';
+import * as keys from '../keys/keys.ts';
+import * as roots from '../roots/roots.ts';
+import { liveReader, keyNameQuestion, urlNameQuestions, settingsQuestion, heldKey, keyStateOf } from './asks-keys.ts';
+import { pickQuestions, rootInUse } from './asks-picks.ts';
+import { changeQuestions, routeQuestion, scopeOrder } from './asks-tool.ts';
+import { STATIC, removeQuestions, clientsQuestion, toolAsk, targetClientsQuestion } from './asks-other.ts';
+import { rootQuestion, rootsBlock } from './asks-roots.ts';
+import { homeDir } from '../core/account.ts';
+import { cursorFound } from '../cursor/cursor-mcp.ts';
+import { ownItems, ownQuestion } from '../inventory/existing.ts';
 
 // picks: { rows: [<row id>], routes: { <row id>: route } } for install, { targets: [<key>], routes: { <key>: route } }
 // for configure; both may carry `scopes` ({ <row id or key>: scope }) and `names` ({ <row id or key>: 'keep' | <name> }),
@@ -19,19 +21,19 @@ const { rootQuestion, rootsBlock } = require('./asks-roots.ts');
 // scope, name and data folder are 'Keep'. `env` and `home`: what the key state reads (the shell's variables, the home
 // key file). plan.js --questions passes the real ones; a caller that passes none reads neither, so a test never depends
 // on the shell that runs it.
-function all(inv, picks, catalog, { env = {}, home = null, connectors = null } = {})
+export function all(inv, picks, catalog, { env = {}, home = null, connectors = null } = {})
 {
     const out = {
         static: { ...STATIC, prereqMissing: STATIC.prereqMissing('<tool>', '<prerequisite>'), settingsOne: STATIC.settingsOne('<tool>'), 'cursor-name-taken': STATIC['cursor-name-taken']('<file>', '<name>') },
         pick: pickQuestions(inv, catalog, picks && picks.existing, connectors), change: null, remove: removeQuestions(inv, catalog), tools: {}, targets: {},
     };
     // `exists` reads the disk: alfred-code's .alfred/.gitignore and its 2.x data decide which folders are offered
-    const ctx = { project: inv.project, platform: inv.os, arch: inv.arch, home: home || require('../core/account.ts').homeDir(process.env), env, keyHome: home, exists: (p) => fs.existsSync(p) };
+    const ctx = { project: inv.project, platform: inv.os, arch: inv.arch, home: home || homeDir(process.env), env, keyHome: home, exists: (p) => fs.existsSync(p) };
     // the roots answered so far (the walk asks them before a tool's folder), else the recommended ones
     ctx.roots = roots.resolve(inv, picks && picks.roots, { ...ctx, catalog }).roots;
     out.change = changeQuestions(inv, catalog, ctx);
     // which apps (spec D3): asked once an install run, when it picked something
-    out.clients = picks && (picks.rows || []).length ? clientsQuestion(require('../cursor/cursor-mcp.ts').cursorFound(ctx, inv)) : null;
+    out.clients = picks && (picks.rows || []).length ? clientsQuestion(cursorFound(ctx, inv)) : null;
     const routes = (picks && picks.routes) || {};
     const scopes = (picks && picks.scopes) || {};
     const names = (picks && picks.names) || {};
@@ -42,7 +44,7 @@ function all(inv, picks, catalog, { env = {}, home = null, connectors = null } =
         // install only adds, so its questions never start from an installed registration
         out.tools[id] = { route: row.kind === 'mcp' ? routeQuestion(row) : null, ...toolAsk(row, inv, { route: routes[id], scope: scopes[id], name: names[id], ctx, catalog, copyOf: installedOf(inv, id) }) };
     }
-    const own = new Map(require('../inventory/existing.ts').ownItems(inv, catalog).map((it) => [it.key, it]));
+    const own = new Map(ownItems(inv, catalog).map((it) => [it.key, it]));
     for (const key of (picks && picks.targets) || [])
     {
         // a root folder: D2's question, the root in use recommended (spec D7)
@@ -57,7 +59,7 @@ function all(inv, picks, catalog, { env = {}, home = null, connectors = null } =
         if (own.has(key))
         {
             const it = own.get(key);
-            out.targets[key] = { row: it.rowId, kind: 'own', current: { name: it.name || it.server || it.connector, scope: it.scope || null, route: null }, own: require('../inventory/existing.ts').ownQuestion(it) };
+            out.targets[key] = { row: it.rowId, kind: 'own', current: { name: it.name || it.server || it.connector, scope: it.scope || null, route: null }, own: ownQuestion(it) };
             continue;
         }
         const t = targetOf(inv, key);
@@ -133,4 +135,3 @@ function listedOf(inv, item)
     return l && !l.note ? (l.servers || []).find((x) => x.name === item.name && x.scope === item.scope) || null : null;
 }
 
-module.exports = { all };

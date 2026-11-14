@@ -1,27 +1,27 @@
-'use strict';
 // One MCP pick: its route, scope, name, root, location, key and settings, as plan steps.
-const fs = require('node:fs');
-const path = require('node:path');
-const { pathFor } = require('../entries/platform.ts');
-const { recommendedSide, alfredNameProblem, logicalRoot, otherPlace, parseRoot, alfredRoot, defaultRoot, serenaSpaceFree, formatRoot, validWindowsSerenaHome, applyRoot } = require('../entries/locations.ts');
-const { currentOf, buildEntry, applyContext, bridgeParts, helperGlobalRoot, bridgePathFor, renameTemplate, helperFor, subst, mergeSettings, contextArgAt } = require('../entries/entry.ts');
-const { signInParts, signInFormOf } = require('../entries/sign-in.ts');
-const { nameProblem, fetchStep } = require('../entries/names.ts');
-const { recommendedScope, keyStateOf, heldKey, PARENT_HELPER_IN_CHILD } = require('./asks-keys.ts');
-const keys = require('../keys/keys.ts');
-const kept = require('../core/kept.ts');
-const roots = require('../roots/roots.ts');
-const { templateNames } = require('../copied/mcp-bridge.js');
-const { listSteps } = require('./lists.ts');
-const cursorMcp = require('../cursor/cursor-mcp.ts');
-const serenaConfig = require('../apply/serena-config.ts');
-const { keyOf, fromHere, otherWindowsMcp } = require('../inventory/inventory.ts');
-const { deepEqual } = require('../core/json-file.ts');
-const { SCOPES, andList } = require('./context.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import { pathFor } from '../entries/platform.ts';
+import { recommendedSide, alfredNameProblem, logicalRoot, otherPlace, parseRoot, alfredRoot, defaultRoot, serenaSpaceFree, formatRoot, validWindowsSerenaHome, applyRoot } from '../entries/locations.ts';
+import { currentOf, buildEntry, applyContext, bridgeParts, helperGlobalRoot, bridgePathFor, renameTemplate, helperFor, subst, mergeSettings, contextArgAt } from '../entries/entry.ts';
+import { signInParts, signInFormOf } from '../entries/sign-in.ts';
+import { nameProblem, fetchStep } from '../entries/names.ts';
+import { recommendedScope, keyStateOf, heldKey, PARENT_HELPER_IN_CHILD } from './asks-keys.ts';
+import * as keys from '../keys/keys.ts';
+import * as kept from '../core/kept.ts';
+import * as roots from '../roots/roots.ts';
+import { templateNames } from '../copied/mcp-bridge.js';
+import { listSteps } from './lists.ts';
+import * as cursorMcp from '../cursor/cursor-mcp.ts';
+import * as serenaConfig from '../apply/serena-config.ts';
+import { keyOf, fromHere, otherWindowsMcp } from '../inventory/inventory.ts';
+import { deepEqual } from '../core/json-file.ts';
+import { SCOPES, andList } from './context.ts';
+import { rootIgnoreLines } from '../apply/file-steps.ts';
 
 // ---- one MCP pick ---------------------------------------------------------------------------------------------------
 
-function projectName(ctx)
+export function projectName(ctx)
 {
     return path.basename(ctx.project).replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
 }
@@ -96,7 +96,7 @@ function listedOf(inv, reg)
     return l && !l.note && !l.old ? (l.servers || []).find((x) => x.name === reg.name && x.scope === reg.scope) || null : null;
 }
 
-function planMcp(row, pick, inv, ctx, catalog, out)
+export function planMcp(row, pick, inv, ctx, catalog, out)
 {
     if (!row.os.includes(ctx.platform)) return out.errors.push(`${row.id}: not offered on ${ctx.platform}`);
     // configure names its target; an install pick only adds, whatever else of this row is installed
@@ -466,7 +466,7 @@ function planMcp(row, pick, inv, ctx, catalog, out)
 // The roots a registration step writes into (spec D2-D4): its helper's - the scope's family root, with the bridge beside
 // it for a bridge route - its key file's and its data folder's. Only a step that is planned uses a root, so a plan with no
 // change writes no file. `keyNames` (a bridge's key and URL names) replaces the one `keyName` when given.
-function useRoots(ctx, scope, { helper, bridge, serenaContext, keyFile, keyName, keyNames, data })
+export function useRoots(ctx, scope, { helper, bridge, serenaContext, keyFile, keyName, keyNames, data })
 {
     const P = pathFor(ctx.platform);
     const r = ctx.roots || {};
@@ -484,7 +484,7 @@ function useRoots(ctx, scope, { helper, bridge, serenaContext, keyFile, keyName,
 // The file steps of the roots the plan writes into, in D8's order - each root's .gitignore, the helpers, the key names -
 // and the lists (plan-lists.js) and the roots map that go last. A root this apply creates gets its .gitignore (R13), never one named .alfred; a root that
 // exists is asked of git, and with a gap gets no key file and a note naming the fix.
-function fileSteps(inv, ctx, out, regSteps = [])
+export function fileSteps(inv, ctx, out, regSteps = [])
 {
     const P = pathFor(ctx.platform);
     const exists = ctx.exists || ((p) => fs.existsSync(p));
@@ -519,7 +519,7 @@ function fileSteps(inv, ctx, out, regSteps = [])
         // serena's context): rootIgnore appends only the lines it lacks
         if (existed && P.basename(r.root) !== '.alfred')
         {
-            const lines = require('../apply/file-steps.ts').rootIgnoreLines(r.root);
+            const lines = rootIgnoreLines(r.root);
             if (lines.text !== null && lines.mine && lines.lack.length)
                 ignore.push({ op: 'root-ignore', path: r.root, why: `${r.root}: its .gitignore gains ${lines.lack.join(', ')}` });
         }
@@ -564,4 +564,3 @@ function fileSteps(inv, ctx, out, regSteps = [])
     return { before: [...ignore, ...helpers, ...names], after: [...lists, ...records] };
 }
 
-module.exports = { projectName, useRoots, fileSteps, planMcp };

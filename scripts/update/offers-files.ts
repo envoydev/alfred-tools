@@ -1,19 +1,20 @@
-'use strict';
 // The file offers: the helper, bridge and serena-context copies behind the plugin's own.
-const { pathFor } = require('../entries/platform.ts');
-const { contextArgAt, bridgeParts } = require('../entries/entry.ts');
+import { pathFor } from '../entries/platform.ts';
+import { contextArgAt, bridgeParts } from '../entries/entry.ts';
+import * as roots from '../roots/roots.ts';
+import { HELPER_VERSION } from '../copied/mcp-headers.js';
+import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
+import { homeDir } from '../core/account.ts';
+import * as fixLib from '../fix/fix.ts';
 
 // ---- key helpers (spec D7, R10) ---------------------------------------------------------------------------------------
 
 // Each mcp-headers.js a managed registration names, or a root in use holds, with a lower number than this plugin's is
 // offered; a hand edit or a newer copy is left to /preferred-tools:fix, with a note.
-function helperOffers(ctx, out)
+export function helperOffers(ctx, out)
 {
-    const roots = require('../roots/roots.ts');
-    const { HELPER_VERSION } = require('../copied/mcp-headers.js');
-    const { BRIDGE_VERSION } = require('../copied/mcp-bridge.js');
     const P = pathFor(ctx.inv.os);
-    const rctx = { project: ctx.project, home: require('../core/account.ts').homeDir(ctx.env), platform: ctx.inv.os, catalog: ctx.catalog };
+    const rctx = { project: ctx.project, home: homeDir(ctx.env), platform: ctx.inv.os, catalog: ctx.catalog };
     const dirs = new Set(['project', 'global'].map((f) => ctx.inv.roots && ctx.inv.roots[f] && ctx.inv.roots[f].path).filter(Boolean));
     const bridgeDirs = new Set();
     const contextDirs = new Set();
@@ -52,12 +53,11 @@ function helperOffers(ctx, out)
 // absolute project paths (project-relative-path), the root's .gitignore (root-ignore), the .mcp.json order (mcp-order).
 // Only those detectors run. A finding that cannot apply alone - blocked, or needing a folder - is a note naming
 // /preferred-tools:fix, counted in `waiting`.
-const upgradeCatalog = (catalog) => ({ ...catalog, fixes: catalog.fixes.filter((f) => f.upgrade) });
+export const upgradeCatalog = (catalog) => ({ ...catalog, fixes: catalog.fixes.filter((f) => f.upgrade) });
 const upgradeLabel = (f) => (f.kind === 'registration' ? `${f.name} (${f.scope})` : f.name);
 
-function upgradeOffers(ctx, out)
+export function upgradeOffers(ctx, out)
 {
-    const fixLib = require('../fix/fix.ts');
     const catalog = upgradeCatalog(ctx.catalog);
     if (!catalog.fixes.length) return;
     const fctx = fixLib.makeCtx({ inv: ctx.inv, catalog, env: ctx.env, machine: ctx.machine, data: ctx.data });
@@ -87,4 +87,3 @@ function upgradeOffers(ctx, out)
     }
 }
 
-module.exports = { helperOffers, upgradeOffers, upgradeCatalog };

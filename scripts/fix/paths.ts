@@ -1,18 +1,18 @@
-'use strict';
 // The fixes for what 0.2.0 wrote at project scope (spec F7, F8, F3a): a data folder or key helper named relative or
 // through ${HOME} / ${USERPROFILE} (project-relative-path), .mcp.json's servers out of the catalog's order (mcp-order),
 // and a parent folder's hosted server whose helper Claude Code does not run in a child folder (helper-child-folder).
 //
 // A parent's .mcp.json is never changed from a child: each row reads the inherited registrations too and reports the
 // parent as a finding with `blocked`, which fix prints as NOT APPLICABLE with the folder to run it in.
-const fs = require('node:fs');
-const path = require('node:path');
-const C = require('./common.ts');
-const { validWindowsSerenaHome } = require('../entries/locations.ts');
-const { helperParts, helperArgv, shellArg } = require('../entries/entry.ts');
-const roots = require('../roots/roots.ts');
-const mcpOrder = require('../mcps-list/mcp-order.ts');
-const { fromHere, matchEntry } = require('../inventory/inventory.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import * as C from './common.ts';
+import { validWindowsSerenaHome } from '../entries/locations.ts';
+import { helperParts, helperArgv, shellArg } from '../entries/entry.ts';
+import * as roots from '../roots/roots.ts';
+import * as mcpOrder from '../mcps-list/mcp-order.ts';
+import { fromHere, matchEntry } from '../inventory/inventory.ts';
+import * as lists from '../mcps-list/mcps-list.ts';
 
 const pathOf = (ctx) => (ctx.platform === 'win32' ? path.win32 : path.posix);
 const styleOf = (ctx) => (ctx.platform === 'win32' ? 'win32' : 'posix');
@@ -86,7 +86,7 @@ function relativeText(paths, rowId)
     return `named relative or through \${HOME}/\${USERPROFILE}, so a session started in a child folder uses its own copy: ${each.join('; ')}; a copy in a child folder is kept out of git by /preferred-tools:fix run there`;
 }
 
-function projectRelativePathDetect(ctx)
+export function projectRelativePathDetect(ctx)
 {
     const out = [];
     for (const r of C.registrationsOf(ctx, 'project-relative-path').filter((x) => x.scope === 'project'))
@@ -109,7 +109,7 @@ function projectRelativePathDetect(ctx)
 }
 
 // The entry as read, with only this row's paths absolute: the pin, the cut-off and the user's args and env kept.
-function projectRelativePathFix(entry, f, ctx)
+export function projectRelativePathFix(entry, f, ctx)
 {
     const reg = ctx.inv.registrations.find((r) => r.name === f.name && r.scope === f.scope);
     const { paths } = changesOf(entry, (reg && reg.rowId) || f.row, ctx);
@@ -135,7 +135,6 @@ function projectRelativePathFix(entry, f, ctx)
 // record where a root has no list yet.
 function parentOwn(ctx, dir)
 {
-    const lists = require('../mcps-list/mcps-list.ts');
     const names = new Set();
     for (const s of roots.standard('project', { project: dir, home: ctx.home, platform: ctx.platform }))
     {
@@ -175,7 +174,7 @@ function outOfOrder(file, ctx, own)
 
 const orderText = (o) => `the catalog servers are not in your order: ${o.names.join(', ')} - in order: ${o.order.join(', ')}`;
 
-function mcpOrderDetect(ctx)
+export function mcpOrderDetect(ctx)
 {
     const P = pathOf(ctx);
     const out = [];
@@ -193,7 +192,7 @@ function mcpOrderDetect(ctx)
 }
 
 // The same step install and configure append: only the order of mcpServers changes. A warning is a fix not made.
-function mcpOrderFix(f, ctx)
+export function mcpOrderFix(f, ctx)
 {
     const r = mcpOrder.orderFile(f.proposal.file, ctx.catalog, new Set(f.proposal.own || []));
     return { ok: !/^warning: /.test(r.detail), restart: false, detail: r.detail };
@@ -201,7 +200,7 @@ function mcpOrderFix(f, ctx)
 
 // ---- helper-child-folder (docs/sources.md M1: a parent folder's helper does not run in a child folder) ----------------
 
-function helperChildFolderDetect(ctx)
+export function helperChildFolderDetect(ctx)
 {
     const tools = C.fixOf(ctx, 'helper-child-folder').tool;
     return inheritedOf(ctx, tools)
@@ -214,4 +213,3 @@ function helperChildFolderDetect(ctx)
         });
 }
 
-module.exports = { projectRelativePathDetect, projectRelativePathFix, mcpOrderDetect, mcpOrderFix, helperChildFolderDetect };

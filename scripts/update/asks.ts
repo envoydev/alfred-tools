@@ -1,14 +1,13 @@
-'use strict';
 // The update's asks, as data.
-const { REC } = require('../plan/asks-keys.ts');
-const { chunk } = require('../plan/asks-picks.ts');
-const { cursorNameQuestion, STATIC, cursorOfferQuestion } = require('../plan/asks-other.ts');
+import { REC } from '../plan/asks-keys.ts';
+import { chunk } from '../plan/asks-picks.ts';
+import { cursorNameQuestion, STATIC, cursorOfferQuestion } from '../plan/asks-other.ts';
 
 // ---- asks ------------------------------------------------------------------------------------------------------------
 
 // The asks as data: the offer (single-select), then the pick lists for 'Pick which' - multi-selects of at most four options,
 // one group per kind, at most four questions a call.
-function questions(out)
+export function questions(out)
 {
     const items = [...out.offers, ...out.unchecked];
     // Cursor's offer, one per root, and the names Cursor already has, asked right after 'Set them up for Cursor too'
@@ -37,4 +36,3 @@ function cursorOfferAsk(o)
     return { ...q.question, answers: q.answers };
 }
 
-module.exports = { questions };

@@ -1,17 +1,27 @@
-'use strict';
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const crypto = require('node:crypto');
-const { world, writeJson, readJson, accountKey, tempOf, files, helperCmd } = require('./helpers.ts');
-const inventory = require('../scripts/inventory/inventory.ts');
-const { plan } = require('../scripts/plan/plan.ts');
-const { apply } = require('../scripts/apply/run.ts');
-const account = require('../scripts/core/account.ts');
-const cli = require('../scripts/core/claude-cli.ts');
-const { MARKER } = require('../scripts/core/kept.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
+import { world, writeJson, readJson, accountKey, tempOf, files, helperCmd } from './helpers.ts';
+import * as inventory from '../scripts/inventory/inventory.ts';
+import { plan } from '../scripts/plan/plan.ts';
+import { apply, REFUSED, refusedLine } from '../scripts/apply/run.ts';
+import * as account from '../scripts/core/account.ts';
+import * as cli from '../scripts/core/claude-cli.ts';
+import { MARKER } from '../scripts/core/kept.ts';
+import * as roots from '../scripts/roots/roots.ts';
+import { GITIGNORE, mapKey, READ_GUARD } from '../scripts/roots/roots.ts';
+import { all } from '../scripts/plan/asks-all.ts';
+import { load } from '../scripts/catalog/catalog.ts';
+import { HELPER_VERSION as HV } from '../scripts/copied/mcp-headers.js';
+import { fetchStep } from '../scripts/entries/names.ts';
+import { BRIDGE_VERSION as BV } from '../scripts/copied/mcp-bridge.js';
+import { tmpdir } from 'node:os';
+import { rootIgnoreLines, rootIgnore, denyRead, listWrite } from '../scripts/apply/file-steps.ts';
+import { readList } from '../scripts/mcps-list/mcps-list.ts';
+import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
 
 // the whole chain, as the walk runs it: inventory -> plan -> apply, against the fake claude on the world's PATH
 function walk(w, answers, { fail, planOpts = {} } = {})
@@ -72,7 +82,6 @@ test('a fresh install writes through the CLI at each scope, and every add is rea
         assert.deepStrictEqual(w.fetches(), [], 'apply runs no runtime');
         assert.match(r.text, /6\. later  serena: fetch serena-agent@/);
         // each root got its .gitignore first (R13): the project root for serena, the global root for playwright-chrome
-        const { GITIGNORE } = require('../scripts/roots/roots.ts');
         for (const root of [path.join(w.project, '.preferred-tools'), path.join(w.home, '.preferred-tools')]) assert.strictEqual(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), GITIGNORE, root);
         assert.match(r.text, /Fetch next, in the background \(a first download can take minutes\): .*fetch\.json/);
         const job = readJson(r.report.fetchFile);
@@ -323,7 +332,7 @@ test('the CLI form applies a written plan and exits 1 on a failure', () => {
         const inv = inventory.buildInventory({ project: w.project, env: w.env });
         const p = plan(inv, { picks: { atlassian: { scope: 'project' } } }, { home: w.home, env: w.env });
         fs.writeFileSync(path.join(w.dir, 'plan.json'), JSON.stringify(p));
-        const script = path.join(__dirname, '..', 'scripts', 'apply.ts');
+        const script = path.join(import.meta.dirname, '..', 'scripts', 'apply.ts');
         const bad = spawnSync(process.execPath, [script, path.join(w.dir, 'plan.json'), '--tmp', path.join(w.dir, 'tmp')], { encoding: 'utf8', env: { ...w.env, FAKE_CLAUDE_FAIL: 'add-json atlassian' } });
         assert.strictEqual(bad.status, 1);
         assert.match(bad.stdout, /FAILED/);
@@ -426,7 +435,7 @@ test('apply removes <tmp> when no fetch follows', () => {
     try
     {
         const t = tempOf(w);
-        const script = path.join(__dirname, '..', 'scripts', 'apply.ts');
+        const script = path.join(import.meta.dirname, '..', 'scripts', 'apply.ts');
         const run = (picks) =>
         {
             const dir = t.made();
@@ -450,7 +459,7 @@ test('apply never removes a --tmp it did not make', () => {
     try
     {
         const t = tempOf(w);
-        const script = path.join(__dirname, '..', 'scripts', 'apply.ts');
+        const script = path.join(import.meta.dirname, '..', 'scripts', 'apply.ts');
         // beside the temp folder, and in it under another name
         for (const [dir, tool] of [[path.join(w.dir, 'mine'), 'atlassian'], [t.made('other-'), 'gitlab']])
         {
@@ -476,7 +485,7 @@ test('tmpdir sweeps only its own folders older than 24 hours', () => {
         const other = t.made('other-');
         const day = new Date(Date.now() - 25 * 3600 * 1000);
         for (const d of [old, other]) fs.utimesSync(d, day, day);
-        const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'tmpdir.ts')], { encoding: 'utf8', env: t.env });
+        const r = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'tmpdir.ts')], { encoding: 'utf8', env: t.env });
         assert.strictEqual(r.status, 0, r.stderr);
         const made = r.stdout.trim();
         assert.strictEqual(path.dirname(made), fs.realpathSync(t.root));
@@ -653,7 +662,7 @@ test('configure recommends the name the registration uses', () => {
         // the questions read the inventory file the command passes - masked - and the live registration in-process
         const inv = inventory.keptOf(inventory.buildInventory({ project: w.project, env: w.env }));
         assert.ok(!JSON.stringify(inv).includes(live), 'the inventory is masked');
-        const q = require('../scripts/plan/asks-all.ts').all(inv, { targets: ['mcp:github~local', 'mcp:gh-docker~local'] }, require('../scripts/catalog/catalog.ts').load(), { env: w.env, home: w.home });
+        const q = all(inv, { targets: ['mcp:github~local', 'mcp:gh-docker~local'] }, load(), { env: w.env, home: w.home });
         assert.strictEqual(q.keyNames['mcp:github~local'].question.options[0].label, 'ACME_GITHUB_TOKEN (Recommended)', 'the helper\'s argument');
         assert.strictEqual(q.keyNames['mcp:gh-docker~local'].question.options[0].label, 'MY_GITHUB_TOKEN (Recommended)', 'the name whose value equals the written-in key');
         assert.ok(!JSON.stringify(q).includes(live));
@@ -738,7 +747,7 @@ test('a replace or a move keeps the stdio key the registration holds when the ch
 });
 
 // ---- 0.2.0: the apply's file steps (spec D2-D4, D6, D8; plan R8, R13) -------------------------------------------------
-const HELPER_SRC = path.join(__dirname, '..', 'scripts', 'copied', 'mcp-headers.js');
+const HELPER_SRC = path.join(import.meta.dirname, '..', 'scripts', 'copied', 'mcp-headers.js');
 const KEY_HEAD = '# preferred-tools MCP keys - fill in each value; this file is never committed';
 function runSteps(w, list, opts = {})
 {
@@ -759,7 +768,6 @@ test('write-helper: absent is written; a lower number is rewritten; the same num
         let r = runSteps(w, [step]);
         assert.strictEqual(r.report.failed, null, r.text);
         assert.strictEqual(fs.readFileSync(dest, 'utf8'), src);
-        const HV = require('../scripts/copied/mcp-headers.js').HELPER_VERSION;
         assert.ok(r.text.includes(`wrote ${dest} (helper ${HV})`), r.text);
         fs.writeFileSync(dest, src.replace(/^\/\/ preferred-tools mcp-headers \d+/, '// preferred-tools mcp-headers 0'));
         r = runSteps(w, [step]);
@@ -848,7 +856,6 @@ test('root-ignore: written once, left when present, never under .alfred', () => 
     const w = world();
     try
     {
-        const { GITIGNORE } = require('../scripts/roots/roots.ts');
         const root = path.join(w.project, '.preferred-tools');
         const file = path.join(root, '.gitignore');
         let r = runSteps(w, [{ op: 'root-ignore', path: root }]);
@@ -881,7 +888,6 @@ test('record-root: the entry written, a second project beside it, the key normal
     const w = world();
     try
     {
-        const roots = require('../scripts/roots/roots.ts');
         const data = path.join(w.dir, 'data');
         const other = path.join(w.dir, 'other');
         fs.mkdirSync(other, { recursive: true });
@@ -904,7 +910,6 @@ test('list-write keeps the own entries record-clean kept: those live still has, 
     const w = world();
     try
     {
-        const roots = require('../scripts/roots/roots.ts');
         const file = path.join(w.project, '.preferred-tools', 'mcps.json');
         const a = { name: 'a', scope: 'local', fingerprint: { pkg: 'x' }, choice: 'own' };
         const gone = { name: 'gone', scope: 'local', fingerprint: { pkg: 'y' }, choice: 'own' };
@@ -1077,7 +1082,7 @@ test('a new root gets root-ignore with GITIGNORE before any other step', () => {
         assert.strictEqual(r.report.failed, null, r.text);
         assert.strictEqual(r.p.steps[0].op, 'root-ignore');
         const root = path.join(w.project, '.preferred-tools');
-        assert.strictEqual(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), require('../scripts/roots/roots.ts').GITIGNORE);
+        assert.strictEqual(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), GITIGNORE);
         assert.match(r.text, /^1\. ok {5}wrote .*\.gitignore \(\*, !\.gitignore, !mcp-headers\.js, !mcp-bridge\.js, !serena-context\.yml\)$/m);
     }
     finally { w.clean(); }
@@ -1101,7 +1106,7 @@ test('a re-run after a failed add writes no file again', () => {
         assert.strictEqual(second.failed, null, lines.join('\n'));
         assert.deepStrictEqual(snap(), before, 'byte-identical and untouched');
         assert.ok(accountDoc(w).projects[accountKey(w.project)].mcpServers.github.headersHelper.endsWith(`mcp-headers.js ${G} Bearer`));
-        assert.deepStrictEqual(readJson(path.join(data, 'roots.json')).projects, { [require('../scripts/roots/roots.ts').mapKey(w.project)]: root });
+        assert.deepStrictEqual(readJson(path.join(data, 'roots.json')).projects, { [mapKey(w.project)]: root });
     }
     finally { w.clean(); }
 });
@@ -1109,7 +1114,6 @@ test('a re-run after a failed add writes no file again', () => {
 // ---- 0.3.0: 'needs authentication' explained (F3) ---------------------------------------------------------------------
 
 test('the apply repeats the reconnect lines after the read-back, and names a refused key with the row\'s hint', () => {
-    const { REFUSED, refusedLine } = require('../scripts/apply/run.ts');
     // what claude mcp get printed for a 401 to a helper's key (tests/matrix/field-fixes.test.ts X7, docs/sources.md)
     const ISSUE = 'Issue: Server rejected the Authorization header minted by the configured headersHelper (HTTP 401). Check that the helper command returns a valid credential for this MCP endpoint — OAuth fallback is disabled when the helper supplies Authorization. Error detail: Error POSTing to endpoint:';
     assert.match(ISSUE, REFUSED);
@@ -1137,7 +1141,7 @@ test('the apply repeats the reconnect lines after the read-back, and names a ref
             assert.strictEqual(report.failed, null, lines.join('\n'));
             return { p, report, text: lines.join('\n') };
         };
-        const a = require('../scripts/catalog/catalog.ts').load().byId.get('atlassian');
+        const a = load().byId.get('atlassian');
         const r = run({ picks: { atlassian: { scope: 'user', token: true }, sentry: { route: 'remote', scope: 'user', token: true }, serena: { scope: 'local' } } });
         const tail = r.text.slice(r.text.indexOf('Read back:'));
         assert.ok(tail.includes(`${a.name}: connects with its key at the next session start; in a session already running, /mcp -> ${a.name} -> Reconnect`), r.text);
@@ -1157,8 +1161,7 @@ test('the apply repeats the reconnect lines after the read-back, and names a ref
 
 // ---- the bridge file (0.4.0) ------------------------------------------------------------------------------------------
 
-const BRIDGE_SRC = path.join(__dirname, '..', 'scripts', 'copied', 'mcp-bridge.js');
-const { fetchStep } = require('../scripts/entries/names.ts');
+const BRIDGE_SRC = path.join(import.meta.dirname, '..', 'scripts', 'copied', 'mcp-bridge.js');
 test('write-bridge writes, rewrites a lower copy, and leaves an edited or newer one', () => {
     const w = world();
     try
@@ -1167,7 +1170,6 @@ test('write-bridge writes, rewrites a lower copy, and leaves an edited or newer 
         const root = path.join(w.project, '.preferred-tools');
         const dest = path.join(root, 'mcp-bridge.js');
         const step = { op: 'write-bridge', path: root };
-        const BV = require('../scripts/copied/mcp-bridge.js').BRIDGE_VERSION;
         let r = runSteps(w, [step]);
         assert.strictEqual(r.report.failed, null, r.text);
         assert.strictEqual(fs.readFileSync(dest, 'utf8'), src);
@@ -1239,11 +1241,10 @@ test('a bridge step with filled: false is left out of the fetch job\'s check; fi
 });
 
 test('rootIgnoreLines puts mcps.json in a user-files root\'s short list', () => {
-    const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'pt-ignore-'));
+    const dir = fs.mkdtempSync(path.join(tmpdir(), 'pt-ignore-'));
     try
     {
         fs.writeFileSync(path.join(dir, 'notes.md'), 'mine\n');
-        const { rootIgnoreLines } = require('../scripts/apply/file-steps.ts');
         const r = rootIgnoreLines(dir);
         assert.strictEqual(r.mine, false);
         assert.deepStrictEqual(r.want, ['.mcps-secrets', 'preferred-tools.json', 'mcps.json', 'mcp-remote-v1/']);
@@ -1253,7 +1254,7 @@ test('rootIgnoreLines puts mcps.json in a user-files root\'s short list', () => 
 
 // ---- list-write (0.5.0, spec D1) -------------------------------------------------------------------------------------
 
-const listOf = (file) => require('../scripts/mcps-list/mcps-list.ts').readList(file);
+const listOf = (file) => readList(file);
 const memEntry = (pkg) => ({ type: 'stdio', command: 'uvx', args: [pkg], env: {} });
 const upsert = (name, scope, extra = {}) => ({ server: { name, scope, row: 'memory', route: 'local', clients: ['claude'], entry: null, key: null, ...extra }, after: `mcp:${name}~${scope}`, cursorFile: null });
 
@@ -1355,10 +1356,9 @@ test('cursor-write runs after the registration steps and before order-mcp-json',
 // ---- the sign-in folder and the read guard (0.5.0, spec D5, ruling 13) ----------------------------------------------
 
 test('rootIgnoreLines lists mcp-remote-v1/ for a root of the user\'s own files, and root-ignore appends it', () => {
-    const dir = fs.realpathSync(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'pt-ignore-')));
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(tmpdir(), 'pt-ignore-')));
     try
     {
-        const { rootIgnoreLines, rootIgnore } = require('../scripts/apply/file-steps.ts');
         fs.writeFileSync(path.join(dir, 'notes.md'), 'mine\n');
         fs.writeFileSync(path.join(dir, '.gitignore'), '.mcps-secrets\npreferred-tools.json\nmcps.json\n');
         assert.deepStrictEqual(rootIgnoreLines(dir).lack, ['mcp-remote-v1/']);
@@ -1377,7 +1377,6 @@ test('deny-read adds only the lacking rules and keeps every other settings key a
     const w = world();
     try
     {
-        const { READ_GUARD } = require('../scripts/roots/roots.ts');
         const file = path.join(w.dir, 'account', 'settings.json');
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, '\ufeff' + JSON.stringify({ model: 'x', permissions: { allow: ['Bash(ls)'], deny: [READ_GUARD.secrets], ask: [] }, z: 1 }, null, 2));
@@ -1388,21 +1387,20 @@ test('deny-read adds only the lacking rules and keeps every other settings key a
         assert.deepStrictEqual(Object.keys(doc.permissions), ['allow', 'deny', 'ask']);
         assert.deepStrictEqual(doc.permissions.deny, [READ_GUARD.secrets, READ_GUARD.signIns]);
         assert.deepStrictEqual(doc.permissions.allow, ['Bash(ls)']);
-        const again = require('../scripts/apply/file-steps.ts').denyRead(file, [READ_GUARD.signIns]);
+        const again = denyRead(file, [READ_GUARD.signIns]);
         assert.deepStrictEqual([again.ok, again.unchanged], [true, true]);
         // an absent file: both keys made
         const fresh = path.join(w.dir, 'account', 'fresh', 'settings.json');
-        assert.strictEqual(require('../scripts/apply/file-steps.ts').denyRead(fresh, [READ_GUARD.signIns]).ok, true);
+        assert.strictEqual(denyRead(fresh, [READ_GUARD.signIns]).ok, true);
         assert.deepStrictEqual(JSON.parse(fs.readFileSync(fresh, 'utf8')), { permissions: { deny: [READ_GUARD.signIns] } });
     }
     finally { w.clean(); }
 });
 
 test('deny-read writes nothing to a settings file that is not JSON, and the plan carries the note', () => {
-    const dir = fs.realpathSync(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'pt-deny-')));
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(tmpdir(), 'pt-deny-')));
     try
     {
-        const { denyRead } = require('../scripts/apply/file-steps.ts');
         for (const text of ['{ nope', '[]', '{"permissions": []}'])
         {
             const file = path.join(dir, 'settings.json');
@@ -1417,11 +1415,9 @@ test('deny-read writes nothing to a settings file that is not JSON, and the plan
 });
 
 test('a Claude-side rewrite keeps Cursor\'s moved pin and its added env pair', () => {
-    const dir = fs.realpathSync(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'pt-two-')));
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(tmpdir(), 'pt-two-')));
     try
     {
-        const { listWrite } = require('../scripts/apply/file-steps.ts');
-        const cursorMcp = require('../scripts/cursor/cursor-mcp.ts');
         const file = path.join(dir, 'mcps.json');
         const helper = (root) => ({ type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: `node ${root}/mcp-headers.js CONTEXT7_API_KEY Bearer` });
         const moved = { command: 'node', args: [path.join(dir, 'mcp-bridge.js'), 'https://mcp.context7.com/mcp', 'CONTEXT7_API_KEY', 'Bearer', 'mcp-remote@0.17.0'], env: { npm_config_before: '2026-12-01T00:00:00Z', MINE: '1' } };
@@ -1430,7 +1426,7 @@ test('a Claude-side rewrite keeps Cursor\'s moved pin and its added env pair', (
         let r = listWrite({ op: 'list-write', file, family: 'global', upserts: [{ server: { name: 'context7', scope: 'user', row: 'context7', route: 'remote', clients: ['claude', 'cursor'], entry: helper(dir), key: null, form: 'two' }, after: null, cursorFile: null }], drops: [], own: null }, ctx);
         assert.strictEqual(r.ok, true, r.detail);
         let s = JSON.parse(fs.readFileSync(file, 'utf8')).servers[0];
-        assert.deepStrictEqual(s.cursorEntry, cursorMcp.bridgeFormOf(helper(dir), require('../scripts/catalog/catalog.ts').load()));
+        assert.deepStrictEqual(s.cursorEntry, cursorMcp.bridgeFormOf(helper(dir), load()));
         assert.ok(!('form' in s), 'the form is a plan field, never stored');
         // a rename carries the prior cursorEntry (its pin moved, an env pair added): kept
         const other = path.join(dir, 'other');
@@ -1449,7 +1445,7 @@ test('write-serena-context writes an absent and a lower file, keeps a higher or 
     const w = world();
     try
     {
-        const src = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'copied', 'serena-context.yml'), 'utf8');
+        const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'scripts', 'copied', 'serena-context.yml'), 'utf8');
         const root = path.join(w.project, '.preferred-tools');
         const dest = path.join(root, 'serena-context.yml');
         const step = { op: 'write-serena-context', path: root };

@@ -1,14 +1,14 @@
-'use strict';
 // mcp-order.js - .mcp.json's servers in the catalog's order (spec F8): the managed servers first, by catalog.order, the
 // user's own and the servers left on their own after them. Only the order of mcpServers changes, never a value.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const catalog = require('../scripts/catalog/catalog.ts').load();
-const { matchEntry } = require('../scripts/inventory/inventory.ts');
-const O = require('../scripts/mcps-list/mcp-order.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { load } from '../scripts/catalog/catalog.ts';
+import { matchEntry } from '../scripts/inventory/inventory.ts';
+import * as O from '../scripts/mcps-list/mcp-order.ts';
+const catalog = load();
 
 // one entry per catalog row, launched as its first route's fingerprint says
 function entryOf(rowId)

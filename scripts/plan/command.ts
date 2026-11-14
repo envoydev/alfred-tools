@@ -1,20 +1,19 @@
-'use strict';
 // The plan command: reads its files and flags, prints the plan or the questions, and writes the plan file.
-const fs = require('node:fs');
-const catalogLib = require('../catalog/catalog.ts');
-const { all } = require('./asks-all.ts');
-const { next } = require('./walk.ts');
-const account = require('../core/account.ts');
-const roots = require('../roots/roots.ts');
-const existing = require('../inventory/existing.ts');
-const { blockingStdio } = require('../core/json-file.ts');
-const { plan } = require('./plan.ts');
-const { render } = require('./render.ts');
+import fs from 'node:fs';
+import * as catalogLib from '../catalog/catalog.ts';
+import { all } from './asks-all.ts';
+import { next } from './walk.ts';
+import * as account from '../core/account.ts';
+import * as roots from '../roots/roots.ts';
+import * as existing from '../inventory/existing.ts';
+import { blockingStdio } from '../core/json-file.ts';
+import { plan } from './plan.ts';
+import { render } from './render.ts';
 
 // The arguments, by flag: `--questions` first or not at all, then at most two files, and the flags anywhere after them.
 // An unknown flag, or a flag without its value, is an error - never read as a file.
 const VALUE_FLAGS = { '--data': 'data', '--connectors': 'connectors', '--out': 'out' };
-function parseArgs(argv)
+export function parseArgs(argv)
 {
     const out = { questions: argv[0] === '--questions', files: [], data: null, connectors: null, out: null, error: null };
     for (let i = out.questions ? 1 : 0; i < argv.length; i++)
@@ -34,7 +33,7 @@ function parseArgs(argv)
 
 const USAGE = 'usage: plan.ts <inventory.json> <answers.json> [--out plan.json] [--data <dir>]\n       plan.ts --questions <inventory.json> [<picks.json>] [--data <dir>] [--connectors <Name>,<Name>]';
 
-function main(argv)
+export function main(argv)
 {
     blockingStdio();
     const read = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
@@ -63,4 +62,3 @@ function main(argv)
     return p.errors.length ? 1 : 0;
 }
 
-module.exports = { main, parseArgs };

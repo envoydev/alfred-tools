@@ -1,16 +1,15 @@
-'use strict';
 // SERENA'S BASE MODES (spec D7, F9). <SERENA_HOME>/serena_config.yml lists `base_modes`, and with its default the manual
 // Serena hands the model describes edit tools the plugin's context leaves out. This sets `base_modes: []`.
 //
 // The file holds Serena's generated auth_secret. So this reads only the base_modes key and its items, changes no other
 // byte, writes through a temporary file with the file's own mode, and never prints, returns or logs the file's text.
-const fs = require('node:fs');
-const path = require('node:path');
+import fs from 'node:fs';
+import path from 'node:path';
 
-const CONFIG = 'serena_config.yml';
+export const CONFIG = 'serena_config.yml';
 const KEY = /^base_modes[ \t]*:(.*?)(\r?)$/;
 
-const configOf = (home) => (/^[A-Za-z]:[\\/]|\\\\/.test(home) ? path.win32 : path.posix).join(home, CONFIG);
+export const configOf = (home) => (/^[A-Za-z]:[\\/]|\\\\/.test(home) ? path.win32 : path.posix).join(home, CONFIG);
 
 // The lines of a text with their endings: [[body, eol]].
 function linesOf(text)
@@ -47,7 +46,7 @@ function locate(lines)
 const readText = (file) => { try { return fs.readFileSync(file, 'utf8'); } catch { return null; } };
 
 // -> 'absent' (no file, or no base_modes key) | 'empty' (base_modes: []) | 'set'
-function baseModesState(file)
+export function baseModesState(file)
 {
     const text = readText(file);
     if (text === null) return 'absent';
@@ -60,7 +59,7 @@ function baseModesState(file)
 }
 
 // base_modes: [] in place of the key and its items (or appended when the file has no key). -> { changed, detail }
-function emptyBaseModes(file)
+export function emptyBaseModes(file)
 {
     const text = readText(file);
     if (text === null) return { changed: false, detail: `${file} is not there yet - serena writes it at its first start` };
@@ -89,7 +88,7 @@ function emptyBaseModes(file)
 // Which homes the edit may touch (D7): never an alfred-code 2.x home (.alfred/serena/home), shared with its old setup;
 // on Windows the home is Serena's own default (<profile>\.serena) or a typed space-free folder, which every other Serena
 // on the machine reads too. -> { ok, shared?, reason? }
-function editableHome(home, ctx = {})
+export function editableHome(home, ctx = {})
 {
     const p = String(home || '').replace(/\\/g, '/').replace(/\/+$/, '');
     if (/(^|\/)\.alfred\/serena\/home$/.test(p))
@@ -99,7 +98,7 @@ function editableHome(home, ctx = {})
 
 // The plan line for a serena add, replace or move: what the edit will do to its home, before the user confirms.
 // -> string | null
-function planNote(entry, ctx = {})
+export function planNote(entry, ctx = {})
 {
     const home = entry && entry.env && entry.env.SERENA_HOME;
     if (!home) return null;
@@ -110,4 +109,3 @@ function planNote(entry, ctx = {})
     return `serena's settings at ${file}: base_modes: [] after its first start, so its manual names only the tools it has`;
 }
 
-module.exports = { CONFIG, configOf, baseModesState, emptyBaseModes, editableHome, planNote };

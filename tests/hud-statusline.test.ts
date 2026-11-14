@@ -1,13 +1,12 @@
-'use strict';
 // hud-statusline.js after 0.5.0 (spec D8, D9): the recognisers that tell claude-hud's own statusLine from any other, and
 // the removal the retired-plugin uninstall runs. Every case runs against a throwaway account dir.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as hud from '../scripts/hud/hud-statusline.ts';
 
-const hud = require('../scripts/hud/hud-statusline.ts');
 const { classify, expected, gitBash, resolveConfigDir, removeHudStatusLine } = hud;
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'hud-statusline-'));

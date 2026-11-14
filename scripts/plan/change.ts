@@ -1,19 +1,18 @@
-'use strict';
 // One configure change: an installed registration by its key, and a root folder's change.
-const fs = require('node:fs');
-const { pathFor } = require('../entries/platform.ts');
-const { logicalRoot, formatRoot } = require('../entries/locations.ts');
-const { currentOf, helperParts } = require('../entries/entry.ts');
-const { heldKey } = require('./asks-keys.ts');
-const keys = require('../keys/keys.ts');
-const roots = require('../roots/roots.ts');
-const existing = require('../inventory/existing.ts');
-const { keyOf, targetOf } = require('../inventory/inventory.ts');
-const { planMcp } = require('./pick.ts');
+import fs from 'node:fs';
+import { pathFor } from '../entries/platform.ts';
+import { logicalRoot, formatRoot } from '../entries/locations.ts';
+import { currentOf, helperParts } from '../entries/entry.ts';
+import { heldKey } from './asks-keys.ts';
+import * as keys from '../keys/keys.ts';
+import * as roots from '../roots/roots.ts';
+import * as existing from '../inventory/existing.ts';
+import { keyOf, targetOf } from '../inventory/inventory.ts';
+import { planMcp } from './pick.ts';
 
 // ---- one configure change: an installed registration, by its key ----------------------------------------------------
 
-function planChange(key, pick, inv, ctx, catalog, out)
+export function planChange(key, pick, inv, ctx, catalog, out)
 {
     const t = targetOf(inv, key);
     if (!t) return out.errors.push(`change: nothing is installed as '${key}' (a key is mcp:<name>~<scope>)`);
@@ -28,7 +27,7 @@ function planChange(key, pick, inv, ctx, catalog, out)
 // configure's 'Change the root' (spec D7, R3): each managed registration of the family is re-added as read, its data
 // folder - when it sits in the old root - and its helper in the new root; the new root gets its .gitignore, the helper,
 // the names in use (names only) and the record, and the roots map points at it. No data and no key value moves.
-function planRootChange(answers, inv, ctx, catalog, out)
+export function planRootChange(answers, inv, ctx, catalog, out)
 {
     const P = pathFor(ctx.platform);
     for (const family of answers.rootChange || [])
@@ -95,7 +94,7 @@ function planRootChange(answers, inv, ctx, catalog, out)
 }
 
 // The inventory with each moved list at its new path (planRootChange's moves).
-function movedLists(inv, moves)
+export function movedLists(inv, moves)
 {
     const listMoves = (moves || []).filter((m) => m.name === roots.FILES.list);
     if (!listMoves.length) return inv;
@@ -106,7 +105,7 @@ function movedLists(inv, moves)
 
 // The answers about the servers already set up (spec D6, F4), from configure: 'own' puts the server in its family's
 // list's own, 'manage' or 'add' takes it out (plan-lists.js). What is here now, so a list drops a server gone since.
-function planExisting(answers, inv, ctx, catalog, out, connectors)
+export function planExisting(answers, inv, ctx, catalog, out, connectors)
 {
     ctx.recordEntries = { project: [], global: [] };
     for (const [key, choice] of Object.entries(answers.existing || {}))
@@ -120,7 +119,7 @@ function planExisting(answers, inv, ctx, catalog, out, connectors)
     ctx.recordLive = existing.liveOf(inv, catalog, connectors);
 }
 
-function planRemove(r, inv, catalog, out)
+export function planRemove(r, inv, catalog, out)
 {
     if (r.kind === 'plugin') return out.errors.push(`remove: ${r.id} is a plugin - the catalog lists none since 0.5.0; claude plugin uninstall ${r.id} --scope ${r.scope} removes it`);
     const reg = inv.registrations.find((x) => x.name === r.name && x.scope === r.scope);
@@ -131,4 +130,3 @@ function planRemove(r, inv, catalog, out)
     return undefined;
 }
 
-module.exports = { planChange, planRemove, planExisting, planRootChange, movedLists };

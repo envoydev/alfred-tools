@@ -1,4 +1,3 @@
-'use strict';
 // MCP ORDER (spec F8) - .mcp.json's servers in the catalog's order: the servers this plugin manages first, by their row's
 // place in catalog.order (two of one row keep their order), then the user's own and the servers left on their own, in
 // their current order. Only the order of mcpServers' keys changes, never a value, and every other top-level key, the
@@ -6,15 +5,15 @@
 //
 // The one write to .mcp.json that is not the claude CLI's (the user's ruling, 2026-11-11). It never fails an apply: a file
 // that is not plain JSON, a check that does not hold or a failed write leaves the file as it was, with a warning.
-const fs = require('node:fs');
-const path = require('node:path');
-const { matchEntry } = require('../inventory/inventory.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import { matchEntry } from '../inventory/inventory.ts';
 
 const LEFT = 'left as it is - /preferred-tools:fix (mcp-order) orders it';
 const WHY = '.mcp.json: the catalog servers in your order, your own after them - no value changes';
 
 // The server names in their new order. `own`: the names left on their own, which sit with the user's own servers.
-function sortedNames(servers, catalog, own = new Set())
+export function sortedNames(servers, catalog, own = new Set())
 {
     const names = Object.keys(servers || {});
     const rank = new Map(names.map((name) =>
@@ -40,7 +39,7 @@ function canon(v)
 }
 
 // -> { text, changed } | { error }
-function reorderText(text, catalog, own = new Set())
+export function reorderText(text, catalog, own = new Set())
 {
     let doc;
     // the parser's message quotes the text, which may hold a value: never repeated
@@ -69,7 +68,7 @@ function reorderText(text, catalog, own = new Set())
 }
 
 // -> { ok: true, changed, detail }; never throws
-function orderFile(file, catalog, own = new Set(), { read = fs.readFileSync, write = fs.writeFileSync, rename = fs.renameSync } = {})
+export function orderFile(file, catalog, own = new Set(), { read = fs.readFileSync, write = fs.writeFileSync, rename = fs.renameSync } = {})
 {
     const warn = (why) => ({ ok: true, changed: false, detail: `warning: ${file} ${why}; ${LEFT}` });
     let text;
@@ -99,7 +98,7 @@ function orderFile(file, catalog, own = new Set(), { read = fs.readFileSync, wri
 }
 
 // The project-scope servers left on their own: recorded so, or answered so in this run.
-function ownProjectNames(inv, existing = {})
+export function ownProjectNames(inv, existing = {})
 {
     const names = (inv.registrations || []).filter((r) => r.scope === 'project' && r.choice === 'own').map((r) => r.name);
     for (const [key, choice] of Object.entries(existing || {}))
@@ -111,7 +110,7 @@ function ownProjectNames(inv, existing = {})
 }
 
 // The steps with the order step last, when one of them writes a project-scope registration.
-function withOrderStep(steps, project, own = [])
+export function withOrderStep(steps, project, own = [])
 {
     const writes = steps.some((s) => (['mcp-add', 'mcp-replace'].includes(s.op) && s.scope === 'project') || (s.op === 'mcp-move' && s.to && s.to.scope === 'project'));
     if (!writes) return steps;
@@ -119,4 +118,3 @@ function withOrderStep(steps, project, own = [])
     return [...steps, { op: 'order-mcp-json', file: P.join(project, '.mcp.json'), own, why: WHY }];
 }
 
-module.exports = { sortedNames, reorderText, orderFile, ownProjectNames, withOrderStep };

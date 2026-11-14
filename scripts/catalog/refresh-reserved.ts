@@ -1,17 +1,16 @@
 #!/usr/bin/env node
-'use strict';
 // Rebuilds catalog/reserved-names.json from the alfred-code checkout beside this repo (or --alfred <dir>): the names
 // alfred-code's retire path may remove a registration under, which no catalog default and no chosen name may use.
 //   A = every id in meta/retired-plugins.json whose retiredIn is 2.10.1 (the retires that can still fire)
 //   B = every name in meta/stack-manifest.json retired.mcps with no row in retired-plugins.json (today `browser`)
 //   reserved = (A + B) - the keys of stack/mcp/original-mcps.json (ADD_BACK_NAMES exempts those)
 // `--check` compares instead of writing. Without a checkout the shipped file is the record.
-const fs = require('node:fs');
-const path = require('node:path');
+import fs from 'node:fs';
+import path from 'node:path';
 
-const FILE = path.join(__dirname, '..', '..', 'catalog', 'reserved-names.json');
+const FILE = path.join(import.meta.dirname, '..', '..', 'catalog', 'reserved-names.json');
 
-function reservedFrom(alfredDir)
+export function reservedFrom(alfredDir)
 {
     const read = (rel) => JSON.parse(fs.readFileSync(path.join(alfredDir, rel), 'utf8'));
     const retired = read('meta/retired-plugins.json').plugins;
@@ -23,10 +22,10 @@ function reservedFrom(alfredDir)
     return [...new Set([...a, ...b])].filter((n) => !original.has(n)).sort();
 }
 
-function main(argv)
+export function main(argv)
 {
     const at = argv.indexOf('--alfred');
-    const alfred = path.resolve(at >= 0 ? argv[at + 1] : path.join(__dirname, '..', '..', '..', 'alfred-code'));
+    const alfred = path.resolve(at >= 0 ? argv[at + 1] : path.join(import.meta.dirname, '..', '..', '..', 'alfred-code'));
     if (!fs.existsSync(path.join(alfred, 'meta', 'retired-plugins.json')))
     {
         console.error(`refresh-reserved: no alfred-code checkout at ${alfred}`);
@@ -46,4 +45,3 @@ function main(argv)
     return 0;
 }
 
-module.exports = { reservedFrom, main };

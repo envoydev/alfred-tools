@@ -1,4 +1,3 @@
-'use strict';
 // alfred-code projects in a throwaway world, for the hook replay (tests/probes/alfred-hooks.ts) and the workspace matrix.
 //
 // ONE ACCOUNT PER VERSION. Every alfred-code release names its marketplace `envoydev`, so two versions in one account
@@ -14,22 +13,26 @@
 // installer then sets up each project the way its workspace matrix does (docs/workspace-layering-matrix/ws-matrix-r3.js
 // `sandbox()`): with a stub `claude` (the installer would otherwise install plugins over the network) and uvx, npx, npm
 // and curl stubbed to fail.
-const fs = require('node:fs');
-const path = require('node:path');
-const crypto = require('node:crypto');
-const { spawnSync } = require('node:child_process');
-const { Harness } = require('../harness.ts');
-const cli = require('../../scripts/core/claude-cli.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { Harness } from '../harness.ts';
+import * as cli from '../../scripts/core/claude-cli.ts';
 
-const REPO = path.resolve(__dirname, '..', '..');
-const ROOT_SEL = 'skill javascript\nrule alfred-security\nrule alfred-navigation\n';
-const CHILD_SEL = `${ROOT_SEL}skill npm\n`;
+// alfred-code's files are CommonJS, loaded from its checkout by their paths.
+const requireAlfred = createRequire(import.meta.url);
+
+const REPO = path.resolve(import.meta.dirname, '..', '..');
+export const ROOT_SEL = 'skill javascript\nrule alfred-security\nrule alfred-navigation\n';
+export const CHILD_SEL = `${ROOT_SEL}skill npm\n`;
 // The installer's view of the plugin list: alfred-code enabled for every project, as the real install below makes it.
 const STUB_PLUGINS = JSON.stringify([{ id: 'alfred-code@envoydev', enabled: true, scope: 'user' }]);
 
 const tail = (text, n = 600) => String(text || '').trim().slice(-n);
 
-function sourceDir(alfredDir, env = process.env)
+export function sourceDir(alfredDir, env = process.env)
 {
     return path.resolve(alfredDir || env.PREFERRED_TOOLS_ALFRED || path.join(REPO, '..', 'alfred-code'));
 }
@@ -46,7 +49,7 @@ function marketplaceVersion(dir)
 }
 
 // -> { git, tag } | { tree } | { notRun }
-function resolveVersion(version, { alfredDir, env } = {})
+export function resolveVersion(version, { alfredDir, env } = {})
 {
     const dir = sourceDir(alfredDir, env);
     const tag = `v${version}`;
@@ -89,7 +92,7 @@ function installerEnv(base, alfred, bin, root)
 {
     const env = { ...base, PATH: `${bin}${path.delimiter}${base.PATH || base.Path || ''}`, CLAUDE_STUB_PLUGINS: path.join(root, 'stub-plugins.json'), ALFRED_CODE_MEMORY_WARM: '0' };
     for (const k of Object.keys(env)) if (/^(SENTRY_|CONTEXT7_|UV_EXCLUDE|ANDROID_|JAVA_HOME|CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_ROOT|CLAUDE_CODE_PROJECT_DIR_NAME)/.test(k)) delete env[k];
-    try { require(path.join(alfred, 'scripts', 'seed-sandbox.js')).scrubStackEnv(env); } catch { /* an older release has no scrub */ }
+    try { requireAlfred(path.join(alfred, 'scripts', 'seed-sandbox.js')).scrubStackEnv(env); } catch { /* an older release has no scrub */ }
     return env;
 }
 
@@ -102,7 +105,7 @@ function gitDir(dir)
 
 // buildAlfred(S, { alfredDir, version, claude, platform, workspace }) -> { solo, root?, child?, workspaceNotRun?, ... } | { notRun }
 // `claude` names the CLI the harness world runs (default: the one on PATH); `workspace` also builds a root and a child.
-function buildAlfred(S, { alfredDir, version, claude, platform = process.platform, workspace = false } = {})
+export function buildAlfred(S, { alfredDir, version, claude, platform = process.platform, workspace = false } = {})
 {
     const src = resolveVersion(version, { alfredDir });
     if (src.notRun) return { notRun: src.notRun };
@@ -183,7 +186,7 @@ function buildWorkspace({ version, root, home, alfred, ienv, node, install, inst
     // the child names its parent: alfred-code's own chain reader says which members it links
     try
     {
-        const layout = require(path.join(alfred, 'stack', 'hooks', 'layout.js'));
+        const layout = requireAlfred(path.join(alfred, 'stack', 'hooks', 'layout.js'));
         const roots = layout.workspaceChain(child, { env: ienv }).members.map((m) => fs.realpathSync(m.root));
         if (!roots.includes(ws)) return { notRun: `${version}: the child's workspace chain does not name its parent (${roots.join(', ') || 'no member'})` };
     }
@@ -191,4 +194,3 @@ function buildWorkspace({ version, root, home, alfred, ienv, node, install, inst
     return { root: ws, child };
 }
 
-module.exports = { buildAlfred, resolveVersion, sourceDir, ROOT_SEL, CHILD_SEL };

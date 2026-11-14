@@ -1,14 +1,13 @@
-'use strict';
 // mcps-list.js - the list of servers the plugin manages, one per root folder (spec D1): read, merge, write.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as kept from '../scripts/core/kept.ts';
+import * as catalogLib from '../scripts/catalog/catalog.ts';
+import { LIST_VERSION, readList, writeList, mergeList, fromRegistration, serverKey, regKey, listFile } from '../scripts/mcps-list/mcps-list.ts';
 const { join } = path;
-const kept = require('../scripts/core/kept.ts');
-const catalogLib = require('../scripts/catalog/catalog.ts');
-const { LIST_VERSION, readList, writeList, mergeList, fromRegistration, serverKey, regKey, listFile } = require('../scripts/mcps-list/mcps-list.ts');
 
 const catalog = catalogLib.load();
 const row = (id) => catalog.byId.get(id);

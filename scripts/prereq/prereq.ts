@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // PREREQUISITES - what each picked tool needs on this machine, checked read-only.
 //
 //   node prereq.js <answers.json> [--json] [--audit]   the tools in answers.picks, each on its picked route, and each
@@ -11,16 +10,16 @@
 // `machine`, the facts the plan needs (docker: false picks github's binary fallback). `--audit` also runs `npm audit` on
 // each npm package a row marks `audit` - in a temp folder, with --ignore-scripts and the row's cut-off, so what is audited is
 // what npx would resolve - and reports the counts; it needs the network, and a failure says 'audit not run', never 'clean'.
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const catalogLib = require('../catalog/catalog.ts');
-const { androidSdk, javaHome } = require('../fix/registration.ts');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as catalogLib from '../catalog/catalog.ts';
+import { androidSdk, javaHome } from '../fix/registration.ts';
 
 const versionOf = (text) => (/(\d+\.\d+(?:\.\d+)?)/.exec(String(text || '')) || [])[1] || null;
 
 // Each check -> { ok, found, install?: { command?, url, note? } }. `ctx` = { platform, env, home, machine }.
-const CHECKS = {
+export const CHECKS = {
     uvx: (ctx) =>
     {
         const bin = ctx.machine.which('uvx');
@@ -71,7 +70,7 @@ function browser(ctx, which)
 }
 
 // -> { ok, counts: { critical, high, moderate, low, total }, note } for one npm package at its pinned version
-function audit(pkg, ctx)
+export function audit(pkg, ctx)
 {
     const m = ctx.machine;
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-audit-'));
@@ -91,7 +90,7 @@ function audit(pkg, ctx)
 }
 
 // -> { tools: [{ row, route, needs: [{ id, ok, found, install }], audit? }], missing: n, machine }
-function check(picks, ctx, catalog = catalogLib.load(), { withAudit = false } = {})
+export function check(picks, ctx, catalog = catalogLib.load(), { withAudit = false } = {})
 {
     const out = { tools: [], missing: 0, machine: {} };
     for (const { row: rowId, route } of picks)
@@ -116,7 +115,7 @@ function check(picks, ctx, catalog = catalogLib.load(), { withAudit = false } = 
     return out;
 }
 
-function render(res)
+export function render(res)
 {
     const lines = [];
     for (const t of res.tools)
@@ -138,7 +137,7 @@ function render(res)
     return lines.join('\n');
 }
 
-function picksFrom(argv, catalog)
+export function picksFrom(argv, catalog)
 {
     const rows = argv.indexOf('--rows');
     if (rows >= 0) return (argv[rows + 1] || '').split(',').filter(Boolean).map((id) => ({ row: id, route: (catalog.byId.get(id) || {}).recommendedRoute }));
@@ -150,4 +149,3 @@ function picksFrom(argv, catalog)
     return Object.entries(answers.picks || {}).map(([id, p]) => ({ row: id, route: (p && p.route) || (catalog.byId.get(id) || {}).recommendedRoute })).concat(changed);
 }
 
-module.exports = { CHECKS, check, audit, render, picksFrom };

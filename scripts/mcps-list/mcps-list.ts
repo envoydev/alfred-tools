@@ -1,4 +1,3 @@
-'use strict';
 // THE LIST - <root>/mcps.json (spec D1, 0.5.0). One per scope family's root folder: every server the plugin manages in
 // that family, the apps each one is written to, and the servers the user left on their own (`own`, the record's entries
 // unchanged). Read and written only here. A server's entry never holds a key value: a stdio key field holds kept.MARKER
@@ -8,21 +7,21 @@
 // a list from a newer version, or one that cannot be read, is never replaced; a file that is not JSON is kept as
 // <file>.bak first; the file goes when both arrays are empty. apply.js's own helpers are not required here, since
 // apply.js requires the planner, which requires this module.
-const fs = require('node:fs');
-const path = require('node:path');
-const roots = require('../roots/roots.ts');
-const keys = require('../keys/keys.ts');
-const kept = require('../core/kept.ts');
-const { deepEqual } = require('../core/json-file.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import * as roots from '../roots/roots.ts';
+import * as keys from '../keys/keys.ts';
+import * as kept from '../core/kept.ts';
+import { deepEqual } from '../core/json-file.ts';
 
-const LIST_VERSION = 1;
+export const LIST_VERSION = 1;
 
 const newerOrBad = (version) => (typeof version === 'number' && version > LIST_VERSION ? 'newer' : 'bad');
 const empty = (file, note, state) => ({ version: LIST_VERSION, servers: [], own: [], note: `${file} ${note} - read as empty`, state });
 
 // The list file. Missing: null. Unreadable, not JSON, another version or another shape: empty with a note and its state
 // (readOldRecord's meanings). Never throws.
-function readList(file)
+export function readList(file)
 {
     let text;
     try { text = fs.readFileSync(file, 'utf8'); }
@@ -43,20 +42,20 @@ function readList(file)
     return out;
 }
 
-const listFile = (root) => path.join(root, roots.FILES.list);
+export const listFile = (root) => path.join(root, roots.FILES.list);
 
 // Where the commands look for a family's list: oldRecordFiles' folders, in its order, with the list's name.
-function listFiles(inv, family, ctx)
+export function listFiles(inv, family, ctx)
 {
     const P = ctx.platform === 'win32' ? path.win32 : path.posix;
     return oldRecordFiles(inv, family, ctx).map((f) => P.join(P.dirname(f), roots.FILES.list));
 }
 
-const serverKey = (s) => `mcp:${s.name}~${s.scope}`;
+export const serverKey = (s) => `mcp:${s.name}~${s.scope}`;
 
 // The registration a plan step leaves in place: a move's destination, else its own name and scope. null for a step that
 // is no registration step.
-function regKey(step)
+export function regKey(step)
 {
     if (!step || typeof step.op !== 'string' || !step.op.startsWith('mcp-')) return null;
     if (step.op === 'mcp-move' && step.to) return `mcp:${step.to.name}~${step.to.scope}`;
@@ -66,7 +65,7 @@ function regKey(step)
 // The list with this plan's changes: each upsert replaces the server with its key in place or is appended, each drop
 // removes its key, `own` (roots.ownOnly's result) replaces the own entries when given, and `cursorOffer` is set when
 // given. -> a new doc
-function mergeList(list, { upserts = [], drops = [], own, cursorOffer } = {})
+export function mergeList(list, { upserts = [], drops = [], own, cursorOffer } = {})
 {
     const servers = ((list && list.servers) || []).slice();
     for (const s of upserts)
@@ -85,7 +84,7 @@ function mergeList(list, { upserts = [], drops = [], own, cursorOffer } = {})
 const same = deepEqual;
 
 // Writes `doc` over `file`, `read` being readList(file) as the plan or apply found it. -> { ok, detail }
-function writeList(file, doc, read)
+export function writeList(file, doc, read)
 {
     if (read && (read.state === 'newer' || read.state === 'unreadable'))
         return { ok: true, detail: `${read.note.replace(/ - read as empty$/, '')} - left as it is; ${read.state === 'newer' ? 'update preferred-tools' : 'check its permissions'}, then run the command again` };
@@ -125,7 +124,7 @@ function valueOf(entry, field, tokenVar)
 // A list item from a registration as read: `entry` kept (every key value the kept marker), `key` the variable a stdio key
 // field holds, named by the key files that hold its value when given (`files`, keys.stdioChain's), else the route's own
 // variable; null when the entry holds no key field.
-function fromRegistration(reg, row, clients, files = [])
+export function fromRegistration(reg, row, clients, files = [])
 {
     const route = row && row.routes ? row.routes[reg.route] : null;
     let key = null;
@@ -142,13 +141,13 @@ function fromRegistration(reg, row, clients, files = [])
 // Read only: the servers the user left on their own until list-import moves them into a list's `own` (0.5.0). Moved here
 // from roots.js unchanged, under the names the list's code reads them by.
 
-const OLD_RECORD_VERSION = 1;
+export const OLD_RECORD_VERSION = 1;
 const pathFor = (platform) => (platform === 'win32' ? path.win32 : path.posix);
 const versionNote = (file, version, current) => (newerOrBad(version) === 'newer' ? `${file} is version ${version}, newer than this plugin's ${current}` : `${file} is version ${JSON.stringify(version)}, not ${current}`);
 
 // Where the commands look for the record (D6): the mapped root, the two standard folders, then every root a managed
 // registration points into.
-function oldRecordFiles(inv, family, ctx)
+export function oldRecordFiles(inv, family, ctx)
 {
     const P = pathFor(ctx.platform);
     const map = (inv.roots && inv.roots.map) || { projects: {} };
@@ -159,7 +158,7 @@ function oldRecordFiles(inv, family, ctx)
 }
 
 // The record file. Missing: null. Malformed or another version: empty with a note and its state. Never throws.
-function readOldRecord(file)
+export function readOldRecord(file)
 {
     let text;
     try { text = fs.readFileSync(file, 'utf8'); }
@@ -179,7 +178,7 @@ function readOldRecord(file)
 // another fingerprint (null: present, not compared); a connector only when `live.connectors` is a list that lacks it -
 // a run that did not pass the connectors keeps every one (R14). An entry of no known shape is dropped.
 // live: { servers: { <key>: fingerprint | null }, connectors: string[] | null }
-function mergeOwn(record, entries, live)
+export function mergeOwn(record, entries, live)
 {
     const out = [];
     const at = new Map();
@@ -204,14 +203,10 @@ function mergeOwn(record, entries, live)
 
 // The own entries a list-write step leaves (recordClean's rules of 0.4.x): `keep` as it is, then the `entries` a server
 // still has (a key in both takes the entries one), the servers left on their own only.
-function ownOf({ entries, keep, live })
+export function ownOf({ entries, keep, live })
 {
     const fresh = roots.ownOnly(mergeOwn({ servers: [] }, entries, live).servers);
     const keys = new Set(fresh.map(roots.recordKey));
     return [...roots.ownOnly(keep).filter((e) => !keys.has(roots.recordKey(e))), ...fresh];
 }
 
-module.exports = {
-    LIST_VERSION, readList, listFile, listFiles, serverKey, regKey, mergeList, writeList, fromRegistration,
-    OLD_RECORD_VERSION, oldRecordFiles, readOldRecord, mergeOwn, ownOf,
-};

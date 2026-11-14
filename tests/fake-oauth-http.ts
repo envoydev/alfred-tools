@@ -1,17 +1,16 @@
-'use strict';
 // A stub OAuth vendor on 127.0.0.1, in the calling process, for the matrix's shared sign-in case (spec M3, D5, F13): the
 // protected-resource and authorization-server metadata, dynamic client registration, `/authorize` redirecting back
 // with a code, `/token` issuing an access token that lives `ttl` seconds and a refresh token, and an MCP endpoint at
 // `/v2/mcp` that answers only with a live token. It counts the hits per path and each grant type; no token value is
 // ever printed.
-const crypto = require('node:crypto');
-const http = require('node:http');
-const { catalogWith } = require('./fake-mcp-http.ts');
+import crypto from 'node:crypto';
+import http from 'node:http';
+import { catalogWith } from './fake-mcp-http.ts';
 
-const MCP_PATH = '/v2/mcp';
+export const MCP_PATH = '/v2/mcp';
 
 // -> Promise<{ port, base, hits: { [path]: n }, grants: [grant_type], close }>
-function oauthStub({ ttl = 5 } = {})
+export function oauthStub({ ttl = 5 } = {})
 {
     const hits = {};
     const grants = [];
@@ -107,7 +106,7 @@ function oauthStub({ ttl = 5 } = {})
 
 // The catalog with atlassian's hosted route pointed at the stub: its URL and the fingerprint the inventory matches it by,
 // so the shared sign-in form reads back as atlassian's `remote` route
-const stubOAuthCatalog = (port) => catalogWith((raw) =>
+export const stubOAuthCatalog = (port) => catalogWith((raw) =>
 {
     const remote = raw.tools.find((r) => r.id === 'atlassian').routes.remote;
     remote.url = `http://127.0.0.1:${port}${MCP_PATH}`;
@@ -117,7 +116,7 @@ const stubOAuthCatalog = (port) => catalogWith((raw) =>
 // A stand-in for macOS's `open`, put first on PATH: mcp-remote opens the sign-in page through the `open` package, which
 // runs `open <url>` on macOS (F13). This one fetches the URL and follows the redirects back to mcp-remote's callback, as
 // a browser would, and writes each URL's path to `log` - never the query, which carries the code.
-const BROWSER_SCRIPT = `#!/usr/bin/env node
+export const BROWSER_SCRIPT = `#!/usr/bin/env node
 'use strict';
 const fs = require('node:fs');
 const url = process.argv[process.argv.length - 1];
@@ -126,4 +125,3 @@ fetch(url, { redirect: 'follow' })
     .catch((e) => { fs.appendFileSync(process.env.PT_BROWSER_LOG, 'failed ' + e.message + '\\n'); process.exit(1); });
 `;
 
-module.exports = { oauthStub, stubOAuthCatalog, BROWSER_SCRIPT, MCP_PATH };

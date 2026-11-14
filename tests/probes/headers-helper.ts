@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // THE HEADER HELPER - where does Claude Code run an MCP server's `headersHelper`, and what reaches the server? A stub
 // HTTP MCP server on 127.0.0.1 (in this process) records, per request, the path, the JSON-RPC method and whether the
 // `Authorization` header equals the expected value - never the value. The real `claude` CLI registers servers whose
@@ -21,11 +20,11 @@
 //   child-both-trusted          the same with the child trusted too
 //   child-root-git              the same with the declaring folder a git repository
 // One line per case: RESULT <case> <pass|fail> <what was seen>. Exit 1 when a case differs from the measured list.
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const fake = require('../fake-mcp-http.ts');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import * as fake from '../fake-mcp-http.ts';
 
 const FAKE = ['probe', 'fake', 'value', '123'].join('-');
 const EXPECTED = `Bearer ${FAKE}`;
@@ -185,4 +184,4 @@ async function main()
     return results.every(Boolean) ? 0 : 1;
 }
 
-if (require.main === module) main().then((code) => process.exit(code), (e) => { console.error(`headers-helper probe: ${e.message}`); process.exit(2); });
+if (import.meta.main) main().then((code) => process.exit(code), (e) => { console.error(`headers-helper probe: ${e.message}`); process.exit(2); });

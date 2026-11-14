@@ -1,28 +1,27 @@
-'use strict';
 // SERVERS ALREADY SET UP (spec D6, F4) - a registration that matches a catalog row, an MCP server an enabled plugin
 // provides, and a claude.ai connector this session has loaded. A matching registration is managed by configure, update
 // and fix; one the user leaves on its own in configure is saved in the root's mcps.json, in its `own`, by the apply's
 // list-write step (a 0.4.x root's preferred-tools.json is read until list-import moves it). Nothing here writes, and no server is started to find one.
-const fs = require('node:fs');
-const path = require('node:path');
-const account = require('../core/account.ts');
-const roots = require('../roots/roots.ts');
-const { parseJson } = require('../core/json-file.ts');
-const { fingerprintKey } = require('../catalog/catalog.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import * as account from '../core/account.ts';
+import * as roots from '../roots/roots.ts';
+import { parseJson } from '../core/json-file.ts';
+import { fingerprintKey } from '../catalog/catalog.ts';
+import { matchesFingerprint } from './inventory.ts';
 // inventory.js requires this file lazily, inside buildInventory
-const { matchesFingerprint } = require('./inventory.ts');
 
 // the rows with a hosted route: the only ones a connector can be
-const HOSTED_ROWS = ['context7', 'github', 'gitlab', 'atlassian', 'sentry'];
-const CHOICES = { mcp: ['own', 'manage'], plugin: ['own', 'add'], connector: ['own', 'add'] };
+export const HOSTED_ROWS = ['context7', 'github', 'gitlab', 'atlassian', 'sentry'];
+export const CHOICES = { mcp: ['own', 'manage'], plugin: ['own', 'add'], connector: ['own', 'add'] };
 const REC = ' (Recommended)';
 
 // `--connectors <Name>,<Name>`: the names, trimmed, each once.
-const parseConnectors = (arg) => [...new Set(String(arg == null ? '' : arg).split(',').map((s) => s.trim()).filter(Boolean))];
+export const parseConnectors = (arg) => [...new Set(String(arg == null ? '' : arg).split(',').map((s) => s.trim()).filter(Boolean))];
 
 // A connector's row: its name lower-cased with all but letters and digits removed starts with the row id, so a suffixed
 // name ('Atlassian_Rovo') still matches. -> row id | null
-function matchConnector(name)
+export function matchConnector(name)
 {
     const n = String(name == null ? '' : name).toLowerCase().replace(/[^a-z0-9]/g, '');
     return n ? HOSTED_ROWS.find((id) => n.startsWith(id)) || null : null;
@@ -40,7 +39,7 @@ function serversIn(doc)
 
 // The MCP servers a plugin provides, read from its install folder: its .mcp.json, then the manifest's mcpServers - inline,
 // or a `./` path (or several) to a file inside the plugin. A file that cannot be read gives nothing. -> [{ server, entry }]
-function pluginServers(installPath)
+export function pluginServers(installPath)
 {
     if (!installPath || typeof installPath !== 'string') return [];
     const out = serversIn(readJsonFile(path.join(installPath, '.mcp.json')));
@@ -58,7 +57,7 @@ function pluginServers(installPath)
 }
 
 // The key of the catalog fingerprint a launch matches, in matchEntry's order. -> string | null
-function fingerprintOf(entry, catalog)
+export function fingerprintOf(entry, catalog)
 {
     if (!entry || typeof entry !== 'object') return null;
     for (const row of catalog.tools)
@@ -94,7 +93,7 @@ const asked = (r) => r.rowId && !r.alfredRetired && ['project', 'local', 'user']
 // D6's three kinds, each with its recorded choice (null: never answered, or its launch changed since). A registration whose
 // helper or data folder points into a root of this plugin is 0.2.0's own - managed, never asked - and is left out.
 // -> [{ key, kind, rowId, label, family, fingerprint, choice, ... }]
-function items(inv, connectors, catalog, { home = account.homeDir(process.env), exists } = {})
+export function items(inv, connectors, catalog, { home = account.homeDir(process.env), exists } = {})
 {
     const ctx = { project: inv.project, home, platform: inv.os, catalog, ...(exists ? { exists } : {}) };
     return [
@@ -105,7 +104,7 @@ function items(inv, connectors, catalog, { home = account.homeDir(process.env), 
 }
 
 // The item an answer's key names, whatever its choice, or null when no such server is here.
-function itemOf(inv, key, catalog)
+export function itemOf(inv, key, catalog)
 {
     let m = /^mcp:(.+)~(project|local|user)$/.exec(key);
     if (m)
@@ -124,11 +123,11 @@ function itemOf(inv, key, catalog)
 }
 
 // Who else provides a plugin's server or a connector, as the questions and notes name it.
-const ownerOf = (item) => (item.kind === 'plugin' ? item.plugin.split('@')[0] : 'claude.ai');
+export const ownerOf = (item) => (item.kind === 'plugin' ? item.plugin.split('@')[0] : 'claude.ai');
 const scopeWord = (scope) => (scope === 'user' ? 'global' : scope);
 
 // The record's entry for an answer (D6): names, scopes, fingerprints and choices only.
-function recordEntry(item, choice)
+export function recordEntry(item, choice)
 {
     if (item.kind === 'mcp') return { name: item.name, scope: item.scope, fingerprint: item.fingerprint, choice };
     if (item.kind === 'plugin') return { plugin: item.plugin, server: item.server, fingerprint: item.fingerprint, choice };
@@ -137,7 +136,7 @@ function recordEntry(item, choice)
 
 // What is here now, for the list-write step to drop what is gone (mcpsList.mergeOwn). `connectors`: the list this run
 // passed, or null - a run without one keeps every connector entry (R14).
-function liveOf(inv, catalog, connectors = null)
+export function liveOf(inv, catalog, connectors = null)
 {
     const servers = {};
     for (const r of (inv.registrations || []).filter(asked)) servers[`mcp:${r.name}~${r.scope}`] = fingerprintOf(r.entry, catalog);
@@ -147,7 +146,7 @@ function liveOf(inv, catalog, connectors = null)
 
 // The rows install does not offer, and the rows it offers beside another server, from the recorded choices and this
 // run's answers (an answer wins over the record). -> { own: Set<row id>, add: Map<row id, owner> }
-function offerRule(inv, catalog, answers = {})
+export function offerRule(inv, catalog, answers = {})
 {
     const byKey = new Map();
     for (const r of (inv.registrations || []).filter((x) => asked(x) && x.choice)) byKey.set(`mcp:${r.name}~${r.scope}`, r.choice);
@@ -168,7 +167,7 @@ function offerRule(inv, catalog, answers = {})
 
 // The servers left on their own, as configure lists them (spec D6): a registration, a plugin's server or a connector
 // whose recorded choice is 'own'.
-function ownItems(inv, catalog)
+export function ownItems(inv, catalog)
 {
     return [
         ...(inv.registrations || []).filter((r) => asked(r) && r.choice === 'own').map((r) => regItem(r, catalog)),
@@ -180,7 +179,7 @@ function ownItems(inv, catalog)
 
 // configure's question for one of them: keep it so, or hand it over - a registration to preferred-tools, a plugin's
 // server or a connector to install's offer beside it. The answer is a list-write step only.
-function ownQuestion(item)
+export function ownQuestion(item)
 {
     const reg = item.kind === 'mcp';
     const opts = reg
@@ -194,9 +193,5 @@ function ownQuestion(item)
     };
 }
 
-const twoServers = (label, owner) => `two servers of ${label} then run - ${owner}'s and this one`;
+export const twoServers = (label, owner) => `two servers of ${label} then run - ${owner}'s and this one`;
 
-module.exports = {
-    HOSTED_ROWS, CHOICES, parseConnectors, matchConnector, pluginServers, fingerprintOf, items, itemOf, recordEntry,
-    liveOf, offerRule, ownerOf, twoServers, ownItems, ownQuestion,
-};

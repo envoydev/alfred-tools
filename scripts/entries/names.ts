@@ -1,11 +1,10 @@
-'use strict';
 // Names: whether a registration name is usable at its scope.
-const { bridgeParts } = require('./entry.ts');
+import { bridgeParts } from './entry.ts';
 
 // ---- names ----------------------------------------------------------------------------------------------------------
 
 // null when the name is usable, else the reason. `taken` = the registrations at the target scope, as inventory reads them.
-function nameProblem(name, { catalog, taken = [], self = null })
+export function nameProblem(name, { catalog, taken = [], self = null })
 {
     if (!new RegExp(catalog.rules.nameRe).test(name)) return `'${name}' must match ${catalog.rules.nameRe}`;
     if (catalog.reserved.has(name)) return `'${name}' is a name alfred-code once registered and may retire`;
@@ -20,7 +19,7 @@ function nameProblem(name, { catalog, taken = [], self = null })
 // exactly what it launches - same pin, same cut-off, from its env - into the runtime's cache. -> a plan step, or null for a
 // launch with nothing to fetch (a hosted URL, a binary) or, given the entry it replaces, one that fetches the same thing.
 const UVX_VALUE = new Set(['--python', '-p', '--exclude-newer', '--from', '--with', '--with-requirements', '--with-editable', '--index', '--index-url', '--extra-index-url']);
-function fetchStep(name, entry, rowId, old)
+export function fetchStep(name, entry, rowId, old)
 {
     const step = fetchOf(name, entry, rowId);
     const was = old ? fetchOf(name, old, rowId) : null;
@@ -76,4 +75,3 @@ function fetchOf(name, entry, rowId)
     return { op: 'fetch', name, row: rowId, what, argv, env: entry.env || {}, why: `${rowId || name}: fetch ${what} so the first start answers in time` };
 }
 
-module.exports = { nameProblem, fetchStep };

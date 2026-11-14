@@ -1,7 +1,6 @@
-'use strict';
-const { formatRoot, validWindowsSerenaHome, recommendedSide, otherPlace, serenaWindowsHome, serenaSpaceFree, alfredRoot, logicalRoot } = require('../entries/locations.ts');
-const roots = require('../roots/roots.ts');
-const { REC } = require('./asks-keys.ts');
+import { formatRoot, validWindowsSerenaHome, recommendedSide, otherPlace, serenaWindowsHome, serenaSpaceFree, alfredRoot, logicalRoot } from '../entries/locations.ts';
+import * as roots from '../roots/roots.ts';
+import { REC } from './asks-keys.ts';
 
 // ---- the location question (spec D2) --------------------------------------------------------------------------------
 // A tool's data folder is <root>/<name> in the root of its scope's family, so most picks ask nothing. A question is left
@@ -37,7 +36,7 @@ function placeText(root, ctx)
 // after it). `ctx.roots` holds the roots answered so far (roots.resolve); none - the recommended ones. -> { question (or
 // null when one place is left), answers: { <label as shown>: <location entry> }, only: the one location left when no
 // question is asked }.
-function locationQuestion(row, inv, { scope, name = null, current = null, copyOf = [], ctx })
+export function locationQuestion(row, inv, { scope, name = null, current = null, copyOf = [], ctx })
 {
     if (!ctx.roots) ctx = { ...ctx, roots: roots.resolve(inv, null, ctx).roots };
     const loc = row.locations;
@@ -101,4 +100,3 @@ function locationQuestion(row, inv, { scope, name = null, current = null, copyOf
     return { question: { id: `location-${row.id}`, header: 'Location', multiSelect: false, question: `${row.label}: where does its data live?`, options }, answers, only: null };
 }
 
-module.exports = { locationQuestion };

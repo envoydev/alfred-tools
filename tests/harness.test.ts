@@ -1,15 +1,15 @@
-'use strict';
 // Step 7 check: the harness runs the REAL claude CLI in a throwaway world and leaves the real account byte-identical.
 // Skipped (not failed) when no claude CLI is on PATH.
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const cli = require('../scripts/core/claude-cli.ts');
-const account = require('../scripts/core/account.ts');
-const { pythonRequest } = require('../scripts/entries/platform.ts');
-const { Harness, isolationCheck } = require('./harness.ts');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as cli from '../scripts/core/claude-cli.ts';
+import * as account from '../scripts/core/account.ts';
+import { pythonRequest } from '../scripts/entries/platform.ts';
+import { Harness, isolationCheck } from './harness.ts';
+import { makeCtx, detectAll, applyFixes } from '../scripts/fix/fix.ts';
 
 const skip = cli.available() ? false : 'no claude CLI on PATH';
 const roots = [];
@@ -41,7 +41,6 @@ test('the real CLI treats an empty or {} .mcp.json as fresh and refuses a malfor
 
 test('the fix engine against the REAL CLI: detect, apply as one replace, read back, a second run finds nothing, the real account untouched', { skip }, () =>
 {
-    const { makeCtx, detectAll, applyFixes } = require('../scripts/fix/fix.ts');
     const h = new Harness({ root: root() });
     const project = h.project('fix-real');
     const theirs = { command: 'uvx', args: ['--from', 'serena-agent@2.0.0', 'serena', 'start-mcp-server', '--verbose'], env: { SERENA_HOME: path.join(h.home, 'serena-home') } };

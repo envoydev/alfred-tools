@@ -1,16 +1,15 @@
-'use strict';
 // A repair's tail (spec D1, D9): the list and Cursor steps after a fix or an update rewrote registrations.
-const fs = require('node:fs');
-const { pathFor } = require('../entries/platform.ts');
-const { signInParts } = require('../entries/sign-in.ts');
-const catalogLib = require('../catalog/catalog.ts');
-const roots = require('../roots/roots.ts');
-const keys = require('../keys/keys.ts');
-const lists = require('../mcps-list/mcps-list.ts');
-const cursorMcp = require('../cursor/cursor-mcp.ts');
-const { deepEqual } = require('../core/json-file.ts');
-const { REG_OPS, listSteps } = require('./lists.ts');
-const { cursorSteps, SCOPES, heldCopies, keepOf } = require('./cursor-steps.ts');
+import fs from 'node:fs';
+import { pathFor } from '../entries/platform.ts';
+import { signInParts } from '../entries/sign-in.ts';
+import * as catalogLib from '../catalog/catalog.ts';
+import * as roots from '../roots/roots.ts';
+import * as keys from '../keys/keys.ts';
+import * as lists from '../mcps-list/mcps-list.ts';
+import * as cursorMcp from '../cursor/cursor-mcp.ts';
+import { deepEqual } from '../core/json-file.ts';
+import { REG_OPS, listSteps } from './lists.ts';
+import { cursorSteps, SCOPES, heldCopies, keepOf } from './cursor-steps.ts';
 
 // ---- a repair's tail (spec D1, D9) -------------------------------------------------------------------------------------
 
@@ -19,7 +18,7 @@ const { cursorSteps, SCOPES, heldCopies, keepOf } = require('./cursor-steps.ts')
 // and named. Only lists that exist are written: a family with none waits for list-import. `refresh`: [{ name, scope }]
 // whose Cursor copy is refilled from .mcps-secrets at apply with no list change (token-sync). Notes go to ctx.notes.
 // -> [step]
-function repairTail(inv, ctx, regSteps, { refresh = [] } = {})
+export function repairTail(inv, ctx, regSteps, { refresh = [] } = {})
 {
     const catalog = ctx.catalog || catalogLib.load();
     const notes = ctx.notes || [];
@@ -69,7 +68,7 @@ function repairTail(inv, ctx, regSteps, { refresh = [] } = {})
 // What changed outside preferred-tools (spec D1): each list entry whose Claude registration differs after kept.keep,
 // then each the list names that Claude Code no longer has. Install, configure and update print these first; only fix
 // changes either. -> [line]
-function changedOutside(inv, catalog = catalogLib.load())
+export function changedOutside(inv, catalog = catalogLib.load())
 {
     const changed = [];
     const missing = [];
@@ -94,7 +93,7 @@ function changedOutside(inv, catalog = catalogLib.load())
 // The settings file the deny rules go in, and which of `want` it lacks: { file, rules } | { file, bad: true }. Shared by
 // install and configure (denyReadSteps) and fix's read-guard row. Claude Code's own settings: CLAUDE_CONFIG_DIR, else
 // ~/.claude - from ctx.home, so a test never reads the real one.
-function readGuardOf(ctx, want)
+export function readGuardOf(ctx, want)
 {
     const P = pathFor(ctx.platform);
     const env = ctx.env || {};
@@ -114,12 +113,12 @@ function readGuardOf(ctx, want)
 }
 
 // The deny-read step as one plan line - or none when the file has every rule.
-function denyReadStep(file, rules)
+export function denyReadStep(file, rules)
 {
     return { op: 'deny-read', file, rules, why: `${file}: keeps an AI session's Read tool out of ${rules.map((r) => (r === roots.READ_GUARD.signIns ? 'the sign-in tokens' : 'the key file')).join(' and ')}` };
 }
 
-function denyReadSteps(steps, ctx, out)
+export function denyReadSteps(steps, ctx, out)
 {
     const want = [
         steps.some((x) => ['mcp-add', 'mcp-replace', 'mcp-move'].includes(x.op) && signInParts(x.entry)) && roots.READ_GUARD.signIns,
@@ -136,7 +135,7 @@ function denyReadSteps(steps, ctx, out)
 }
 
 // The plan line of a list-write, retire-record, cursor-write or deny-read step.
-function renderLine(s)
+export function renderLine(s)
 {
     if (s.op === 'deny-read') return `   adds ${s.rules.join(' and ')} to permissions.deny in ${s.file}  (keeps AI sessions out of the sign-in tokens and the key file)`;
     if (s.op === 'cursor-write') return [`   writes ${s.file}  (Cursor: the servers set up for it; your own entries kept)`, ...(s.replace || []).map((n) => `   replaces your own ${n} in ${s.file}`)].join('\n');
@@ -144,4 +143,3 @@ function renderLine(s)
     return s.empty ? `   removes ${s.file}  (no server is listed)` : `   writes ${s.file}  (the servers preferred-tools manages, and the ones left on their own)`;
 }
 
-module.exports = { renderLine, denyReadSteps, readGuardOf, denyReadStep, repairTail, changedOutside };

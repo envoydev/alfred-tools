@@ -1,4 +1,3 @@
-'use strict';
 // 0.4.0's bridge end to end: the REAL claude CLI in a throwaway home and account (tests/harness.ts), the real mcp-remote
 // from npm in the throwaway npm cache, and a stub HTTP MCP server on 127.0.0.1 (tests/fake-mcp-http.ts) standing in for
 // Sentry. Every result is read back from what the CLI wrote and what the stub saw.
@@ -6,15 +5,15 @@
 //   B1  sentry's bridge at project scope with the default names: fetched, filled by hand, then `claude mcp get` connects
 //       through mcp-bridge.js and mcp-remote to /mcp/<org>/<project> with the key; a changed SENTRY_ORG reaches the next
 //       start, and a child folder's start reaches it too. The key is in no file the CLI wrote and in none of its output.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const cli = require('../../scripts/core/claude-cli.ts');
-const fake = require('../fake-mcp-http.ts');
-const { Harness } = require('../harness.ts');
-const { keepWritten } = require('../proof/matrix-keep.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as cli from '../../scripts/core/claude-cli.ts';
+import * as fake from '../fake-mcp-http.ts';
+import { Harness } from '../harness.ts';
+import { keepWritten } from '../proof/matrix-keep.ts';
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const NETWORK = /could not resolve|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|ECONNRESET|fetch failed|network/i;

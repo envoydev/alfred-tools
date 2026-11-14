@@ -1,22 +1,40 @@
-'use strict';
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const catalogLib = require('../scripts/catalog/catalog.ts');
-const { plan } = require('../scripts/plan/plan.ts');
-const { render, argvOf } = require('../scripts/plan/render.ts');
-const { makeCtx } = require('../scripts/plan/context.ts');
-const { fileSteps } = require('../scripts/plan/pick.ts');
-const { scopeOfLabel, SCOPE_LABEL, PARENT_HELPER_IN_CHILD, keyNameQuestion, settingsQuestion, SCOPE_TEXT } = require('../scripts/plan/asks-keys.ts');
-const { pickQuestions, packed, alsoProvided } = require('../scripts/plan/asks-picks.ts');
-const { scopeQuestion, routeQuestion, changeQuestions, scopesFor } = require('../scripts/plan/asks-tool.ts');
-const { locationQuestion } = require('../scripts/plan/asks-location.ts');
-const { toolAsk, STATIC, toolQuestions, removeQuestions } = require('../scripts/plan/asks-other.ts');
-const asks = require('../scripts/plan/asks-all.ts');
-const inventoryLib = require('../scripts/inventory/inventory.ts');
-const { MARKER } = require('../scripts/core/kept.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as catalogLib from '../scripts/catalog/catalog.ts';
+import { plan } from '../scripts/plan/plan.ts';
+import { render, argvOf, reconnectLine } from '../scripts/plan/render.ts';
+import { makeCtx } from '../scripts/plan/context.ts';
+import { fileSteps } from '../scripts/plan/pick.ts';
+import { scopeOfLabel, SCOPE_LABEL, PARENT_HELPER_IN_CHILD, keyNameQuestion, settingsQuestion, SCOPE_TEXT } from '../scripts/plan/asks-keys.ts';
+import { pickQuestions, packed, alsoProvided } from '../scripts/plan/asks-picks.ts';
+import { scopeQuestion, routeQuestion, changeQuestions, scopesFor } from '../scripts/plan/asks-tool.ts';
+import { locationQuestion } from '../scripts/plan/asks-location.ts';
+import { toolAsk, STATIC, toolQuestions, removeQuestions } from '../scripts/plan/asks-other.ts';
+import * as asks from '../scripts/plan/asks-all.ts';
+import * as inventoryLib from '../scripts/inventory/inventory.ts';
+import { MARKER } from '../scripts/core/kept.ts';
+import { world, writeJson, helperCmd } from './helpers.ts';
+import { parseAskBlocks } from './ask-blocks.ts';
+import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { ALFRED_ENTRIES, alfredNameProblem, formatRoot } from '../scripts/entries/locations.ts';
+import * as roots from '../scripts/roots/roots.ts';
+import * as rootsLib from '../scripts/roots/roots.ts';
+import { FILES } from '../scripts/roots/roots.ts';
+import { main } from '../scripts/plan/command.ts';
+import { OTHER_RE } from './ask-texts.ts';
+import { helperCommand, helperNameOf, helperArgv, buildEntry, currentOf, settingsOf, bridgeParts, renameTemplate } from '../scripts/entries/entry.ts';
+import * as cli from '../scripts/core/claude-cli.ts';
+import * as X from '../scripts/inventory/existing.ts';
+import { apply } from '../scripts/apply/run.ts';
+import * as keys from '../scripts/keys/keys.ts';
+import * as account from '../scripts/core/account.ts';
+import { readAccount } from '../scripts/core/account.ts';
+import * as fix from '../scripts/fix/fix.ts';
+import { BRIDGE_VERSION } from '../scripts/copied/mcp-bridge.js';
 
 const catalog = catalogLib.load();
 const clone = () => JSON.parse(JSON.stringify({ ...catalog, reserved: [...catalog.reserved], byId: undefined }));
@@ -178,7 +196,6 @@ const G = 'GITHUB_PERSONAL_ACCESS_TOKEN';
 const ALFRED_STORE = ['.alfred', ['.', 'secrets'].join('')];
 function putKeys(dir, parts, lines)
 {
-    const fs = require('node:fs');
     const file = path.join(dir, ...parts);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.appendFileSync(file, `${lines.join('\n')}\n`);
@@ -186,7 +203,6 @@ function putKeys(dir, parts, lines)
 }
 
 test('the key line names an old file holding the name, never a near name\'s file or any value', () => {
-    const { world } = require('./helpers.ts');
     const w = world();
     try
     {
@@ -207,8 +223,6 @@ test('the key line names an old file holding the name, never a near name\'s file
 });
 
 test('the key line names the chain its reader takes; a workspace child finds an old key in a parent\'s alfred-code store by name only', () => {
-    const fs = require('node:fs');
-    const { world } = require('./helpers.ts');
     const w = world();
     try
     {
@@ -571,9 +585,7 @@ test('no ask names git or remote state: alfred-code\'s stop guard reads such a w
         }
     }
     Object.values(STATIC).map((q) => (typeof q === 'function' ? q(1, 2, 3) : q)).forEach(add);
-    const fs = require('node:fs');
-    const { parseAskBlocks } = require('./ask-blocks.ts');
-    for (const f of fs.readdirSync(path.join(__dirname, '..', 'commands'))) parseAskBlocks(fs.readFileSync(path.join(__dirname, '..', 'commands', f), 'utf8')).forEach(add);
+    for (const f of fs.readdirSync(path.join(import.meta.dirname, '..', 'commands'))) parseAskBlocks(fs.readFileSync(path.join(import.meta.dirname, '..', 'commands', f), 'utf8')).forEach(add);
     const hits = [...new Set(texts.filter((t) => REMOTE_STATE_RE.test(t) || GIT_STATE_RE.test(t)))];
     assert.deepStrictEqual(hits, []);
 });
@@ -757,20 +769,17 @@ test('plan.js plans every route at project scope but a stdio route that needs a 
 });
 
 test('the CLI form prints a plan and writes it for apply.js', () => {
-    const fs = require('node:fs');
-    const os = require('node:os');
-    const { spawnSync } = require('node:child_process');
     const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plan-'));
     try
     {
         fs.writeFileSync(path.join(d, 'inv.json'), JSON.stringify(inv(MAC)));
         fs.writeFileSync(path.join(d, 'ans.json'), JSON.stringify(pickOne('atlassian', { token: false })));
-        const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'plan.ts'), path.join(d, 'inv.json'), path.join(d, 'ans.json'), '--out', path.join(d, 'plan.json')], { encoding: 'utf8' });
+        const r = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'plan.ts'), path.join(d, 'inv.json'), path.join(d, 'ans.json'), '--out', path.join(d, 'plan.json')], { encoding: 'utf8' });
         assert.strictEqual(r.status, 0, r.stderr);
         assert.match(r.stdout, /claude mcp add-json atlassian .*-s user/);
         assert.match(r.stdout, /OAuth: run \/mcp once/);
         assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(d, 'plan.json'), 'utf8')).steps.map((s) => s.op), ['root-ignore', 'mcp-add', 'list-write', 'record-root']);
-        const q = spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'plan.ts'), '--questions', path.join(d, 'inv.json')], { encoding: 'utf8' });
+        const q = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'plan.ts'), '--questions', path.join(d, 'inv.json')], { encoding: 'utf8' });
         assert.strictEqual(q.status, 0, q.stderr);
         assert.ok(JSON.parse(q.stdout).pick.length >= 1);
         assert.deepStrictEqual(JSON.parse(q.stdout).next, { id: 'done' }, 'no picks: nothing to walk');
@@ -823,7 +832,7 @@ test('location: alfred-code data on disk is a second answer, not the recommended
 
 test('plan.js from a kept inventory file leaves location keys as they are', () => {
     // memory at user scope, renamed by configure from the inventory as inventory.js writes it
-    const live = `sk-live-${require('node:crypto').randomBytes(16).toString('hex')}`;
+    const live = `sk-live-${randomBytes(16).toString('hex')}`;
     const db = '/h/.preferred-tools/memory/memory.db';
     const r = reg('memory', 'user', { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20T23:59:59Z', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_STORAGE_BACKEND: 'sqlite_vec', MCP_MEMORY_SQLITE_PATH: db, MEMORY_API_TOKEN: live } }, 'memory', 'local');
     const kept = inventoryLib.keptOf(inv(MAC, { registrations: [r] }), catalog);
@@ -837,17 +846,14 @@ test('plan.js from a kept inventory file leaves location keys as they are', () =
 });
 
 test('configure plan.js from a kept inventory prints no live value', () => {
-    const fs = require('node:fs');
-    const os = require('node:os');
-    const { spawnSync } = require('node:child_process');
-    const token = `sntryu_${require('node:crypto').randomBytes(16).toString('hex')}`;
+    const token = `sntryu_${randomBytes(16).toString('hex')}`;
     const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plan-'));
     try
     {
         const r = reg('sentry-live', 'local', { command: 'npx', args: ['-y', '@sentry/mcp-server@0.42.0'], env: { SENTRY_ACCESS_TOKEN: token } }, 'sentry', 'local');
         fs.writeFileSync(path.join(d, 'inv.json'), JSON.stringify(inventoryLib.keptOf(inv(MAC, { registrations: [r] }), catalog)));
         fs.writeFileSync(path.join(d, 'ans.json'), JSON.stringify(changeOf(r, { name: 'sentry-moved' })));
-        const out = spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'plan.ts'), path.join(d, 'inv.json'), path.join(d, 'ans.json'), '--out', path.join(d, 'plan.json')], { encoding: 'utf8' });
+        const out = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'plan.ts'), path.join(d, 'inv.json'), path.join(d, 'ans.json'), '--out', path.join(d, 'plan.json')], { encoding: 'utf8' });
         assert.strictEqual(out.status, 0, out.stderr);
         assert.match(out.stdout, /claude mcp add-json sentry-moved .*\$\{PREFERRED_TOOLS_KEPT\}/);
         for (const where of [out.stdout, out.stderr, fs.readFileSync(path.join(d, 'plan.json'), 'utf8')]) assert.ok(!where.includes(token));
@@ -969,7 +975,7 @@ test('without .alfred/.gitignore there is no alfred-data: today\'s folders, and 
 });
 
 test('the name guard: docs, state, statistics, workspace, flow and an .alfred/<name> file are refused', () => {
-    assert.deepStrictEqual(require('../scripts/entries/locations.ts').ALFRED_ENTRIES, ['docs', 'state', 'statistics', 'workspace', 'flow']);
+    assert.deepStrictEqual(ALFRED_ENTRIES, ['docs', 'state', 'statistics', 'workspace', 'flow']);
     for (const name of ['docs', 'state', 'statistics', 'workspace', 'flow'])
     {
         const picked = plan(inv(MAC, { alfredCodeEnabled: true }), pickOne('playwright-chrome', { name, location: { side: 'alfred-data' } }), opts('/Users/me', { exists: ALFRED }));
@@ -1114,7 +1120,6 @@ test('every question has 2 to 4 options, one Recommended and first: each scope, 
 
 // ---- final review fixes ---------------------------------------------------------------------------------------------
 test("the alfred-code name guard ignores case: 'Docs' or 'STATE' is alfred-code's own folder on macOS and Windows", () => {
-    const { alfredNameProblem } = require('../scripts/entries/locations.ts');
     const ctx = { project: '/work/shop', platform: 'darwin', exists: () => false };
     assert.match(alfredNameProblem('Docs', ctx) || '', /one of alfred-code's own entries under \.alfred/);
     assert.match(alfredNameProblem('STATE', ctx) || '', /one of alfred-code's own entries under \.alfred/);
@@ -1261,10 +1266,6 @@ test('answers.roots: a named project folder outside the project is a plan error 
 });
 
 test('plan.js --questions takes --data after its files and refuses an unknown flag', () => {
-    const fs = require('node:fs');
-    const os = require('node:os');
-    const roots = require('../scripts/roots/roots.ts');
-    const { main } = require('../scripts/plan/command.ts');
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plan-main-')));
     const out = [];
     const log = console.log;
@@ -1301,7 +1302,6 @@ test('plan.js --questions takes --data after its files and refuses an unknown fl
 
 // ---- 0.2.0: data folders in the root (spec D2) ----------------------------------------------------------------------
 // alfred-code 3.9.2's pattern, cited where it lives
-const { OTHER_RE } = require('./ask-texts.ts');
 const ALFRED_ROOT = { project: { id: 'alfred' } };
 const callsOf = (x) => (Array.isArray(x) ? x : (x && x.calls) || []).flat();
 
@@ -1408,7 +1408,7 @@ test('an .alfred project root refuses a registration named after one of alfred-c
 });
 
 // ---- 0.2.0: hosted keys through the header helper; D5's routes and scopes -----------------------------------------
-const SECRETS_FILE = require('../scripts/roots/roots.ts').FILES.secrets;
+const SECRETS_FILE = FILES.secrets;
 const helperOf = (p, id) => { const s = p.steps.find((x) => x.op === 'mcp-add' && x.row === id); return s ? s.entry.headersHelper : undefined; };
 
 test('D5: each keyed route at each scope', () => {
@@ -1460,7 +1460,6 @@ test('D5: each keyed route at each scope', () => {
 });
 
 test('the helper command per scope', () => {
-    const { helperCommand } = require('../scripts/entries/entry.ts');
     assert.strictEqual(helperCommand({ helperPath: '.alfred/mcp-headers.js', name: G, scheme: 'Bearer', style: 'portable' }), `node .alfred/mcp-headers.js ${G} Bearer`);
     assert.strictEqual(helperCommand({ helperPath: 'my keys/mcp-headers.js', name: G, scheme: 'Bearer', style: 'portable' }), `node "my keys/mcp-headers.js" ${G} Bearer`, 'the committed file: double quotes, which every shell reads');
     assert.strictEqual(helperCommand({ helperPath: '/work/my shop/.preferred-tools/mcp-headers.js', name: G, scheme: 'Bearer', style: 'posix' }), `node '/work/my shop/.preferred-tools/mcp-headers.js' ${G} Bearer`);
@@ -1482,9 +1481,6 @@ test('the helper command per scope', () => {
 });
 
 test('a helper path holding shell characters reaches node whole, and the command reads back to its path and key name', () => {
-    const { helperCommand, helperNameOf } = require('../scripts/entries/entry.ts');
-    const rootsLib = require('../scripts/roots/roots.ts');
-    const { spawnSync } = require('node:child_process');
     const cases = [
         ['posix', '/work/R&D/.preferred-tools/mcp-headers.js', `node '/work/R&D/.preferred-tools/mcp-headers.js' ${G} Bearer`],
         ['posix', "/Users/bob's-app/.preferred-tools/mcp-headers.js", `node '/Users/bob'\\''s-app/.preferred-tools/mcp-headers.js' ${G} Bearer`],
@@ -1527,8 +1523,6 @@ test('a hosted keyed route recommends global; a stdio keyed route is not offered
 });
 
 test('context7 hosted: global recommended and the key first, filled or not (spec F2, M1)', () => {
-    const fs = require('node:fs');
-    const { world } = require('./helpers.ts');
     const w = world();
     try
     {
@@ -1578,7 +1572,6 @@ test('the plan notes an untrusted folder, a project-scope helper\'s child folder
 });
 
 test('the old-file line names the project root\'s .mcps-secrets at local scope and the global root\'s at global scope', () => {
-    const { world } = require('./helpers.ts');
     const w = world();
     try
     {
@@ -1596,10 +1589,9 @@ test('the old-file line names the project root\'s .mcps-secrets at local scope a
 });
 
 // ---- 0.2.0: the key's name and the server's settings (spec D9) ------------------------------------------------------
-const mcpsAt = (dir, lines) => { const fs = require('node:fs'); fs.mkdirSync(dir, { recursive: true }); fs.appendFileSync(path.join(dir, '.mcps-secrets'), `${lines.join('\n')}\n`); };
+const mcpsAt = (dir, lines) => {  fs.mkdirSync(dir, { recursive: true }); fs.appendFileSync(path.join(dir, '.mcps-secrets'), `${lines.join('\n')}\n`); };
 
 test('key name options: the default, names found holding the row id, \'A name you choose\'; a filled name recommended, the default first when both are', () => {
-    const { world } = require('./helpers.ts');
     const w = world();
     try
     {
@@ -1700,9 +1692,6 @@ test('a credential-shaped setting is refused; a machine path is taken at every s
 
 // ---- 0.2.0: the file steps (spec D2-D4, D8; plan R13) ----------------------------------------------------------------
 test('an existing root without a .gitignore gets no key file step and the plan names the root-ignore fix', () => {
-    const fs = require('node:fs');
-    const { spawnSync } = require('node:child_process');
-    const { world } = require('./helpers.ts');
     const w = world();
     try
     {
@@ -1768,7 +1757,6 @@ const S_VAR = 'SENTRY_ACCESS_TOKEN';
 
 // ---- 0.2.0: servers already set up (spec D6; plan R12) ---------------------------------------------------------------
 test("a tool answered 'own' is not offered; 'add' is offered with the two-servers note", () => {
-    const { pickQuestions } = require('../scripts/plan/asks-picks.ts');
     const labels = (calls) => calls.flat().flatMap((x) => x.options.map((o) => o.label));
     const has = (calls, id) => labels(calls).some((l) => l === id || l.startsWith(`${id} (`));
     const sentry = reg('sentry', 'user', { type: 'http', url: 'https://mcp.sentry.dev/mcp' }, 'sentry', 'remote', { choice: null });
@@ -1799,18 +1787,13 @@ test("a tool answered 'own' is not offered; 'add' is offered with the two-server
 });
 
 test('plan.js --questions with --connectors prints no existing block, reads no live inventory, and tags the pick list', () => {
-    const fs = require('node:fs');
-    const { spawnSync } = require('node:child_process');
-    const { world } = require('./helpers.ts');
-    const inventoryLib = require('../scripts/inventory/inventory.ts');
-    const cli = require('../scripts/core/claude-cli.ts');
     const w = world();
     try
     {
         assert.strictEqual(cli.run(['mcp', 'add-json', 'github', JSON.stringify({ type: 'http', url: 'https://api.githubcopilot.com/mcp/' }), '-s', 'user'], { cwd: w.project, env: w.env }).status, 0);
         const invFile = path.join(w.dir, 'inv.json');
         fs.writeFileSync(invFile, JSON.stringify(inventoryLib.keptOf(inventoryLib.buildInventory({ project: w.project, env: w.env }))));
-        const run = (...extra) => spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'plan.ts'), '--questions', invFile, ...extra], { encoding: 'utf8', env: w.env, cwd: w.project });
+        const run = (...extra) => spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'plan.ts'), '--questions', invFile, ...extra], { encoding: 'utf8', env: w.env, cwd: w.project });
         const before = w.calls().length;
         for (const out of [run(), run('--connectors', ''), run('--connectors', 'GitLab')])
         {
@@ -1826,8 +1809,6 @@ test('plan.js --questions with --connectors prints no existing block, reads no l
 });
 
 test("configure: the 'On their own' group, and 'Let preferred-tools manage it' plans only a list-write step", () => {
-    const { changeQuestions } = require('../scripts/plan/asks-tool.ts');
-    const asks = require('../scripts/plan/asks-all.ts');
     const gh = reg('github', 'user', { type: 'http', url: 'https://api.githubcopilot.com/mcp/' }, 'github', 'remote', { choice: 'own' });
     const c7 = reg('context7', 'local', { type: 'http', url: 'https://mcp.context7.com/mcp' }, 'context7', 'remote', { choice: null });
     const ghOwn = { name: 'github', scope: 'user', fingerprint: 'url:api.githubcopilot.com/mcp', choice: 'own' };
@@ -1889,8 +1870,6 @@ test('install with no key answer: gitlab gets the helper, an empty name line and
 });
 
 test("context7's local route: keyless at project scope; at local scope an unfilled key leaves --api-key out", { skip: POSIX_FIXTURE }, () => {
-    const fs = require('node:fs');
-    const os = require('node:os');
     const project = plan(inv(MAC), pickOne('context7', { route: 'local', scope: 'project' }), opts('/Users/me'));
     assert.deepStrictEqual(project.errors, []);
     assert.ok(!project.steps.find((s) => s.op === 'mcp-add').entry.args.includes('--api-key'));
@@ -1959,7 +1938,6 @@ test("a global-family own entry in this project's list moves to the global root'
 });
 
 test("configure: 'Leave it on its own' writes one own entry in the family root's list, 'preferred-tools' writes none, and a change for an own target is not planned", () => {
-    const X = require('../scripts/inventory/existing.ts');
     const entry = { type: 'http', url: 'https://gitlab.com/api/v4/mcp' };
     const i = inv(MAC, { registrations: [reg('gitlab', 'project', entry, 'gitlab', 'remote')], lists: { project: null, global: null } });
     const p = plan(i, { existing: { 'mcp:gitlab~project': 'own' }, change: { 'mcp:gitlab~project': { scope: 'local' } } }, opts('/Users/me'));
@@ -1972,7 +1950,6 @@ test("configure: 'Leave it on its own' writes one own entry in the family root's
 });
 
 test('the pick list labels a row that a claude.ai connector or an enabled plugin already provides, and the plan names the two servers', () => {
-    const X = require('../scripts/inventory/existing.ts');
     const label = (calls, id) => calls.flat().flatMap((x) => x.options.map((o) => o.label)).find((l) => l === id || l.startsWith(`${id} (`));
     assert.strictEqual(label(pickQuestions(inv(MAC), catalog, {}, ['GitLab']), 'gitlab'), 'gitlab (also connected through claude.ai)');
     assert.strictEqual(label(pickQuestions(inv(MAC), catalog), 'gitlab'), 'gitlab');
@@ -2042,13 +2019,6 @@ test('change the root: each managed registration of the family is re-added with 
 });
 
 test('change the root: the old data and the old key file stay, the new key file holds the names with empty values, the list\'s entries move', () => {
-    const fs = require('node:fs');
-    const { world, writeJson, helperCmd } = require('./helpers.ts');
-    const { apply } = require('../scripts/apply/run.ts');
-    const cli = require('../scripts/core/claude-cli.ts');
-    const roots = require('../scripts/roots/roots.ts');
-    const keys = require('../scripts/keys/keys.ts');
-    const account = require('../scripts/core/account.ts');
     const w = world();
     try
     {
@@ -2149,10 +2119,6 @@ test('configure: the key name and the settings start from the registration as re
 });
 
 test('the 0.1.x key files are read for names only: a held key is never matched against their values', () => {
-    const fs = require('node:fs');
-    const { world } = require('./helpers.ts');
-    const cli = require('../scripts/core/claude-cli.ts');
-    const keys = require('../scripts/keys/keys.ts');
     const w = world();
     try
     {
@@ -2177,12 +2143,6 @@ test('the 0.1.x key files are read for names only: a held key is never matched a
 });
 
 test('configure: a 0.1.x project-scope github Docker registration keeps Project listed, recommends Local, and the move writes the key from the chain, never ${VAR}', () => {
-    const fs = require('node:fs');
-    const { world } = require('./helpers.ts');
-    const { apply } = require('../scripts/apply/run.ts');
-    const cli = require('../scripts/core/claude-cli.ts');
-    const account = require('../scripts/core/account.ts');
-    const fix = require('../scripts/fix/fix.ts');
     const docker = { command: 'docker', args: ['run', '-i', '--rm', '-e', G, 'ghcr.io/github/github-mcp-server:v2.1.0', 'stdio'], env: { [G]: `\${${G}}` } };
     const t = asks.all(inv(MAC, { registrations: [reg('github', 'project', docker, 'github', 'local')] }), { targets: ['mcp:github~project'] }, catalog).targets['mcp:github~project'];
     const scopeQ = [...(t.first || []), ...t.questions].find((q) => q.id === 'scope-github');
@@ -2215,7 +2175,6 @@ test('configure: a 0.1.x project-scope github Docker registration keeps Project 
 // ---- 0.3.0: absolute paths at project scope, data in its root (F6, F7, Optional 3) ----------------------------------
 
 test('project scope writes absolute paths on darwin, linux and win32', () => {
-    const { formatRoot } = require('../scripts/entries/locations.ts');
     for (const [base, home] of [[MAC, '/Users/me'], [LINUX, '/home/me'], [WIN, 'C:\\Users\\me']])
     {
         const P = base.os === 'win32' ? path.win32 : path.posix;
@@ -2231,7 +2190,6 @@ test('project scope writes absolute paths on darwin, linux and win32', () => {
 });
 
 test('the helper at project scope is absolute and quoted for its OS', () => {
-    const { helperArgv } = require('../scripts/entries/entry.ts');
     const h = (base, home) => addStep(plan(inv(base), pickOne('context7', { route: 'remote', scope: 'project', token: true }), opts(home))).entry.headersHelper;
     const cases = [
         [MAC, '/Users/me', 'node /work/shop/.preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer', '/work/shop/.preferred-tools/mcp-headers.js'],
@@ -2324,8 +2282,6 @@ test('every scope question words Project as the folder\'s .mcp.json that names t
 // ---- 0.3.0: 'needs authentication' explained (F3) ---------------------------------------------------------------------
 
 test('a hosted keyed registration gets its reconnect line in the plan: filled, unfilled, unfilled anonymous', () => {
-    const { reconnectLine } = require('../scripts/plan/render.ts');
-    const { world } = require('./helpers.ts');
     const w = world();
     try
     {
@@ -2363,7 +2319,6 @@ test('the project-scope helper note says why, once', () => {
 });
 
 test('buildEntry for the sentry bridge at local, project and user scope', () => {
-    const { buildEntry, currentOf, settingsOf, bridgeParts, renameTemplate } = require('../scripts/entries/entry.ts');
     const row = catalog.byId.get('sentry');
     const tail = (t) => [t, 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'];
     const mac = { platform: 'darwin', home: '/Users/me', project: '/work/shop' };
@@ -2395,7 +2350,6 @@ test('buildEntry for the sentry bridge at local, project and user scope', () => 
 
 // ---- the sentry bridge (0.4.0) ----------------------------------------------------------------------------------------
 
-const roots = require('../scripts/roots/roots.ts');
 const bridgeWorld = () =>
 {
     const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-bplan-')));
@@ -2461,7 +2415,6 @@ test('a root with helper 3 and no bridge gets both rewritten for a bridge; a new
         fs.writeFileSync(path.join(b.proot, 'mcp-headers.js'), roots.helperSource().replace(/^\/\/ preferred-tools mcp-headers \d+/, '// preferred-tools mcp-headers 3'));
         const ops = (p) => p.steps.map((s) => s.op);
         assert.deepStrictEqual(ops(bridgePlan(b, { route: 'bridge', scope: 'project' })).filter((o) => o.startsWith('write-')), ['write-helper', 'write-bridge']);
-        const { BRIDGE_VERSION } = require('../scripts/copied/mcp-bridge.js');
         fs.writeFileSync(path.join(b.proot, 'mcp-bridge.js'), roots.shippedSource('bridge').replace(/^\/\/ preferred-tools mcp-bridge \d+/, `// preferred-tools mcp-bridge ${BRIDGE_VERSION + 1}`));
         const p = bridgePlan(b, { route: 'bridge', scope: 'project' });
         assert.ok(!ops(p).includes('write-bridge'));
@@ -2596,8 +2549,6 @@ test('two URL parts under one name are refused at install and configure, and not
 // ---- 0.3.0 review, Important 1: the key's format reaches the user on the recommended path ---------------------------
 
 test('an unfilled reconnect line names what the key must be: atlassian email:api_token, gitlab a fine-grained token', () => {
-    const { reconnectLine } = require('../scripts/plan/render.ts');
-    const { world } = require('./helpers.ts');
     const w = world();
     try
     {
@@ -2678,9 +2629,6 @@ test('serena args at project, local and global scope: --context absolute, --proj
 // ---- configure's root change moves the root's files (spec D1, D5, D7) --------------------------------------------------
 function rootMoveWorld(t, pick)
 {
-    const fs = require('node:fs');
-    const { world } = require('./helpers.ts');
-    const { apply } = require('../scripts/apply/run.ts');
     const w = world();
     t.after(() => w.clean());
     const data = path.join(w.dir, 'data');
@@ -2692,7 +2640,7 @@ function rootMoveWorld(t, pick)
     assert.strictEqual(apply(install, { env: w.env, tmp: path.join(w.dir, 'tmp1'), data, log: () => {} }).failed, null);
     const change = () => plan(inv(), { rootChange: ['project'], roots: { project: { id: 'named', path: 'tools' } } }, { home: w.home, env: w.env });
     const run = (p, tmp) => { const lines = []; const r = apply(p, { env: w.env, tmp: path.join(w.dir, tmp), data, log: (...a) => lines.push(a.join(' ')) }); return { r, text: lines.join('\n') }; };
-    const local = (name) => require('../scripts/core/account.ts').readAccount(w.env, w.project).local[name];
+    const local = (name) => readAccount(w.env, w.project).local[name];
     const cursor = () => JSON.parse(fs.readFileSync(path.join(w.project, '.cursor', 'mcp.json'), 'utf8')).mcpServers;
     return { w, fs, old, fresh, change, run, local, cursor };
 }

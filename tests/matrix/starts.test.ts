@@ -1,4 +1,3 @@
-'use strict';
 // Do the tools START? The other matrix files prove a registration is written right; this one launches it. Each local
 // row is installed through the real CLI in the throwaway world, its packages fetched by fetch.js as the command runs it,
 // read back from the file the CLI wrote, and started exactly as written - command, args and env, ${VAR} expanded as
@@ -9,20 +8,20 @@
 //   npm run matrix        (slow on a first run: uvx and npx fetch each package into the throwaway home)
 //
 // A row this OS is not offered, a missing runtime, a token route with no token, or no network is NOT RUN, with the reason.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawn, spawnSync } = require('node:child_process');
-const cli = require('../../scripts/core/claude-cli.ts');
-const catalogLib = require('../../scripts/catalog/catalog.ts');
-const { plan } = require('../../scripts/plan/plan.ts');
-const roots = require('../../scripts/roots/roots.ts');
-const { fill } = require('../fake-mcp-http.ts');
-const { Harness } = require('../harness.ts');
-const { TOKEN_VARS: TOKENS } = require('../helpers.ts');
-const { keepWritten } = require('../proof/matrix-keep.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
+import * as cli from '../../scripts/core/claude-cli.ts';
+import * as catalogLib from '../../scripts/catalog/catalog.ts';
+import { plan } from '../../scripts/plan/plan.ts';
+import * as roots from '../../scripts/roots/roots.ts';
+import { fill } from '../fake-mcp-http.ts';
+import { Harness } from '../harness.ts';
+import { TOKEN_VARS as TOKENS } from '../helpers.ts';
+import { keepWritten } from '../proof/matrix-keep.ts';
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-start-'));

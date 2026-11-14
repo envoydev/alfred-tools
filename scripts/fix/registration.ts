@@ -1,16 +1,16 @@
-'use strict';
 // The registration fixes: each finds a known problem in an installed registration and edits that entry AS READ (its pin,
 // its cut-off and the args or env the user added stay). The edit is applied by `claude mcp remove` + `add-json` through
 // apply.js's mcp-replace, with a rollback; this file never writes.
 //
 // A finding the machine cannot act on carries `blocked` (the reason), is shown, and is never applied.
-const path = require('node:path');
-const { pythonRequest, isWindowsArm, pathFor } = require('../entries/platform.ts');
-const { validWindowsSerenaHome, serenaWindowsHome, serenaSpaceFree } = require('../entries/locations.ts');
-const keys = require('../keys/keys.ts');
-const roots = require('../roots/roots.ts');
-const C = require('./common.ts');
-const { windowsMcpServers, fromHere } = require('../inventory/inventory.ts');
+import path from 'node:path';
+import { pythonRequest, isWindowsArm, pathFor } from '../entries/platform.ts';
+import { validWindowsSerenaHome, serenaWindowsHome, serenaSpaceFree } from '../entries/locations.ts';
+import * as keys from '../keys/keys.ts';
+import * as roots from '../roots/roots.ts';
+import * as C from './common.ts';
+import { windowsMcpServers, fromHere } from '../inventory/inventory.ts';
+import * as cursorMcp from '../cursor/cursor-mcp.ts';
 
 const eachReg = (ctx, id, fn) => C.registrationsOf(ctx, id).map((reg) => fn(reg, C.routeOf(ctx, reg))).filter(Boolean);
 
@@ -23,7 +23,7 @@ function windowsHomeOf(value, ctx)
     return path.win32.resolve(ctx.inv.project, expanded).replace(/\\+$/, '');
 }
 
-function serenaWindowsHomeDetect(ctx)
+export function serenaWindowsHomeDetect(ctx)
 {
     if (ctx.platform !== 'win32') return [];
     return eachReg(ctx, 'serena-windows-home', (reg) =>
@@ -59,7 +59,7 @@ function unsetSerenaHome(reg, ctx)
     return C.finding('serena-windows-home', reg, what, { proposal: { SERENA_HOME: free }, note: `a new home, ${free} - serena's data in ${path.win32.join(profile, '.serena')} is not moved and its language servers download again (~327MB)` });
 }
 
-function serenaWindowsHomeFix(entry, f, ctx, input = {})
+export function serenaWindowsHomeFix(entry, f, ctx, input = {})
 {
     const home = (f.proposal && f.proposal.SERENA_HOME) || input.serenaHome;
     if (!home || !validWindowsSerenaHome(home)) throw new Error(`serena's home must be an absolute Windows folder in backslashes with no space; '${home || ''}' is not (pass --input serenaHome=<folder>)`);
@@ -69,7 +69,7 @@ function serenaWindowsHomeFix(entry, f, ctx, input = {})
 // ---- uvx-python / windows-arm-python --------------------------------------------------------------------------------
 const pythonAt = (args) => args.findIndex((a) => a === '--python' || a === '-p' || a.startsWith('--python='));
 
-function uvxPythonDetect(ctx)
+export function uvxPythonDetect(ctx)
 {
     return eachReg(ctx, 'uvx-python', (reg) =>
     {
@@ -79,12 +79,12 @@ function uvxPythonDetect(ctx)
     });
 }
 
-function uvxPythonFix(entry, f, ctx)
+export function uvxPythonFix(entry, f, ctx)
 {
     return { ...entry, args: ['--python', f.proposal.python, ...entry.args] };
 }
 
-function windowsArmPythonDetect(ctx)
+export function windowsArmPythonDetect(ctx)
 {
     if (!isWindowsArm(ctx)) return [];
     return eachReg(ctx, 'windows-arm-python', (reg) =>
@@ -98,7 +98,7 @@ function windowsArmPythonDetect(ctx)
     });
 }
 
-function windowsArmPythonFix(entry, f)
+export function windowsArmPythonFix(entry, f)
 {
     const args = [...entry.args];
     args[args.indexOf('--python') + 1] = f.proposal.python;
@@ -106,7 +106,7 @@ function windowsArmPythonFix(entry, f)
 }
 
 // ---- windows-npx-cmd ------------------------------------------------------------------------------------------------
-function windowsNpxCmdDetect(ctx)
+export function windowsNpxCmdDetect(ctx)
 {
     if (ctx.platform !== 'win32') return [];
     return eachReg(ctx, 'windows-npx-cmd', (reg) =>
@@ -116,7 +116,7 @@ function windowsNpxCmdDetect(ctx)
     });
 }
 
-function windowsNpxCmdFix(entry)
+export function windowsNpxCmdFix(entry)
 {
     return { ...entry, command: 'cmd', args: ['/c', 'npx', ...(entry.args || [])] };
 }
@@ -125,7 +125,7 @@ function windowsNpxCmdFix(entry)
 // The release whose README documents --no-webmcp (catalog/fixes.json verifiedOn): a fixed floor, never the catalog's pin,
 // which moves on every refresh and would block a registration that already has the flag.
 const NO_WEBMCP_SINCE = '0.0.83';
-function playwrightWebmcpDetect(ctx)
+export function playwrightWebmcpDetect(ctx)
 {
     return eachReg(ctx, 'playwright-webmcp', (reg) =>
     {
@@ -138,7 +138,7 @@ function playwrightWebmcpDetect(ctx)
     });
 }
 
-function playwrightWebmcpFix(entry)
+export function playwrightWebmcpFix(entry)
 {
     const args = [...entry.args];
     const at = args.indexOf('--browser');
@@ -148,7 +148,7 @@ function playwrightWebmcpFix(entry)
 
 // ---- appium-sdk-env -------------------------------------------------------------------------------------------------
 const SDK_ENV = ['ANDROID_HOME', 'JAVA_HOME'];
-function androidSdk(ctx)
+export function androidSdk(ctx)
 {
     const { env, machine: m } = ctx;
     for (const v of [env.ANDROID_HOME, env.ANDROID_SDK_ROOT]) if (v && m.exists(v)) return v;
@@ -159,7 +159,7 @@ function androidSdk(ctx)
     return defaults.find((d) => m.exists(d)) || null;
 }
 
-function javaHome(ctx)
+export function javaHome(ctx)
 {
     const { env, machine: m } = ctx;
     if (env.JAVA_HOME && m.exists(env.JAVA_HOME)) return env.JAVA_HOME;
@@ -176,7 +176,7 @@ function javaHome(ctx)
     return m.exists(P.join(home, 'bin', ctx.platform === 'win32' ? 'java.exe' : 'java')) ? home : null;
 }
 
-function appiumSdkEnvDetect(ctx)
+export function appiumSdkEnvDetect(ctx)
 {
     return eachReg(ctx, 'appium-sdk-env', (reg) =>
     {
@@ -193,20 +193,20 @@ function appiumSdkEnvDetect(ctx)
     });
 }
 
-function appiumSdkEnvFix(entry, f)
+export function appiumSdkEnvFix(entry, f)
 {
     return { ...entry, env: { ...(entry.env || {}), ...f.proposal } };
 }
 
 // ---- serena-telemetry -----------------------------------------------------------------------------------------------
 // Only an ABSENT variable is a finding: a user who set it to something else chose that.
-function serenaTelemetryDetect(ctx)
+export function serenaTelemetryDetect(ctx)
 {
     return eachReg(ctx, 'serena-telemetry', (reg) =>
         (reg.entry.env || {}).SERENA_USAGE_REPORTING === undefined ? C.finding('serena-telemetry', reg, 'SERENA_USAGE_REPORTING is not set - serena sends a usage ping at every start') : null);
 }
 
-function serenaTelemetryFix(entry)
+export function serenaTelemetryFix(entry)
 {
     return { ...entry, env: { ...(entry.env || {}), SERENA_USAGE_REPORTING: 'false' } };
 }
@@ -215,7 +215,7 @@ function serenaTelemetryFix(entry)
 // A managed serena whose --context is not the context file in its family's root: 0.4.x ran Serena's own claude-code
 // context, whose instructions name Claude Code's tools. The fix points it at <root>/serena-context.yml; fix.js plans the
 // file's write before the replace.
-function serenaContextDetect(ctx)
+export function serenaContextDetect(ctx)
 {
     const r = roots.resolve(ctx.inv, null, { project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog }).roots;
     return eachReg(ctx, 'serena-context', (reg) =>
@@ -231,7 +231,7 @@ function serenaContextDetect(ctx)
     });
 }
 
-function serenaContextFix(entry, f)
+export function serenaContextFix(entry, f)
 {
     const args = [...(entry.args || [])];
     const i = args.indexOf('--context');
@@ -263,7 +263,7 @@ function stdioChainOf(ctx, scope)
     return keys.stdioChain({ scope, projectRoot: r.project, globalRoot: r.global });
 }
 
-function tokenSyncDetect(ctx)
+export function tokenSyncDetect(ctx)
 {
     return eachReg(ctx, 'token-sync', (reg, route) =>
     {
@@ -296,7 +296,6 @@ function cursorBehind(ctx, reg, route, chain, extra)
     const l = ctx.inv.lists && ctx.inv.lists.global;
     const s = l && !l.note && !l.old ? (l.servers || []).find((x) => x.name === reg.name && x.scope === 'user' && (x.clients || []).includes('cursor')) : null;
     if (!s || !s.key) return null;
-    const cursorMcp = require('../cursor/cursor-mcp.ts');
     const file = cursorMcp.fileFor('global', ctx);
     const read = cursorMcp.readCursor(file);
     const copy = read.state === 'ok' ? read.doc.mcpServers[reg.name] : null;
@@ -308,7 +307,7 @@ function cursorBehind(ctx, reg, route, chain, extra)
     return C.finding('token-sync', reg, `Cursor's copy in ${file} holds a key other than ${s.key} in ${at.file}`, { ...extra, keyName: s.key, cursorOnly: true });
 }
 
-function tokenSyncFix(entry, f, ctx)
+export function tokenSyncFix(entry, f, ctx)
 {
     // Cursor's copy alone: Claude Code's registration stays as it is
     if (f.cursorOnly) return entry;
@@ -329,7 +328,7 @@ function windowsMcpDrop(s, ctx)
     return s.scope === 'inherited' ? `${how}, run in ${fromHere(ctx.inv, s.from)}` : how;
 }
 
-function windowsMcpOneDetect(ctx)
+export function windowsMcpOneDetect(ctx)
 {
     const servers = windowsMcpServers(ctx.inv);
     if (servers.length < 2) return [];
@@ -341,9 +340,3 @@ function windowsMcpOneDetect(ctx)
         { blocked: `keep one per Windows desktop - ${drop}; a stuck one recovers only in a new Claude Code session` })];
 }
 
-module.exports = {
-    windowsMcpOneDetect,
-    serenaWindowsHomeDetect, serenaWindowsHomeFix, uvxPythonDetect, uvxPythonFix, windowsArmPythonDetect, windowsArmPythonFix,
-    windowsNpxCmdDetect, windowsNpxCmdFix, playwrightWebmcpDetect, playwrightWebmcpFix, appiumSdkEnvDetect, appiumSdkEnvFix,
-    serenaTelemetryDetect, serenaTelemetryFix, serenaContextDetect, serenaContextFix, tokenSyncDetect, tokenSyncFix, androidSdk, javaHome,
-};

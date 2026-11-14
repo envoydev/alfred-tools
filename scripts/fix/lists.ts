@@ -1,4 +1,3 @@
-'use strict';
 // The fixes for the list, <root>/mcps.json (spec D1, D9). A row of kind `file` names no `fix` function: its `steps`
 // function plans list-write and the rest, which fix.js's file pass runs through apply.js as one plan.
 //
@@ -6,18 +5,19 @@
 // the list - each registration as read with clients claude, the record's own entries as they are, and the record moved
 // aside as preferred-tools.json.0.4.bak. Install and configure do the same the first time they write a family
 // (plan-lists.js), with the same importUnlisted.
-const fs = require('node:fs');
-const path = require('node:path');
-const roots = require('../roots/roots.ts');
-const lists = require('../mcps-list/mcps-list.ts');
-const { importUnlisted } = require('../plan/lists.ts');
-const { SCOPES, folderList } = require('../plan/cursor-steps.ts');
-const { readGuardOf, denyReadStep } = require('../plan/repair-tail.ts');
-const kept = require('../core/kept.ts');
-const keys = require('../keys/keys.ts');
-const cursorMcp = require('../cursor/cursor-mcp.ts');
-const workspace = require('../roots/workspace.ts');
-const { deepEqual } = require('../core/json-file.ts');
+import fs from 'node:fs';
+import path from 'node:path';
+import * as roots from '../roots/roots.ts';
+import * as lists from '../mcps-list/mcps-list.ts';
+import { importUnlisted } from '../plan/lists.ts';
+import { SCOPES, folderList } from '../plan/cursor-steps.ts';
+import { readGuardOf, denyReadStep } from '../plan/repair-tail.ts';
+import * as kept from '../core/kept.ts';
+import * as keys from '../keys/keys.ts';
+import * as cursorMcp from '../cursor/cursor-mcp.ts';
+import * as workspace from '../roots/workspace.ts';
+import { deepEqual } from '../core/json-file.ts';
+import * as serenaConfig from '../apply/serena-config.ts';
 
 const pathOf = (ctx) => (ctx.platform === 'win32' ? path.win32 : path.posix);
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -26,7 +26,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const rootsOf = (ctx) => roots.resolve(ctx.inv, null, { project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog }).roots;
 
 // -> [{ id, name: <list file>, scope: null, family, servers, record: <preferred-tools.json> | null, found }]
-function listImportDetect(ctx)
+export function listImportDetect(ctx)
 {
     const P = pathOf(ctx);
     const r = rootsOf(ctx);
@@ -50,7 +50,7 @@ function listImportDetect(ctx)
 
 // The plan for one family: its root's .gitignore when the root is new, the list-write (the servers as read, `after:
 // null`, and the own entries the list and the record hold, as they are), the record moved aside, the roots map.
-function listImportSteps(f, ctx)
+export function listImportSteps(f, ctx)
 {
     const P = pathOf(ctx);
     const root = P.dirname(f.name);
@@ -79,7 +79,7 @@ function listImportSteps(f, ctx)
 // read-guard (0.5.0): a root that holds the key file or mcp-remote's sign-in folder, and Claude Code's settings that do
 // not deny an AI session's Read tool there (rulings 12 and 13). Both are checked by name only - fs.existsSync, never
 // opened. One finding per settings file, naming every rule it lacks; its plan is one deny-read.
-function readGuardDetect(ctx)
+export function readGuardDetect(ctx)
 {
     const P = pathOf(ctx);
     const r = rootsOf(ctx);
@@ -98,13 +98,12 @@ function readGuardDetect(ctx)
     return [{ id: 'read-guard', name: g.file, scope: null, rules: g.rules, found: `${g.file} does not deny ${g.rules.join(' or ')} - an AI session's Read tool can open ${why.join(' and ')}` }];
 }
 
-const readGuardSteps = (f) => [denyReadStep(f.name, f.rules)];
+export const readGuardSteps = (f) => [denyReadStep(f.name, f.rules)];
 
 // serena-base-modes (0.5.0, D7): a managed serena's home, other than an alfred-code 2.x one, whose serena_config.yml
 // lists base modes. Read by serena-config.js, which reads that key alone and never the file's other lines.
-function serenaBaseModesDetect(ctx)
+export function serenaBaseModesDetect(ctx)
 {
-    const serenaConfig = require('../apply/serena-config.ts');
     const out = [];
     const seen = new Set();
     for (const reg of (ctx.inv.registrations || []).filter((r) => r.rowId === 'serena' && !r.own && !r.alfredRetired && r.choice !== 'own' && r.scope !== 'inherited'))
@@ -121,7 +120,7 @@ function serenaBaseModesDetect(ctx)
     return out;
 }
 
-const serenaBaseModesSteps = (f) => [{ op: 'serena-base-modes', file: f.file, shared: f.shared, why: `${f.file}: base_modes: [], so serena's manual names only the tools it has` }];
+export const serenaBaseModesSteps = (f) => [{ op: 'serena-base-modes', file: f.file, shared: f.shared, why: `${f.file}: base_modes: [], so serena's manual names only the tools it has` }];
 
 // ---- client-drift and cursor-file (0.5.0, D9) -------------------------------------------------------------------------
 // A list entry whose copy in Claude Code or in Cursor was edited or removed by hand. Both sides are compared after
@@ -171,7 +170,7 @@ function keyEmptyOf(copy, want, row, routeId)
 }
 
 // -> [finding], each entry's Claude Code finding before its Cursor one
-function clientDriftDetect(ctx)
+export function clientDriftDetect(ctx)
 {
     const catalog = ctx.catalog;
     const cctx = cursorCtx(ctx);
@@ -239,7 +238,7 @@ function clientDriftDetect(ctx)
 }
 
 // The steps of one answered finding. answer: keep | restore | leave | drop.
-function clientDriftSteps(f, ctx, input = {})
+export function clientDriftSteps(f, ctx, input = {})
 {
     const answer = input[f.driftKey];
     const catalog = ctx.catalog;
@@ -294,7 +293,7 @@ function clientDriftSteps(f, ctx, input = {})
 }
 
 // cursor-file (advice): a Cursor file preferred-tools will not write, with what to do.
-function cursorFileDetect(ctx)
+export function cursorFileDetect(ctx)
 {
     const cctx = cursorCtx(ctx);
     const out = [];
@@ -307,4 +306,3 @@ function cursorFileDetect(ctx)
     return out;
 }
 
-module.exports = { listImportDetect, listImportSteps, readGuardDetect, readGuardSteps, serenaBaseModesDetect, serenaBaseModesSteps, clientDriftDetect, clientDriftSteps, cursorFileDetect };

@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // THE RELATIVE DATA FOLDER - does a tool resolve the relative data folder project scope writes against the folder it
 // starts in? Each row is launched as plan.js builds it at project scope (data folder `.preferred-tools/<name>`), over
 // stdio, from a root folder R and then from R/child, under a throwaway HOME, and the file the tool writes into its data
@@ -18,12 +17,13 @@
 // One line per run: RESULT <row> <root|child> <pass|fail> <where the data file was found>. Exit 1 when a named tool is
 // missing, else 0. Packages download into the throwaway folder's cache on the first run (minutes). The browser runs
 // headless (no window; it does not change where the profile goes). --list prints each server's tool names and exits.
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawn } = require('node:child_process');
-const { buildEntry } = require('../../scripts/entries/entry.ts');
-const catalog = require('../../scripts/catalog/catalog.ts').load();
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { buildEntry } from '../../scripts/entries/entry.ts';
+import { load } from '../../scripts/catalog/catalog.ts';
+const catalog = load();
 
 const DATA_FILE = { serena: 'serena_config.yml', memory: 'memory.db', appium: '.png' };
 const CALLS = {

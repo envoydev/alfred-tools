@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // THE UPDATE ENGINE - what is installed and behind its release: every plugin, the pinned MCP servers, the helper, bridge
 // and serena-context copies, and the new ways to pass data (fix's `upgrade` rows, the old plugins' uninstall among them).
 //
@@ -18,22 +17,22 @@
 // starts from the registration AS READ: the user's args, env and name stay, only the pin and the cut-off beside it move
 // (`--exclude-newer` for uvx, `npm_config_before` for npx). A remote route has no pin, a docker image tag is not checked,
 // and a registration that matches no catalog row is the user's and never touched.
-const path = require('node:path');
-const catalogLib = require('../catalog/catalog.ts');
-const cli = require('../core/claude-cli.ts');
-const registryLib = require('../catalog/registry.ts');
-const { realMachine } = require('../fix/common.ts');
-const { takenNames } = require('../plan/cursor-steps.ts');
-const { changedOutside } = require('../plan/repair-tail.ts');
-const cursorMcp = require('../cursor/cursor-mcp.ts');
-const account = require('../core/account.ts');
-const { pluginOffers } = require('./offers-plugins.ts');
-const { mcpOffers, cursorPinOffers } = require('./offers-pins.ts');
-const { helperOffers, upgradeOffers } = require('./offers-files.ts');
+import path from 'node:path';
+import * as catalogLib from '../catalog/catalog.ts';
+import * as cli from '../core/claude-cli.ts';
+import * as registryLib from '../catalog/registry.ts';
+import { realMachine } from '../fix/common.ts';
+import { takenNames } from '../plan/cursor-steps.ts';
+import { changedOutside } from '../plan/repair-tail.ts';
+import * as cursorMcp from '../cursor/cursor-mcp.ts';
+import * as account from '../core/account.ts';
+import { pluginOffers } from './offers-plugins.ts';
+import { mcpOffers, cursorPinOffers } from './offers-pins.ts';
+import { helperOffers, upgradeOffers } from './offers-files.ts';
 
 // ---- check -----------------------------------------------------------------------------------------------------------
 
-function makeCtx({ inv, project, catalog = catalogLib.load(), env = process.env, machine, runCli = cli.run, registry, now = Date.now(), refresh = true, data = null })
+export function makeCtx({ inv, project, catalog = catalogLib.load(), env = process.env, machine, runCli = cli.run, registry, now = Date.now(), refresh = true, data = null })
 {
     return {
         inv, project, catalog, env, runCli, now, refresh, data,
@@ -43,7 +42,7 @@ function makeCtx({ inv, project, catalog = catalogLib.load(), env = process.env,
 }
 
 // -> { offers, unchecked, skipped, held, errors, notes, waiting }
-async function check(ctx)
+export async function check(ctx)
 {
     const out = { offers: [], unchecked: [], skipped: [], held: [], errors: [], notes: [], waiting: 0, outside: changedOutside(ctx.inv, ctx.catalog), cursorOffers: [] };
     pluginOffers(ctx, out);
@@ -89,7 +88,7 @@ function cursorOffers(ctx, out)
 
 // The order update applies in (spec D9): list-import first, then the registration upgrades, then the other upgrades,
 // then every other offer; ties keep catalog/fixes.json's order.
-function ordered(picked, catalog)
+export function ordered(picked, catalog)
 {
     const order = catalog.fixes.map((f) => f.id);
     const rank = (c) => (typeof c === 'string' || c.kind !== 'upgrade' ? 3 : c.fix === 'list-import' ? 0 : c.fixKind === 'registration' ? 1 : 2);
@@ -97,9 +96,9 @@ function ordered(picked, catalog)
     return picked.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || at(a.c) - at(b.c) || a.i - b.i).map((x) => x.c);
 }
 
-const behind = (out) => out.offers.length + out.unchecked.length > 0;
+export const behind = (out) => out.offers.length + out.unchecked.length > 0;
 
-function render(out)
+export function render(out)
 {
     const lines = [...(out.outside || [])];
     if (lines.length) lines.push('');
@@ -138,4 +137,3 @@ function render(out)
     return lines.join('\n').replace(/^\n/, '');
 }
 
-module.exports = { makeCtx, check, render, behind, ordered };

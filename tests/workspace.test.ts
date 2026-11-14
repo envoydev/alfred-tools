@@ -1,13 +1,12 @@
-'use strict';
 // workspace.js - alfred-code's workspace record, read-only (spec D4a). The line-file fixtures follow the grammar in
 // alfred-code's stack/hooks/workspace-file.js (parseLegacy's header): `parent ..`, `parent none`, `role root`,
 // `child <path>`.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const ws = require('../scripts/roots/workspace.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as ws from '../scripts/roots/workspace.ts';
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-ws-')));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

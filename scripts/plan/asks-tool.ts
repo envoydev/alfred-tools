@@ -1,14 +1,14 @@
-'use strict';
 // One tool's questions: its route, scope and name, and configure's change questions.
-const path = require('node:path');
-const { keyOf, fromHere } = require('../inventory/inventory.ts');
-const { pinOf } = require('../inventory/table.ts');
-const { ROUTE_WORD, REC, recommendedScope, SCOPE_ORDER, PARENT_HELPER_IN_CHILD, SCOPE_LABEL, scopeText } = require('./asks-keys.ts');
-const { installedItems, rootInUse, ROOT_LABEL, ROOT_MOVES, packed } = require('./asks-picks.ts');
+import path from 'node:path';
+import { keyOf, fromHere } from '../inventory/inventory.ts';
+import { pinOf } from '../inventory/table.ts';
+import { ROUTE_WORD, REC, recommendedScope, SCOPE_ORDER, PARENT_HELPER_IN_CHILD, SCOPE_LABEL, scopeText } from './asks-keys.ts';
+import { installedItems, rootInUse, ROOT_LABEL, ROOT_MOVES, packed } from './asks-picks.ts';
+import * as X from '../inventory/existing.ts';
 
 // The configure pick: one option per installed registration, then the servers left on their own, then one per root
 // folder in use (spec D7, R3). `keys` maps each label to the key the answers use (`mcp:<name>~<scope>`, `root:<family>`).
-function changeQuestions(inv, catalog, ctx = {})
+export function changeQuestions(inv, catalog, ctx = {})
 {
     const describe = (row, h) =>
     {
@@ -17,7 +17,6 @@ function changeQuestions(inv, catalog, ctx = {})
     };
     const items = installedItems(inv, catalog, describe);
     // the servers left on their own (spec D6, R3): a group of their own, whose pick keeps them so or hands them over
-    const X = require('../inventory/existing.ts');
     const group = { id: 'own', label: 'On their own' };
     for (const it of X.ownItems(inv, catalog))
     {
@@ -38,7 +37,7 @@ function changeQuestions(inv, catalog, ctx = {})
 }
 
 // `current`: the route the registration has now, recommended first so 'Keep' is the default.
-function routeQuestion(row, current = null)
+export function routeQuestion(row, current = null)
 {
     const ids = Object.keys(row.routes);
     if (ids.length < 2) return null;
@@ -54,7 +53,7 @@ function routeQuestion(row, current = null)
 // Every scope for every row (the user's ruling, 2026-11-10: 'It must give options as user/project/local'). The one left
 // out: project for serena on Windows when this machine's profile path has a space - its home must be absolute and
 // space-free, and the committed file can only name it as ${USERPROFILE}\.serena.
-function scopesFor(row, routeId, ctx = null)
+export function scopesFor(row, routeId, ctx = null)
 {
     // a stdio route that needs a key holds it written in, which the .mcp.json in this folder never carries (spec D5)
     const route = row.routes && row.routes[routeId];
@@ -65,7 +64,7 @@ function scopesFor(row, routeId, ctx = null)
 
 // The scopes offered, the recommended one first. `current` is the registration configure changes; for an install,
 // `copyOf` lists this row's registrations at other scopes (the copy for every project), whose scopes are not offered again.
-function scopeOrder(row, inv, { route, current = null, copyOf = [], ctx = null } = {})
+export function scopeOrder(row, inv, { route, current = null, copyOf = [], ctx = null } = {})
 {
     const routeId = route || (current && current.route) || row.recommendedRoute;
     const all = scopesFor(row, routeId, ctx);
@@ -88,7 +87,7 @@ const STRANDED_TEXT = 'the scope it has now - it reads its key from the environm
 const CHILD_NO_KEY = PARENT_HELPER_IN_CHILD ? '' : "; a session started in a child folder connects without the key - Claude Code does not run a parent folder's helper there";
 const hostedKeyed = (row, routeId) => Boolean(row.routes && row.routes[routeId] && row.routes[routeId].helper && row.routes[routeId].runtime !== 'bridge');
 
-function scopeQuestion(row, inv, { route, current = null, copyOf = [], ctx = null } = {})
+export function scopeQuestion(row, inv, { route, current = null, copyOf = [], ctx = null } = {})
 {
     const routeId = route || (current && current.route) || row.recommendedRoute;
     const order = scopeOrder(row, inv, { route: routeId, current, copyOf, ctx });
@@ -105,13 +104,13 @@ const perProjectName = (row, ctx) => (ctx ? `${path.basename(ctx.project).replac
 
 // The registration name a `names` answer stands for: 'keep' (or none) - the name it has now, else the original;
 // 'prefixed' - the per-project name; else the name itself.
-function nameFor(row, name, current, ctx)
+export function nameFor(row, name, current, ctx)
 {
     if (!name || name === 'keep') return current ? current.name : row.name;
     return name === 'prefixed' ? perProjectName(row, ctx) : name;
 }
 
-function nameQuestion(row, inv, { current = null, copyOf = [], ctx = null } = {})
+export function nameQuestion(row, inv, { current = null, copyOf = [], ctx = null } = {})
 {
     const orig = row.name;
     const shadows = copyOf.find((c) => c.name === orig);
@@ -121,4 +120,3 @@ function nameQuestion(row, inv, { current = null, copyOf = [], ctx = null } = {}
     return { id: `name-${row.id}`, header: 'Name', multiSelect: false, question: `${row.label}: registration name?`, options };
 }
 
-module.exports = { changeQuestions, routeQuestion, scopeQuestion, nameQuestion, scopesFor, scopeOrder, nameFor };

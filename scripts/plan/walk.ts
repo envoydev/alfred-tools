@@ -1,19 +1,19 @@
-'use strict';
-const path = require('node:path');
-const { installedOf } = require('../inventory/inventory.ts');
-const roots = require('../roots/roots.ts');
-const { REC } = require('./asks-keys.ts');
-const { rootInUse } = require('./asks-picks.ts');
-const { scopeOrder } = require('./asks-tool.ts');
-const { STATIC } = require('./asks-other.ts');
-const { needsRoot } = require('./asks-roots.ts');
-const { all } = require('./asks-all.ts');
+import path from 'node:path';
+import { installedOf } from '../inventory/inventory.ts';
+import * as roots from '../roots/roots.ts';
+import { REC } from './asks-keys.ts';
+import { rootInUse } from './asks-picks.ts';
+import { scopeOrder } from './asks-tool.ts';
+import { STATIC } from './asks-other.ts';
+import { needsRoot } from './asks-roots.ts';
+import { all } from './asks-all.ts';
+import { homeDir } from '../core/account.ts';
 
 // ---- the walk (spec F1) ---------------------------------------------------------------------------------------------
 
 // configure's first question for a registration (spec F4): who looks after it. `root`: the folder its family's list
 // would sit in. -> { question, answers: { <label as shown>: { key, choice } } }
-function ownStep(item, root)
+export function ownStep(item, root)
 {
     const P = /^(?:[A-Za-z]:[\\/]|\\\\)/.test(String(root)) ? path.win32 : path.posix;
     const file = P.join(root, roots.FILES.list);
@@ -44,7 +44,7 @@ function pickOrder(catalog, ids)
 // install.md's and configure.md's picks.json - `done` the step ids answered, `walk` the settings answer, `tokens` the
 // API key answers. `built`: the all() output, when the caller has it.
 // -> { id, tool, call, answers, set? } | { id: 'done' }
-function next(inv, picks, catalog, opts = {}, built = null)
+export function next(inv, picks, catalog, opts = {}, built = null)
 {
     picks = picks || {};
     const b = built || all(inv, picks, catalog, opts);
@@ -120,7 +120,7 @@ function next(inv, picks, catalog, opts = {}, built = null)
         {
             const family = roots.familyOf(t.current.scope);
             const root = rootInUse(inv, family, { home: opts.home, catalog });
-            const fallback = roots.resolve(inv, picks.roots, { project: inv.project, platform: inv.os, home: opts.home || require('../core/account.ts').homeDir(process.env), catalog }).roots[family];
+            const fallback = roots.resolve(inv, picks.roots, { project: inv.project, platform: inv.os, home: opts.home || homeDir(process.env), catalog }).roots[family];
             const o = ownStep({ key, name: t.current.name, scope: t.current.scope }, root ? root.path : fallback);
             add(`${key}:own`, key, [o.question], { [o.question.id]: o.answers });
             if ((picks.existing || {})[key] === 'own') continue;
@@ -131,4 +131,3 @@ function next(inv, picks, catalog, opts = {}, built = null)
     return steps.find((s) => !done.has(s.id)) || { id: 'done' };
 }
 
-module.exports = { ownStep, next };

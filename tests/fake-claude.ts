@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // A FAKE `claude` for the tests. It records every call's argv (FAKE_CLAUDE_LOG, JSON lines) and emulates what the real
 // CLI was MEASURED doing (Claude Code 2.1.311, docs/sources.md): `mcp add-json` / `remove` write .mcp.json or the
 // account file; `plugin install` over an installed plugin is a no-op at the same scope, flips a disabled row on, and adds
@@ -8,10 +7,10 @@
 //   FAKE_CLAUDE_STATE    folder holding plugins.json (the fake's plugin and marketplace records)
 //   FAKE_CLAUDE_FAIL     comma-separated substrings; a call whose argv contains one fails with exit 1
 //   FAKE_CLAUDE_VERSIONS JSON {"<plugin id>": "<version a fresh install or update lands on>"}
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const argv = process.argv.slice(2);
 const cwd = process.cwd();

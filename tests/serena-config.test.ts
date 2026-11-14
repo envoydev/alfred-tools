@@ -1,13 +1,12 @@
-'use strict';
 // serena-config.js - base_modes: [] in <SERENA_HOME>/serena_config.yml (spec D7, F9). The file holds Serena's
 // auth_secret: the edit reads only the key it changes, touches no other byte and never prints the file.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const sc = require('../scripts/apply/serena-config.ts');
-const { plan } = require('../scripts/plan/plan.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import * as sc from '../scripts/apply/serena-config.ts';
+import { plan } from '../scripts/plan/plan.ts';
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-serena-')));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

@@ -1,16 +1,19 @@
-'use strict';
 // mcp-headers.js - the header helper a hosted registration names as `headersHelper` (spec D4). Each test copies it into
 // a throwaway root and runs it with its working folder elsewhere and HOME / USERPROFILE pointing into the throwaway world,
 // as Claude Code runs it: with CLAUDE_CODE_MCP_SERVER_NAME and _URL set. `{ byHand: true }` first runs it without them.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const keys = require('../scripts/keys/keys.ts');
+import test from 'node:test';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
+import * as keys from '../scripts/keys/keys.ts';
+import * as helper from '../scripts/copied/mcp-headers.js';
 
-const SOURCE = path.join(__dirname, '..', 'scripts', 'copied', 'mcp-headers.js');
+const SOURCE = path.join(import.meta.dirname, '..', 'scripts', 'copied', 'mcp-headers.js');
+// The copied files stay CommonJS: a test that loads one by its path loads it through a require.
+const requireCopied = createRequire(import.meta.url);
 const G = 'GITHUB_PERSONAL_ACCESS_TOKEN';
 const put = (file, text) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
 const sec = (dir) => path.join(dir, '.mcps-secrets');
@@ -124,7 +127,6 @@ test('stdout always parses as JSON', () => {
 });
 
 test('its chain equals keys.hostedChain for project, local and global scope', () => {
-    const helper = require('../scripts/copied/mcp-headers.js');
     const h = path.join(path.sep, 'h');
     const p = path.join(path.sep, 'w', 'p', '.alfred');
     const k = path.join(path.sep, 'k');
@@ -179,7 +181,6 @@ test('a note after the value is not part of the key, in the helper and in keys.j
 });
 
 test('digestOf reads a CRLF copy as the same helper', () => {
-    const helper = require('../scripts/copied/mcp-headers.js');
     const text = fs.readFileSync(SOURCE, 'utf8');
     assert.strictEqual(helper.digestOf(text.replace(/\n/g, '\r\n')), helper.digestOf(text));
     assert.strictEqual(helper.digestOf(Buffer.from(text)), helper.digestOf(text));
@@ -204,7 +205,7 @@ test('Bearer sends a value with a colon as it is', () => assert.deepStrictEqual(
 // ---- helper 4: the reader the bridge shares (0.4.0) -------------------------------------------------------------------
 
 test('valueIn takes the first non-empty value in chain order and names its file', () => {
-    const helper = require(SOURCE);
+    const helper = requireCopied(SOURCE);
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-valueof-')));
     try
     {
@@ -221,7 +222,7 @@ test('valueIn takes the first non-empty value in chain order and names its file'
 });
 
 test('authValue is the scheme and the value, with the Basic base64 rule', () => {
-    const helper = require(SOURCE);
+    const helper = requireCopied(SOURCE);
     assert.strictEqual(helper.authValue('Bearer', 'x:y'), 'Bearer x:y');
     assert.strictEqual(helper.authValue('Sentry-Bearer', 'pt-key'), 'Sentry-Bearer pt-key');
     assert.strictEqual(helper.authValue('Basic', 'a@b:t'), 'Basic YUBiOnQ=');
@@ -229,7 +230,7 @@ test('authValue is the scheme and the value, with the Basic base64 rule', () => 
 });
 
 test('helper 4 prints the same headers as helper 3, and exports its reader', () => {
-    const helper = require(SOURCE);
+    const helper = requireCopied(SOURCE);
     assert.strictEqual(helper.HELPER_VERSION, 4);
     assert.match(fs.readFileSync(SOURCE, 'utf8').split('\n')[0], /^\/\/ preferred-tools mcp-headers 4$/);
     for (const k of ['chainOf', 'digestOf', 'readDotenv', 'valueIn', 'authValue']) assert.strictEqual(typeof helper[k], 'function', k);

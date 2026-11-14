@@ -1,30 +1,30 @@
-'use strict';
 // The key questions: which key a hosted route reads, and the name it is kept under.
-const path = require('node:path');
-const { rootOf } = require('../entries/locations.ts');
-const { settingsOf } = require('../entries/entry.ts');
-const keys = require('../keys/keys.ts');
+import path from 'node:path';
+import { rootOf } from '../entries/locations.ts';
+import { settingsOf } from '../entries/entry.ts';
+import * as keys from '../keys/keys.ts';
+import { readRegistration } from '../core/account.ts';
 
-const REC = ' (Recommended)';
+export const REC = ' (Recommended)';
 // The `remote` route is worded 'hosted' in every ask: alfred-code's stop guard reads a bare 'remote' in an ask as git
 // state and sends Claude to fetch and re-ask (docs/sources.md, 'alfred-code hooks over the commands').
-const ROUTE_WORD = { remote: 'hosted', local: 'local', bridge: 'bridge' };
-const HEADER = { code: 'Code', docs: 'Docs, forges', browsers: 'Browsers', machine: 'Machine', own: 'On their own', roots: 'Root folders' };
-const SCOPE_TEXT = {
+export const ROUTE_WORD = { remote: 'hosted', local: 'local', bridge: 'bridge' };
+export const HEADER = { code: 'Code', docs: 'Docs, forges', browsers: 'Browsers', machine: 'Machine', own: 'On their own', roots: 'Root folders' };
+export const SCOPE_TEXT = {
     local: 'this project, only you (~/.claude.json, under this project)',
     project: "the .mcp.json in this folder - every session started here or below it; it names this machine's paths, so a teammate's clone points at yours, and never holds a key",
     user: "every project on this machine (Claude Code's user scope, in ~/.claude.json)",
 };
 // Only words change (spec D1): the value stays user, project or local in picks, answers, the plan and on the CLI.
-const SCOPE_LABEL = { user: 'Global', project: 'Project', local: 'Local' };
-const scopeOfLabel = (label) => Object.keys(SCOPE_LABEL).find((s) => SCOPE_LABEL[s] === String(label).replace(/ \(Recommended\)$/, '')) || null;
-const scopeText = (s) => SCOPE_TEXT[s];
+export const SCOPE_LABEL = { user: 'Global', project: 'Project', local: 'Local' };
+export const scopeOfLabel = (label) => Object.keys(SCOPE_LABEL).find((s) => SCOPE_LABEL[s] === String(label).replace(/ \(Recommended\)$/, '')) || null;
+export const scopeText = (s) => SCOPE_TEXT[s];
 // every scope question lists the recommended scope first, then the others in this order (the user's ruling, 2026-11-10)
-const SCOPE_ORDER = ['user', 'project', 'local'];
+export const SCOPE_ORDER = ['user', 'project', 'local'];
 
 // M1 (docs/sources.md 'Claude Code - headersHelper', 2026-11-11, Claude Code 2.1.322): does a parent folder's helper,
 // named by absolute path, run in a session started in a child folder? Measured: no.
-const PARENT_HELPER_IN_CHILD = false;
+export const PARENT_HELPER_IN_CHILD = false;
 
 // Where a route's key is, by name only (spec D3, D9): { variable, kind, scope, files, found } - or null for a route that
 // takes no key. `variable` is the catalog's default name; `kind` 'helper' for a hosted route (mcp-headers.js reads the
@@ -33,7 +33,7 @@ const PARENT_HELPER_IN_CHILD = false;
 // order; `found` the default name's entry when it is filled, else the first other, else null. `old` the same for the
 // files 0.1.x read (names only). `ctx.keyHome`, when the ctx has one, decides whether files outside the project are
 // read (null: none); else they are.
-function keyStateOf(row, routeId, ctx, alfredEnabled, scope = 'user')
+export function keyStateOf(row, routeId, ctx, alfredEnabled, scope = 'user')
 {
     const route = row.routes && row.routes[routeId];
     if (!route || !ctx) return null;
@@ -65,7 +65,7 @@ function keyStateOf(row, routeId, ctx, alfredEnabled, scope = 'user')
 // the row id (in the chain, then in a file 0.1.x read), and 'A name you choose', asked next. Recommended: `current` (the
 // name the registration uses, for configure), else a name filled in the chain - the default first when both are -
 // else the default. -> { question, answers: { <label as shown>: NAME | 'named' } } | null for a route with no key here.
-function keyNameQuestion(row, routeId, scope, ctx, { current = null } = {})
+export function keyNameQuestion(row, routeId, scope, ctx, { current = null } = {})
 {
     const ks = keyStateOf(row, routeId, ctx, null, scope);
     if (!ks || (ks.kind === 'stdio' && scope === 'project')) return null;
@@ -90,7 +90,7 @@ function keyNameQuestion(row, routeId, scope, ctx, { current = null } = {})
 // the wrong URL with no warning, while an unfilled catalog name stops the bridge with its name (review I2). A name found
 // is filled in the hosted chain, holds the row word (SENTRY for sentry), and is not a credential, the key's name, or a
 // name an earlier question recommends. -> [{ var, question, answers }] ([] for another route)
-function urlNameQuestions(row, routeId, scope, ctx, { current = null, keyName = null } = {})
+export function urlNameQuestions(row, routeId, scope, ctx, { current = null, keyName = null } = {})
 {
     const route = row.routes && row.routes[routeId];
     if (!route || route.runtime !== 'bridge' || !ctx) return [];
@@ -127,7 +127,7 @@ function urlNameQuestions(row, routeId, scope, ctx, { current = null, keyName = 
 // D9: a stdio route's settings - 'Keep these settings' listing NAME=value, or 'No settings' for an empty env, then
 // 'Change or add a setting', after which the walk asks for NAME=value pairs. `entry`: the registration as read
 // (configure), else the catalog's env. -> { question, answers: { <label>: 'keep' | 'change' } } | null for a hosted route.
-function settingsQuestion(row, routeId, { entry = null } = {})
+export function settingsQuestion(row, routeId, { entry = null } = {})
 {
     // a hosted route, and a bridge (0.4.0), take no settings
     if (routeId === 'remote' || !row.routes[routeId] || row.routes[routeId].runtime === 'bridge') return null;
@@ -142,10 +142,10 @@ function settingsQuestion(row, routeId, { entry = null } = {})
 
 // The live registration, read in this process when the env names an account (R1: the inventory file is masked); a
 // caller that passes no env reads none.
-const liveReader = (project, env) => (env && (env.CLAUDE_CONFIG_DIR || env.HOME || env.USERPROFILE) ? (name, scope) => require('../core/account.ts').readRegistration(name, scope, project, env) : () => undefined);
+export const liveReader = (project, env) => (env && (env.CLAUDE_CONFIG_DIR || env.HOME || env.USERPROFILE) ? (name, scope) => readRegistration(name, scope, project, env) : () => undefined);
 
 // The key a stdio registration holds, from its first token field: a value, or null for none (empty, ${VAR} only).
-function heldKey(entry, route)
+export function heldKey(entry, route)
 {
     const f = keys.tokenFields(entry, route)[0];
     const v = f ? f.at.reduce((o, k) => (o == null ? undefined : o[k]), entry) : undefined;
@@ -156,7 +156,7 @@ function heldKey(entry, route)
 // settles (spec F2): global while a parent folder's helper does not run in a child folder's session (a global helper has
 // an absolute path, needs no folder trust and serves every session, a workspace child included), else project. A user
 // who then picks OAuth or no key keeps the scope picked. A hosted route with no key: project.
-function recommendedScope(row, routeId)
+export function recommendedScope(row, routeId)
 {
     // a bridge holds names only and connects in a child folder too (0.4.0 Ruling 6): this project's own server
     if (row.routes[routeId] && row.routes[routeId].runtime === 'bridge') return 'project';
@@ -166,6 +166,5 @@ function recommendedScope(row, routeId)
     return PARENT_HELPER_IN_CHILD ? 'project' : 'user';
 }
 // an optional key is sent by default when a name D9 offers is filled in the chain the chosen scope reads
-const keyToSend = (keyState) => Boolean(keyState && keyState.found);
+export const keyToSend = (keyState) => Boolean(keyState && keyState.found);
 
-module.exports = { PARENT_HELPER_IN_CHILD, SCOPE_TEXT, keyNameQuestion, urlNameQuestions, settingsQuestion, liveReader, heldKey, SCOPE_LABEL, scopeOfLabel, REC, recommendedScope, keyStateOf, keyToSend, HEADER, ROUTE_WORD, SCOPE_ORDER, scopeText };

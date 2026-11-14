@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-'use strict';
 // THE .mcp.json WALK - which project files Claude Code loads from a folder, its parents and its subfolders, which one
 // wins a name clash, where a subfolder session writes, and what approves a project server. The real CLI in a throwaway
 // home and account, logged out, no model.
@@ -26,13 +25,13 @@
 //
 // One line per measurement: RESULT M<n> ... | NOT RUN - <reason>, then the FACT lines docs/sources.md records. Exit 0
 // when the control passed and every measurement asked for ran. Paths print as <S>; in RESULT lines, relative to home.
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const cli = require('../../scripts/core/claude-cli.ts');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import * as cli from '../../scripts/core/claude-cli.ts';
 
-const FAKE = path.resolve(__dirname, '..', 'fake-mcp-server.ts');
+const FAKE = path.resolve(import.meta.dirname, '..', 'fake-mcp-server.ts');
 const WIN = process.platform === 'win32';
 const ALL = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7'];
 const FOLDERS = ['ws', 'ws/api', 'ws/api/src', 'ws/web'];
@@ -48,7 +47,7 @@ const servers = (map) => ({ mcpServers: Object.fromEntries(Object.entries(map).m
 const nameOf = (tag) => (DUP_TAGS.has(tag) ? 'dup' : tag);
 const list = (items) => `[${[...items].join(', ')}]`;
 
-function world(S, name, claudeDir)
+export function world(S, name, claudeDir)
 {
     const root = path.join(S, name);
     const home = path.join(root, 'home');
@@ -84,7 +83,7 @@ function world(S, name, claudeDir)
 }
 
 // One CLI call with its own start log. -> { status, out, started: [{ tag, cwd }] }
-function call(d, cwd, args, timeout = 90000)
+export function call(d, cwd, args, timeout = 90000)
 {
     const log = path.join(d.logs, `${String(++d.seq).padStart(3, '0')}.log`);
     const r = cli.run(args, { cwd, env: { ...d.env, PT_PROBE_LOG: log }, timeout });
@@ -103,7 +102,7 @@ const cwdsOf = (d, r) => [...new Set(r.started.map((s) => rel(d, s.cwd)))].sort(
 
 // `claude mcp list` -> { name: connected | pending | rejected | failed | <text> }
 const word = (s) => (/Connected/.test(s) ? 'connected' : /Pending/.test(s) ? 'pending' : /Rejected/.test(s) ? 'rejected' : /Failed/i.test(s) ? 'failed' : s.trim());
-function listed(out)
+export function listed(out)
 {
     const map = {};
     for (const line of out.split(/\r?\n/))
@@ -276,7 +275,7 @@ function measure(only, S, claudeDir, print)
 }
 
 // The fact block Task 5 encodes. A value outside the named set is printed as `other (...)`: the plan's stop.
-function facts(res)
+export function facts(res)
 {
     const out = [];
     if (res.m1)
@@ -347,5 +346,4 @@ function main(argv)
     }
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { listed, facts, world, call };
+if (import.meta.main) process.exit(main(process.argv.slice(2)));

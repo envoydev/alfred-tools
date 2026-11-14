@@ -1,15 +1,18 @@
-'use strict';
 // The machine fixes: a problem on this machine, not in a registration. The fix changes the machine (a plugin uninstalled,
 // a data folder's .gitignore, a broken npx cache folder removed), so it runs only when the user picked it, and is read
 // back by running the detector again. A fix that changes nothing a running session uses returns `restart: false`; one
 // that leaves a package to download again returns its `fetch` step, which fix.js hands to fetch.js.
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
-const C = require('./common.ts');
-const { rootOfEntry } = require('../entries/locations.ts');
-const { bridgeParts } = require('../entries/entry.ts');
-const { fetchStep } = require('../entries/names.ts');
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import * as C from './common.ts';
+import { rootOfEntry } from '../entries/locations.ts';
+import { bridgeParts } from '../entries/entry.ts';
+import { fetchStep } from '../entries/names.ts';
+import * as declines from '../core/declines.ts';
+import * as cli from '../core/claude-cli.ts';
+import * as inventory from '../inventory/inventory.ts';
+import * as hud from '../hud/hud-statusline.ts';
 
 // ---- retired-plugin (spec D8, D9, 0.5.0) -------------------------------------------------------------------------------
 // typescript-lsp, csharp-lsp and claude-hud work in Claude Code alone, so the catalog no longer lists them. Each id the row
@@ -17,9 +20,8 @@ const { fetchStep } = require('../entries/names.ts');
 // kept in <plugin data>/retired-declined.json (declines.js); a declined one is shown as advice, never applied. Where
 // alfred-code is set up it installs the same plugins, so fix.js keeps those out of 'Apply all found' (`alfred`).
 
-function retiredPluginDetect(ctx)
+export function retiredPluginDetect(ctx)
 {
-    const declines = require('../core/declines.ts');
     const ids = C.fixOf(ctx, 'retired-plugin').ids || [];
     const declined = declines.read(ctx.data);
     const alfred = Boolean(ctx.inv.alfredCodeEnabled);
@@ -37,11 +39,8 @@ function retiredPluginDetect(ctx)
 
 // `claude plugin uninstall <id> --scope <scope>`, read back from the plugin list. claude-hud's statusLine goes with the
 // last claude-hud: the account line is shared by every scope, so it stays while another scope still has the plugin.
-function retiredPluginFix(f, ctx)
+export function retiredPluginFix(f, ctx)
 {
-    const cli = require('../core/claude-cli.ts');
-    const inventory = require('../inventory/inventory.ts');
-    const hud = require('../hud/hud-statusline.ts');
     const command = `claude plugin uninstall ${f.name} --scope ${f.scope}`;
     const r = cli.run(['plugin', 'uninstall', f.name, '--scope', f.scope], { cwd: ctx.inv.project, env: ctx.env });
     if (r.error || r.status !== 0) return { ok: false, detail: `${command} failed - ${String(`${r.stderr || ''}${r.stdout || ''}` || (r.error && r.error.message) || 'no output').trim().split('\n').slice(-1)[0]}` };
@@ -70,7 +69,7 @@ function ignoredByGit(ctx, rel)
     return r && (r.status === 0 || r.status === 1) ? r.status === 0 : null;
 }
 
-function dataFolderIgnoreDetect(ctx)
+export function dataFolderIgnoreDetect(ctx)
 {
     const P = ctx.platform === 'win32' ? path.win32 : path.posix;
     const tools = C.fixOf(ctx, 'data-folder-ignore').tool;
@@ -144,7 +143,7 @@ function leftoverCopy(ctx, r, root, P)
 }
 
 // Create the folder with a .gitignore holding `*`, as the plan's ensure-dir step does; a .gitignore already there is left.
-function dataFolderIgnoreFix(f, ctx)
+export function dataFolderIgnoreFix(f, ctx)
 {
     const file = path.join(f.proposal.path, '.gitignore');
     try
@@ -199,7 +198,7 @@ function npmCacheOf(ctx, reg, memo)
 const startsHere = (ctx, r) => !r.own && !r.alfredRetired && r.choice !== 'own' && r.approval !== 'rejected' && !(r.scope === 'inherited' && r.shadowed)
     && C.fixOf(ctx, 'npx-cache-entry').tool.includes(r.rowId);
 
-function npxCacheEntryDetect(ctx)
+export function npxCacheEntryDetect(ctx)
 {
     const P = ctx.platform === 'win32' ? path.win32 : path.posix;
     const memo = new Map();
@@ -223,7 +222,7 @@ function npxCacheEntryDetect(ctx)
 }
 
 // Remove that folder, never another: it must be a 16-hex folder directly under an _npx folder. -> { ok, detail, fetch }
-function npxCacheEntryFix(f, ctx)
+export function npxCacheEntryFix(f, ctx)
 {
     const P = ctx.platform === 'win32' ? path.win32 : path.posix;
     const folder = f.proposal.path;
@@ -237,4 +236,3 @@ function npxCacheEntryFix(f, ctx)
     return { ok: true, detail: `removed ${folder} - npx installs ${f.proposal.what} into it again`, fetch: step ? { ...step, ...where } : null };
 }
 
-module.exports = { retiredPluginDetect, retiredPluginFix, dataFolderIgnoreDetect, dataFolderIgnoreFix, npxCacheEntryDetect, npxCacheEntryFix };
