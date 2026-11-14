@@ -21,11 +21,11 @@ const path = require('node:path');
 const cli = require('../../scripts/core/claude-cli.js');
 const roots = require('../../scripts/roots/roots.js');
 const catalogLib = require('../../scripts/catalog/catalog.js');
-const E = require('../../scripts/entries.js');
-const existing = require('../../scripts/existing.js');
+const { shellArg, buildEntry } = require('../../scripts/entries/entry.js');
+const existing = require('../../scripts/inventory/existing.js');
 const fix = require('../../scripts/fix.js');
 const update = require('../../scripts/update.js');
-const { REFUSED } = require('../../scripts/apply.js');
+const { REFUSED } = require('../../scripts/apply/run.js');
 const fake = require('../fake-mcp-http.js');
 const { Harness } = require('../harness.js');
 const { keepWritten } = require('../proof/matrix-keep.js');
@@ -59,7 +59,7 @@ test('X1 - gitlab at project scope with a key: the helper named by its absolute 
     ok(r);
     const root = path.join(dir, '.preferred-tools');
     const e = servers(dir).gitlab;
-    assert.strictEqual(e.headersHelper, `node ${E.shellArg(path.join(root, roots.FILES.helper), style)} GITLAB_TOKEN Bearer`);
+    assert.strictEqual(e.headersHelper, `node ${shellArg(path.join(root, roots.FILES.helper), style)} GITLAB_TOKEN Bearer`);
     assert.ok(fs.existsSync(path.join(root, roots.FILES.helper)), 'the helper is in the root');
     assert.match(r.rendered, /^Key: gitlab \(project scope\) - GITLAB_TOKEN;/m);
     assert.match(fs.readFileSync(path.join(root, roots.FILES.secrets), 'utf8'), /^GITLAB_TOKEN=$/m, 'the name, empty, for the user to fill');
@@ -99,9 +99,9 @@ test('X4 - fix on a 0.2.0 project file: relative paths and helper written absolu
     const dir = h.project('p');
     const ctx = { platform: process.platform, arch: process.arch, env: h.env, home: h.home, project: dir };
     // what 0.2.0 wrote: relative folders, a relative helper, and the servers in the order they were added
-    const pw = E.buildEntry(catalog.byId.get('playwright-chrome'), 'local', { rootStr: '.preferred-tools/playwright-chrome', scope: 'project', token: false }, ctx, catalog.rules);
+    const pw = buildEntry(catalog.byId.get('playwright-chrome'), 'local', { rootStr: '.preferred-tools/playwright-chrome', scope: 'project', token: false }, ctx, catalog.rules);
     pw.args = pw.args.map((a) => (a.startsWith('@playwright/mcp@') ? '@playwright/mcp@0.0.70' : a === path.join('.preferred-tools/playwright-chrome', 'output') ? '.preferred-tools/playwright-chrome/output' : a));
-    const serena = E.buildEntry(catalog.byId.get('serena'), 'local', { rootStr: '.preferred-tools/serena', scope: 'project', token: false }, ctx, catalog.rules);
+    const serena = buildEntry(catalog.byId.get('serena'), 'local', { rootStr: '.preferred-tools/serena', scope: 'project', token: false }, ctx, catalog.rules);
     const c7 = { type: 'http', url: catalog.byId.get('context7').routes.remote.url, headersHelper: 'node .preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' };
     for (const [name, entry] of [['playwright-chrome', pw], ['serena', serena], ['context7', c7]])
         assert.strictEqual(h.claude(dir, ['mcp', 'add-json', name, JSON.stringify(entry), '-s', 'project']).status, 0);
@@ -122,7 +122,7 @@ test('X4 - fix on a 0.2.0 project file: relative paths and helper written absolu
     assert.strictEqual(after.serena.env.SERENA_HOME, path.join(root, 'serena'));
     assert.strictEqual(arg(after.serena, '--exclude-newer'), cutoff, 'the cut-off as seeded');
     assert.deepStrictEqual(after.serena.args, before.serena.args, 'serena\'s args as seeded');
-    assert.strictEqual(after.context7.headersHelper, `node ${E.shellArg(path.join(root, roots.FILES.helper), style)} CONTEXT7_API_KEY Bearer`);
+    assert.strictEqual(after.context7.headersHelper, `node ${shellArg(path.join(root, roots.FILES.helper), style)} CONTEXT7_API_KEY Bearer`);
     const left = fix.detectAll(fix.makeCtx({ inv: h.inventory(dir), env: h.env, data: h.data })).found.map((f) => f.id);
     assert.ok(!left.includes('project-relative-path') && !left.includes('mcp-order'), left.join(', '));
 });

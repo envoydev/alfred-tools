@@ -6,7 +6,8 @@
 // A key is compared in this process only: a finding names a key and a file, never a value.
 const fs = require('node:fs');
 const path = require('node:path');
-const E = require('../entries.js');
+const { pathFor } = require('../entries/platform.js');
+const { helperFor, contextArgAt, bridgeParts } = require('../entries/entry.js');
 const keys = require('../keys/keys.js');
 const roots = require('../roots/roots.js');
 const { HELPER_VERSION } = require('../mcp-headers.js');
@@ -71,7 +72,7 @@ function keyToHelperFix(entry, f, ctx)
     if (auth) delete out.headers[auth.header];
     if (out.headers && !Object.keys(out.headers).length) delete out.headers;
     const route = C.rowOf(ctx, f.row).routes[f.route];
-    out.headersHelper = E.helperFor(route, f.scope, { project: ctx.inv.project, platform: ctx.platform, home: ctx.home, roots: f.roots }, f.keyName);
+    out.headersHelper = helperFor(route, f.scope, { project: ctx.inv.project, platform: ctx.platform, home: ctx.home, roots: f.roots }, f.keyName);
     return out;
 }
 
@@ -82,7 +83,7 @@ function keyToHelperFix(entry, f, ctx)
 const SHIPPED = { helper: { word: 'helper', version: HELPER_VERSION }, bridge: { word: 'bridge', version: BRIDGE_VERSION }, serenaContext: { word: 'context', version: roots.SERENA_CONTEXT_VERSION } };
 function shippedFiles(ctx, fixId)
 {
-    const P = E.pathFor(ctx.platform);
+    const P = pathFor(ctx.platform);
     const seen = new Map();
     const add = (file, kind, reg) => { if (!seen.has(file)) seen.set(file, { file, root: P.dirname(file), kind, reg }); };
     let familyRoots = null;
@@ -92,14 +93,14 @@ function shippedFiles(ctx, fixId)
         if (named) add(roots.absOf(named, rootCtx(ctx)), 'helper', reg);
         // serena's context file (0.5.0, D7): the --context path a managed serena names
         // only the root's own: a path elsewhere is serena-context's to repoint, and a folder there may not be writable
-        const ctxAt = E.contextArgAt(reg.entry);
+        const ctxAt = contextArgAt(reg.entry);
         if (ctxAt >= 0)
         {
             const file = roots.absOf(reg.entry.args[ctxAt], rootCtx(ctx));
             const root = (familyRoots || (familyRoots = rootsOf(ctx)))[roots.familyOf(reg.scope)];
             if (root && file === P.join(root, roots.FILES.serenaContext)) add(file, 'serenaContext', reg);
         }
-        const bridge = E.bridgeParts(reg.entry);
+        const bridge = bridgeParts(reg.entry);
         if (!bridge) continue;
         const file = roots.absOf(bridge.path, rootCtx(ctx));
         add(file, 'bridge', reg);
@@ -110,7 +111,7 @@ function shippedFiles(ctx, fixId)
 
 // `bridged`: found through a bridge registration, which did not start without the file - so its fix needs a new start,
 // where a hosted server's helper runs at each connect (review)
-const helperFinding = (fixId, h, what, extra = {}) => ({ ...C.finding(fixId, h.reg, what, extra), name: h.file, path: h.file, shipped: h.kind, bridged: Boolean(E.bridgeParts(h.reg.entry)) || h.kind === 'serenaContext' });
+const helperFinding = (fixId, h, what, extra = {}) => ({ ...C.finding(fixId, h.reg, what, extra), name: h.file, path: h.file, shipped: h.kind, bridged: Boolean(bridgeParts(h.reg.entry)) || h.kind === 'serenaContext' });
 const nameOf = (h) => roots.FILES[h.kind];
 // the file this finding writes: 'helper' or 'bridge' (a finding from before 0.4.0 carries none: a helper)
 const kindOf = (f) => (f.shipped === 'bridge' || f.shipped === 'serenaContext' ? f.shipped : 'helper');
@@ -118,14 +119,14 @@ const kindOf = (f) => (f.shipped === 'bridge' || f.shipped === 'serenaContext' ?
 const withCommonjs = (root, r, kind) =>
 {
     if (kind === 'serenaContext') return r;
-    const pkg = require('../apply.js').ensureCommonjs(root);
+    const pkg = require('../apply/file-steps.js').ensureCommonjs(root);
     return { ...r, detail: [r.detail, pkg.wrote ? `wrote ${path.join(root, 'package.json')} (type commonjs)` : null, pkg.note].filter(Boolean).join('; ') };
 };
 
 function helperMissingDetect(ctx)
 {
     return shippedFiles(ctx, 'helper-missing').filter((h) => !fs.existsSync(h.file))
-        .map((h) => helperFinding('helper-missing', h, `${nameOf(h)} is missing - ${h.reg.name} (${h.reg.scope}) ${E.bridgeParts(h.reg.entry) || h.kind === 'serenaContext' ? 'does not start' : 'connects without its key'}`));
+        .map((h) => helperFinding('helper-missing', h, `${nameOf(h)} is missing - ${h.reg.name} (${h.reg.scope}) ${bridgeParts(h.reg.entry) || h.kind === 'serenaContext' ? 'does not start' : 'connects without its key'}`));
 }
 
 function helperMissingFix(f)
@@ -167,7 +168,7 @@ function helperStaleFix(f)
 // appended line can close is blocked and named.
 function rootIgnoreDetect(ctx)
 {
-    const { rootIgnoreLines } = require('../apply.js');
+    const { rootIgnoreLines } = require('../apply/file-steps.js');
     const out = [];
     for (const family of ['project', 'global'])
     {
@@ -203,7 +204,7 @@ function rootIgnoreDetect(ctx)
 
 function rootIgnoreFix(f)
 {
-    const r = require('../apply.js').rootIgnore(f.path);
+    const r = require('../apply/file-steps.js').rootIgnore(f.path);
     const still = [
         f.fixes.secrets && roots.gitIgnores(path.join(f.path, roots.FILES.secrets)) === false && `git would still commit ${path.join(f.path, roots.FILES.secrets)}`,
         f.fixes.helper && roots.gitIgnores(path.join(f.path, roots.FILES.helper)) === true && `git still ignores ${path.join(f.path, roots.FILES.helper)}`,

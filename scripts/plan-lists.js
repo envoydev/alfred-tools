@@ -8,7 +8,8 @@
 // The first plan that writes a family with no list yet imports it, as list-import does: every managed registration of
 // the family joins the list as read, and the 0.4.x record's own entries move into it, the record itself moved aside.
 const fs = require('node:fs');
-const E = require('./entries.js');
+const { pathFor } = require('./entries/platform.js');
+const { signInParts } = require('./entries/sign-in.js');
 const catalogLib = require('./catalog/catalog.js');
 const roots = require('./roots/roots.js');
 const keys = require('./keys/keys.js');
@@ -60,7 +61,7 @@ const ownChanged = (rec, next) => (!rec || rec.state ? next.length > 0 : JSON.st
 // own part runs only for a plan that read the answers (`ctx.recordLive`): fix.js has none.
 function listSteps(inv, ctx, out, regSteps = [])
 {
-    const P = E.pathFor(ctx.platform);
+    const P = pathFor(ctx.platform);
     const fileIn = (dir) => P.join(dir, roots.FILES.list);
     const map = (inv.roots && inv.roots.map) || null;
     const mapped = map && map.projects ? map.projects[roots.mapKey(ctx.project)] : null;
@@ -314,7 +315,7 @@ const sameKeys = (a, b) => a.size === b.size && [...a.keys()].every((n) => b.has
 // a change to this folder's project scope writes each member below it too: no member gets a root or a list.
 function cursorSteps(inv, ctx, out, answers = {})
 {
-    const P = E.pathFor(ctx.platform);
+    const P = pathFor(ctx.platform);
     const named = answers.cursorNames || {};
     const steps = [];
     const ws = inv.workspace !== undefined ? inv.workspace : (ctx.project ? workspace.of(ctx.project, ctx.env || {}) : null);
@@ -566,7 +567,7 @@ function changedOutside(inv, catalog = catalogLib.load())
 // ~/.claude - from ctx.home, so a test never reads the real one.
 function readGuardOf(ctx, want)
 {
-    const P = E.pathFor(ctx.platform);
+    const P = pathFor(ctx.platform);
     const env = ctx.env || {};
     const file = env.CLAUDE_CONFIG_DIR ? P.resolve(env.CLAUDE_CONFIG_DIR, 'settings.json') : P.join(ctx.home, '.claude', 'settings.json');
     let text = null;
@@ -592,7 +593,7 @@ function denyReadStep(file, rules)
 function denyReadSteps(steps, ctx, out)
 {
     const want = [
-        steps.some((x) => ['mcp-add', 'mcp-replace', 'mcp-move'].includes(x.op) && E.signInParts(x.entry)) && roots.READ_GUARD.signIns,
+        steps.some((x) => ['mcp-add', 'mcp-replace', 'mcp-move'].includes(x.op) && signInParts(x.entry)) && roots.READ_GUARD.signIns,
         steps.some((x) => x.op === 'ensure-key-name') && roots.READ_GUARD.secrets,
     ].filter(Boolean);
     if (!want.length) return [];

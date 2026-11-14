@@ -22,13 +22,17 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const catalogLib = require('./catalog/catalog.js');
-const E = require('./entries.js');
+const { pathFor } = require('./entries/platform.js');
+const { alfredData, recommendedSide, alfredNameProblem, logicalRoot, otherPlace, parseRoot, alfredRoot, defaultRoot, serenaSpaceFree, formatRoot, validWindowsSerenaHome, applyRoot } = require('./entries/locations.js');
+const { currentOf, buildEntry, applyContext, bridgeParts, helperGlobalRoot, bridgePathFor, renameTemplate, helperFor, subst, mergeSettings, contextArgAt, helperParts } = require('./entries/entry.js');
+const { signInParts, signInFormOf } = require('./entries/sign-in.js');
+const { nameProblem, fetchStep } = require('./entries/names.js');
 const asks = require('./asks.js');
 const account = require('./core/account.js');
 const keys = require('./keys/keys.js');
 const kept = require('./core/kept.js');
 const roots = require('./roots/roots.js');
-const existing = require('./existing.js');
+const existing = require('./inventory/existing.js');
 const { templateNames } = require('./mcp-bridge.js');
 
 // 'A', 'A and B', 'A, B and C'
@@ -37,8 +41,8 @@ const mcpOrder = require('./mcps-list/mcp-order.js');
 const planLists = require('./plan-lists.js');
 const mcpsList = require('./mcps-list/mcps-list.js');
 const cursorMcp = require('./cursor/cursor-mcp.js');
-const serenaConfig = require('./serena-config.js');
-const { installedOf, keyOf, targetOf, fromHere, otherWindowsMcp } = require('./inventory.js');
+const serenaConfig = require('./apply/serena-config.js');
+const { installedOf, keyOf, targetOf, fromHere, otherWindowsMcp } = require('./inventory/inventory.js');
 const { blockingStdio, deepEqual } = require('./core/json-file.js');
 
 const SCOPES = ['local', 'project', 'user'];
@@ -50,7 +54,7 @@ function makeCtx(inv, opts = {})
         home: opts.home || account.homeDir(opts.env || process.env), exists: opts.exists, isDir: opts.isDir, machine: opts.machine || {},
     };
     // alfred-code set up in this project (its .alfred/.gitignore): its folder is recommended for the data (D3)
-    ctx.alfredHere = E.alfredData(ctx, inv.alfredCodeEnabled);
+    ctx.alfredHere = alfredData(ctx, inv.alfredCodeEnabled);
     // a live registration, read in this process for a key comparison (R1) - only from an account the caller's env names
     ctx.readLive = opts.readLive || asks.liveReader(inv.project, opts.env);
     return ctx;
@@ -77,49 +81,49 @@ function resolveName(pick, row, cur, ctx)
 function wantedRoot(row, pick, cur, name, scope, ctx)
 {
     const serenaWin = row.locations.windowsAbsolute && ctx.platform === 'win32';
-    let loc = pick.location || { side: cur ? 'keep' : E.recommendedSide(row, scope, ctx) };
-    if (loc.side === 'default' && !serenaWin) loc = { side: E.recommendedSide(row, scope, ctx) };
+    let loc = pick.location || { side: cur ? 'keep' : recommendedSide(row, scope, ctx) };
+    if (loc.side === 'default' && !serenaWin) loc = { side: recommendedSide(row, scope, ctx) };
     // an .alfred project root holds alfred-code's own entries: a registration of this family is never given a name
     // that is one (a registration already under that name keeps it)
-    const P = E.pathFor(ctx.platform);
+    const P = pathFor(ctx.platform);
     if (scope !== 'user' && !(cur && cur.name === name) && ctx.roots && ctx.roots.project === P.join(ctx.project, '.alfred'))
     {
-        const problem = E.alfredNameProblem(name, ctx);
+        const problem = alfredNameProblem(name, ctx);
         if (problem) return { error: problem };
     }
     let root;
     let existing = false;
-    if (loc.side === 'keep' && cur && cur.rootStr) root = E.logicalRoot(cur.rootStr, ctx);
-    else if (loc.side === 'project') root = E.otherPlace(row, name, 'project', ctx);
-    else if (loc.side === 'account') root = E.otherPlace(row, name, 'account', ctx);
-    else if (loc.side === 'path') root = E.parseRoot(loc.path, ctx);
+    if (loc.side === 'keep' && cur && cur.rootStr) root = logicalRoot(cur.rootStr, ctx);
+    else if (loc.side === 'project') root = otherPlace(row, name, 'project', ctx);
+    else if (loc.side === 'account') root = otherPlace(row, name, 'account', ctx);
+    else if (loc.side === 'path') root = parseRoot(loc.path, ctx);
     else if (loc.side === 'alfred-data')
     {
         if (!ctx.alfredHere) return { error: 'alfred-code is not set up here (no .alfred/.gitignore) - pick another folder' };
-        const problem = E.alfredNameProblem(name, ctx);
+        const problem = alfredNameProblem(name, ctx);
         if (problem) return { error: problem };
         root = { kind: 'project', rel: `.alfred/${name}` };
     }
     else if (loc.side === 'alfred')
     {
         // only on the user's pick: the folder is alfred-code's, so deleting it erases this tool's data
-        root = E.alfredRoot(row, ctx);
+        root = alfredRoot(row, ctx);
         if (!root) return { error: "no alfred-code data folder for it on disk" };
         existing = true;
     }
     else
     {
-        const d = E.defaultRoot(row, name, ctx);
+        const d = defaultRoot(row, name, ctx);
         // serena on Windows with a spaced profile: the space-free folder the question recommends in its place
         if (d.needsInput && !serenaWin) return { error: d.needsInput };
-        root = d.needsInput ? E.serenaSpaceFree(ctx) : d.root;
+        root = d.needsInput ? serenaSpaceFree(ctx) : d.root;
         existing = Boolean(d.existing);
     }
     if (row.locations.windowsAbsolute && ctx.platform === 'win32')
     {
-        const resolved = E.formatRoot(root, 'local', ctx);
+        const resolved = formatRoot(root, 'local', ctx);
         const text = resolved.value && resolved.value.replace(/\//g, '\\');
-        if (!text || !E.validWindowsSerenaHome(text))
+        if (!text || !validWindowsSerenaHome(text))
             return { error: `serena's home on Windows must be absolute, in backslashes and space-free (fix row serena-windows-home); '${text || loc.path}' is not` };
         return { root: { kind: 'abs', path: text }, existing };
     }
@@ -139,7 +143,7 @@ function planMcp(row, pick, inv, ctx, catalog, out)
     // configure names its target; an install pick only adds, whatever else of this row is installed
     const here = inv.registrations.filter((r) => r.rowId === row.id && !r.alfredRetired);
     const target = pick.target ? here.find((r) => r.name === pick.target.name && r.scope === pick.target.scope) : null;
-    const cur = target ? E.currentOf(row, target) : null;
+    const cur = target ? currentOf(row, target) : null;
 
     // which apps (D3): the answer, else what the list holds for the target, else Claude Code only
     const listedEntry = target ? listedOf(inv, target) : null;
@@ -175,7 +179,7 @@ function planMcp(row, pick, inv, ctx, catalog, out)
         return out.unchanged.push(`${row.id}: '${name}' is already installed at ${scope} scope - a change to it is /preferred-tools:configure`);
     }
     const taken = inv.registrations.filter((r) => r.scope === scope);
-    const problem = E.nameProblem(name, { catalog, taken, self: cur ? { name: cur.name, scope: cur.scope } : null });
+    const problem = nameProblem(name, { catalog, taken, self: cur ? { name: cur.name, scope: cur.scope } : null });
     if (problem) return out.errors.push(`${row.id}: ${problem}`);
     // windows-mcp 0.8.8 makes one missed overlay confirmation permanent; another session cannot be seen, so it is named
     if (row.id === 'windows-control' && !target)
@@ -263,7 +267,7 @@ function planMcp(row, pick, inv, ctx, catalog, out)
     {
         const w = wantedRoot(row, pick, cur, name, scope, ctx);
         if (w.error) return out.errors.push(`${row.id}: ${w.error}`);
-        rootStr = E.formatRoot(w.root, scope, ctx).value;
+        rootStr = formatRoot(w.root, scope, ctx).value;
         dataAbs = rootStr;
         if (!w.existing) ensure = dataAbs;
         // an absolute --user-data-dir: every session under this folder opens the same persistent profile, which one
@@ -275,13 +279,13 @@ function planMcp(row, pick, inv, ctx, catalog, out)
     let entry;
     let fresh = !cur || cur.route !== routeId;
     if (fresh)
-        entry = E.buildEntry(row, routeId, { rootStr, scope, executablePath: wantExec, token: sendNow, keyName, params, urlNames }, ctx, catalog.rules);
+        entry = buildEntry(row, routeId, { rootStr, scope, executablePath: wantExec, token: sendNow, keyName, params, urlNames }, ctx, catalog.rules);
     else
     {
         entry = JSON.parse(JSON.stringify(cur.entry));
-        if (row.locations && rootStr !== cur.rootStr) entry = E.applyRoot(entry, row, rootStr, scope, ctx);
+        if (row.locations && rootStr !== cur.rootStr) entry = applyRoot(entry, row, rootStr, scope, ctx);
         // serena's context file follows the scope's root (D7)
-        if (route.run && route.run.includes('{contextFile}')) entry = E.applyContext(entry, scope, ctx);
+        if (route.run && route.run.includes('{contextFile}')) entry = applyContext(entry, scope, ctx);
         if (route.optionalArgs && route.optionalArgs.executablePath && wantExec !== cur.executablePath)
         {
             const args = (entry.args || []).slice();
@@ -294,12 +298,12 @@ function planMcp(row, pick, inv, ctx, catalog, out)
         {
             // from the registration as read (0.4.0): its path follows the scope, its template the URL names and its key
             // argument the key's name; the scheme, the pin and the cut-off stay
-            const parts = E.bridgeParts(entry);
+            const parts = bridgeParts(entry);
             const at = entry.args.findIndex((a) => String(a) === parts.path);
             const held = cur.urlNames || {};
             const rename = Object.fromEntries((route.urlVars || []).map((v) => [held[v.var] || v.var, urlNames[v.var]]));
-            const globalRoot = E.helperGlobalRoot(scope, ctx);
-            entry.args = [...entry.args.slice(0, at), E.bridgePathFor(scope, ctx), E.renameTemplate(parts.template, rename), keyName, ...entry.args.slice(at + 3, at + 5), ...(globalRoot ? [globalRoot] : []), ...entry.args.slice(at + 6)];
+            const globalRoot = helperGlobalRoot(scope, ctx);
+            entry.args = [...entry.args.slice(0, at), bridgePathFor(scope, ctx), renameTemplate(parts.template, rename), keyName, ...entry.args.slice(at + 3, at + 5), ...(globalRoot ? [globalRoot] : []), ...entry.args.slice(at + 6)];
         }
         else if (routeId === 'remote' && route.helper)
         {
@@ -312,7 +316,7 @@ function planMcp(row, pick, inv, ctx, catalog, out)
                 if (header) { delete entry.headers.Authorization; if (!Object.keys(entry.headers).length) delete entry.headers; }
             }
             else if (header) out.notes.push(`${row.id}: '${cur.name}' sends its key from an Authorization header - /preferred-tools:fix moves it into .mcps-secrets, read by mcp-headers.js (key-to-helper)`);
-            else entry.headersHelper = E.helperFor(route, scope, ctx, keyName);
+            else entry.headersHelper = helperFor(route, scope, ctx, keyName);
         }
         else if (route.authMode === 'optional-token' && sendNow !== cur.token)
         {
@@ -322,7 +326,7 @@ function planMcp(row, pick, inv, ctx, catalog, out)
             if (sendNow) args.push(...route.optionalArgs.token);
             entry.args = args;
         }
-        if (row.params && cur.host && params.host !== cur.host) entry.url = E.subst(route.url, params);
+        if (row.params && cur.host && params.host !== cur.host) entry.url = subst(route.url, params);
     }
 
     // Cursor's form of a hosted route (D5): a keyless OAuth route for both apps is the shared mcp-remote sign-in in the
@@ -333,9 +337,9 @@ function planMcp(row, pick, inv, ctx, catalog, out)
     {
         const family = roots.familyOf(scope);
         const root = (ctx.roots || {})[family];
-        const P = E.pathFor(ctx.platform);
-        const was = E.signInParts(entry);
-        const httpUrl = row.params && params.host ? E.subst(route.url, params) : (was ? was.url : entry.url);
+        const P = pathFor(ctx.platform);
+        const was = signInParts(entry);
+        const httpUrl = row.params && params.host ? subst(route.url, params) : (was ? was.url : entry.url);
         const exists = ctx.exists || ((x) => fs.existsSync(x));
         if (clients.includes('cursor') && root && (exists(root) || P.basename(root) === '.alfred') && roots.gitIgnores(P.join(root, roots.FILES.signIns, 'tokens')) === false)
         {
@@ -346,15 +350,15 @@ function planMcp(row, pick, inv, ctx, catalog, out)
         {
             entry = was
                 ? { ...entry, args: entry.args.map((a) => (a === was.url ? httpUrl : a)), env: { ...(entry.env || {}), MCP_REMOTE_CONFIG_DIR: root } }
-                : E.signInFormOf(httpUrl, root, catalog, ctx);
+                : signInFormOf(httpUrl, root, catalog, ctx);
             delete entry.url;
             form = 'signin';
-            if (cur && !E.signInParts(cur.entry)) out.notes.push(`${name}: sign in once more - the sign-in now lives in ${P.join(root, roots.FILES.signIns)}/ and serves both apps`);
+            if (cur && !signInParts(cur.entry)) out.notes.push(`${name}: sign in once more - the sign-in now lives in ${P.join(root, roots.FILES.signIns)}/ and serves both apps`);
         }
         else
         {
             if (was) entry = { type: 'http', url: httpUrl };
-            if (cur && E.signInParts(cur.entry)) out.notes.push(`${name}: Claude Code signs in on its own again (/mcp)`);
+            if (cur && signInParts(cur.entry)) out.notes.push(`${name}: Claude Code signs in on its own again (/mcp)`);
         }
     }
     else if (routeId === 'remote' && entry.headersHelper && clients.includes('cursor'))
@@ -376,7 +380,7 @@ function planMcp(row, pick, inv, ctx, catalog, out)
         clients = clients.filter((c) => c !== 'cursor');
     }
 
-    if (pick.settings) entry = E.mergeSettings(entry, route, pick.settings);
+    if (pick.settings) entry = mergeSettings(entry, route, pick.settings);
 
     // .mcp.json is committed: a move into it never carries a credential the route's own token field does not take - a
     // header of the user's own, a userinfo URL, a 0.1.x Authorization header (D7). A key never becomes a ${VAR} there: a
@@ -395,7 +399,7 @@ function planMcp(row, pick, inv, ctx, catalog, out)
     const keyed = ks && !(entry.headers && entry.headers.Authorization) ? ks : null;
     // a bridge (0.4.0) reads its key and its URL names from the hosted chain each time the server starts, never through
     // Claude Code
-    const bridge = E.bridgeParts(entry);
+    const bridge = bridgeParts(entry);
     let keyFile = null;
     let keyNames = [keyName];
     if (keyed && !(keyed.kind === 'stdio' && scope === 'project'))
@@ -450,8 +454,8 @@ function planMcp(row, pick, inv, ctx, catalog, out)
 
     // a launch the cache may not hold yet is fetched once it is written (entries.js fetchStep says why); a change that
     // keeps the package, such as a location or a name, fetches nothing
-    const fetch = E.fetchStep(name, entry, row.id, cur && cur.entry);
-    const uses = { helper: Boolean(entry.headersHelper) || Boolean(bridge), bridge: Boolean(bridge) || form === 'two', serenaContext: E.contextArgAt(entry) >= 0, keyFile, keyName, keyNames, data: dataAbs };
+    const fetch = fetchStep(name, entry, row.id, cur && cur.entry);
+    const uses = { helper: Boolean(entry.headersHelper) || Boolean(bridge), bridge: Boolean(bridge) || form === 'two', serenaContext: contextArgAt(entry) >= 0, keyFile, keyName, keyNames, data: dataAbs };
     // the shared sign-in's folder sits in the family's root: the root is written (its .gitignore) like any other
     const signInRoot = () => { if (form === 'signin') ctx.uses.push({ family: roots.familyOf(scope), root: ctx.roots[roots.familyOf(scope)] }); };
     // the apps and the form this registration is listed with (plan-lists.js)
@@ -489,7 +493,7 @@ function planMcp(row, pick, inv, ctx, catalog, out)
     useRoots(ctx, scope, uses);
     signInRoot();
     record();
-    if (row.locations && cur.rootStr && rootStr !== cur.rootStr && E.formatRoot(E.logicalRoot(cur.rootStr, ctx), 'local', ctx).value !== ensure)
+    if (row.locations && cur.rootStr && rootStr !== cur.rootStr && formatRoot(logicalRoot(cur.rootStr, ctx), 'local', ctx).value !== ensure)
         out.notes.push(`${row.id}: the old data stays at ${cur.rootStr}; moving a location moves no data`);
     if (ensure && (!cur.rootStr || rootStr !== cur.rootStr)) out.steps.push({ op: 'ensure-dir', path: ensure, why: `${row.id}: new data folder` });
     if (moved)
@@ -505,7 +509,7 @@ function planMcp(row, pick, inv, ctx, catalog, out)
 // change writes no file. `keyNames` (a bridge's key and URL names) replaces the one `keyName` when given.
 function useRoots(ctx, scope, { helper, bridge, serenaContext, keyFile, keyName, keyNames, data })
 {
-    const P = E.pathFor(ctx.platform);
+    const P = pathFor(ctx.platform);
     const r = ctx.roots || {};
     const inside = (root, p) => { if (!root || !p) return false; const rel = P.relative(root, p); return rel === '' || (!rel.startsWith('..') && !P.isAbsolute(rel)); };
     const familyOf = (p) => ['project', 'global'].find((f) => inside(r[f], p)) || null;
@@ -523,7 +527,7 @@ function useRoots(ctx, scope, { helper, bridge, serenaContext, keyFile, keyName,
 // exists is asked of git, and with a gap gets no key file and a note naming the fix.
 function fileSteps(inv, ctx, out, regSteps = [])
 {
-    const P = E.pathFor(ctx.platform);
+    const P = pathFor(ctx.platform);
     const exists = ctx.exists || ((p) => fs.existsSync(p));
     // first: a list's family root joins the roots this run writes into
     const lists = planLists.listSteps(inv, ctx, out, regSteps);
@@ -556,7 +560,7 @@ function fileSteps(inv, ctx, out, regSteps = [])
         // serena's context): rootIgnore appends only the lines it lacks
         if (existed && P.basename(r.root) !== '.alfred')
         {
-            const lines = require('./apply.js').rootIgnoreLines(r.root);
+            const lines = require('./apply/file-steps.js').rootIgnoreLines(r.root);
             if (lines.text !== null && lines.mine && lines.lack.length)
                 ignore.push({ op: 'root-ignore', path: r.root, why: `${r.root}: its .gitignore gains ${lines.lack.join(', ')}` });
         }
@@ -687,7 +691,7 @@ function plan(inv, answers, opts = {})
 // the names in use (names only) and the record, and the roots map points at it. No data and no key value moves.
 function planRootChange(answers, inv, ctx, catalog, out)
 {
-    const P = E.pathFor(ctx.platform);
+    const P = pathFor(ctx.platform);
     for (const family of answers.rootChange || [])
     {
         if (!['project', 'global'].includes(family)) { out.errors.push(`rootChange: '${family}' is not a root family - project or global`); continue; }
@@ -717,8 +721,8 @@ function planRootChange(answers, inv, ctx, catalog, out)
             const row = catalog.byId.get(r.rowId);
             // a target changed in this run is planned there, into the new root as well
             if (!row || row.kind !== 'mcp' || ctx.changing.has(keyOf('mcp', r.name, r.scope))) continue;
-            const cur = E.currentOf(row, r);
-            const dataAbs = row.locations && cur.rootStr ? E.formatRoot(E.logicalRoot(cur.rootStr, ctx), 'local', ctx).value : null;
+            const cur = currentOf(row, r);
+            const dataAbs = row.locations && cur.rootStr ? formatRoot(logicalRoot(cur.rootStr, ctx), 'local', ctx).value : null;
             const moves = Boolean(dataAbs) && inOld(dataAbs);
             planMcp(row, { target: { name: r.name, scope: r.scope }, ...(moves ? { location: { side: family === 'global' ? 'account' : 'project' } } : {}) }, inv, ctx, catalog, out);
             // the name its key goes under: the helper's argument, else the name holding the key it holds, else the catalog's
@@ -740,7 +744,7 @@ function planRootChange(answers, inv, ctx, catalog, out)
         {
             for (const r of inv.registrations.filter((x) => x.rowId && !x.own && !x.alfredRetired && x.choice !== 'own' && x.scope === 'local'))
             {
-                const parts = E.helperParts(r.entry && r.entry.headersHelper);
+                const parts = helperParts(r.entry && r.entry.headersHelper);
                 const row = catalog.byId.get(r.rowId);
                 if (!row || !parts || parts.args.length < 3 || ctx.changing.has(keyOf('mcp', r.name, r.scope))) continue;
                 if (P.resolve(roots.absOf(parts.args[2], ctx)) !== P.resolve(used.path)) continue;
@@ -826,7 +830,7 @@ function reconnectLine({ name, variable, file, filled, anonymous, hint = null })
 function render(p)
 {
     const lines = [];
-    const P = E.pathFor(p.os);
+    const P = pathFor(p.os);
     if ((p.outside || []).length) lines.push(...p.outside, '');
     if (p.errors.length) lines.push('Cannot plan:', ...p.errors.map((e) => `  ! ${e}`), '');
     if (!p.steps.length && !p.errors.length) lines.push('Nothing to do: every answer already matches what is installed - no claude call, no file written.');

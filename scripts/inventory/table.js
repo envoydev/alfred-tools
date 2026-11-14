@@ -7,11 +7,9 @@
 // Printed to the tool result, never written to a file. A cell holds, for each server installed at that scope,
 // `<name> [<route>, <pin>]`. A registration that matches no row is the user's: it is named under the table and nothing
 // in this plugin touches it.
-const fs = require('node:fs');
-const catalogLib = require('./catalog/catalog.js');
+const catalogLib = require('../catalog/catalog.js');
 const { fromHere } = require('./inventory.js');
-const { pinnedVersion, launchArgs } = require('./fixes/common.js');
-const { blockingStdio } = require('./core/json-file.js');
+const { pinnedVersion, launchArgs } = require('../fixes/common.js');
 
 const SCOPES = ['local', 'project', 'user'];
 
@@ -64,15 +62,4 @@ function render(inv, catalog = catalogLib.load())
     return [...out, ...(notes.length ? ['', ...notes] : [])].join('\n');
 }
 
-function main(argv, { out = (s) => process.stdout.write(`${s}\n`) } = {})
-{
-    if (!argv[0]) { out('usage: table.js <inventory.json>'); return 2; }
-    let inv;
-    try { inv = JSON.parse(fs.readFileSync(argv[0], 'utf8')); }
-    catch (e) { out(`table: cannot read ${argv[0]}: ${e.message}`); return 2; }
-    out(render(inv));
-    return 0;
-}
-
-if (require.main === module) { blockingStdio(); process.exit(main(process.argv.slice(2))); }
-module.exports = { render, pinOf, main };
+module.exports = { render, pinOf };

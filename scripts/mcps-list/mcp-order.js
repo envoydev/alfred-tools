@@ -8,7 +8,7 @@
 // that is not plain JSON, a check that does not hold or a failed write leaves the file as it was, with a warning.
 const fs = require('node:fs');
 const path = require('node:path');
-const { matchEntry } = require('../inventory.js');
+const { matchEntry } = require('../inventory/inventory.js');
 
 const LEFT = 'left as it is - /preferred-tools:fix (mcp-order) orders it';
 const WHY = '.mcp.json: the catalog servers in your order, your own after them - no value changes';

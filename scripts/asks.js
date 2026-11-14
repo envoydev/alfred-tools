@@ -4,9 +4,10 @@
 // 'Other' is added by AskUserQuestion itself and never listed here.
 const fs = require('node:fs');
 const path = require('node:path');
-const E = require('./entries.js');
-const { installedOf, keyOf, targetOf, fromHere, otherWindowsMcp } = require('./inventory.js');
-const { pinOf } = require('./table.js');
+const { rootOf, formatRoot, validWindowsSerenaHome, recommendedSide, otherPlace, serenaWindowsHome, serenaSpaceFree, alfredRoot, logicalRoot } = require('./entries/locations.js');
+const { settingsOf, currentOf } = require('./entries/entry.js');
+const { installedOf, keyOf, targetOf, fromHere, otherWindowsMcp } = require('./inventory/inventory.js');
+const { pinOf } = require('./inventory/table.js');
 const keys = require('./keys/keys.js');
 const roots = require('./roots/roots.js');
 
@@ -45,8 +46,8 @@ function keyStateOf(row, routeId, ctx, alfredEnabled, scope = 'user')
     const variable = route.helper ? route.helper.var : route.tokenVar;
     if (!variable) return null;
     const kind = route.helper ? 'helper' : 'stdio';
-    const projectRoot = E.rootOf('project', ctx);
-    const globalRoot = E.rootOf('global', ctx);
+    const projectRoot = rootOf('project', ctx);
+    const globalRoot = rootOf('global', ctx);
     const files = kind === 'helper'
         ? keys.hostedChain({ scope, projectRoot, globalRoot, globalNamed: Boolean(ctx.roots && ctx.roots.globalNamed), home: ctx.home })
         : keys.stdioChain({ scope, projectRoot, globalRoot });
@@ -136,7 +137,7 @@ function settingsQuestion(row, routeId, { entry = null } = {})
 {
     // a hosted route, and a bridge (0.4.0), take no settings
     if (routeId === 'remote' || !row.routes[routeId] || row.routes[routeId].runtime === 'bridge') return null;
-    const pairs = E.settingsOf(row, routeId, entry);
+    const pairs = settingsOf(row, routeId, entry);
     const keep = pairs.length ? { label: `Keep these settings${REC}`, description: pairs.map(([k, v]) => `${k}=${v}`).join(', ') } : { label: `No settings${REC}`, description: "the server's own defaults" };
     const change = { label: 'Change or add a setting', description: 'NAME=value pairs, asked next - a key goes in .mcps-secrets, never here' };
     return {
@@ -235,7 +236,7 @@ const offeredForInstall = (row, inv) =>
 // -> [{ owner, tag }]
 function alsoProvided(inv, rowId, connectors)
 {
-    const X = require('./existing.js');
+    const X = require('./inventory/existing.js');
     const out = [];
     if ((connectors || []).some((n) => X.matchConnector(n) === rowId)) out.push({ owner: 'claude.ai', tag: 'also connected through claude.ai' });
     const enabled = new Set((inv.plugins || []).filter((p) => p.enabledHere ?? p.enabled).map((p) => p.id));
@@ -249,7 +250,7 @@ function alsoProvided(inv, rowId, connectors)
 // this session has loaded; a row one of them, or an enabled plugin, provides says so in its label (spec F4).
 function pickQuestions(inv, catalog, existing = {}, connectors = null)
 {
-    const X = require('./existing.js');
+    const X = require('./inventory/existing.js');
     const rule = X.offerRule(inv, catalog, existing);
     const items = [];
     for (const g of catalog.groups)
@@ -307,7 +308,7 @@ function changeQuestions(inv, catalog, ctx = {})
     };
     const items = installedItems(inv, catalog, describe);
     // the servers left on their own (spec D6, R3): a group of their own, whose pick keeps them so or hands them over
-    const X = require('./existing.js');
+    const X = require('./inventory/existing.js');
     const group = { id: 'own', label: 'On their own' };
     for (const it of X.ownItems(inv, catalog))
     {
@@ -438,7 +439,7 @@ const SERENA_PER_PROJECT = 'its language servers (about 327MB) download once per
 // The folder a root lands in, as the description says it: absolute at every scope (F7).
 function placeText(root, ctx)
 {
-    return E.formatRoot(root, 'local', ctx).value;
+    return formatRoot(root, 'local', ctx).value;
 }
 
 // The location question for a row with a data folder, at a known scope and registration name (the folder is named
@@ -451,12 +452,12 @@ function locationQuestion(row, inv, { scope, name = null, current = null, copyOf
     const loc = row.locations;
     const folder = name || (current ? current.name : row.name);
     const serenaWin = Boolean(loc.windowsAbsolute && ctx.platform === 'win32');
-    const winValid = (root) => !serenaWin || E.validWindowsSerenaHome(E.formatRoot(root, 'local', ctx).value);
-    const natural = E.recommendedSide(row, scope, ctx);
+    const winValid = (root) => !serenaWin || validWindowsSerenaHome(formatRoot(root, 'local', ctx).value);
+    const natural = recommendedSide(row, scope, ctx);
 
     const places = [];
-    const own = scope === 'user' ? null : { side: 'project', root: E.otherPlace(row, folder, 'project', ctx) };
-    const shared = { side: 'account', root: E.otherPlace(row, folder, 'account', ctx) };
+    const own = scope === 'user' ? null : { side: 'project', root: otherPlace(row, folder, 'project', ctx) };
+    const shared = { side: 'account', root: otherPlace(row, folder, 'account', ctx) };
     // global scope: the global root; memory, or a pick whose recommended place is the global root: both roots
     if (scope === 'user') places.push(shared);
     else
@@ -468,24 +469,24 @@ function locationQuestion(row, inv, { scope, name = null, current = null, copyOf
     if (serenaWin && usable.length < places.length)
     {
         // a root with a space: the profile's .serena when it is space-free, else a space-free folder, or one typed next
-        const profile = E.serenaWindowsHome(ctx);
+        const profile = serenaWindowsHome(ctx);
         if (!profile.needsInput) usable.push({ side: 'default', root: profile.root, label: "Your profile's .serena", description: `${profile.root.path} - the root's path has a space, which serena's home cannot hold; one folder for every project on this machine` });
         else
         {
-            const free = E.serenaSpaceFree(ctx);
+            const free = serenaSpaceFree(ctx);
             usable.push({ side: 'default', root: free, label: 'A space-free folder', answer: { side: 'path', path: free.path }, description: `${free.path} - the root's path and your profile path ${ctx.home} have a space, which serena's home cannot hold; one folder for every project on this machine` });
         }
     }
-    const old = !current && !serenaWin ? E.alfredRoot(row, ctx) : null;
+    const old = !current && !serenaWin ? alfredRoot(row, ctx) : null;
     if (old) usable.push({ side: 'alfred', root: old });
 
     // configure: the folder it uses now, when it can stay at this scope; a place that is the same folder is not repeated
     let keep = null;
     if (current && current.rootStr)
     {
-        keep = { side: 'keep', root: E.logicalRoot(current.rootStr, ctx) };
+        keep = { side: 'keep', root: logicalRoot(current.rootStr, ctx) };
     }
-    const at = (p) => E.formatRoot(p.root, scope, ctx).value;
+    const at = (p) => formatRoot(p.root, scope, ctx).value;
     const listed = keep ? [keep, ...usable.filter((p) => at(p) !== at(keep))] : usable;
     if (serenaWin && listed.some((p) => p.side === 'default')) listed.push({ side: 'path', label: 'Another space-free folder', description: 'an absolute folder without spaces, asked next' });
 
@@ -801,7 +802,7 @@ function all(inv, picks, catalog, { env = {}, home = null, connectors = null } =
         // install only adds, so its questions never start from an installed registration
         out.tools[id] = { route: row.kind === 'mcp' ? routeQuestion(row) : null, ...toolAsk(row, inv, { route: routes[id], scope: scopes[id], name: names[id], ctx, catalog, copyOf: installedOf(inv, id) }) };
     }
-    const own = new Map(require('./existing.js').ownItems(inv, catalog).map((it) => [it.key, it]));
+    const own = new Map(require('./inventory/existing.js').ownItems(inv, catalog).map((it) => [it.key, it]));
     for (const key of (picks && picks.targets) || [])
     {
         // a root folder: D2's question, the root in use recommended (spec D7)
@@ -816,14 +817,14 @@ function all(inv, picks, catalog, { env = {}, home = null, connectors = null } =
         if (own.has(key))
         {
             const it = own.get(key);
-            out.targets[key] = { row: it.rowId, kind: 'own', current: { name: it.name || it.server || it.connector, scope: it.scope || null, route: null }, own: require('./existing.js').ownQuestion(it) };
+            out.targets[key] = { row: it.rowId, kind: 'own', current: { name: it.name || it.server || it.connector, scope: it.scope || null, route: null }, own: require('./inventory/existing.js').ownQuestion(it) };
             continue;
         }
         const t = targetOf(inv, key);
         const row = t && t.item.rowId && !t.item.alfredRetired ? catalog.byId.get(t.item.rowId) : null;
         if (!row) { out.targets[key] = { error: `'${key}' is not a catalog tool installed here` }; continue; }
         // required here, not at the top: plan.js requires this file
-        const current = t.kind === 'mcp' ? E.currentOf(row, t.item) : { scope: t.item.scope };
+        const current = t.kind === 'mcp' ? currentOf(row, t.item) : { scope: t.item.scope };
         const listed = t.kind === 'mcp' ? listedOf(inv, t.item) : null;
         out.targets[key] = {
             row: row.id, kind: t.kind, current: { name: t.item.name || t.item.id, scope: t.item.scope, route: current.route || null, ...(t.kind === 'mcp' ? { clients: listed ? listed.clients : ['claude'] } : {}) },
@@ -860,7 +861,7 @@ function all(inv, picks, catalog, { env = {}, home = null, connectors = null } =
         const t = targetOf(inv, key);
         const row = t && t.kind === 'mcp' && t.item.rowId && !t.item.alfredRetired ? catalog.byId.get(t.item.rowId) : null;
         if (!row) continue;
-        const current = E.currentOf(row, t.item);
+        const current = currentOf(row, t.item);
         const routeId = routes[key] || current.route;
         const route = row.routes[routeId];
         if (!route) continue;

@@ -11,14 +11,15 @@
 // registration that matches no row is the user's: it is listed as `own` and nothing in this plugin touches it.
 const fs = require('node:fs');
 const path = require('node:path');
-const catalogLib = require('./catalog/catalog.js');
-const account = require('./core/account.js');
-const cli = require('./core/claude-cli.js');
-const kept = require('./core/kept.js');
-const roots = require('./roots/roots.js');
-const E = require('./entries.js');
+const catalogLib = require('../catalog/catalog.js');
+const account = require('../core/account.js');
+const cli = require('../core/claude-cli.js');
+const kept = require('../core/kept.js');
+const roots = require('../roots/roots.js');
+const { bridgeParts } = require('../entries/entry.js');
+const { signInParts } = require('../entries/sign-in.js');
+
 const { readState } = account;
-const { blockingStdio } = require('./core/json-file.js');
 
 // ---- matching a registration to a row -------------------------------------------------------------------------------
 
@@ -58,7 +59,7 @@ function matchesFingerprint(entry, f)
 {
     // a bridge (0.4.0): `node <root>/mcp-bridge.js <template> ...`, matched by the file's exact name and the template's host
     // and path - never by the URL branch below, which would take every hosted URL for a fingerprint with no host
-    const bridge = E.bridgeParts(entry);
+    const bridge = bridgeParts(entry);
     if (f.bridge) return Boolean(bridge) && bridge.template.replace(/^https?:\/\//i, '').toLowerCase().startsWith(f.bridge);
     if (bridge) return false;
     const byUrl = (url) =>
@@ -71,7 +72,7 @@ function matchesFingerprint(entry, f)
     };
     // the shared sign-in form (0.5.0, D5): mcp-remote with MCP_REMOTE_CONFIG_DIR, matched by its URL as an http entry, so
     // it is the row's remote route; a hand-made mcp-remote entry has no parts and matches no row below
-    const signIn = E.signInParts(entry);
+    const signIn = signInParts(entry);
     if (signIn) return byUrl(signIn.url);
     if (entry.url || entry.type === 'http' || entry.type === 'sse') return byUrl(entry.url);
     const { command, args } = launchTokens(entry);
@@ -251,7 +252,7 @@ function buildInventory({ project, env = process.env, platform = process.platfor
     out.lists = { project: listOf(out, 'project', rootCtx), global: listOf(out, 'global', rootCtx) };
     out.cursor = cursorFiles(out, { platform, env, project: proj }, catalog);
     // the workspace alfred-code records (spec D4a): the folders whose Cursor files take this folder's project servers
-    out.workspace = require('./roots/workspace.js').of(proj, env);
+    out.workspace = require('../roots/workspace.js').of(proj, env);
     const fp = (entry) => existing.fingerprintOf(entry, catalog);
     for (const r of out.registrations)
     {
@@ -289,7 +290,7 @@ function buildInventory({ project, env = process.env, platform = process.platfor
 // skipped from the first 0.5.0 run. -> { file, servers, own, cursorOffer?, note?, old? } | null
 function listOf(inv, family, ctx)
 {
-    const lists = require('./mcps-list/mcps-list.js');
+    const lists = require('../mcps-list/mcps-list.js');
     for (const file of lists.listFiles(inv, family, ctx))
     {
         const l = lists.readList(file);
@@ -308,7 +309,7 @@ function listOf(inv, family, ctx)
 // name it holds, and the entries of the names its family's list marks for Cursor, kept.
 function cursorFiles(inv, ctx, catalog)
 {
-    const cursorMcp = require('./cursor/cursor-mcp.js');
+    const cursorMcp = require('../cursor/cursor-mcp.js');
     const marked = (family) =>
     {
         const l = inv.lists[family];
@@ -392,28 +393,4 @@ function targetOf(inv, key)
     return item ? { kind: m[1], item } : null;
 }
 
-function main(argv)
-{
-    blockingStdio();
-    const val = (flag) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : undefined; };
-    const project = val('--project') || process.cwd();
-    const outFile = val('--json');
-    const inv = buildInventory({ project, data: val('--data') || null });
-    if (!inv.cli.ok)
-    {
-        console.error('preferred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.');
-        return 3;
-    }
-    const text = JSON.stringify(keptOf(inv), null, 2);
-    if (outFile) fs.writeFileSync(outFile, text);
-    else console.log(text);
-    for (const u of inv.unreadable)
-        console.error(`preferred-tools: ${u.file} is ${u.state}${u.error ? ` (${u.error})` : ''} - ${u.scope === 'inherited' ? "Claude Code skips that parent folder's servers too; nothing here writes to it." : `the ${u.scope} scope is treated as unreadable and nothing will be written there.`}`);
-    const own = inv.registrations.filter((r) => r.own).length;
-    console.log(`inventory: ${inv.registrations.length} registrations (${inv.registrations.length - own} match a catalog row, ${own} are your own), ${inv.plugins.length} plugins${outFile ? ` -> ${outFile}` : ''}`);
-    return 0;
-}
-
-// exported before main runs: existing.js, required while main runs, reads matchesFingerprint from here
 module.exports = { launchTokens, bareName, matchEntry, matchesFingerprint, ancestorMcpFiles, buildInventory, keptOf, fromHere, installedOf, windowsMcpServers, otherWindowsMcp, keyOf, targetOf, pluginRows };
-if (require.main === module) process.exit(main(process.argv.slice(2)));

@@ -16,7 +16,7 @@ const { spawnSync } = require('node:child_process');
 const cli = require('../../scripts/core/claude-cli.js');
 const account = require('../../scripts/core/account.js');
 const catalogLib = require('../../scripts/catalog/catalog.js');
-const E = require('../../scripts/entries.js');
+const { buildEntry } = require('../../scripts/entries/entry.js');
 const fix = require('../../scripts/fix.js');
 const update = require('../../scripts/update.js');
 const { pinnedVersion } = require('../../scripts/fixes/common.js');
@@ -248,7 +248,7 @@ function freshEntry(rowId, platform, arch = 'x64', scope = 'user')
     const win = platform === 'win32';
     const rootStr = r.locations ? (win ? 'C:\\Users\\dev\\.pt\\x' : '/Users/dev/.pt/x') : undefined;
     const ctx = { platform, arch, env: {}, home: win ? 'C:\\Users\\dev' : '/Users/dev', project: win ? 'C:\\proj' : '/proj' };
-    return E.buildEntry(r, 'local', { rootStr, scope, token: false }, ctx, catalog.rules);
+    return buildEntry(r, 'local', { rootStr, scope, token: false }, ctx, catalog.rules);
 }
 const withoutArgs = (entry, from, count) => { const a = entry.args.slice(); a.splice(a.indexOf(from), count); return { ...entry, args: a }; };
 

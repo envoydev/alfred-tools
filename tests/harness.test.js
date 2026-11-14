@@ -8,7 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const cli = require('../scripts/core/claude-cli.js');
 const account = require('../scripts/core/account.js');
-const E = require('../scripts/entries.js');
+const { pythonRequest } = require('../scripts/entries/platform.js');
 const { Harness, isolationCheck } = require('./harness.js');
 
 const skip = cli.available() ? false : 'no claude CLI on PATH';
@@ -59,7 +59,7 @@ test('the fix engine against the REAL CLI: detect, apply as one replace, read ba
     const now = account.readAccount(h.env, project).user;
     // the row's minor, as this machine takes it: on Windows ARM64 the x64 build (windows-arm-python)
     const c = ctx();
-    assert.deepStrictEqual(now.serena.args.slice(0, 2), ['--python', E.pythonRequest({ python: '3.13' }, c, c.rules)]);
+    assert.deepStrictEqual(now.serena.args.slice(0, 2), ['--python', pythonRequest({ python: '3.13' }, c, c.rules)]);
     assert.ok(now.serena.args.includes('serena-agent@2.0.0') && now.serena.args.includes('--verbose'), 'the user\'s pin and arg survive the real CLI round trip');
     assert.strictEqual(now.serena.env.SERENA_USAGE_REPORTING, 'false');
     assert.deepStrictEqual(now['my-own-server'], own);

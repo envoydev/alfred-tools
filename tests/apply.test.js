@@ -6,9 +6,9 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const { world, writeJson, readJson, accountKey, tempOf, files, helperCmd } = require('./helpers.js');
-const inventory = require('../scripts/inventory.js');
+const inventory = require('../scripts/inventory/inventory.js');
 const { plan } = require('../scripts/plan.js');
-const { apply } = require('../scripts/apply.js');
+const { apply } = require('../scripts/apply/run.js');
 const account = require('../scripts/core/account.js');
 const cli = require('../scripts/core/claude-cli.js');
 const { MARKER } = require('../scripts/core/kept.js');
@@ -1109,7 +1109,7 @@ test('a re-run after a failed add writes no file again', () => {
 // ---- 0.3.0: 'needs authentication' explained (F3) ---------------------------------------------------------------------
 
 test('the apply repeats the reconnect lines after the read-back, and names a refused key with the row\'s hint', () => {
-    const { REFUSED, refusedLine } = require('../scripts/apply.js');
+    const { REFUSED, refusedLine } = require('../scripts/apply/run.js');
     // what claude mcp get printed for a 401 to a helper's key (tests/matrix/field-fixes.test.js X7, docs/sources.md)
     const ISSUE = 'Issue: Server rejected the Authorization header minted by the configured headersHelper (HTTP 401). Check that the helper command returns a valid credential for this MCP endpoint — OAuth fallback is disabled when the helper supplies Authorization. Error detail: Error POSTing to endpoint:';
     assert.match(ISSUE, REFUSED);
@@ -1158,7 +1158,7 @@ test('the apply repeats the reconnect lines after the read-back, and names a ref
 // ---- the bridge file (0.4.0) ------------------------------------------------------------------------------------------
 
 const BRIDGE_SRC = path.join(__dirname, '..', 'scripts', 'mcp-bridge.js');
-const E = require('../scripts/entries.js');
+const { fetchStep } = require('../scripts/entries/names.js');
 test('write-bridge writes, rewrites a lower copy, and leaves an edited or newer one', () => {
     const w = world();
     try
@@ -1225,9 +1225,9 @@ test('a bridge step with filled: false is left out of the fetch job\'s check; fi
         const entry = (n) => ({ command: 'node', args: [path.join(w.project, '.preferred-tools', 'mcp-bridge.js'), 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}', 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'], env: { npm_config_before: '2026-11-11T23:59:59Z' } });
         const steps = [
             { op: 'mcp-add', name: 'sentry', scope: 'local', entry: entry(), row: 'sentry', route: 'bridge', filled: false, why: 'x' },
-            E.fetchStep('sentry', entry(), 'sentry'),
+            fetchStep('sentry', entry(), 'sentry'),
             { op: 'mcp-add', name: 'sentry2', scope: 'local', entry: entry(), row: 'sentry', route: 'bridge', filled: true, why: 'y' },
-            E.fetchStep('sentry2', entry(), 'sentry'),
+            fetchStep('sentry2', entry(), 'sentry'),
         ];
         const fetchFile = path.join(w.dir, 'fetch.json');
         const { report } = runSteps(w, steps, { fetchFile });
@@ -1243,7 +1243,7 @@ test('rootIgnoreLines puts mcps.json in a user-files root\'s short list', () => 
     try
     {
         fs.writeFileSync(path.join(dir, 'notes.md'), 'mine\n');
-        const { rootIgnoreLines } = require('../scripts/apply.js');
+        const { rootIgnoreLines } = require('../scripts/apply/file-steps.js');
         const r = rootIgnoreLines(dir);
         assert.strictEqual(r.mine, false);
         assert.deepStrictEqual(r.want, ['.mcps-secrets', 'preferred-tools.json', 'mcps.json', 'mcp-remote-v1/']);
@@ -1358,7 +1358,7 @@ test('rootIgnoreLines lists mcp-remote-v1/ for a root of the user\'s own files, 
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'pt-ignore-')));
     try
     {
-        const { rootIgnoreLines, rootIgnore } = require('../scripts/apply.js');
+        const { rootIgnoreLines, rootIgnore } = require('../scripts/apply/file-steps.js');
         fs.writeFileSync(path.join(dir, 'notes.md'), 'mine\n');
         fs.writeFileSync(path.join(dir, '.gitignore'), '.mcps-secrets\npreferred-tools.json\nmcps.json\n');
         assert.deepStrictEqual(rootIgnoreLines(dir).lack, ['mcp-remote-v1/']);
@@ -1388,11 +1388,11 @@ test('deny-read adds only the lacking rules and keeps every other settings key a
         assert.deepStrictEqual(Object.keys(doc.permissions), ['allow', 'deny', 'ask']);
         assert.deepStrictEqual(doc.permissions.deny, [READ_GUARD.secrets, READ_GUARD.signIns]);
         assert.deepStrictEqual(doc.permissions.allow, ['Bash(ls)']);
-        const again = require('../scripts/apply.js').denyRead(file, [READ_GUARD.signIns]);
+        const again = require('../scripts/apply/file-steps.js').denyRead(file, [READ_GUARD.signIns]);
         assert.deepStrictEqual([again.ok, again.unchanged], [true, true]);
         // an absent file: both keys made
         const fresh = path.join(w.dir, 'account', 'fresh', 'settings.json');
-        assert.strictEqual(require('../scripts/apply.js').denyRead(fresh, [READ_GUARD.signIns]).ok, true);
+        assert.strictEqual(require('../scripts/apply/file-steps.js').denyRead(fresh, [READ_GUARD.signIns]).ok, true);
         assert.deepStrictEqual(JSON.parse(fs.readFileSync(fresh, 'utf8')), { permissions: { deny: [READ_GUARD.signIns] } });
     }
     finally { w.clean(); }
@@ -1402,7 +1402,7 @@ test('deny-read writes nothing to a settings file that is not JSON, and the plan
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'pt-deny-')));
     try
     {
-        const { denyRead } = require('../scripts/apply.js');
+        const { denyRead } = require('../scripts/apply/file-steps.js');
         for (const text of ['{ nope', '[]', '{"permissions": []}'])
         {
             const file = path.join(dir, 'settings.json');
@@ -1420,7 +1420,7 @@ test('a Claude-side rewrite keeps Cursor\'s moved pin and its added env pair', (
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'pt-two-')));
     try
     {
-        const { listWrite } = require('../scripts/apply.js');
+        const { listWrite } = require('../scripts/apply/file-steps.js');
         const cursorMcp = require('../scripts/cursor/cursor-mcp.js');
         const file = path.join(dir, 'mcps.json');
         const helper = (root) => ({ type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: `node ${root}/mcp-headers.js CONTEXT7_API_KEY Bearer` });

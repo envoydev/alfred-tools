@@ -102,7 +102,7 @@ const readGuardSteps = (f) => [planLists.denyReadStep(f.name, f.rules)];
 // lists base modes. Read by serena-config.js, which reads that key alone and never the file's other lines.
 function serenaBaseModesDetect(ctx)
 {
-    const serenaConfig = require('../serena-config.js');
+    const serenaConfig = require('../apply/serena-config.js');
     const out = [];
     const seen = new Set();
     for (const reg of (ctx.inv.registrations || []).filter((r) => r.rowId === 'serena' && !r.own && !r.alfredRetired && r.choice !== 'own' && r.scope !== 'inherited'))

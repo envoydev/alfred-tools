@@ -5,10 +5,10 @@
 // list-write step (a 0.4.x root's preferred-tools.json is read until list-import moves it). Nothing here writes, and no server is started to find one.
 const fs = require('node:fs');
 const path = require('node:path');
-const account = require('./core/account.js');
-const roots = require('./roots/roots.js');
-const { parseJson } = require('./core/json-file.js');
-const { fingerprintKey } = require('./catalog/catalog.js');
+const account = require('../core/account.js');
+const roots = require('../roots/roots.js');
+const { parseJson } = require('../core/json-file.js');
+const { fingerprintKey } = require('../catalog/catalog.js');
 // inventory.js requires this file lazily, inside buildInventory
 const { matchesFingerprint } = require('./inventory.js');
 

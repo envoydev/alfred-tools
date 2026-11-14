@@ -20,7 +20,7 @@ const path = require('node:path');
 const cli = require('../../scripts/core/claude-cli.js');
 const account = require('../../scripts/core/account.js');
 const roots = require('../../scripts/roots/roots.js');
-const E = require('../../scripts/entries.js');
+const { shellArg } = require('../../scripts/entries/entry.js');
 const fix = require('../../scripts/fix.js');
 const update = require('../../scripts/update.js');
 const fake = require('../fake-mcp-http.js');
@@ -108,7 +108,7 @@ test('K2 - a chosen key name (ACME_GITHUB_TOKEN) at project scope', T, async () 
         helperOnly(w);
         // absolute since 0.3.0 at every scope, project included
         const style = process.platform === 'win32' ? 'win32' : 'posix';
-        assert.strictEqual(w.entry.headersHelper, `node ${E.shellArg(path.join(dir, '.preferred-tools', roots.FILES.helper), style)} ACME_GITHUB_TOKEN Bearer`);
+        assert.strictEqual(w.entry.headersHelper, `node ${shellArg(path.join(dir, '.preferred-tools', roots.FILES.helper), style)} ACME_GITHUB_TOKEN Bearer`);
         const secrets = path.join(dir, '.preferred-tools', roots.FILES.secrets);
         assert.ok(fs.readFileSync(secrets, 'utf8').split('\n').includes('ACME_GITHUB_TOKEN='), 'the chosen name written');
         fill(secrets, G, 'not-this-one');

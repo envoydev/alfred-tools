@@ -8,11 +8,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { world, readJson, writeJson } = require('./helpers.js');
-const inventory = require('../scripts/inventory.js');
+const inventory = require('../scripts/inventory/inventory.js');
 const fix = require('../scripts/fix.js');
 const cli = require('../scripts/core/claude-cli.js');
 const { plan } = require('../scripts/plan.js');
-const { apply } = require('../scripts/apply.js');
+const { apply } = require('../scripts/apply/run.js');
 
 const noMachine = () => ({ exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1, stdout: '', stderr: '' }), nodeVersion: '24.0.0' });
 

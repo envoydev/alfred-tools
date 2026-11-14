@@ -8,8 +8,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { launchTokens, bareName } = require('../inventory.js');
-const E = require('../entries.js');
+const { launchTokens, bareName } = require('../inventory/inventory.js');
+const E = require('../entries/locations.js');
 
 const fixOf = (ctx, id) => ctx.catalog.fixes.find((f) => f.id === id);
 const rowOf = (ctx, id) => ctx.catalog.byId.get(id);

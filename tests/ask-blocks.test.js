@@ -89,10 +89,11 @@ test('asks.js never requires plan.js: the shared readers (currentOf, logicalRoot
     const fs = require('node:fs');
     const src = fs.readFileSync(require.resolve('../scripts/asks.js'), 'utf8');
     assert.doesNotMatch(src, /require\('\.\/plan\.js'\)/);
-    const E = require('../scripts/entries.js');
-    assert.strictEqual(typeof E.currentOf, 'function');
-    assert.deepStrictEqual(E.logicalRoot('/work/shop/.preferred-tools/serena', { platform: 'darwin', project: '/work/shop', home: '/Users/me' }), { kind: 'project', rel: '.preferred-tools/serena' });
-    assert.deepStrictEqual(E.logicalRoot('/Users/me/.preferred-tools/serena', { platform: 'darwin', project: '/work/shop', home: '/Users/me' }), { kind: 'home', rel: '.preferred-tools/serena' });
+    const { logicalRoot } = require('../scripts/entries/locations.js');
+    const { currentOf } = require('../scripts/entries/entry.js');
+    assert.strictEqual(typeof currentOf, 'function');
+    assert.deepStrictEqual(logicalRoot('/work/shop/.preferred-tools/serena', { platform: 'darwin', project: '/work/shop', home: '/Users/me' }), { kind: 'project', rel: '.preferred-tools/serena' });
+    assert.deepStrictEqual(logicalRoot('/Users/me/.preferred-tools/serena', { platform: 'darwin', project: '/work/shop', home: '/Users/me' }), { kind: 'home', rel: '.preferred-tools/serena' });
 });
 
 test('staticAsk fills a STATIC function\'s own placeholders', () => {

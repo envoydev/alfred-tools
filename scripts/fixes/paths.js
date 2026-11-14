@@ -8,10 +8,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const C = require('./common.js');
-const E = require('../entries.js');
+const { validWindowsSerenaHome } = require('../entries/locations.js');
+const { helperParts, helperArgv, shellArg } = require('../entries/entry.js');
 const roots = require('../roots/roots.js');
 const mcpOrder = require('../mcps-list/mcp-order.js');
-const { fromHere, matchEntry } = require('../inventory.js');
+const { fromHere, matchEntry } = require('../inventory/inventory.js');
 
 const pathOf = (ctx) => (ctx.platform === 'win32' ? path.win32 : path.posix);
 const styleOf = (ctx) => (ctx.platform === 'win32' ? 'win32' : 'posix');
@@ -42,7 +43,7 @@ function serenaHome(to, ctx)
 {
     const root = roots.resolve(ctx.inv, null, { project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog }).roots.project;
     const home = root ? path.win32.join(root, 'serena') : null;
-    return home && E.validWindowsSerenaHome(home) ? home : to;
+    return home && validWindowsSerenaHome(home) ? home : to;
 }
 
 // Every path of a registration this row writes out: its derived data paths, and its helper. -> { paths, unset }
@@ -69,7 +70,7 @@ function changesOf(entry, rowId, ctx)
         if (a.unset) { unset.push(a.unset); continue; }
         paths.push({ in: d.in, key: d.key, from, to: serena ? serenaHome(a.to, ctx) : a.to, was: a.to });
     }
-    const parts = E.helperParts(entry.headersHelper);
+    const parts = helperParts(entry.headersHelper);
     if (parts)
     {
         const a = absoluteOf(parts.path, ctx);
@@ -119,10 +120,10 @@ function projectRelativePathFix(entry, f, ctx)
         else if (p.in === 'arg') out.args[out.args.indexOf(p.key) + 1] = p.to;
         else
         {
-            const argv = E.helperArgv(entry.headersHelper);
+            const argv = helperArgv(entry.headersHelper);
             const at = argv.findIndex((a) => /mcp-headers\.js$/.test(a));
             const style = styleOf(ctx);
-            out.headersHelper = [...argv.slice(0, at), E.shellArg(p.to, style), ...argv.slice(at + 1).map((a) => E.shellArg(a, style))].join(' ');
+            out.headersHelper = [...argv.slice(0, at), shellArg(p.to, style), ...argv.slice(at + 1).map((a) => shellArg(a, style))].join(' ');
         }
     }
     return out;

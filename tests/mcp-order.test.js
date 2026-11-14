@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const catalog = require('../scripts/catalog/catalog.js').load();
-const { matchEntry } = require('../scripts/inventory.js');
+const { matchEntry } = require('../scripts/inventory/inventory.js');
 const O = require('../scripts/mcps-list/mcp-order.js');
 
 // one entry per catalog row, launched as its first route's fingerprint says

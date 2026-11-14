@@ -5,11 +5,12 @@
 //
 // A finding the machine cannot act on carries `blocked` (the reason), is shown, and is never applied.
 const path = require('node:path');
-const E = require('../entries.js');
+const { pythonRequest, isWindowsArm, pathFor } = require('../entries/platform.js');
+const { validWindowsSerenaHome, serenaWindowsHome, serenaSpaceFree } = require('../entries/locations.js');
 const keys = require('../keys/keys.js');
 const roots = require('../roots/roots.js');
 const C = require('./common.js');
-const { windowsMcpServers, fromHere } = require('../inventory.js');
+const { windowsMcpServers, fromHere } = require('../inventory/inventory.js');
 
 const eachReg = (ctx, id, fn) => C.registrationsOf(ctx, id).map((reg) => fn(reg, C.routeOf(ctx, reg))).filter(Boolean);
 
@@ -31,14 +32,14 @@ function serenaWindowsHomeDetect(ctx)
         // none set (a registration made by hand): serena's default home is <profile>\.serena, cut at a space in the
         // profile path like any other; the space-free folder install offers takes its place
         if (value === undefined) return unsetSerenaHome(reg, ctx);
-        if (typeof value !== 'string' || E.validWindowsSerenaHome(value)) return null;
+        if (typeof value !== 'string' || validWindowsSerenaHome(value)) return null;
         // a ${VAR} form in this folder's .mcp.json is 0.2.0's: project-relative-path writes it out absolute
         if (reg.scope === 'project' && value.includes('${')) return null;
         const faults = [!path.win32.isAbsolute(value) && 'not absolute', value.includes('/') && 'forward slashes', /\s/.test(value) && 'a space'].filter(Boolean);
         const what = `SERENA_HOME is '${value}' (${faults.join(', ')})`;
         const same = windowsHomeOf(value, ctx);
-        if (E.validWindowsSerenaHome(same)) return C.finding('serena-windows-home', reg, what, { proposal: { SERENA_HOME: same }, note: `same folder, written absolute with backslashes: ${same}` });
-        const fresh = E.serenaWindowsHome({ home: ctx.home });
+        if (validWindowsSerenaHome(same)) return C.finding('serena-windows-home', reg, what, { proposal: { SERENA_HOME: same }, note: `same folder, written absolute with backslashes: ${same}` });
+        const fresh = serenaWindowsHome({ home: ctx.home });
         if (fresh.root) return C.finding('serena-windows-home', reg, what, { proposal: { SERENA_HOME: fresh.root.path }, note: `a new home, ${fresh.root.path} - serena's data in '${value}' is not moved and its language servers download again (~327MB)` });
         if (reg.scope === 'project') return C.finding('serena-windows-home', reg, what, { blocked: SPACED_PROJECT });
         return C.finding('serena-windows-home', reg, what, { input: { id: 'serenaHome', prompt: fresh.needsInput } });
@@ -54,14 +55,14 @@ function unsetSerenaHome(reg, ctx)
     if (!/\s/.test(profile)) return null;
     const what = `no SERENA_HOME: serena's default home, ${path.win32.join(profile, '.serena')}, has a space`;
     if (reg.scope === 'project') return C.finding('serena-windows-home', reg, what, { blocked: SPACED_PROJECT });
-    const free = E.serenaSpaceFree(ctx).path;
+    const free = serenaSpaceFree(ctx).path;
     return C.finding('serena-windows-home', reg, what, { proposal: { SERENA_HOME: free }, note: `a new home, ${free} - serena's data in ${path.win32.join(profile, '.serena')} is not moved and its language servers download again (~327MB)` });
 }
 
 function serenaWindowsHomeFix(entry, f, ctx, input = {})
 {
     const home = (f.proposal && f.proposal.SERENA_HOME) || input.serenaHome;
-    if (!home || !E.validWindowsSerenaHome(home)) throw new Error(`serena's home must be an absolute Windows folder in backslashes with no space; '${home || ''}' is not (pass --input serenaHome=<folder>)`);
+    if (!home || !validWindowsSerenaHome(home)) throw new Error(`serena's home must be an absolute Windows folder in backslashes with no space; '${home || ''}' is not (pass --input serenaHome=<folder>)`);
     return { ...entry, env: { ...(entry.env || {}), SERENA_HOME: home } };
 }
 
@@ -73,7 +74,7 @@ function uvxPythonDetect(ctx)
     return eachReg(ctx, 'uvx-python', (reg) =>
     {
         if (C.launcher(reg.entry) !== 'uvx' || pythonAt(C.launchArgs(reg.entry)) >= 0) return null;
-        const want = E.pythonRequest(C.routeOf(ctx, reg), ctx, ctx.rules);
+        const want = pythonRequest(C.routeOf(ctx, reg), ctx, ctx.rules);
         return C.finding('uvx-python', reg, `no --python: uvx picks the newest CPython, which has no wheel for some dependencies`, { proposal: { python: want } });
     });
 }
@@ -85,7 +86,7 @@ function uvxPythonFix(entry, f, ctx)
 
 function windowsArmPythonDetect(ctx)
 {
-    if (!E.isWindowsArm(ctx)) return [];
+    if (!isWindowsArm(ctx)) return [];
     return eachReg(ctx, 'windows-arm-python', (reg) =>
     {
         if (C.launcher(reg.entry) !== 'uvx') return null;
@@ -151,7 +152,7 @@ function androidSdk(ctx)
 {
     const { env, machine: m } = ctx;
     for (const v of [env.ANDROID_HOME, env.ANDROID_SDK_ROOT]) if (v && m.exists(v)) return v;
-    const P = E.pathFor(ctx.platform);
+    const P = pathFor(ctx.platform);
     const defaults = ctx.platform === 'darwin' ? [P.join(ctx.home, 'Library', 'Android', 'sdk')]
         : ctx.platform === 'win32' ? [P.join(env.LOCALAPPDATA || P.join(ctx.home, 'AppData', 'Local'), 'Android', 'Sdk')]
             : [P.join(ctx.home, 'Android', 'Sdk'), P.join(ctx.home, 'Android', 'sdk')];
@@ -170,7 +171,7 @@ function javaHome(ctx)
     const java = m.which('java');
     const real = java && m.realpath(java);
     if (!real) return null;
-    const P = E.pathFor(ctx.platform);
+    const P = pathFor(ctx.platform);
     const home = P.dirname(P.dirname(real));
     return m.exists(P.join(home, 'bin', ctx.platform === 'win32' ? 'java.exe' : 'java')) ? home : null;
 }
@@ -221,7 +222,7 @@ function serenaContextDetect(ctx)
     {
         const root = r[roots.familyOf(reg.scope)];
         if (!root) return null;
-        const want = E.pathFor(ctx.platform).join(root, roots.FILES.serenaContext);
+        const want = pathFor(ctx.platform).join(root, roots.FILES.serenaContext);
         const args = reg.entry.args || [];
         const i = args.indexOf('--context');
         const now = i >= 0 ? args[i + 1] : null;

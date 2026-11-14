@@ -20,17 +20,18 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const catalogLib = require('./catalog/catalog.js');
-const inventory = require('./inventory.js');
+const inventory = require('./inventory/inventory.js');
 const account = require('./core/account.js');
-const { apply } = require('./apply.js');
+const { apply } = require('./apply/run.js');
 const tmpdir = require('./core/tmpdir.js');
 const cli = require('./core/claude-cli.js');
 const { blockingStdio } = require('./core/json-file.js');
-const fetchLib = require('./fetch.js');
+const { writeJob, job, nextLines } = require('./apply/fetch.js');
 const F = require('./fixes/index.js');
 const { realMachine, clone } = require('./fixes/common.js');
 const { deepEqual, useRoots, fileSteps, reconnectLine } = require('./plan.js');
-const E = require('./entries.js');
+const { helperNameOf, contextArgAt } = require('./entries/entry.js');
+const { fetchStep } = require('./entries/names.js');
 const mcpOrder = require('./mcps-list/mcp-order.js');
 const keys = require('./keys/keys.js');
 const roots = require('./roots/roots.js');
@@ -51,9 +52,9 @@ const matches = (f, only) => !only || [f.id, f.row, f.name].includes(only);
 function reconnectOf(ctx, steps)
 {
     const r = roots.resolve(ctx.inv, null, { project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog }).roots;
-    return steps.filter((s) => s.entry && s.entry.headersHelper && E.helperNameOf(s.entry.headersHelper)).map((s) =>
+    return steps.filter((s) => s.entry && s.entry.headersHelper && helperNameOf(s.entry.headersHelper)).map((s) =>
     {
-        const variable = E.helperNameOf(s.entry.headersHelper);
+        const variable = helperNameOf(s.entry.headersHelper);
         const route = ctx.catalog.byId.get(s.row).routes[s.route] || {};
         const files = keys.hostedChain({ scope: s.scope, projectRoot: r.project, globalRoot: r.global, globalNamed: r.globalNamed, home: ctx.home });
         return { name: s.name, variable, file: files[0], filled: keys.filledNames(files).some((f) => f.names.includes(variable)), anonymous: route.authMode === 'optional-token' && !route.keyless };
@@ -241,7 +242,7 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
         steps.push({ op: 'mcp-replace', name: reg.name, scope: reg.scope, entry, old: reg.entry, row: reg.rowId, route: reg.route, why: `${list.map((x) => x.id).join(' + ')}: rewrite '${reg.name}' from the registration as read` });
         if (entry.headersHelper && !reg.entry.headersHelper && fileCtx.roots) useRoots(fileCtx, reg.scope, { helper: true, keyFile: null, keyName: null, data: null });
         // serena's context file (D7) is written into its root before the registration names it
-        if (E.contextArgAt(entry) >= 0 && fileCtx.roots) useRoots(fileCtx, reg.scope, { serenaContext: true });
+        if (contextArgAt(entry) >= 0 && fileCtx.roots) useRoots(fileCtx, reg.scope, { serenaContext: true });
     }
     res.steps = steps.length;
     // each list the repaired servers sit in, and Cursor's files from them, in the same run (spec D1); a Cursor copy whose
@@ -254,7 +255,7 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
         // a fix that changes what is fetched (a python request, a cut-off, cmd /c) is fetched once it is written
         const withFetch = steps.flatMap((s) =>
         {
-            const f = E.fetchStep(s.name, s.entry, s.row, s.old);
+            const f = fetchStep(s.name, s.entry, s.row, s.old);
             return f ? [s, f] : [s];
         });
         const fileNotes = [];
@@ -310,8 +311,8 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
     {
         // beside a fetch file a registration fix already wrote, or in a new one
         res.tmp = res.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
-        res.fetchFile = fetchLib.writeJob(res.fetchFile || path.join(res.tmp, 'fetch.json'), fetchLib.job(ctx.inv.project, refetch, refetch.map((s) => s.name)), { append: true });
-        log('', ...fetchLib.nextLines(res.fetchFile, JSON.parse(fs.readFileSync(res.fetchFile, 'utf8'))));
+        res.fetchFile = writeJob(res.fetchFile || path.join(res.tmp, 'fetch.json'), job(ctx.inv.project, refetch, refetch.map((s) => s.name)), { append: true });
+        log('', ...nextLines(res.fetchFile, JSON.parse(fs.readFileSync(res.fetchFile, 'utf8'))));
     }
 
     // read back: the same detectors, run again on what is installed now

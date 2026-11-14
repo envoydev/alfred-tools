@@ -6,8 +6,10 @@ const assert = require('node:assert');
 const path = require('node:path');
 const { world, readJson, helperCmd } = require('./helpers.js');
 const catalogLib = require('../scripts/catalog/catalog.js');
-const inventory = require('../scripts/inventory.js');
-const E = require('../scripts/entries.js');
+const inventory = require('../scripts/inventory/inventory.js');
+const { pythonRequest } = require('../scripts/entries/platform.js');
+const { expandVars } = require('../scripts/entries/locations.js');
+const { buildEntry } = require('../scripts/entries/entry.js');
 const cli = require('../scripts/core/claude-cli.js');
 const account = require('../scripts/core/account.js');
 const F = require('../scripts/fixes/index.js');
@@ -41,7 +43,7 @@ function fresh(rowId, platform = 'darwin', arch = 'x64', scope = 'local', where 
     const r = row(rowId);
     const ctx = { platform, arch, env: {}, home: win ? 'C:\\Users\\dev' : '/home/dev', project: win ? 'C:\\proj' : '/proj', ...where };
     const rootStr = r.locations ? (win ? 'C:\\Users\\dev\\.pt\\x' : '/home/dev/.pt/x') : undefined;
-    return E.buildEntry(r, 'local', { rootStr, scope, token: false }, ctx, catalog.rules);
+    return buildEntry(r, 'local', { rootStr, scope, token: false }, ctx, catalog.rules);
 }
 
 const ids = (list) => list.map((f) => f.id);
@@ -672,7 +674,7 @@ test('apply: two fixes on one registration are ONE replace, from the entry as re
         const now = userEntry(w, 'serena');
         // the row's minor, as this machine takes it: on Windows ARM64 the x64 build (windows-arm-python)
         const c = ctxOf(w);
-        assert.deepStrictEqual(now.args.slice(0, 2), ['--python', E.pythonRequest({ python: '3.13' }, c, c.rules)]);
+        assert.deepStrictEqual(now.args.slice(0, 2), ['--python', pythonRequest({ python: '3.13' }, c, c.rules)]);
         assert.ok(now.args.includes('serena-agent@2.0.0') && now.args.includes('--verbose'));
         assert.strictEqual(now.env.SERENA_USAGE_REPORTING, 'false');
         assert.strictEqual(now.env.SERENA_HOME, entry.env.SERENA_HOME);
@@ -1267,14 +1269,14 @@ test('expandVars: ${NAME} from the environment, ${NAME:-fallback} when unset, nu
 
 test('one ${VAR} expander, Claude Code\'s rule (2.1.322): a variable set to empty is empty, the fallback only when unset - fix and fetch agree', () => {
     const C = require('../scripts/fixes/common.js');
-    const fetch = require('../scripts/fetch.js');
-    assert.strictEqual(E.expandVars('${B:-C:\\b}', { B: '' }).value, '');
-    assert.deepStrictEqual(E.expandVars('${A}/${MISSING}', { A: 'a' }), { value: 'a/${MISSING}', unset: ['MISSING'] });
+    const { expand } = require('../scripts/apply/fetch.js');
+    assert.strictEqual(expandVars('${B:-C:\\b}', { B: '' }).value, '');
+    assert.deepStrictEqual(expandVars('${A}/${MISSING}', { A: 'a' }), { value: 'a/${MISSING}', unset: ['MISSING'] });
     assert.strictEqual(C.expandVars('${B:-C:\\b}', { B: '' }), '', 'set to empty: no fallback');
     assert.strictEqual(C.expandVars('${A}', { A: '' }), '', 'set to empty: set');
     assert.strictEqual(C.firstUnset('${A}', { A: '' }), null);
-    assert.strictEqual(fetch.expand('${B:-x}', { B: '' }), C.expandVars('${B:-x}', { B: '' }));
-    assert.strictEqual(fetch.expand('${B:-x}', {}), 'x');
+    assert.strictEqual(expand('${B:-x}', { B: '' }), C.expandVars('${B:-x}', { B: '' }));
+    assert.strictEqual(expand('${B:-x}', {}), 'x');
 });
 
 // ---- a registration left on its own (spec D6) --------------------------------------------------------------------------
@@ -1321,7 +1323,7 @@ test('appium-sdk-env at project scope finds and proposes the SDK homes as at loc
 // ---- 0.3.0: 0.2.0's relative project paths, the .mcp.json order and a parent's helper (F7, F8, F3a) -------------------
 
 const asks = require('../scripts/asks.js');
-const existingLib = require('../scripts/existing.js');
+const existingLib = require('../scripts/inventory/existing.js');
 const GH = { type: 'http', url: 'https://api.githubcopilot.com/mcp/' };
 const C7 = { type: 'http', url: 'https://mcp.context7.com/mcp' };
 const ctxIn = (w, dir, machine = noMachine()) => fix.makeCtx({ inv: inventory.buildInventory({ project: dir, env: w.env }), env: w.env, machine });
@@ -1577,7 +1579,7 @@ test("npx-cache-entry finds a bridge registration's mcp-remote folder without pa
 test('a 0.4.x own server is skipped before list-import: fix all leaves it byte-identical and list-import moves it to own', () =>
 {
     const fs = require('node:fs');
-    const X = require('../scripts/existing.js');
+    const X = require('../scripts/inventory/existing.js');
     const w = world();
     try
     {
@@ -1696,8 +1698,8 @@ test('the file pass runs after the registration pass, detects on what it wrote, 
 test("install's first touch retires the old record, and a configure 'manage' answer given then survives a later fix run", () =>
 {
     const { plan } = require('../scripts/plan.js');
-    const { apply } = require('../scripts/apply.js');
-    const X = require('../scripts/existing.js');
+    const { apply } = require('../scripts/apply/run.js');
+    const X = require('../scripts/inventory/existing.js');
     const w = world();
     try
     {
@@ -1903,7 +1905,7 @@ const kept5 = require('../scripts/core/kept.js');
 const installBoth = (w, answers) =>
 {
     const { plan } = require('../scripts/plan.js');
-    const { apply } = require('../scripts/apply.js');
+    const { apply } = require('../scripts/apply/run.js');
     const p = plan(inventory.buildInventory({ project: w.project, env: w.env }), { clients: ['claude', 'cursor'], ...answers }, { home: w.home, env: w.env });
     assert.deepStrictEqual(p.errors, []);
     assert.strictEqual(apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);

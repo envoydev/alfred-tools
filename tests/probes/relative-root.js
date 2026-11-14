@@ -22,7 +22,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const E = require('../../scripts/entries.js');
+const { buildEntry } = require('../../scripts/entries/entry.js');
 const catalog = require('../../scripts/catalog/catalog.js').load();
 
 const DATA_FILE = { serena: 'serena_config.yml', memory: 'memory.db', appium: '.png' };
@@ -149,7 +149,7 @@ async function runRow(id, base, cache, opts)
     const child = path.join(R, 'child');
     for (const d of [HOME, child]) fs.mkdirSync(d, { recursive: true });
     const ctx = { platform: process.platform, arch: process.arch, project: R, home: HOME, env: {}, machine: {} };
-    const entry = E.buildEntry(row, 'local', { rootStr: `.preferred-tools/${row.name}`, scope: 'project', params: {} }, ctx, catalog.rules);
+    const entry = buildEntry(row, 'local', { rootStr: `.preferred-tools/${row.name}`, scope: 'project', params: {} }, ctx, catalog.rules);
     if (isBrowser(id)) entry.args = [...entry.args, '--headless'];
     console.log(`LAUNCH ${id} ${entry.command} ${(entry.args || []).join(' ')} ${JSON.stringify(entry.env || {})}`);
     const env = {

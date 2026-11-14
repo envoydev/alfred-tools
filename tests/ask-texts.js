@@ -3,7 +3,7 @@
 // texts, tests/plan.test.js and tests/roots.test.js use the same pattern. One home for the pattern and the fixtures.
 const catalogLib = require('../scripts/catalog/catalog.js');
 const asks = require('../scripts/asks.js');
-const existing = require('../scripts/existing.js');
+const existing = require('../scripts/inventory/existing.js');
 const { plan } = require('../scripts/plan.js');
 
 // alfred-code 3.9.2 stack/hooks/guard-stop-contract.js: an ask that sends the user to the Other field. 'under Other',

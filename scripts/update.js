@@ -22,12 +22,15 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const catalogLib = require('./catalog/catalog.js');
-const inventory = require('./inventory.js');
+const inventory = require('./inventory/inventory.js');
 const cli = require('./core/claude-cli.js');
 const registryLib = require('./catalog/registry.js');
-const E = require('./entries.js');
-const fetchLib = require('./fetch.js');
-const { apply } = require('./apply.js');
+const { pathFor } = require('./entries/platform.js');
+const { contextArgAt, bridgeParts } = require('./entries/entry.js');
+const { signInParts } = require('./entries/sign-in.js');
+const { fetchStep } = require('./entries/names.js');
+const fetchLib = require('./apply/fetch.js');
+const { apply } = require('./apply/run.js');
 const tmpdir = require('./core/tmpdir.js');
 const { blockingStdio } = require('./core/json-file.js');
 const { realMachine, clone, compareVersions, pinnedVersion } = require('./fixes/common.js');
@@ -127,7 +130,7 @@ async function mcpOffers(ctx, out)
         const def = row.routes[r.route];
         const at = `${r.name} (${r.scope})`;
         // the shared sign-in form (0.5.0, D5) runs mcp-remote at a pin, the bridge route's package
-        const signIn = r.route === 'remote' && E.signInParts(r.entry);
+        const signIn = r.route === 'remote' && signInParts(r.entry);
         if (r.route === 'remote' && !signIn) { out.skipped.push(`${at}: a hosted URL has no pin`); continue; }
         if (def.runtime === 'docker') { out.skipped.push(`${at}: the Docker image tag is not checked - change it with /preferred-tools:configure`); continue; }
         const pkg = signIn ? ctx.catalog.byId.get('sentry').routes.bridge.package : def.package;
@@ -193,7 +196,7 @@ function helperOffers(ctx, out)
     const roots = require('./roots/roots.js');
     const { HELPER_VERSION } = require('./mcp-headers.js');
     const { BRIDGE_VERSION } = require('./mcp-bridge.js');
-    const P = E.pathFor(ctx.inv.os);
+    const P = pathFor(ctx.inv.os);
     const rctx = { project: ctx.project, home: require('./core/account.js').homeDir(ctx.env), platform: ctx.inv.os, catalog: ctx.catalog };
     const dirs = new Set(['project', 'global'].map((f) => ctx.inv.roots && ctx.inv.roots[f] && ctx.inv.roots[f].path).filter(Boolean));
     const bridgeDirs = new Set();
@@ -202,12 +205,12 @@ function helperOffers(ctx, out)
     {
         if (!r.rowId || r.own || r.alfredRetired || r.choice === 'own' || r.scope === 'inherited') continue;
         // serena's context file (0.5.0, D7), where the entry names this plugin's
-        const at = E.contextArgAt(r.entry);
+        const at = contextArgAt(r.entry);
         if (at >= 0) contextDirs.add(P.dirname(roots.absOf(r.entry.args[at], rctx)));
         const named = roots.helperPathOf(r.entry && r.entry.headersHelper);
         if (named) dirs.add(P.dirname(roots.absOf(named, rctx)));
         // a bridge's folder holds its bridge and the helper it requires (0.4.0)
-        const bridge = E.bridgeParts(r.entry);
+        const bridge = bridgeParts(r.entry);
         if (bridge) bridgeDirs.add(P.dirname(roots.absOf(bridge.path, rctx)));
     }
     for (const root of bridgeDirs) dirs.add(root);
@@ -433,7 +436,7 @@ function updateMcp(ctx, offer, tmp, log)
         offer = { ...offer, old: now.entry, entry };
     }
     // the new pin is not in the cache yet: fetch it right after the rewrite (entries.js fetchStep)
-    const fetch = E.fetchStep(offer.name, offer.entry, offer.row, offer.old);
+    const fetch = fetchStep(offer.name, offer.entry, offer.row, offer.old);
     const replace = { op: 'mcp-replace', name: offer.name, scope: offer.scope, old: offer.old, entry: offer.entry, row: offer.row, route: offer.route, why: `${offer.package} ${offer.from} -> ${offer.to}` };
     // the list and Cursor take the registration as read back, in the same run (spec D9 Update 2), from the lists as they
     // stand now - an earlier step of this run may have written them
@@ -481,7 +484,7 @@ function updateHelper(offer, log)
     if (before.state !== 'lower') { log(`CHECK  ${offer.label}: now ${before.state} - left as it is`); return false; }
     fs.writeFileSync(offer.file, roots.shippedSource(kind));
     // a YAML file needs no package.json
-    const pkg = kind === 'serenaContext' ? {} : require('./apply.js').ensureCommonjs(path.dirname(offer.file));
+    const pkg = kind === 'serenaContext' ? {} : require('./apply/file-steps.js').ensureCommonjs(path.dirname(offer.file));
     if (pkg.note) log(`note   ${pkg.note}`);
     const ok = roots.shippedState(kind, offer.file).state === 'same';
     log(`${ok ? 'ok    ' : 'CHECK '} ${offer.label}: ${kind} ${offer.from} -> ${offer.to} (read back)`);

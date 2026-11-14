@@ -7,10 +7,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { world, writeJson, readJson } = require('./helpers.js');
 const catalog = require('../scripts/catalog/catalog.js').load();
-const X = require('../scripts/existing.js');
-const inventory = require('../scripts/inventory.js');
+const X = require('../scripts/inventory/existing.js');
+const inventory = require('../scripts/inventory/inventory.js');
 const { plan } = require('../scripts/plan.js');
-const { apply } = require('../scripts/apply.js');
+const { apply } = require('../scripts/apply/run.js');
 const cli = require('../scripts/core/claude-cli.js');
 
 const GH = { type: 'http', url: 'https://api.githubcopilot.com/mcp/' };

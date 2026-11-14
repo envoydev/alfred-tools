@@ -9,7 +9,7 @@ const path = require('node:path');
 const account = require('../core/account.js');
 const lists = require('../mcps-list/mcps-list.js');
 const { stripBom, deepEqual } = require('../core/json-file.js');
-const E = require('../entries.js');
+const { bridgeParts, helperParts } = require('../entries/entry.js');
 const kept = require('../core/kept.js');
 const keys = require('../keys/keys.js');
 
@@ -176,9 +176,9 @@ function fillStdioKeys(managed, ctx)
 // every bridge entry against a host or path fingerprint. inventory.js requires this file, so it is required here, late.
 function matchesRow(entry, row)
 {
-    const { matchesFingerprint } = require('../inventory.js');
+    const { matchesFingerprint } = require('../inventory/inventory.js');
     const fps = Object.values((row && row.routes) || {}).flatMap((r) => r.fingerprints || []);
-    const bridge = E.bridgeParts(entry);
+    const bridge = bridgeParts(entry);
     if (!bridge) return fps.some((f) => matchesFingerprint(entry, f));
     const asHttp = { type: 'http', url: bridge.template };
     return fps.some((f) => (f.bridge ? matchesFingerprint(entry, f) : matchesFingerprint(asHttp, f)));
@@ -210,12 +210,12 @@ const otherHeaders = (entry) => Object.keys((entry && entry.headers) || {});
 function bridgeFormOf(entry, catalog, prior = null)
 {
     if (!entry || typeof entry.headersHelper !== 'string' || otherHeaders(entry).length) return null;
-    const h = E.helperParts(entry.headersHelper);
+    const h = helperParts(entry.headersHelper);
     if (!h || h.args.length < 2) return null;
     const P = /^(?:[A-Za-z]:[\\/]|\\\\)/.test(h.path) ? path.win32 : path.posix;
     const own = [P.join(P.dirname(h.path), 'mcp-bridge.js'), entry.url, h.args[0], h.args[1]];
     const globalRoot = h.args[2] ? [h.args[2]] : [];
-    const pp = prior ? E.bridgeParts(prior) : null;
+    const pp = prior ? bridgeParts(prior) : null;
     if (pp && pp.pkg)
     {
         const at = prior.args.findIndex((a) => String(a) === pp.path);

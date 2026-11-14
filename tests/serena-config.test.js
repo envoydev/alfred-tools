@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const sc = require('../scripts/serena-config.js');
+const sc = require('../scripts/apply/serena-config.js');
 const planLib = require('../scripts/plan.js');
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-serena-')));

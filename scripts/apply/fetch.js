@@ -19,19 +19,19 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
-const cli = require('./core/claude-cli.js');
-const account = require('./core/account.js');
-const kept = require('./core/kept.js');
-const tmpdir = require('./core/tmpdir.js');
-const E = require('./entries.js');
+const cli = require('../core/claude-cli.js');
+const account = require('../core/account.js');
+const kept = require('../core/kept.js');
+const { expandVars } = require('../entries/locations.js');
+const { bridgeParts } = require('../entries/entry.js');
+const { signInParts } = require('../entries/sign-in.js');
 const serenaConfig = require('./serena-config.js');
-const { blockingStdio } = require('./core/json-file.js');
 
 const VERSION = 1;
 const START_MS = 600000;
 const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'preferred-tools', version: '0' } } };
 // ${VAR} and ${VAR:-default}, as Claude Code expands them in an MCP entry (entries.js expandVars)
-const expand = (s, env) => E.expandVars(s, env).value;
+const expand = (s, env) => expandVars(s, env).value;
 // the first ${VAR} with no default that is not set: a start without it only fails
 const unsetVar = (entry, env) => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((m) => m[1]).find((k) => env[k] === undefined) || null;
 
@@ -162,7 +162,7 @@ async function run(j, { env = process.env, runFetch = realFetch, start = realSta
         const entry = step.scope ? account.readRegistration(step.name, step.scope, step.from || cwd, env) : undefined;
         if (!entry || !entry.command) { warn(n, `'${step.name}' is not at ${step.scope || 'a known'} scope any more - not started`); continue; }
         // a bridge's first start would only run the package just fetched - and reach the hosted server with the key
-        if (E.bridgeParts(entry))
+        if (bridgeParts(entry))
         {
             const line = `'${step.name}' not started: a bridge has no first-run work beyond its package`;
             res.skipped.push(line);
@@ -170,7 +170,7 @@ async function run(j, { env = process.env, runFetch = realFetch, start = realSta
             continue;
         }
         // the shared sign-in form (D5): its first start opens a browser to sign in, which is the user's to do in an app
-        if (E.signInParts(entry))
+        if (signInParts(entry))
         {
             const line = `'${step.name}' not started: its first start opens the sign-in, which belongs to Claude Code or Cursor`;
             res.skipped.push(line);
@@ -205,21 +205,4 @@ async function run(j, { env = process.env, runFetch = realFetch, start = realSta
     return res;
 }
 
-async function main(argv)
-{
-    blockingStdio();
-    const file = argv[0];
-    if (!file) { console.error('usage: fetch.js <fetch.json>'); return 2; }
-    let j;
-    try { j = JSON.parse(fs.readFileSync(file, 'utf8')); }
-    catch (e) { console.error(`fetch: cannot read ${file} (${e.message})`); return 2; }
-    if (j.version !== VERSION || !Array.isArray(j.fetch) || !Array.isArray(j.check) || !j.project) { console.error(`fetch: ${file} is not a fetch file of version ${VERSION}`); return 2; }
-    const log = (...a) => console.log(a.join('\n'));
-    const res = await run(j, { log });
-    // the last script on the command's <tmp>: the folder the fetch file sits in goes with it
-    tmpdir.release(path.dirname(path.resolve(file)), log);
-    return res.warnings.length ? 1 : 0;
-}
-
-if (require.main === module) main(process.argv.slice(2)).then((code) => process.exit(code));
-module.exports = { job, writeJob, nextLines, run, status, realFetch, realStart, expand, unsetVar };
+module.exports = { job, writeJob, nextLines, run, status, realFetch, realStart, expand, unsetVar, VERSION };

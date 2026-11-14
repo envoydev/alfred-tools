@@ -89,6 +89,6 @@ function files(dir)
 
 // The headersHelper a registration names for the helper at `file`, as this platform's apply writes it: the path in
 // forward slashes on Windows (entries.js shellArg, style 'win32'), as it is elsewhere
-const helperCmd = (file, name, scheme) => `node ${require('../scripts/entries.js').shellArg(file, process.platform === 'win32' ? 'win32' : 'posix')} ${name} ${scheme}`;
+const helperCmd = (file, name, scheme) => `node ${require('../scripts/entries/entry.js').shellArg(file, process.platform === 'win32' ? 'win32' : 'posix')} ${name} ${scheme}`;
 
 module.exports = { world, writeJson, readJson, accountKey, tempOf, files, helperCmd, FAKE, TOKEN_VARS };

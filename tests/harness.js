@@ -15,10 +15,10 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const inventory = require('../scripts/inventory.js');
+const inventory = require('../scripts/inventory/inventory.js');
 const { plan, render } = require('../scripts/plan.js');
-const { apply } = require('../scripts/apply.js');
-const fetchLib = require('../scripts/fetch.js');
+const { apply } = require('../scripts/apply/run.js');
+const { run } = require('../scripts/apply/fetch.js');
 const account = require('../scripts/core/account.js');
 const cli = require('../scripts/core/claude-cli.js');
 
@@ -85,7 +85,7 @@ class Harness
     async fetch(file)
     {
         const lines = [];
-        const res = await fetchLib.run(JSON.parse(fs.readFileSync(file, 'utf8')), { env: this.env, log: (...a) => lines.push(a.join(' ')) });
+        const res = await run(JSON.parse(fs.readFileSync(file, 'utf8')), { env: this.env, log: (...a) => lines.push(a.join(' ')) });
         return { ...res, text: lines.join('\n') };
     }
 

@@ -66,7 +66,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { cursorSteps, takenNames, renderLine } = require('../scripts/plan-lists.js');
 const { cursorNameQuestion } = require('../scripts/asks.js');
-const applyLib = require('../scripts/apply.js');
+const { listWrite } = require('../scripts/apply/file-steps.js');
 const cursorMcp = require('../scripts/cursor/cursor-mcp.js');
 const catalogAll = require('../scripts/catalog/catalog.js').load();
 
@@ -97,7 +97,7 @@ const runFiles = (w, out, extra) =>
     const report = { appliedKeys: new Set(), cursorFiles: new Set() };
     for (const s of [...out.steps, ...extra])
     {
-        const r = s.op === 'list-write' ? applyLib.listWrite(s, { project: w.project, env: w.ctx.env, report }) : cursorMcp.cursorWrite(s, { catalog: catalogAll });
+        const r = s.op === 'list-write' ? listWrite(s, { project: w.project, env: w.ctx.env, report }) : cursorMcp.cursorWrite(s, { catalog: catalogAll });
         assert.strictEqual(r.ok, true, r.detail);
         if (s.op === 'cursor-write') report.cursorFiles.add(s.file);
     }
@@ -281,7 +281,7 @@ test('a member file holding the name asks for that file, keyed <name>@<file>', (
 
 // ---- hosted routes in both apps (spec D5, ruling 12, ruling 13) -----------------------------------------------------
 const planLib = require('../scripts/plan.js');
-const E = require('../scripts/entries.js');
+const { signInParts, signInFormOf } = require('../scripts/entries/sign-in.js');
 const { READ_GUARD } = require('../scripts/roots/roots.js');
 const MR = catalogAll.byId.get('sentry').routes.bridge.package;
 const hinv = (extra = {}) => ({ version: 1, os: 'darwin', arch: 'arm64', project: '/work/shop', cli: { ok: true }, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, roots: { map: null }, lists: { project: null, global: null }, ...extra });
@@ -365,13 +365,13 @@ test('adding Cursor to an http atlassian entry plans mcp-replace, list-write and
     const p = planLib.plan(i, { change: { 'mcp:atlassian~user': { row: 'atlassian', clients: ['claude', 'cursor'] } } }, HOPTS);
     assert.deepStrictEqual(p.errors, []);
     const rep = p.steps.find((s) => s.op === 'mcp-replace');
-    assert.ok(E.signInParts(rep.entry), JSON.stringify(rep.entry));
+    assert.ok(signInParts(rep.entry), JSON.stringify(rep.entry));
     for (const op of ['list-write', 'cursor-write']) assert.ok(ops(p).includes(op), ops(p).join());
     assert.ok(p.notes.includes(`atlassian: sign in once more - the sign-in now lives in ${GROOT}/mcp-remote-v1/ and serves both apps`), p.notes.join('\n'));
 });
 
 test('taking Cursor off a shared entry plans mcp-replace back to http, with the /mcp line', { skip: POSIX_FIXTURE }, () => {
-    const shared = E.signInFormOf(ATL_URL, GROOT, catalogAll, { platform: 'darwin' });
+    const shared = signInFormOf(ATL_URL, GROOT, catalogAll, { platform: 'darwin' });
     const i = hinv({ registrations: [hreg('atlassian', 'atlassian', shared)], lists: { project: null, global: { file: GLIST, servers: [hlisted('atlassian', 'atlassian', shared, ['claude', 'cursor'])], own: [] } } });
     const p = planLib.plan(i, { change: { 'mcp:atlassian~user': { row: 'atlassian', clients: ['claude'] } } }, HOPTS);
     assert.deepStrictEqual(p.errors, []);
@@ -648,8 +648,8 @@ test('install names a listed server missing from Claude Code and re-adds nothing
 {
     const { world } = require('./helpers.js');
     const planLists = require('../scripts/plan-lists.js');
-    const inventoryLib = require('../scripts/inventory.js');
-    const { apply } = require('../scripts/apply.js');
+    const inventoryLib = require('../scripts/inventory/inventory.js');
+    const { apply } = require('../scripts/apply/run.js');
     const cli = require('../scripts/core/claude-cli.js');
     const w = world();
     try

@@ -7,7 +7,7 @@ const path = require('node:path');
 const catalogLib = require('../scripts/catalog/catalog.js');
 const { plan, render, argvOf, makeCtx, fileSteps } = require('../scripts/plan.js');
 const asks = require('../scripts/asks.js');
-const inventoryLib = require('../scripts/inventory.js');
+const inventoryLib = require('../scripts/inventory/inventory.js');
 const { MARKER } = require('../scripts/core/kept.js');
 
 const catalog = catalogLib.load();
@@ -961,7 +961,7 @@ test('without .alfred/.gitignore there is no alfred-data: today\'s folders, and 
 });
 
 test('the name guard: docs, state, statistics, workspace, flow and an .alfred/<name> file are refused', () => {
-    assert.deepStrictEqual(require('../scripts/entries.js').ALFRED_ENTRIES, ['docs', 'state', 'statistics', 'workspace', 'flow']);
+    assert.deepStrictEqual(require('../scripts/entries/locations.js').ALFRED_ENTRIES, ['docs', 'state', 'statistics', 'workspace', 'flow']);
     for (const name of ['docs', 'state', 'statistics', 'workspace', 'flow'])
     {
         const picked = plan(inv(MAC, { alfredCodeEnabled: true }), pickOne('playwright-chrome', { name, location: { side: 'alfred-data' } }), opts('/Users/me', { exists: ALFRED }));
@@ -1106,11 +1106,11 @@ test('every question has 2 to 4 options, one Recommended and first: each scope, 
 
 // ---- final review fixes ---------------------------------------------------------------------------------------------
 test("the alfred-code name guard ignores case: 'Docs' or 'STATE' is alfred-code's own folder on macOS and Windows", () => {
-    const E = require('../scripts/entries.js');
+    const { alfredNameProblem } = require('../scripts/entries/locations.js');
     const ctx = { project: '/work/shop', platform: 'darwin', exists: () => false };
-    assert.match(E.alfredNameProblem('Docs', ctx) || '', /one of alfred-code's own entries under \.alfred/);
-    assert.match(E.alfredNameProblem('STATE', ctx) || '', /one of alfred-code's own entries under \.alfred/);
-    assert.strictEqual(E.alfredNameProblem('docs-browser', ctx), null);
+    assert.match(alfredNameProblem('Docs', ctx) || '', /one of alfred-code's own entries under \.alfred/);
+    assert.match(alfredNameProblem('STATE', ctx) || '', /one of alfred-code's own entries under \.alfred/);
+    assert.strictEqual(alfredNameProblem('docs-browser', ctx), null);
     const p = plan(inv(MAC, { alfredCodeEnabled: true }), pickOne('playwright-chrome', { scope: 'local', name: 'Docs', location: { side: 'alfred-data' } }), opts('/Users/me', { exists: ALFRED }));
     assert.match(p.errors.join(' '), /'Docs' is one of alfred-code's own entries/);
 });
@@ -1452,11 +1452,11 @@ test('D5: each keyed route at each scope', () => {
 });
 
 test('the helper command per scope', () => {
-    const E = require('../scripts/entries.js');
-    assert.strictEqual(E.helperCommand({ helperPath: '.alfred/mcp-headers.js', name: G, scheme: 'Bearer', style: 'portable' }), `node .alfred/mcp-headers.js ${G} Bearer`);
-    assert.strictEqual(E.helperCommand({ helperPath: 'my keys/mcp-headers.js', name: G, scheme: 'Bearer', style: 'portable' }), `node "my keys/mcp-headers.js" ${G} Bearer`, 'the committed file: double quotes, which every shell reads');
-    assert.strictEqual(E.helperCommand({ helperPath: '/work/my shop/.preferred-tools/mcp-headers.js', name: G, scheme: 'Bearer', style: 'posix' }), `node '/work/my shop/.preferred-tools/mcp-headers.js' ${G} Bearer`);
-    assert.strictEqual(E.helperCommand({ helperPath: '/w/.preferred-tools/mcp-headers.js', name: G, scheme: 'Bearer', globalRoot: '/my keys', style: 'posix' }), `node /w/.preferred-tools/mcp-headers.js ${G} Bearer '/my keys'`);
+    const { helperCommand } = require('../scripts/entries/entry.js');
+    assert.strictEqual(helperCommand({ helperPath: '.alfred/mcp-headers.js', name: G, scheme: 'Bearer', style: 'portable' }), `node .alfred/mcp-headers.js ${G} Bearer`);
+    assert.strictEqual(helperCommand({ helperPath: 'my keys/mcp-headers.js', name: G, scheme: 'Bearer', style: 'portable' }), `node "my keys/mcp-headers.js" ${G} Bearer`, 'the committed file: double quotes, which every shell reads');
+    assert.strictEqual(helperCommand({ helperPath: '/work/my shop/.preferred-tools/mcp-headers.js', name: G, scheme: 'Bearer', style: 'posix' }), `node '/work/my shop/.preferred-tools/mcp-headers.js' ${G} Bearer`);
+    assert.strictEqual(helperCommand({ helperPath: '/w/.preferred-tools/mcp-headers.js', name: G, scheme: 'Bearer', globalRoot: '/my keys', style: 'posix' }), `node /w/.preferred-tools/mcp-headers.js ${G} Bearer '/my keys'`);
     const gh = (base, scope, roots, home = '/Users/me') => helperOf(plan(inv(base, { alfredCodeEnabled: true }), { picks: { github: { route: 'remote', scope } }, roots }, opts(home, { exists: ALFRED })), 'github');
     assert.strictEqual(gh(MAC, 'project'), `node /work/shop/.alfred/mcp-headers.js ${G} Bearer`);
     assert.strictEqual(gh({ ...MAC, project: '/work/my shop' }, 'local', { project: { id: 'preferred-tools' } }), `node '/work/my shop/.preferred-tools/mcp-headers.js' ${G} Bearer`);
@@ -1474,7 +1474,7 @@ test('the helper command per scope', () => {
 });
 
 test('a helper path holding shell characters reaches node whole, and the command reads back to its path and key name', () => {
-    const E = require('../scripts/entries.js');
+    const { helperCommand, helperNameOf } = require('../scripts/entries/entry.js');
     const rootsLib = require('../scripts/roots/roots.js');
     const { spawnSync } = require('node:child_process');
     const cases = [
@@ -1486,10 +1486,10 @@ test('a helper path holding shell characters reaches node whole, and the command
     ];
     for (const [style, helperPath, want] of cases)
     {
-        const cmd = E.helperCommand({ helperPath, name: G, scheme: 'Bearer', style });
+        const cmd = helperCommand({ helperPath, name: G, scheme: 'Bearer', style });
         assert.strictEqual(cmd, want);
         assert.strictEqual(rootsLib.helperPathOf(cmd), style === 'win32' ? helperPath.replace(/\\/g, '/') : helperPath, `read back: ${cmd}`);
-        assert.strictEqual(E.helperNameOf(cmd), G);
+        assert.strictEqual(helperNameOf(cmd), G);
         if (style === 'posix' && process.platform !== 'win32')
         {
             const r = spawnSync('/bin/sh', ['-c', cmd.replace(/^node /, "printf '%s\\n' ")], { encoding: 'utf8' });
@@ -1794,7 +1794,7 @@ test('plan.js --questions with --connectors prints no existing block, reads no l
     const fs = require('node:fs');
     const { spawnSync } = require('node:child_process');
     const { world } = require('./helpers.js');
-    const inventoryLib = require('../scripts/inventory.js');
+    const inventoryLib = require('../scripts/inventory/inventory.js');
     const cli = require('../scripts/core/claude-cli.js');
     const w = world();
     try
@@ -1950,7 +1950,7 @@ test("a global-family own entry in this project's list moves to the global root'
 });
 
 test("configure: 'Leave it on its own' writes one own entry in the family root's list, 'preferred-tools' writes none, and a change for an own target is not planned", () => {
-    const X = require('../scripts/existing.js');
+    const X = require('../scripts/inventory/existing.js');
     const entry = { type: 'http', url: 'https://gitlab.com/api/v4/mcp' };
     const i = inv(MAC, { registrations: [reg('gitlab', 'project', entry, 'gitlab', 'remote')], lists: { project: null, global: null } });
     const p = plan(i, { existing: { 'mcp:gitlab~project': 'own' }, change: { 'mcp:gitlab~project': { scope: 'local' } } }, opts('/Users/me'));
@@ -1963,7 +1963,7 @@ test("configure: 'Leave it on its own' writes one own entry in the family root's
 });
 
 test('the pick list labels a row that a claude.ai connector or an enabled plugin already provides, and the plan names the two servers', () => {
-    const X = require('../scripts/existing.js');
+    const X = require('../scripts/inventory/existing.js');
     const label = (calls, id) => calls.flat().flatMap((x) => x.options.map((o) => o.label)).find((l) => l === id || l.startsWith(`${id} (`));
     assert.strictEqual(label(asks.pickQuestions(inv(MAC), catalog, {}, ['GitLab']), 'gitlab'), 'gitlab (also connected through claude.ai)');
     assert.strictEqual(label(asks.pickQuestions(inv(MAC), catalog), 'gitlab'), 'gitlab');
@@ -2035,7 +2035,7 @@ test('change the root: each managed registration of the family is re-added with 
 test('change the root: the old data and the old key file stay, the new key file holds the names with empty values, the list\'s entries move', () => {
     const fs = require('node:fs');
     const { world, writeJson, helperCmd } = require('./helpers.js');
-    const { apply } = require('../scripts/apply.js');
+    const { apply } = require('../scripts/apply/run.js');
     const cli = require('../scripts/core/claude-cli.js');
     const roots = require('../scripts/roots/roots.js');
     const keys = require('../scripts/keys/keys.js');
@@ -2170,7 +2170,7 @@ test('the 0.1.x key files are read for names only: a held key is never matched a
 test('configure: a 0.1.x project-scope github Docker registration keeps Project listed, recommends Local, and the move writes the key from the chain, never ${VAR}', () => {
     const fs = require('node:fs');
     const { world } = require('./helpers.js');
-    const { apply } = require('../scripts/apply.js');
+    const { apply } = require('../scripts/apply/run.js');
     const cli = require('../scripts/core/claude-cli.js');
     const account = require('../scripts/core/account.js');
     const fix = require('../scripts/fix.js');
@@ -2206,15 +2206,15 @@ test('configure: a 0.1.x project-scope github Docker registration keeps Project 
 // ---- 0.3.0: absolute paths at project scope, data in its root (F6, F7, Optional 3) ----------------------------------
 
 test('project scope writes absolute paths on darwin, linux and win32', () => {
-    const E = require('../scripts/entries.js');
+    const { formatRoot } = require('../scripts/entries/locations.js');
     for (const [base, home] of [[MAC, '/Users/me'], [LINUX, '/home/me'], [WIN, 'C:\\Users\\me']])
     {
         const P = base.os === 'win32' ? path.win32 : path.posix;
         const ctx = { project: base.project, platform: base.os, home, env: {} };
         const rel = { kind: 'project', rel: '.preferred-tools/playwright-chrome' };
-        assert.deepStrictEqual(E.formatRoot(rel, 'project', ctx), E.formatRoot(rel, 'local', ctx), base.os);
-        assert.deepStrictEqual(E.formatRoot({ kind: 'home', rel: '.serena' }, 'project', ctx), { value: P.join(home, '.serena') }, base.os);
-        assert.ok(!E.formatRoot({ kind: 'abs', path: base.os === 'win32' ? 'D:\\data' : '/data' }, 'project', ctx).error, base.os);
+        assert.deepStrictEqual(formatRoot(rel, 'project', ctx), formatRoot(rel, 'local', ctx), base.os);
+        assert.deepStrictEqual(formatRoot({ kind: 'home', rel: '.serena' }, 'project', ctx), { value: P.join(home, '.serena') }, base.os);
+        assert.ok(!formatRoot({ kind: 'abs', path: base.os === 'win32' ? 'D:\\data' : '/data' }, 'project', ctx).error, base.os);
         const pw = addStep(plan(inv(base), pickOne('playwright-chrome', { scope: 'project' }), opts(home))).entry;
         assert.strictEqual(flag(pw, '--user-data-dir'), P.join(base.project, '.preferred-tools', 'playwright-chrome'), base.os);
         assert.strictEqual(flag(pw, '--output-dir'), P.join(base.project, '.preferred-tools', 'playwright-chrome', 'output'), base.os);
@@ -2222,7 +2222,7 @@ test('project scope writes absolute paths on darwin, linux and win32', () => {
 });
 
 test('the helper at project scope is absolute and quoted for its OS', () => {
-    const E = require('../scripts/entries.js');
+    const { helperArgv } = require('../scripts/entries/entry.js');
     const h = (base, home) => addStep(plan(inv(base), pickOne('context7', { route: 'remote', scope: 'project', token: true }), opts(home))).entry.headersHelper;
     const cases = [
         [MAC, '/Users/me', 'node /work/shop/.preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer', '/work/shop/.preferred-tools/mcp-headers.js'],
@@ -2233,7 +2233,7 @@ test('the helper at project scope is absolute and quoted for its OS', () => {
     {
         const cmd = h(base, home);
         assert.strictEqual(cmd, want);
-        assert.strictEqual(E.helperArgv(cmd)[1], file, 'one argument to node (Review Focus 2)');
+        assert.strictEqual(helperArgv(cmd)[1], file, 'one argument to node (Review Focus 2)');
     }
 });
 
@@ -2354,34 +2354,34 @@ test('the project-scope helper note says why, once', () => {
 });
 
 test('buildEntry for the sentry bridge at local, project and user scope', () => {
-    const E = require('../scripts/entries.js');
+    const { buildEntry, currentOf, settingsOf, bridgeParts, renameTemplate } = require('../scripts/entries/entry.js');
     const row = catalog.byId.get('sentry');
     const tail = (t) => [t, 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'];
     const mac = { platform: 'darwin', home: '/Users/me', project: '/work/shop' };
-    const local = E.buildEntry(row, 'bridge', { scope: 'local', urlNames: { SENTRY_ORG: 'SENTRY_SLUG' } }, mac, catalog.rules);
+    const local = buildEntry(row, 'bridge', { scope: 'local', urlNames: { SENTRY_ORG: 'SENTRY_SLUG' } }, mac, catalog.rules);
     assert.deepStrictEqual(local, { command: 'node', args: ['/work/shop/.preferred-tools/mcp-bridge.js', ...tail('https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}')], env: { npm_config_before: '2026-11-11T23:59:59Z' } });
-    const project = E.buildEntry(row, 'bridge', { scope: 'project' }, mac, catalog.rules);
+    const project = buildEntry(row, 'bridge', { scope: 'project' }, mac, catalog.rules);
     assert.strictEqual(project.args[0], '/work/shop/.preferred-tools/mcp-bridge.js', 'absolute at project scope too');
     assert.strictEqual(project.args[1], 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}');
-    const user = E.buildEntry(row, 'bridge', { scope: 'user', keyName: 'MY_SENTRY' }, mac, catalog.rules);
+    const user = buildEntry(row, 'bridge', { scope: 'user', keyName: 'MY_SENTRY' }, mac, catalog.rules);
     assert.strictEqual(user.args[0], '/Users/me/.preferred-tools/mcp-bridge.js');
     assert.strictEqual(user.args[2], 'MY_SENTRY');
-    const named = E.buildEntry(row, 'bridge', { scope: 'local' }, { ...mac, roots: { global: '/keys', globalNamed: true } }, catalog.rules);
+    const named = buildEntry(row, 'bridge', { scope: 'local' }, { ...mac, roots: { global: '/keys', globalNamed: true } }, catalog.rules);
     assert.strictEqual(named.args[5], '/keys', 'a named global root is the last argument at local scope');
-    const win = E.buildEntry(row, 'bridge', { scope: 'project' }, { platform: 'win32', home: 'C:\\Users\\me', project: 'C:\\work\\my shop' }, catalog.rules);
+    const win = buildEntry(row, 'bridge', { scope: 'project' }, { platform: 'win32', home: 'C:\\Users\\me', project: 'C:\\work\\my shop' }, catalog.rules);
     assert.strictEqual(win.command, 'node');
     assert.strictEqual(win.args[0], 'C:\\work\\my shop\\.preferred-tools\\mcp-bridge.js', 'unquoted: no shell reads it');
     for (const [e, scope, keyName, urlNames] of [[local, 'local', 'SENTRY_ACCESS_TOKEN', { SENTRY_ORG: 'SENTRY_SLUG', SENTRY_PROJECT: 'SENTRY_PROJECT' }], [project, 'project', 'SENTRY_ACCESS_TOKEN', { SENTRY_ORG: 'SENTRY_ORG', SENTRY_PROJECT: 'SENTRY_PROJECT' }], [user, 'user', 'MY_SENTRY', { SENTRY_ORG: 'SENTRY_ORG', SENTRY_PROJECT: 'SENTRY_PROJECT' }]])
     {
-        const cur = E.currentOf(row, { name: 'sentry', scope, route: 'bridge', entry: e });
+        const cur = currentOf(row, { name: 'sentry', scope, route: 'bridge', entry: e });
         assert.strictEqual(cur.token, true, scope);
         assert.strictEqual(cur.keyName, keyName, scope);
         assert.deepStrictEqual(cur.urlNames, urlNames, scope);
     }
-    assert.deepStrictEqual(E.settingsOf(row, 'bridge', local), [], 'the bridge passes no setting of the user\'s');
-    assert.deepStrictEqual(E.bridgeParts(local), { path: '/work/shop/.preferred-tools/mcp-bridge.js', template: 'https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}', keyName: 'SENTRY_ACCESS_TOKEN', scheme: 'Sentry-Bearer', pkg: 'mcp-remote@0.16.0', globalRoot: null });
-    assert.strictEqual(E.bridgeParts({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0'] }), null);
-    assert.strictEqual(E.renameTemplate('https://h/mcp/{A}/{B?}', { A: 'X', B: 'Y' }), 'https://h/mcp/{X}/{Y?}');
+    assert.deepStrictEqual(settingsOf(row, 'bridge', local), [], 'the bridge passes no setting of the user\'s');
+    assert.deepStrictEqual(bridgeParts(local), { path: '/work/shop/.preferred-tools/mcp-bridge.js', template: 'https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}', keyName: 'SENTRY_ACCESS_TOKEN', scheme: 'Sentry-Bearer', pkg: 'mcp-remote@0.16.0', globalRoot: null });
+    assert.strictEqual(bridgeParts({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0'] }), null);
+    assert.strictEqual(renameTemplate('https://h/mcp/{A}/{B?}', { A: 'X', B: 'Y' }), 'https://h/mcp/{X}/{Y?}');
 });
 
 // ---- the sentry bridge (0.4.0) ----------------------------------------------------------------------------------------
@@ -2671,7 +2671,7 @@ function rootMoveWorld(t, pick)
 {
     const fs = require('node:fs');
     const { world } = require('./helpers.js');
-    const { apply } = require('../scripts/apply.js');
+    const { apply } = require('../scripts/apply/run.js');
     const w = world();
     t.after(() => w.clean());
     const data = path.join(w.dir, 'data');

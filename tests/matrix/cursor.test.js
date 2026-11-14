@@ -401,7 +401,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
 
     // 2. 0.5.0's update, as the command runs it
     const update = require('../../scripts/update.js');
-    const inventory = require('../../scripts/inventory.js');
+    const inventory = require('../../scripts/inventory/inventory.js');
     const checkNow = async () =>
     {
         const inv = inventory.buildInventory({ project: p, env: hh.env, run: cli.run, data: hh.data });

@@ -10,7 +10,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const account = require('../core/account.js');
-const E = require('../entries.js');
+const { rootOfEntry, alfredData } = require('../entries/locations.js');
+const { helperParts, bridgeParts, helperNameOf } = require('../entries/entry.js');
 const helper = require('../mcp-headers.js');
 
 const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json', signIns: 'mcp-remote-v1', serenaContext: 'serena-context.yml' };
@@ -95,7 +96,7 @@ function absOf(text, ctx)
 // The helper file a `headersHelper` command names, or null.
 function helperPathOf(command)
 {
-    const h = E.helperParts(command);
+    const h = helperParts(command);
     return h ? h.path : null;
 }
 
@@ -122,7 +123,7 @@ function registrationRoots(inv, family, ctx)
         const row = catalog.byId.get(r.rowId);
         if (!row || !row.locations || !r.entry) continue;
         let rootStr;
-        try { rootStr = E.rootOfEntry(row, r.entry); }
+        try { rootStr = rootOfEntry(row, r.entry); }
         catch { rootStr = null; }
         if (!rootStr || rootStr.includes('${') && !/^\$\{(?:HOME|USERPROFILE)\}/.test(rootStr)) continue;
         const parent = P.dirname(absOf(rootStr, ctx));
@@ -164,7 +165,7 @@ function options(inv, family, ctx)
             { id: 'named', root: null, label: 'A folder you name', description: `a folder of yours, asked next - ${NAMED_GLOBAL_TAIL}` },
         ]
         : [
-            ...(E.alfredData(ctx, inv.alfredCodeEnabled) ? [{ ...alfred, label: '.alfred in this project', description: `${alfred.root} - kept out of git by alfred-code` }] : []),
+            ...(alfredData(ctx, inv.alfredCodeEnabled) ? [{ ...alfred, label: '.alfred in this project', description: `${alfred.root} - kept out of git by alfred-code` }] : []),
             { ...preferred, label: '.preferred-tools in this project', description: `${preferred.root} - its own .gitignore keeps the keys, the record and the data out of git` },
             { id: 'named', root: null, label: 'A folder you name', description: 'a folder of yours inside this project, asked next' },
         ];
@@ -242,7 +243,7 @@ function pointsIntoRoot(reg, inv, ctx)
 {
     const P = pathFor(ctx.platform);
     // a bridge (0.4.0): this plugin's when its file has a number line, or - no file yet - when its launch names a key
-    const bridge = E.bridgeParts(reg.entry);
+    const bridge = bridgeParts(reg.entry);
     if (bridge)
     {
         const abs = absOf(bridge.path, ctx);
@@ -258,13 +259,13 @@ function pointsIntoRoot(reg, inv, ctx)
         // of the user's own under the same name is asked about
         const abs = absOf(file, ctx);
         const { state, number } = helperState(abs, ctx.exists || ((p) => fs.existsSync(p)));
-        const ours = state === 'absent' ? Boolean(E.helperNameOf(command)) : number !== null;
+        const ours = state === 'absent' ? Boolean(helperNameOf(command)) : number !== null;
         return ours ? P.dirname(abs) : null;
     }
     const row = reg.rowId ? catalogOf(ctx).byId.get(reg.rowId) : null;
     if (!row || !row.locations || !reg.entry) return null;
     let rootStr;
-    try { rootStr = E.rootOfEntry(row, reg.entry); }
+    try { rootStr = rootOfEntry(row, reg.entry); }
     catch { rootStr = null; }
     if (!rootStr || rootStr.includes('${') && !/^\$\{(?:HOME|USERPROFILE)\}/.test(rootStr)) return null;
     const parent = P.dirname(absOf(rootStr, ctx));

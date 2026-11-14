@@ -7,7 +7,9 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const C = require('./common.js');
-const E = require('../entries.js');
+const { rootOfEntry } = require('../entries/locations.js');
+const { bridgeParts } = require('../entries/entry.js');
+const { fetchStep } = require('../entries/names.js');
 
 // ---- retired-plugin (spec D8, D9, 0.5.0) -------------------------------------------------------------------------------
 // typescript-lsp, csharp-lsp and claude-hud work in Claude Code alone, so the catalog no longer lists them. Each id the row
@@ -38,7 +40,7 @@ function retiredPluginDetect(ctx)
 function retiredPluginFix(f, ctx)
 {
     const cli = require('../core/claude-cli.js');
-    const inventory = require('../inventory.js');
+    const inventory = require('../inventory/inventory.js');
     const hud = require('../hud/hud-statusline.js');
     const command = `claude plugin uninstall ${f.name} --scope ${f.scope}`;
     const r = cli.run(['plugin', 'uninstall', f.name, '--scope', f.scope], { cwd: ctx.inv.project, env: ctx.env });
@@ -80,7 +82,7 @@ function dataFolderIgnoreDetect(ctx)
         // starts here: a project-scope one not rejected, or a parent's not rejected and not shadowed by a nearer one
         if (r.scope === 'inherited' ? r.approval === 'rejected' || r.shadowed : r.scope !== 'project' || r.approval === 'rejected') continue;
         const row = C.rowOf(ctx, r.rowId);
-        const root = row.locations ? E.rootOfEntry(row, r.entry) : null;
+        const root = row.locations ? rootOfEntry(row, r.entry) : null;
         if (!root || root.includes('${') || root.startsWith('~')) continue;
         if (path.posix.isAbsolute(root) || path.win32.isAbsolute(root))
         {
@@ -206,8 +208,8 @@ function npxCacheEntryDetect(ctx)
     for (const reg of ctx.inv.registrations)
     {
         // npx, or a bridge (0.4.0), which runs its pinned mcp-remote through npx
-        if (!startsHere(ctx, reg) || (C.launcher(reg.entry) !== 'npx' && !E.bridgeParts(reg.entry))) continue;
-        const step = E.fetchStep(reg.name, reg.entry, reg.rowId);
+        if (!startsHere(ctx, reg) || (C.launcher(reg.entry) !== 'npx' && !bridgeParts(reg.entry))) continue;
+        const step = fetchStep(reg.name, reg.entry, reg.rowId);
         if (!step) continue;
         const cache = npmCacheOf(ctx, reg, memo);
         if (!cache) continue;
@@ -229,7 +231,7 @@ function npxCacheEntryFix(f, ctx)
     try { fs.rmSync(folder, { recursive: true, force: true }); }
     catch (e) { return { ok: false, detail: `could not remove ${folder}: ${e.message}` }; }
     const reg = ctx.inv.registrations.find((r) => r.name === f.name && r.scope === f.scope && !r.shadowed);
-    const step = reg ? E.fetchStep(reg.name, reg.entry, reg.rowId) : null;
+    const step = reg ? fetchStep(reg.name, reg.entry, reg.rowId) : null;
     // a parent's server is read from the parent's .mcp.json and started here, as this folder's session starts it
     const where = reg && reg.scope === 'inherited' ? { scope: 'project', from: reg.from } : { scope: reg && reg.scope };
     return { ok: true, detail: `removed ${folder} - npx installs ${f.proposal.what} into it again`, fetch: step ? { ...step, ...where } : null };
