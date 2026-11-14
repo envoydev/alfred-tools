@@ -16,5 +16,91 @@
   "not_here": [
     "- A change in a sibling repo (plugins-marketplaces hosts the `envoydev` marketplace), which follows that repo's own flow.",
     "- Alfred Code's `task-solve` and its seats, stamps and stops, which serve the projects that install the stack."
-  ]
+  ],
+  "audit": {
+    "skills": {
+      "roots": [
+        "commands"
+      ],
+      "checks": [
+        "npm run lint",
+        "npm run validate"
+      ],
+      "notes": [
+        "commands/*.md are single-file skills (slash commands): each file is one skill with SKILL.md-style frontmatter (description, argument-hint, disable-model-invocation, allowed-tools) and no bundled folder; all four are manual-only, so Dimension 1 judges the slash-menu description and argument-hint, not model triggering.",
+        "A command runs its work through scripts invoked only via the plugin root (node \"${CLAUDE_PLUGIN_ROOT}/scripts/<x>.ts\"), each pre-approved in allowed-tools; npm run lint fails a script path that does not go through the plugin root.",
+        "Commands that write registrations (install, configure, update, fix) have side effects the user owns; after an edit that touches what they write, run npm run matrix (real-CLI cases in a throwaway home) and read the written .mcp.json, account file and settings, never the exit code alone.",
+        "The MCP-server catalog under catalog/ decides what the commands can install; a command cite of a server is checked against it."
+      ]
+    },
+    "plugins": {
+      "roots": [
+        "catalog/tools.json"
+      ],
+      "checks": [
+        "npm run lint",
+        "npm test",
+        "npm run validate"
+      ],
+      "notes": [
+        "Every catalog row is an MCP server (kind: mcp, 14 rows); there are no plugin rows since 0.5.0 (claude-hud, typescript-lsp and csharp-lsp left), and a plugin row returns only when it works in both Claude Code and Cursor.",
+        "Each row's routes are a hosted remote (url, authMode, header helper) or a local launch (runtime npx/uvx, package registry, name and pinned version, cutoff); npm run refresh-pins moves the pins under the 7-day release-age gate (rules.ageGateDays, rules.cutoff), and the vendor facts behind each row are in docs/sources.md.",
+        "The claude CLI is the only writer of .mcp.json and the account .claude.json (claude mcp add-json/remove/get, claude plugin install/update/uninstall/list --json); the one exception is scripts/mcps-list/mcp-order.ts, a reorder-only rewrite of .mcp.json.",
+        "Cursor is a second host: scripts/cursor/cursor-mcp.ts writes <project>/.cursor/mcp.json and ~/.cursor/mcp.json, so both are part of the install and are read beside Claude Code's.",
+        "The catalog holds no secret: a hosted key is named by its helper block, which mcp-headers.js reads from .mcps-secrets, and a stdio key is only ever a ${VAR} reference.",
+        "Each row's dangerous field lists the risk the row declares; read it in the security read.",
+        "The copied files in scripts/copied/ (mcp-headers.js, mcp-bridge.js, serena-context.yml) run outside the plugin on users' machines and are updated by /alfred-tools:update, so they are part of the installed surface.",
+        "Retirement: /alfred-tools:update offers once to uninstall the retired plugins (the retired-plugin offers in scripts/update/), and catalog/reserved-names.json (built by scripts/refresh-reserved.ts) lists names alfred-code once registered.",
+        "Known problems and their fixes are catalog/fixes.json, with detect and fix functions in scripts/fix/.",
+        "The root is the four manual commands under commands/ (install, configure, update, fix); the repo ships no skills, agents, rules or hooks, and the plugin is standalone - it may read what alfred-code left but must never need it.",
+        "After a change to install, configure, update or fix, npm run matrix runs real-CLI cases in a throwaway home and account; read the written .mcp.json, account file and settings, never the exit code alone.",
+        "There is no usage analyzer: measure use by counting mcp__<name>__* tool calls in the corpus."
+      ]
+    },
+    "system": {
+      "roots": [
+        ".claude-plugin/plugin.json",
+        "commands/",
+        "scripts/",
+        "catalog/",
+        "package.json"
+      ],
+      "checks": [
+        "npm run lint",
+        "npm test",
+        "npm run validate"
+      ],
+      "notes": [
+        "The plugin ships four commands - `commands/install.md`, `configure.md`, `update.md`, `fix.md` - each `disable-model-invocation: true`, so it puts no description in every session; each command's work is a script under `scripts/` called as `node \"${CLAUDE_PLUGIN_ROOT}/scripts/<file>\"`, and `allowed-tools` lists read-only calls only.",
+        "No skills, agents, hooks, rules or MCP servers ship; a default component folder (`skills/`, `agents/`, `hooks/`, `bin/`, `.mcp.json`) at the root is a packaging finding.",
+        "The repo-root `.mcp.json` is a git-ignored, machine-local dev file the kit sync writes; it never ships but a `claude --plugin-dir .` fixture would read it as a plugin MCP server, so the map attributes it to the dev checkout.",
+        "PROFILES is one `default` install; no fixture or session-surface tool exists, so install by hand with `claude --plugin-dir .` in a scratch project under an isolated `CLAUDE_CONFIG_DIR` and `HOME` in the session scratchpad, never the real account (matrix installs once left records in `~/.claude/plugins/installed_plugins.json` and nested sessions ended logged out).",
+        "The plugin states no project facts by design: S5 fixes what each of the four commands is for.",
+        "The plugin's dangerous actions are config writes: it writes `.mcp.json`, the account file, Cursor's config and settings, and handles keys and mcp-remote sign-ins - never a key in `.mcp.json`, the plugin never reads, prints or copies `<root>/mcp-remote-v1/`, and the user's settings deny reads of `mcp-remote-v1/` and `.mcps-secrets`; the guard-route map covers these.",
+        "The install proof is `npm run matrix` (real-CLI cases in a throwaway home and account, minutes) after any change to install, configure, update or fix, reading the written `.mcp.json`, account file and settings, never the exit code alone.",
+        "The catalog is `catalog/tools.json` (one row per tool), `catalog/fixes.json` (one row per known problem, code under `scripts/fix/`) and `catalog/reserved-names.json`; every outside fact a row rests on is in `docs/sources.md` with its URL and date.",
+        "`scripts/copied/` files run outside the plugin in a user's root byte for byte and stay CommonJS.",
+        "The version lives in `.claude-plugin/plugin.json` and is mirrored in `package.json`; `npm run lint` fails on drift.",
+        "`npm run validate` runs `claude plugin validate --profile directory --strict` on a scratch copy of the files git would ship; the publish order is validate, a `claude --plugin-dir .` session in a scratch project, then `claude plugin details`.",
+        "MARKETPLACE is the `envoydev` catalog in envoydev/plugins-marketplaces (`.claude-plugin/marketplace.json`), which lists the plugin as a github source on envoydev/alfred-tools `main` with no `sha`; `main` is release-only and a merge there with a new version is the release.",
+        "Never rename or drop the id `alfred-tools`: every install goes silent.",
+        "Plugin CLI behaviour evidence is recorded in `docs/plugin-cli-evidence.md`.",
+        "The repo is public: no private project names or absolute local paths in a tracked file (`npm run lint` checks the paths)."
+      ]
+    },
+    "usage": {
+      "roots": [
+        "docs/sessions-investigation/"
+      ],
+      "checks": [
+        "npm run lint",
+        "npm test"
+      ],
+      "notes": [
+        "No collector, analyzer or per-project report skill exists: collect by route 3 by hand (the raw transcript and its `<session-id>/` folder copied from `~/.claude*/projects/`), count with `jq` / `grep`, and offer `skeleton` only.",
+        "The plugin's commands are manual, so its use shows in a transcript as a user-typed `/alfred-tools:<command>` expansion and the `node .../scripts/<file>` Bash calls it makes; there are no skills, agents or hooks to score.",
+        "`docs/sessions-investigation/` already holds hand-written evidence folders (for example `preferred-tools-issues-2026-11-10/`), not collector bundles: read them as already-known claims to verify, never as bundles."
+      ]
+    }
+  }
 }
