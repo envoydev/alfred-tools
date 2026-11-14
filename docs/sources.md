@@ -1327,6 +1327,8 @@ unless a URL is given. 'The former plugin' and 'the former folder' are the plugi
   starts its servers again, so `root-move` names the stdio servers that use the folder and tells the user to disable
   them in `/mcp` (https://code.claude.com/docs/en/mcp, 'Disable a server without removing it': Claude Code does not
   connect to a disabled server; the choice is kept per project), restart, update, and enable them again.
+  On the GitHub `windows-2025-vs2026` runner (x64, node 22, 2026-11-15, CI run 43654368677) the same rename with a
+  child process whose working folder is inside fails `EBUSY`, not `EPERM`: `root-move` treats both as a folder in use.
 - A6 - moving an account to another catalog source under the same name (claude 2.1.x, measured 2026-11-14 on a
   throwaway config with two local catalogs, then on the owner's account): `claude plugin marketplace add <new source>`
   for a name already added re-points it in place - 'Plugins already installed from it now update from the new source' -

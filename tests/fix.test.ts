@@ -2192,8 +2192,8 @@ test('a rename whose folder already moved reports it, never throws (a project th
 });
 
 // Hold `root` so its rename fails, the way each host refuses it: on Windows a process whose working folder is inside it
-// (measured: EPERM, docs/sources.md A7 - a read-only folder does not stop a rename there); elsewhere a folder the rename
-// cannot write. -> the error code the rename meets and how to let go
+// (measured: EPERM on Windows 11, EBUSY on the windows-2025 runner, docs/sources.md A7 - a read-only folder does not stop
+// a rename there); elsewhere a folder the rename cannot write. -> the error codes the rename may meet and how to let go
 async function holdFolder(parent: string, root: string): Promise<{ code: string; release: () => Promise<void> }>
 {
     if (process.platform !== 'win32')
@@ -2203,7 +2203,7 @@ async function holdFolder(parent: string, root: string): Promise<{ code: string;
     }
     const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { cwd: root, stdio: 'ignore' });
     await once(child, 'spawn');
-    return { code: 'EPERM', release: async () => { const exited = once(child, 'exit'); child.kill(); await exited; } };
+    return { code: '(?:EPERM|EBUSY)', release: async () => { const exited = once(child, 'exit'); child.kill(); await exited; } };
 }
 
 test('a rename Windows refuses names the servers that keep files in the folder, and how to stop them first', async () =>
