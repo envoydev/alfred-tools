@@ -29,6 +29,11 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    env:
+      # Windows only reads these: the hosted runner's own temp folder is under C:\Users\RUNNER~1, an 8.3 short path
+      # the tests' scratch projects then disagree with the CLI about (first Windows run: 19 failures naming it)
+      TEMP: ${{ runner.temp }}
+      TMP: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v7
         with:
