@@ -63,6 +63,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --questions <tmp>/inventory.json --
 `<Name>,<Name>`: the claude.ai connectors this session has loaded - each `<Name>` in your own tool names
 `mcp__claude_ai_<Name>__<tool>`, once each (`mcp__claude_ai_Context7__query-docs` gives `Context7`); `""` when there are
 none. The call reads the registrations and starts no server; it asks nothing about servers already set up.
+If the questions call exits 1 naming the plugin's old folder, show that line and stop.
 
 Its `pick` holds only the tools not installed here, without a server left on its own. When it is empty, say every
 catalog tool for this OS is installed or left on its own, point to `/alfred-tools:configure` to change or remove one,

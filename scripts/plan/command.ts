@@ -7,7 +7,7 @@ import * as account from '../core/account.ts';
 import * as roots from '../roots/roots.ts';
 import * as existing from '../inventory/existing.ts';
 import { blockingStdio } from '../core/json-file.ts';
-import { plan } from './plan.ts';
+import { plan, MOVE_FIRST, moveWaits } from './plan.ts';
 import { renderPlan } from './render.ts';
 import type { Inventory } from '../inventory/types.ts';
 import type { Answers, Picks, PlanArgs } from './types.ts';
@@ -46,6 +46,8 @@ export function runPlanCommand(argv: string[]): number
     const inventory = read(invFile) as Inventory;
     // the roots map is read fresh from the plugin's data folder when one is given
     if (args.data !== null) inventory.roots = { ...(inventory.roots || {}), map: roots.readMap(args.data) };
+    // a folder under the former name waits to move: nothing is asked before update moves it (spec D3)
+    if (args.questions && moveWaits({ project: inventory.project, home: account.homeDir(process.env), platform: inventory.os || process.platform })) { console.error(MOVE_FIRST); return 1; }
     if (args.questions)
     {
         const picks = second ? read(second) as Picks : null;

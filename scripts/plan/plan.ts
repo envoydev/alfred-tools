@@ -37,12 +37,18 @@ import type { Answers, Plan, PlanCtx, PlanOptions, PlanStep } from './types.ts';
 
 // ---- the plan -------------------------------------------------------------------------------------------------------
 
+// A folder under the plugin's former name waits to move (spec D3): install and configure write nothing beside it - a
+// new helper no longer reads ~/.preferred-tools - and send the user to update, which moves it.
+export const MOVE_FIRST = ".preferred-tools is this plugin's old folder - run /alfred-tools:update first, which moves it";
+export const moveWaits = (context: { project: string; home: string; platform: string }): boolean => roots.pendingMoves(context).some((move) => move.state === 'move');
+
 export function plan(inventory: Inventory, answers: Answers, options: PlanOptions = {}): Plan
 {
     const catalog = options.catalog || catalogLib.load();
     // answers.machine: what prereq.ts found (docker: false picks github's binary fallback); an explicit option wins
     const context: PlanCtx = { ...makeCtx(inventory, { ...options, machine: options.machine || answers.machine }), changing: new Set(Object.keys(answers.change || {})), uses: [], rootMoves: [] };
     const out: Plan = { version: 1, project: inventory.project, os: inventory.os, alfredCodeEnabled: Boolean(inventory.alfredCodeEnabled), steps: [], notes: [], errors: [], unchanged: [], keys: [], reconnect: [], oauth: [], dangerous: [], expect: [] };
+    if (moveWaits({ project: inventory.project, home: context.home, platform: context.platform })) { out.errors.push(MOVE_FIRST); return out; }
     // the root folders (spec D2): every data folder, key file and helper of a family sits in its root
     const resolved = roots.resolveRoots(inventory, answers.roots, { ...context, catalog });
     out.errors.push(...resolved.errors);

@@ -2705,3 +2705,72 @@ test('a root move renames mcp-remote-v1 and rewrites MCP_REMOTE_CONFIG_DIR in bo
     assert.strictEqual((m.local('atlassian')!.env as EntryEnv).MCP_REMOTE_CONFIG_DIR, m.fresh);
     assert.strictEqual(m.cursor().atlassian.env.MCP_REMOTE_CONFIG_DIR, m.fresh);
 });
+
+// ---- the rename: install and configure wait for the move (spec D3) ------------------------------------------------
+const MOVE_FIRST = ".preferred-tools is this plugin's old folder - run /alfred-tools:update first, which moves it";
+function oldFolders(state: 'move' | 'came-back')
+{
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plan-move-')));
+    const project = path.join(dir, 'shop');
+    const home = path.join(dir, 'home');
+    fs.mkdirSync(path.join(project, '.preferred-tools'), { recursive: true });
+    fs.mkdirSync(home, { recursive: true });
+    if (state === 'came-back')
+    {
+        fs.mkdirSync(path.join(project, '.preferred-tools', 'memory'));
+        fs.mkdirSync(path.join(project, '.alfred-tools'));
+        fs.writeFileSync(path.join(project, '.alfred-tools', 'mcps.json'), '{"version":1,"servers":[],"own":[]}\n');
+    }
+    else fs.writeFileSync(path.join(project, '.preferred-tools', 'preferred-tools.json'), '{"version":1,"servers":[]}\n');
+    return { dir, project, home, clean: () => fs.rmSync(dir, { recursive: true, force: true }) };
+}
+
+test('install stops while .preferred-tools waits to move', () => {
+    const f = oldFolders('move');
+    try
+    {
+        const p = plan(inv({ ...MAC, project: f.project }), pickOne('serena'), opts(f.home));
+        assert.deepStrictEqual([p.errors, p.steps], [[MOVE_FIRST], []]);
+    }
+    finally { f.clean(); }
+});
+
+test('configure stops the same way', () => {
+    const f = oldFolders('move');
+    try
+    {
+        const p = plan(inv({ ...MAC, project: f.project }), { change: { 'mcp:serena~user': { row: 'serena', name: 'nav' } } }, opts(f.home));
+        assert.deepStrictEqual([p.errors, p.steps], [[MOVE_FIRST], []]);
+    }
+    finally { f.clean(); }
+});
+
+test('a came-back folder does not stop install', () => {
+    const f = oldFolders('came-back');
+    try
+    {
+        assert.ok(!plan(inv({ ...MAC, project: f.project }), pickOne('serena'), opts(f.home)).errors.includes(MOVE_FIRST));
+    }
+    finally { f.clean(); }
+});
+
+test('the questions call stops before any ask while a move waits', () => {
+    const f = oldFolders('move');
+    const lines: string[] = [];
+    const log = console.log;
+    const err = console.error;
+    try
+    {
+        const invFile = path.join(f.dir, 'inv.json');
+        fs.writeFileSync(invFile, JSON.stringify(inv({ ...MAC, project: f.project })));
+        console.log = (s) => lines.push(s);
+        console.error = (s) => lines.push(s);
+        const env = { ...process.env };
+        const keys = ['HOME', 'USERPROFILE'] as const;
+        for (const key of keys) process.env[key] = f.home;
+        try { assert.strictEqual(runPlanCommand(['--questions', invFile]), 1); }
+        finally { for (const key of keys) { if (env[key] === undefined) delete process.env[key]; else process.env[key] = env[key]; } }
+        assert.deepStrictEqual(lines, [MOVE_FIRST]);
+    }
+    finally { console.log = log; console.error = err; f.clean(); }
+});

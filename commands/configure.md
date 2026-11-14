@@ -66,6 +66,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --questions <tmp>/inventory.json --
 Its `change.keys` maps each option to its key: an installed registration (`mcp:<name>~<scope>`), a server left on its own (`mcp:...`, `plugin-mcp:<plugin>/<server>`, `connector:<Name>`), and a
 root folder in use (`root:project`, `root:global`). When it is empty, say nothing from the catalog is installed here,
 point to `/alfred-tools:install`, and stop.
+If the questions call exits 1 naming the plugin's old folder, show that line and stop.
 
 The argument, when given:
 
