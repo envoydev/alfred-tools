@@ -6,12 +6,12 @@
 // nothing. A write goes through a temporary file and a rename, and is read back.
 const fs = require('node:fs');
 const path = require('node:path');
-const account = require('./account.js');
-const lists = require('./mcps-list.js');
-const { stripBom, deepEqual } = require('./json-file.js');
-const E = require('./entries.js');
-const kept = require('./kept.js');
-const keys = require('./keys.js');
+const account = require('../core/account.js');
+const lists = require('../mcps-list/mcps-list.js');
+const { stripBom, deepEqual } = require('../core/json-file.js');
+const E = require('../entries.js');
+const kept = require('../core/kept.js');
+const keys = require('../keys/keys.js');
 
 const pathFor = (platform) => (platform === 'win32' ? path.win32 : path.posix);
 
@@ -148,7 +148,7 @@ function stdioKeyed(entry, row, routeId)
 // neither, the name is written empty, with fillStep's note. Changes `managed` in place. -> [note]
 function fillStdioKeys(managed, ctx)
 {
-    const catalog = (ctx && ctx.catalog) || require('./catalog.js').load();
+    const catalog = (ctx && ctx.catalog) || require('../catalog/catalog.js').load();
     const notes = [];
     for (const [name, m] of managed)
     {
@@ -176,7 +176,7 @@ function fillStdioKeys(managed, ctx)
 // every bridge entry against a host or path fingerprint. inventory.js requires this file, so it is required here, late.
 function matchesRow(entry, row)
 {
-    const { matchesFingerprint } = require('./inventory.js');
+    const { matchesFingerprint } = require('../inventory.js');
     const fps = Object.values((row && row.routes) || {}).flatMap((r) => r.fingerprints || []);
     const bridge = E.bridgeParts(entry);
     if (!bridge) return fps.some((f) => matchesFingerprint(entry, f));

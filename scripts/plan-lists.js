@@ -9,14 +9,14 @@
 // the family joins the list as read, and the 0.4.x record's own entries move into it, the record itself moved aside.
 const fs = require('node:fs');
 const E = require('./entries.js');
-const catalogLib = require('./catalog.js');
-const roots = require('./roots.js');
-const keys = require('./keys.js');
-const lists = require('./mcps-list.js');
-const cursorMcp = require('./cursor-mcp.js');
-const workspace = require('./workspace.js');
-const kept = require('./kept.js');
-const { deepEqual } = require('./json-file.js');
+const catalogLib = require('./catalog/catalog.js');
+const roots = require('./roots/roots.js');
+const keys = require('./keys/keys.js');
+const lists = require('./mcps-list/mcps-list.js');
+const cursorMcp = require('./cursor/cursor-mcp.js');
+const workspace = require('./roots/workspace.js');
+const kept = require('./core/kept.js');
+const { deepEqual } = require('./core/json-file.js');
 
 const REG_OPS = ['mcp-add', 'mcp-replace', 'mcp-move', 'mcp-remove'];
 

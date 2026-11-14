@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const hud = require('../scripts/hud-statusline.js');
+const hud = require('../scripts/hud/hud-statusline.js');
 const { classify, expected, gitBash, resolveConfigDir, removeHudStatusLine } = hud;
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'hud-statusline-'));

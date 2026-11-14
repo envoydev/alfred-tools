@@ -6,12 +6,12 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const { world, writeJson, readJson } = require('./helpers.js');
-const catalog = require('../scripts/catalog.js').load();
+const catalog = require('../scripts/catalog/catalog.js').load();
 const X = require('../scripts/existing.js');
 const inventory = require('../scripts/inventory.js');
 const { plan } = require('../scripts/plan.js');
 const { apply } = require('../scripts/apply.js');
-const cli = require('../scripts/claude-cli.js');
+const cli = require('../scripts/core/claude-cli.js');
 
 const GH = { type: 'http', url: 'https://api.githubcopilot.com/mcp/' };
 const C7 = { type: 'http', url: 'https://mcp.context7.com/mcp' };
@@ -93,7 +93,7 @@ test("a helper file of the user's own - no preferred-tools number line, or not t
         assert.deepStrictEqual(X.items(invOf({ registrations: [hand] }), [], catalog, real).map((x) => x.key), ['mcp:github~local'], 'a hand-made file in place');
         const shape = regOf('github', 'local', { ...GH, headersHelper: 'node /work/shop/.alfred/mcp-headers.js github' }, 'github', 'remote');
         assert.deepStrictEqual(X.items(invOf({ registrations: [shape] }), [], catalog, ctx).map((x) => x.key), ['mcp:github~local'], "no file, and not this plugin's <NAME> <SCHEME>");
-        fs.writeFileSync(own, require('../scripts/roots.js').helperSource());
+        fs.writeFileSync(own, require('../scripts/roots/roots.js').helperSource());
         const ours = regOf('github', 'local', { ...GH, headersHelper: `node ${own} GITHUB_PERSONAL_ACCESS_TOKEN Bearer` }, 'github', 'remote');
         assert.deepStrictEqual(X.items(invOf({ registrations: [ours] }), [], catalog, real), [], "this plugin's helper in place: not asked");
     }

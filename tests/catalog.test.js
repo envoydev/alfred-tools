@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const { load, fingerprintKey, CATALOG_DIR } = require('../scripts/catalog.js');
+const { load, fingerprintKey, CATALOG_DIR } = require('../scripts/catalog/catalog.js');
 
 const cat = load();
 const ROOT = path.join(__dirname, '..');
@@ -182,7 +182,7 @@ test('no catalog default name is in the reserved set, and the shipped set is the
     for (const n of ['sentry', 'context7-local', 'angular-cli', 'chrome-devtools']) assert.ok(!cat.reserved.has(n), n);
     const alfred = path.join(ROOT, '..', 'alfred-code');
     if (!fs.existsSync(path.join(alfred, 'meta', 'retired-plugins.json'))) return t.skip('no alfred-code checkout beside this repo');
-    const { reservedFrom } = require('../scripts/refresh-reserved.js');
+    const { reservedFrom } = require('../scripts/catalog/refresh-reserved.js');
     assert.deepStrictEqual([...cat.reserved].sort(), reservedFrom(alfred));
 });
 

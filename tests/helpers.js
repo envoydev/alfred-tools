@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 // every ${VAR} a catalog route reads its key from
-const TOKEN_VARS = [...new Set(require('../scripts/catalog.js').load().tools.flatMap((r) => Object.values(r.routes || {}).map((x) => x.tokenVar).filter(Boolean)))];
+const TOKEN_VARS = [...new Set(require('../scripts/catalog/catalog.js').load().tools.flatMap((r) => Object.values(r.routes || {}).map((x) => x.tokenVar).filter(Boolean)))];
 
 const FAKE = path.join(__dirname, 'fake-claude.js');
 const RUNTIME = path.join(__dirname, 'fake-runtime.js');

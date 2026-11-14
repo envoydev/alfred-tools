@@ -8,10 +8,10 @@
 // `<name> [<route>, <pin>]`. A registration that matches no row is the user's: it is named under the table and nothing
 // in this plugin touches it.
 const fs = require('node:fs');
-const catalogLib = require('./catalog.js');
+const catalogLib = require('./catalog/catalog.js');
 const { fromHere } = require('./inventory.js');
 const { pinnedVersion, launchArgs } = require('./fixes/common.js');
-const { blockingStdio } = require('./json-file.js');
+const { blockingStdio } = require('./core/json-file.js');
 
 const SCOPES = ['local', 'project', 'user'];
 

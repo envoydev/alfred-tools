@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const asks = require('../scripts/asks.js');
 const { plan } = require('../scripts/plan.js');
-const catalog = require('../scripts/catalog.js').load();
+const catalog = require('../scripts/catalog/catalog.js').load();
 
 const MAC = { os: 'darwin', arch: 'arm64', project: '/work/shop' };
 const LINUX = { os: 'linux', arch: 'x64', project: '/work/shop' };
@@ -290,7 +290,7 @@ test('every bridge step asks at most four questions with two to four options', (
 });
 
 // ---- which apps (spec D3) -------------------------------------------------------------------------------------------
-const cursorMcp = require('../scripts/cursor-mcp.js');
+const cursorMcp = require('../scripts/cursor/cursor-mcp.js');
 
 const appsDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-apps-')));
 test.after(() => fs.rmSync(appsDir, { recursive: true, force: true }));

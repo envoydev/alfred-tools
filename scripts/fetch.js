@@ -19,13 +19,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
-const cli = require('./claude-cli.js');
-const account = require('./account.js');
-const kept = require('./kept.js');
-const tmpdir = require('./tmpdir.js');
+const cli = require('./core/claude-cli.js');
+const account = require('./core/account.js');
+const kept = require('./core/kept.js');
+const tmpdir = require('./core/tmpdir.js');
 const E = require('./entries.js');
 const serenaConfig = require('./serena-config.js');
-const { blockingStdio } = require('./json-file.js');
+const { blockingStdio } = require('./core/json-file.js');
 
 const VERSION = 1;
 const START_MS = 600000;

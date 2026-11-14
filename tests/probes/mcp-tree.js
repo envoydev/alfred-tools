@@ -30,7 +30,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const cli = require('../../scripts/claude-cli.js');
+const cli = require('../../scripts/core/claude-cli.js');
 
 const FAKE = path.resolve(__dirname, '..', 'fake-mcp-server.js');
 const WIN = process.platform === 'win32';

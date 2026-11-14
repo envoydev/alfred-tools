@@ -5,11 +5,11 @@ const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
 const { world, readJson, helperCmd } = require('./helpers.js');
-const catalogLib = require('../scripts/catalog.js');
+const catalogLib = require('../scripts/catalog/catalog.js');
 const inventory = require('../scripts/inventory.js');
 const E = require('../scripts/entries.js');
-const cli = require('../scripts/claude-cli.js');
-const account = require('../scripts/account.js');
+const cli = require('../scripts/core/claude-cli.js');
+const account = require('../scripts/core/account.js');
 const F = require('../scripts/fixes/index.js');
 const fix = require('../scripts/fix.js');
 const C = require('../scripts/fixes/common.js');
@@ -509,7 +509,7 @@ test('fix reports a declined id with no apply step', () =>
     const data = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-declined-'));
     try
     {
-        require('../scripts/declines.js').add(data, [{ id: RETIRED.hud, scope: 'user' }]);
+        require('../scripts/core/declines.js').add(data, [{ id: RETIRED.hud, scope: 'user' }]);
         const ctx = fix.makeCtx({ ...ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }), inv: ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }).inv, catalog, machine: noMachine(), data });
         const [f] = detect(ctx).found.filter((x) => x.id === 'retired-plugin');
         assert.strictEqual(f.declined, true);
@@ -817,7 +817,7 @@ test('the machine fix runs after the registration edits and is read back; its fa
         // claude-hud's own statusLine in the account settings
         const settings = path.join(w.account, 'settings.json');
         const doc = JSON.parse(fs.readFileSync(settings, 'utf8'));
-        doc.statusLine = { type: 'command', command: `${require('../scripts/hud-statusline.js').fill(require('../scripts/hud-statusline.js').SHAPES.sortV, { RUNTIME_PATH: process.execPath, SOURCE: 'dist/index.js' })}` };
+        doc.statusLine = { type: 'command', command: `${require('../scripts/hud/hud-statusline.js').fill(require('../scripts/hud/hud-statusline.js').SHAPES.sortV, { RUNTIME_PATH: process.execPath, SOURCE: 'dist/index.js' })}` };
         fs.writeFileSync(settings, JSON.stringify(doc, null, 2));
         const lines = [];
         const res = fix.applyFixes(ctxOf(w), ['retired-plugin'], { log: (...a) => lines.push(a.join(' ')) });
@@ -842,7 +842,7 @@ test('the machine fix runs after the registration edits and is read back; its fa
 test('declines per answer: unpicked recorded; kept out for alfred-code recorded and named; Skip records nothing; fix with one id', () =>
 {
     const fs = require('node:fs');
-    const declines = require('../scripts/declines.js');
+    const declines = require('../scripts/core/declines.js');
     const w = world();
     const data = path.join(w.dir, 'data');
     try
@@ -929,7 +929,7 @@ const fsx = require('node:fs');
 const cryptox = require('node:crypto');
 const { spawnSync: spawnx } = require('node:child_process');
 const { writeJson, files } = require('./helpers.js');
-const rootsLib = require('../scripts/roots.js');
+const rootsLib = require('../scripts/roots/roots.js');
 const SK = 'SENTRY_ACCESS_TOKEN';
 const GK = 'GITHUB_PERSONAL_ACCESS_TOKEN';
 const SENTRY = (value) => ({ command: 'npx', args: ['-y', '@sentry/mcp-server@0.42.0'], env: { [SK]: value } });
@@ -1899,7 +1899,7 @@ test('a root of the user\'s own files gets the advice to add !<file> for the bri
 });
 
 // ---- 0.5.0: a repair reaches the list and Cursor in the same run (spec D1) --------------------------------------------
-const kept5 = require('../scripts/kept.js');
+const kept5 = require('../scripts/core/kept.js');
 const installBoth = (w, answers) =>
 {
     const { plan } = require('../scripts/plan.js');

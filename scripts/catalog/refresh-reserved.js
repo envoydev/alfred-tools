@@ -9,7 +9,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const FILE = path.join(__dirname, '..', 'catalog', 'reserved-names.json');
+const FILE = path.join(__dirname, '..', '..', 'catalog', 'reserved-names.json');
 
 function reservedFrom(alfredDir)
 {
@@ -26,7 +26,7 @@ function reservedFrom(alfredDir)
 function main(argv)
 {
     const at = argv.indexOf('--alfred');
-    const alfred = path.resolve(at >= 0 ? argv[at + 1] : path.join(__dirname, '..', '..', 'alfred-code'));
+    const alfred = path.resolve(at >= 0 ? argv[at + 1] : path.join(__dirname, '..', '..', '..', 'alfred-code'));
     if (!fs.existsSync(path.join(alfred, 'meta', 'retired-plugins.json')))
     {
         console.error(`refresh-reserved: no alfred-code checkout at ${alfred}`);
@@ -46,5 +46,4 @@ function main(argv)
     return 0;
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { reservedFrom };
+module.exports = { reservedFrom, main };

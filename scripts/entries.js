@@ -4,7 +4,7 @@
 // Nothing here reads a machine: the OS, the arch, the home and the project come in through `ctx`.
 const fs = require('node:fs');
 const path = require('node:path');
-const keys = require('./keys.js');
+const keys = require('./keys/keys.js');
 const { templateNames } = require('./mcp-bridge.js');
 
 const pathFor = (platform) => (platform === 'win32' ? path.win32 : path.posix);

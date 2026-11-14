@@ -59,5 +59,4 @@ function make()
     return fs.mkdtempSync(path.join(tempRoot(), PREFIX));
 }
 
-if (require.main === module) process.stdout.write(`${make()}\n`);
 module.exports = { PREFIX, ours, release, sweep, make };

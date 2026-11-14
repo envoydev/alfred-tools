@@ -12,8 +12,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { configDir: accountDir } = require('./account.js');
-const { parseJson } = require('./json-file.js');
+const { configDir: accountDir } = require('../core/account.js');
+const { parseJson } = require('../core/json-file.js');
 
 const HUD = 'claude-hud';
 

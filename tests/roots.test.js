@@ -9,9 +9,9 @@ const path = require('node:path');
 // POSIX fixture paths (/work/shop): on a Windows host node's path module resolves them under a drive
 const POSIX_FIXTURE = process.platform === 'win32' && 'NOT RUN: POSIX fixture paths meet node\'s win32 path module on this host';
 const { spawnSync } = require('node:child_process');
-const roots = require('../scripts/roots.js');
+const roots = require('../scripts/roots/roots.js');
 const asks = require('../scripts/asks.js');
-const catalogLib = require('../scripts/catalog.js');
+const catalogLib = require('../scripts/catalog/catalog.js');
 
 const catalog = catalogLib.load();
 // alfred-code 3.9.2's pattern, cited where it lives
@@ -144,7 +144,7 @@ test('roots map: missing or malformed reads empty with a note; a second project 
 });
 
 test('a 0.4.x record file: missing is null, malformed or another version reads empty with a note', { skip: POSIX_FIXTURE }, () => {
-    const lists = require('../scripts/mcps-list.js');
+    const lists = require('../scripts/mcps-list/mcps-list.js');
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-record-')));
     try
     {

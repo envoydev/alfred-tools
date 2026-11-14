@@ -12,7 +12,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const catalogLib = require('./catalog.js');
 const registryLib = require('./registry.js');
-const { blockingStdio } = require('./json-file.js');
+const { blockingStdio } = require('../core/json-file.js');
 
 const FILE = path.join(catalogLib.CATALOG_DIR, 'tools.json');
 
@@ -81,5 +81,4 @@ async function main(argv, { out = (s) => process.stdout.write(`${s}\n`), registr
     return result.errors.length ? 1 : 0;
 }
 
-if (require.main === module) { blockingStdio(); main(process.argv.slice(2)).then((code) => process.exit(code)); }
 module.exports = { refresh, serialize, render, main };

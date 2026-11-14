@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const catalogLib = require('../scripts/catalog.js');
+const catalogLib = require('../scripts/catalog/catalog.js');
 const prereq = require('../scripts/prereq.js');
 
 const catalog = catalogLib.load();

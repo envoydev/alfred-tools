@@ -10,10 +10,10 @@
 // apply.js requires the planner, which requires this module.
 const fs = require('node:fs');
 const path = require('node:path');
-const roots = require('./roots.js');
-const keys = require('./keys.js');
-const kept = require('./kept.js');
-const { deepEqual } = require('./json-file.js');
+const roots = require('../roots/roots.js');
+const keys = require('../keys/keys.js');
+const kept = require('../core/kept.js');
+const { deepEqual } = require('../core/json-file.js');
 
 const LIST_VERSION = 1;
 

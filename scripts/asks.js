@@ -7,8 +7,8 @@ const path = require('node:path');
 const E = require('./entries.js');
 const { installedOf, keyOf, targetOf, fromHere, otherWindowsMcp } = require('./inventory.js');
 const { pinOf } = require('./table.js');
-const keys = require('./keys.js');
-const roots = require('./roots.js');
+const keys = require('./keys/keys.js');
+const roots = require('./roots/roots.js');
 
 const REC = ' (Recommended)';
 // The `remote` route is worded 'hosted' in every ask: alfred-code's stop guard reads a bare 'remote' in an ask as git
@@ -147,7 +147,7 @@ function settingsQuestion(row, routeId, { entry = null } = {})
 
 // The live registration, read in this process when the env names an account (R1: the inventory file is masked); a
 // caller that passes no env reads none.
-const liveReader = (project, env) => (env && (env.CLAUDE_CONFIG_DIR || env.HOME || env.USERPROFILE) ? (name, scope) => require('./account.js').readRegistration(name, scope, project, env) : () => undefined);
+const liveReader = (project, env) => (env && (env.CLAUDE_CONFIG_DIR || env.HOME || env.USERPROFILE) ? (name, scope) => require('./core/account.js').readRegistration(name, scope, project, env) : () => undefined);
 
 // The key a stdio registration holds, from its first token field: a value, or null for none (empty, ${VAR} only).
 function heldKey(entry, route)
@@ -290,7 +290,7 @@ function installedItems(inv, catalog, describe)
 function rootInUse(inv, family, ctx = {})
 {
     if (inv.roots && Object.hasOwn(inv.roots, family)) return inv.roots[family] || null;
-    return roots.inUse(inv, family, { project: inv.project, platform: inv.os, home: ctx.home || require('./account.js').homeDir(process.env), exists: ctx.exists, catalog: ctx.catalog });
+    return roots.inUse(inv, family, { project: inv.project, platform: inv.os, home: ctx.home || require('./core/account.js').homeDir(process.env), exists: ctx.exists, catalog: ctx.catalog });
 }
 
 const ROOT_LABEL = { project: 'Project root folder', global: 'Global root folder' };
@@ -785,12 +785,12 @@ function all(inv, picks, catalog, { env = {}, home = null, connectors = null } =
         pick: pickQuestions(inv, catalog, picks && picks.existing, connectors), change: null, remove: removeQuestions(inv, catalog), tools: {}, targets: {},
     };
     // `exists` reads the disk: alfred-code's .alfred/.gitignore and its 2.x data decide which folders are offered
-    const ctx = { project: inv.project, platform: inv.os, arch: inv.arch, home: home || require('./account.js').homeDir(process.env), env, keyHome: home, exists: (p) => fs.existsSync(p) };
+    const ctx = { project: inv.project, platform: inv.os, arch: inv.arch, home: home || require('./core/account.js').homeDir(process.env), env, keyHome: home, exists: (p) => fs.existsSync(p) };
     // the roots answered so far (the walk asks them before a tool's folder), else the recommended ones
     ctx.roots = roots.resolve(inv, picks && picks.roots, { ...ctx, catalog }).roots;
     out.change = changeQuestions(inv, catalog, ctx);
     // which apps (spec D3): asked once an install run, when it picked something
-    out.clients = picks && (picks.rows || []).length ? clientsQuestion(require('./cursor-mcp.js').cursorFound(ctx, inv)) : null;
+    out.clients = picks && (picks.rows || []).length ? clientsQuestion(require('./cursor/cursor-mcp.js').cursorFound(ctx, inv)) : null;
     const routes = (picks && picks.routes) || {};
     const scopes = (picks && picks.scopes) || {};
     const names = (picks && picks.names) || {};
@@ -1003,7 +1003,7 @@ function next(inv, picks, catalog, opts = {}, built = null)
         {
             const family = roots.familyOf(t.current.scope);
             const root = rootInUse(inv, family, { home: opts.home, catalog });
-            const fallback = roots.resolve(inv, picks.roots, { project: inv.project, platform: inv.os, home: opts.home || require('./account.js').homeDir(process.env), catalog }).roots[family];
+            const fallback = roots.resolve(inv, picks.roots, { project: inv.project, platform: inv.os, home: opts.home || require('./core/account.js').homeDir(process.env), catalog }).roots[family];
             const o = ownStep({ key, name: t.current.name, scope: t.current.scope }, root ? root.path : fallback);
             add(`${key}:own`, key, [o.question], { [o.question.id]: o.answers });
             if ((picks.existing || {})[key] === 'own') continue;

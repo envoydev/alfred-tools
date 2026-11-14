@@ -19,7 +19,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { Harness } = require('../harness.js');
-const cli = require('../../scripts/claude-cli.js');
+const cli = require('../../scripts/core/claude-cli.js');
 
 const REPO = path.resolve(__dirname, '..', '..');
 const ROOT_SEL = 'skill javascript\nrule alfred-security\nrule alfred-navigation\n';

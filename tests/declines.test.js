@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const declines = require('../scripts/declines.js');
+const declines = require('../scripts/core/declines.js');
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-declines-')));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

@@ -9,8 +9,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const C = require('./common.js');
 const E = require('../entries.js');
-const roots = require('../roots.js');
-const mcpOrder = require('../mcp-order.js');
+const roots = require('../roots/roots.js');
+const mcpOrder = require('../mcps-list/mcp-order.js');
 const { fromHere, matchEntry } = require('../inventory.js');
 
 const pathOf = (ctx) => (ctx.platform === 'win32' ? path.win32 : path.posix);
@@ -134,7 +134,7 @@ function projectRelativePathFix(entry, f, ctx)
 // record where a root has no list yet.
 function parentOwn(ctx, dir)
 {
-    const lists = require('../mcps-list.js');
+    const lists = require('../mcps-list/mcps-list.js');
     const names = new Set();
     for (const s of roots.standard('project', { project: dir, home: ctx.home, platform: ctx.platform }))
     {

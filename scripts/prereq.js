@@ -14,11 +14,11 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const catalogLib = require('./catalog.js');
-const account = require('./account.js');
+const catalogLib = require('./catalog/catalog.js');
+const account = require('./core/account.js');
 const { realMachine } = require('./fixes/common.js');
 const { androidSdk, javaHome } = require('./fixes/registration.js');
-const { blockingStdio } = require('./json-file.js');
+const { blockingStdio } = require('./core/json-file.js');
 
 const versionOf = (text) => (/(\d+\.\d+(?:\.\d+)?)/.exec(String(text || '')) || [])[1] || null;
 

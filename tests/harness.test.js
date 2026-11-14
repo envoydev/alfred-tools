@@ -6,8 +6,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const cli = require('../scripts/claude-cli.js');
-const account = require('../scripts/account.js');
+const cli = require('../scripts/core/claude-cli.js');
+const account = require('../scripts/core/account.js');
 const E = require('../scripts/entries.js');
 const { Harness, isolationCheck } = require('./harness.js');
 

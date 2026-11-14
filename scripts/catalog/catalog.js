@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const CATALOG_DIR = path.join(__dirname, '..', 'catalog');
+const CATALOG_DIR = path.join(__dirname, '..', '..', 'catalog');
 const readJson = (name) => JSON.parse(fs.readFileSync(path.join(CATALOG_DIR, name), 'utf8'));
 
 function load(dir = CATALOG_DIR)

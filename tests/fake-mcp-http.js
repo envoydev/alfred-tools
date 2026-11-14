@@ -5,8 +5,8 @@
 const fs = require('node:fs');
 const http = require('node:http');
 const { execFile } = require('node:child_process');
-const account = require('../scripts/account.js');
-const catalogLib = require('../scripts/catalog.js');
+const account = require('../scripts/core/account.js');
+const catalogLib = require('../scripts/catalog/catalog.js');
 
 // -> Promise<{ server, port, seen: [{ path, rpc, auth: 'none' | 'expected' | 'other' }], close }>. `expected`: the whole
 // header value a request must carry to count as 'expected'. `status`: 401 answers every POST with 401 and

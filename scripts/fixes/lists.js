@@ -8,14 +8,14 @@
 // (plan-lists.js), with the same importUnlisted.
 const fs = require('node:fs');
 const path = require('node:path');
-const roots = require('../roots.js');
-const lists = require('../mcps-list.js');
+const roots = require('../roots/roots.js');
+const lists = require('../mcps-list/mcps-list.js');
 const planLists = require('../plan-lists.js');
-const kept = require('../kept.js');
-const keys = require('../keys.js');
-const cursorMcp = require('../cursor-mcp.js');
-const workspace = require('../workspace.js');
-const { deepEqual } = require('../json-file.js');
+const kept = require('../core/kept.js');
+const keys = require('../keys/keys.js');
+const cursorMcp = require('../cursor/cursor-mcp.js');
+const workspace = require('../roots/workspace.js');
+const { deepEqual } = require('../core/json-file.js');
 
 const pathOf = (ctx) => (ctx.platform === 'win32' ? path.win32 : path.posix);
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;

@@ -7,8 +7,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const E = require('../entries.js');
-const keys = require('../keys.js');
-const roots = require('../roots.js');
+const keys = require('../keys/keys.js');
+const roots = require('../roots/roots.js');
 const { HELPER_VERSION } = require('../mcp-headers.js');
 const { BRIDGE_VERSION } = require('../mcp-bridge.js');
 const C = require('./common.js');

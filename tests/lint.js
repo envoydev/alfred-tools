@@ -143,7 +143,7 @@ const BRIDGE_SHA256 = {
     }
     for (const m of text.matchAll(/\brequire\(\s*(['"])([^'"]+)\1\s*\)/g))
         need(m[2].startsWith('node:') || m[2] === './mcp-headers.js', `${rel}: require('${m[2]}') - the bridge runs outside the plugin, so node: modules and ./mcp-headers.js only`);
-    const keysSrc = fs.readFileSync(path.join(root, 'scripts', 'keys.js'), 'utf8');
+    const keysSrc = fs.readFileSync(path.join(root, 'scripts', 'keys', 'keys.js'), 'utf8');
     const pattern = /const credentialName = \(n\) => (\/[^/]+\/[a-z]*)\.test/.exec(keysSrc);
     need(pattern && String(bridge.CREDENTIAL) === pattern[1], `${rel}: CREDENTIAL is not keys.js credentialName's pattern`);
 }
@@ -160,7 +160,7 @@ const SERENA_CONTEXT_SHA256 = {
     if (first)
     {
         const version = Number(first[1]);
-        const want = require(path.join(root, 'scripts', 'roots.js')).SERENA_CONTEXT_VERSION;
+        const want = require(path.join(root, 'scripts', 'roots', 'roots.js')).SERENA_CONTEXT_VERSION;
         need(version === want, `${rel}: the first line says version ${version}, SERENA_CONTEXT_VERSION is ${want}`);
         const digest = require(path.join(root, 'scripts', 'mcp-headers.js')).digestOf(text);
         need(digest === SERENA_CONTEXT_SHA256[version], `${rel}: SHA-256 ${digest} is not SERENA_CONTEXT_SHA256[${version}] in tests/lint.js - a changed context bumps its version`);

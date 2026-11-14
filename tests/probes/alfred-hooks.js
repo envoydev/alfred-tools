@@ -30,8 +30,8 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
-const cli = require('../../scripts/claude-cli.js');
-const catalogLib = require('../../scripts/catalog.js');
+const cli = require('../../scripts/core/claude-cli.js');
+const catalogLib = require('../../scripts/catalog/catalog.js');
 const { buildAlfred } = require('./alfred-workspace.js');
 
 const REPO = path.resolve(__dirname, '..', '..');

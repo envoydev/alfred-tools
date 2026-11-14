@@ -6,9 +6,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { join } = path;
-const kept = require('../scripts/kept.js');
-const catalogLib = require('../scripts/catalog.js');
-const { LIST_VERSION, readList, writeList, mergeList, fromRegistration, serverKey, regKey, listFile } = require('../scripts/mcps-list.js');
+const kept = require('../scripts/core/kept.js');
+const catalogLib = require('../scripts/catalog/catalog.js');
+const { LIST_VERSION, readList, writeList, mergeList, fromRegistration, serverKey, regKey, listFile } = require('../scripts/mcps-list/mcps-list.js');
 
 const catalog = catalogLib.load();
 const row = (id) => catalog.byId.get(id);

@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const keys = require('../scripts/keys.js');
+const keys = require('../scripts/keys/keys.js');
 
 const SOURCE = path.join(__dirname, '..', 'scripts', 'mcp-headers.js');
 const G = 'GITHUB_PERSONAL_ACCESS_TOKEN';

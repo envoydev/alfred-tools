@@ -9,9 +9,9 @@ const { world, writeJson, readJson, tempOf, helperCmd } = require('./helpers.js'
 const inventory = require('../scripts/inventory.js');
 const { plan } = require('../scripts/plan.js');
 const { apply } = require('../scripts/apply.js');
-const cli = require('../scripts/claude-cli.js');
+const cli = require('../scripts/core/claude-cli.js');
 const update = require('../scripts/update.js');
-const registry = require('../scripts/registry.js');
+const registry = require('../scripts/catalog/registry.js');
 const { pinnedVersion } = require('../scripts/fixes/common.js');
 
 const DAY = 86400000;
@@ -349,7 +349,7 @@ test('a declined retired-plugin adds no note and no waiting count to update', as
     try
     {
         seed(w, { markets: [], installed: [[HUD, '0.15.0', 'user']] });
-        require('../scripts/declines.js').add(data, [{ id: HUD, scope: 'user' }]);
+        require('../scripts/core/declines.js').add(data, [{ id: HUD, scope: 'user' }]);
         const out = JSON.parse((await run(w, ['--check', '--json', '--no-refresh', '--data', data])).text);
         assert.deepStrictEqual([out.offers.filter((o) => o.fix === 'retired-plugin').length, out.notes.filter((n) => n.includes('claude-hud')).length, out.waiting], [0, 0, 0]);
     }
@@ -484,7 +484,7 @@ test('update: a pinned server on its own is skipped, not offered', async () =>
 test('fix and update take --data after their read-only flag', async () =>
 {
     const fix = require('../scripts/fix.js');
-    const roots = require('../scripts/roots.js');
+    const roots = require('../scripts/roots/roots.js');
     const w = world();
     try
     {
@@ -509,7 +509,7 @@ test('fix and update take --data after their read-only flag', async () =>
 
 test('update offers and rewrites a lower-numbered helper copy; leaves a higher one', async () =>
 {
-    const roots = require('../scripts/roots.js');
+    const roots = require('../scripts/roots/roots.js');
     const w = world();
     try
     {
@@ -546,7 +546,7 @@ test('update offers and rewrites a lower-numbered helper copy; leaves a higher o
 const bridgeEntry = (root, pin = '0.16.0') => ({ command: 'node', args: [path.join(root, 'mcp-bridge.js'), 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}', 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', `mcp-remote@${pin}`], env: { npm_config_before: '2026-11-11T23:59:59Z' } });
 
 test('update offers a lower mcp-bridge.js for rewriting beside the helper', async () => {
-    const roots = require('../scripts/roots.js');
+    const roots = require('../scripts/roots/roots.js');
     const w = world();
     try
     {
@@ -595,13 +595,13 @@ const listed = (root, servers) => writeJson(path.join(root, 'mcps.json'), { vers
 
 test('the fix rows update applies are the ones marked upgrade, each with the version that brought its way', () =>
 {
-    const catalog = require('../scripts/catalog.js').load();
+    const catalog = require('../scripts/catalog/catalog.js').load();
     assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['list-import', '0.5.0'], ['retired-plugin', '0.5.0'], ['read-guard', '0.5.0'], ['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
 });
 
 test('update offers the new ways to pass data that fix knows - a 0.1.x key header, a relative project path - and applies them after the pins, by registration', async () =>
 {
-    const account = require('../scripts/account.js');
+    const account = require('../scripts/core/account.js');
     const w = world();
     try
     {
@@ -770,17 +770,17 @@ test('a 0.4.x own server is skipped before list-import: update all leaves it byt
     {
         assert.strictEqual(cli.run(['mcp', 'add-json', 'context7', JSON.stringify(C7_PINNED), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         ownRecord(path.join(w.project, '.preferred-tools'));
-        const before = JSON.stringify(require('../scripts/account.js').readAccount(w.env, w.project).local.context7);
+        const before = JSON.stringify(require('../scripts/core/account.js').readAccount(w.env, w.project).local.context7);
         const a = await run(w, ['--apply', 'all', '--no-refresh'], { registry: C7_AHEAD() });
         assert.doesNotMatch(a.text, /2\.0\.0 -> 9\.0\.0/, a.text);
-        assert.strictEqual(JSON.stringify(require('../scripts/account.js').readAccount(w.env, w.project).local.context7), before, 'byte-identical');
+        assert.strictEqual(JSON.stringify(require('../scripts/core/account.js').readAccount(w.env, w.project).local.context7), before, 'byte-identical');
     }
     finally { w.clean(); }
 });
 
 // ---- 0.5.0: mcp-remote's pin in Cursor's bridge copy and in the shared sign-in form (spec D5) -------------------------
 const npmRemote = (...v) => ({ 'npm:mcp-remote': v.map(([version, days]) => ({ version, time: ago(days) })) });
-const accountOf = (w) => readJson(require('../scripts/account.js').accountFile(w.env));
+const accountOf = (w) => readJson(require('../scripts/core/account.js').accountFile(w.env));
 
 function bothContext7(w)
 {
@@ -856,7 +856,7 @@ test('update moves the shared form\'s mcp-remote pin in Claude Code', async () =
 });
 
 test('update offers a lower serena-context.yml as context:<file> and rewrites it', async () => {
-    const roots = require('../scripts/roots.js');
+    const roots = require('../scripts/roots/roots.js');
     const w = world();
     try
     {
@@ -1107,7 +1107,7 @@ test('update\'s Cursor offer asks for a taken name, and an unanswered one is lef
 
 test('the upgrade rows run in order: list-import, serena-context, serena-base-modes, retired-plugin, read-guard', () =>
 {
-    const catalog = require('../scripts/catalog.js').load();
+    const catalog = require('../scripts/catalog/catalog.js').load();
     const o = (fix, scope, fixKind) => ({ kind: 'upgrade', id: `upgrade:${fix}`, fix, scope, fixKind });
     const offers = [o('read-guard', null, 'file'), o('retired-plugin', 'user', 'machine'), o('serena-base-modes', null, 'file'), o('serena-context', 'local', 'registration'), o('list-import', null, 'file'), { kind: 'mcp', id: 'mcp:serena~local' }];
     assert.deepStrictEqual(update.ordered(offers, catalog).map((x) => x.fix || x.id), ['list-import', 'serena-context', 'serena-base-modes', 'retired-plugin', 'read-guard', 'mcp:serena~local']);

@@ -5,8 +5,8 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const catalogLib = require('../scripts/catalog.js');
-const C = require('../scripts/cursor-mcp.js');
+const catalogLib = require('../scripts/catalog/catalog.js');
+const C = require('../scripts/cursor/cursor-mcp.js');
 
 const catalog = catalogLib.load();
 const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-cursor-')));
@@ -181,10 +181,10 @@ test('cursor-mcp loads before and after inventory without a partial export', () 
     const { spawnSync } = require('node:child_process');
     const root = path.join(__dirname, '..', 'scripts');
     const probe = (first, second) => `const a = require(${JSON.stringify(path.join(root, first))}); const b = require(${JSON.stringify(path.join(root, second))});`
-        + ' const c = require(' + JSON.stringify(path.join(root, 'cursor-mcp.js')) + '); const i = require(' + JSON.stringify(path.join(root, 'inventory.js')) + ');'
+        + ' const c = require(' + JSON.stringify(path.join(root, 'cursor', 'cursor-mcp.js')) + '); const i = require(' + JSON.stringify(path.join(root, 'inventory.js')) + ');'
         + " if (typeof c.matchesRow !== 'function' || typeof c.readCursor !== 'function' || typeof i.buildInventory !== 'function' || typeof i.matchesFingerprint !== 'function') { process.exit(3); }"
-        + " if (!c.matchesRow({ type: 'http', url: 'https://mcp.context7.com/mcp' }, require(" + JSON.stringify(path.join(root, 'catalog.js')) + ").load().byId.get('context7'))) process.exit(4);";
-    for (const [a, b] of [['cursor-mcp.js', 'inventory.js'], ['inventory.js', 'cursor-mcp.js']])
+        + " if (!c.matchesRow({ type: 'http', url: 'https://mcp.context7.com/mcp' }, require(" + JSON.stringify(path.join(root, 'catalog', 'catalog.js')) + ").load().byId.get('context7'))) process.exit(4);";
+    for (const [a, b] of [['cursor/cursor-mcp.js', 'inventory.js'], ['inventory.js', 'cursor/cursor-mcp.js']])
     {
         const r = spawnSync(process.execPath, ['-e', probe(a, b)], { encoding: 'utf8' });
         assert.strictEqual(r.status, 0, `${a} first: ${r.stderr}`);

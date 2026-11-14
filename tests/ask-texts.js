@@ -1,7 +1,7 @@
 'use strict';
 // Every question the walk can put, for the 'no text sends the user to Other' rule (spec D8): tests/lint.js checks the
 // texts, tests/plan.test.js and tests/roots.test.js use the same pattern. One home for the pattern and the fixtures.
-const catalogLib = require('../scripts/catalog.js');
+const catalogLib = require('../scripts/catalog/catalog.js');
 const asks = require('../scripts/asks.js');
 const existing = require('../scripts/existing.js');
 const { plan } = require('../scripts/plan.js');

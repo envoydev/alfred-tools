@@ -23,7 +23,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const E = require('../../scripts/entries.js');
-const catalog = require('../../scripts/catalog.js').load();
+const catalog = require('../../scripts/catalog/catalog.js').load();
 
 const DATA_FILE = { serena: 'serena_config.yml', memory: 'memory.db', appium: '.png' };
 const CALLS = {

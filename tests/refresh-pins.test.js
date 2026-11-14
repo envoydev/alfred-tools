@@ -4,8 +4,8 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const refreshPins = require('../scripts/refresh-pins.js');
-const catalogLib = require('../scripts/catalog.js');
+const refreshPins = require('../scripts/catalog/refresh-pins.js');
+const catalogLib = require('../scripts/catalog/catalog.js');
 
 const DAY = 86400000;
 const NOW = Date.parse('2026-10-27T12:00:00Z');

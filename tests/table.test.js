@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const catalogLib = require('../scripts/catalog.js');
+const catalogLib = require('../scripts/catalog/catalog.js');
 const E = require('../scripts/entries.js');
 const table = require('../scripts/table.js');
 

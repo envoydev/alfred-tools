@@ -21,25 +21,25 @@
 //   renames, moves or rewrites that ONE registration, and another of the same row is left. Its `row` is for prereq.js.
 const fs = require('node:fs');
 const path = require('node:path');
-const catalogLib = require('./catalog.js');
+const catalogLib = require('./catalog/catalog.js');
 const E = require('./entries.js');
 const asks = require('./asks.js');
-const account = require('./account.js');
-const keys = require('./keys.js');
-const kept = require('./kept.js');
-const roots = require('./roots.js');
+const account = require('./core/account.js');
+const keys = require('./keys/keys.js');
+const kept = require('./core/kept.js');
+const roots = require('./roots/roots.js');
 const existing = require('./existing.js');
 const { templateNames } = require('./mcp-bridge.js');
 
 // 'A', 'A and B', 'A, B and C'
 const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
-const mcpOrder = require('./mcp-order.js');
+const mcpOrder = require('./mcps-list/mcp-order.js');
 const planLists = require('./plan-lists.js');
-const mcpsList = require('./mcps-list.js');
-const cursorMcp = require('./cursor-mcp.js');
+const mcpsList = require('./mcps-list/mcps-list.js');
+const cursorMcp = require('./cursor/cursor-mcp.js');
 const serenaConfig = require('./serena-config.js');
 const { installedOf, keyOf, targetOf, fromHere, otherWindowsMcp } = require('./inventory.js');
-const { blockingStdio, deepEqual } = require('./json-file.js');
+const { blockingStdio, deepEqual } = require('./core/json-file.js');
 
 const SCOPES = ['local', 'project', 'user'];
 

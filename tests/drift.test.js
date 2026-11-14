@@ -10,7 +10,7 @@ const { spawnSync } = require('node:child_process');
 const { world, readJson, writeJson } = require('./helpers.js');
 const inventory = require('../scripts/inventory.js');
 const fix = require('../scripts/fix.js');
-const cli = require('../scripts/claude-cli.js');
+const cli = require('../scripts/core/claude-cli.js');
 const { plan } = require('../scripts/plan.js');
 const { apply } = require('../scripts/apply.js');
 
@@ -164,7 +164,7 @@ test('a Cursor copy whose key field is empty where the list holds the key offers
         assert.deepStrictEqual(labels(q), ['Restore from the list (Recommended)', 'Leave Cursor\'s copy as it is']);
         const keep = run(w, ['none'], { 'drift:cursor:sentry~user': 'keep' });
         assert.match(keep.text, /its key field is empty, so Keep is not offered - answer restore or leave/);
-        assert.strictEqual(sentryKey(readJson(require('../scripts/account.js').accountFile(w.env)).mcpServers.sentry), value, 'Claude Code keeps its key');
+        assert.strictEqual(sentryKey(readJson(require('../scripts/core/account.js').accountFile(w.env)).mcpServers.sentry), value, 'Claude Code keeps its key');
         const r = run(w, ['none'], { 'drift:cursor:sentry~user': 'restore' });
         assert.strictEqual(r.res.failed, null, r.text);
         assert.strictEqual(sentryKey(copyOf(globalCursor(w), 'sentry')), value);

@@ -7,8 +7,8 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { world } = require('./helpers.js');
-const catalogLib = require('../scripts/catalog.js');
-const keys = require('../scripts/keys.js');
+const catalogLib = require('../scripts/catalog/catalog.js');
+const keys = require('../scripts/keys/keys.js');
 
 const catalog = catalogLib.load();
 const row = (id) => catalog.byId.get(id);

@@ -2,8 +2,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const crypto = require('node:crypto');
-const { MARKER, keep, restore } = require('../scripts/kept.js');
-const catalogLib = require('../scripts/catalog.js');
+const { MARKER, keep, restore } = require('../scripts/core/kept.js');
+const catalogLib = require('../scripts/catalog/catalog.js');
 
 // live-shaped values are made per run, so no file here holds one a guard would read as a credential
 const hex = (n) => crypto.randomBytes(n).toString('hex');

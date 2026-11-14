@@ -67,8 +67,8 @@ const { spawnSync } = require('node:child_process');
 const { cursorSteps, takenNames, renderLine } = require('../scripts/plan-lists.js');
 const { cursorNameQuestion } = require('../scripts/asks.js');
 const applyLib = require('../scripts/apply.js');
-const cursorMcp = require('../scripts/cursor-mcp.js');
-const catalogAll = require('../scripts/catalog.js').load();
+const cursorMcp = require('../scripts/cursor/cursor-mcp.js');
+const catalogAll = require('../scripts/catalog/catalog.js').load();
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plcur-')));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -282,7 +282,7 @@ test('a member file holding the name asks for that file, keyed <name>@<file>', (
 // ---- hosted routes in both apps (spec D5, ruling 12, ruling 13) -----------------------------------------------------
 const planLib = require('../scripts/plan.js');
 const E = require('../scripts/entries.js');
-const { READ_GUARD } = require('../scripts/roots.js');
+const { READ_GUARD } = require('../scripts/roots/roots.js');
 const MR = catalogAll.byId.get('sentry').routes.bridge.package;
 const hinv = (extra = {}) => ({ version: 1, os: 'darwin', arch: 'arm64', project: '/work/shop', cli: { ok: true }, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, roots: { map: null }, lists: { project: null, global: null }, ...extra });
 const HOPTS = { env: {}, home: '/Users/me' };
@@ -431,7 +431,7 @@ test('deny-read\'s file sits under the isolated CLAUDE_CONFIG_DIR, never the rea
 });
 
 // ---- a workspace in Cursor (spec D4a) ----------------------------------------------------------------------------------
-const wsLib = require('../scripts/workspace.js');
+const wsLib = require('../scripts/roots/workspace.js');
 const wsRec = (folder, doc) => { fs.mkdirSync(path.join(folder, '.alfred'), { recursive: true }); fs.writeFileSync(path.join(folder, '.alfred', 'workspace.json'), JSON.stringify(doc)); };
 const MEMORY_A = { command: 'uvx', args: ['mcp-memory-service', '--a'] };
 // a root (the project, `shop`) listing a, b and c, c ignored; each member's record names the root. `own`: a's own list.
@@ -626,7 +626,7 @@ test('at global scope the value goes in ~/.cursor/mcp.json from .mcps-secrets an
     const secret = `ghp_${'q'.repeat(36)}`;
     fs.mkdirSync(groot, { recursive: true });
     fs.writeFileSync(path.join(groot, '.mcps-secrets'), `WORK_GH=${secret}\n`);
-    const kept = require('../scripts/kept.js');
+    const kept = require('../scripts/core/kept.js');
     const GH = { command: 'docker', args: ['run', '-i', '--rm', '-e', 'GITHUB_PERSONAL_ACCESS_TOKEN', 'ghcr.io/github/github-mcp-server:v1.0.0'], env: { GITHUB_PERSONAL_ACCESS_TOKEN: kept.MARKER } };
     fs.writeFileSync(glist, JSON.stringify({ version: 1, own: [], servers: [{ name: 'github', scope: 'user', row: 'github', route: 'local', clients: ['claude', 'cursor'], entry: GH, key: 'WORK_GH' }] }));
     const cfile = path.join(w.home, '.cursor', 'mcp.json');
@@ -650,7 +650,7 @@ test('install names a listed server missing from Claude Code and re-adds nothing
     const planLists = require('../scripts/plan-lists.js');
     const inventoryLib = require('../scripts/inventory.js');
     const { apply } = require('../scripts/apply.js');
-    const cli = require('../scripts/claude-cli.js');
+    const cli = require('../scripts/core/claude-cli.js');
     const w = world();
     try
     {

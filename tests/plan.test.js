@@ -4,11 +4,11 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const catalogLib = require('../scripts/catalog.js');
+const catalogLib = require('../scripts/catalog/catalog.js');
 const { plan, render, argvOf, makeCtx, fileSteps } = require('../scripts/plan.js');
 const asks = require('../scripts/asks.js');
 const inventoryLib = require('../scripts/inventory.js');
-const { MARKER } = require('../scripts/kept.js');
+const { MARKER } = require('../scripts/core/kept.js');
 
 const catalog = catalogLib.load();
 const clone = () => JSON.parse(JSON.stringify({ ...catalog, reserved: [...catalog.reserved], byId: undefined }));
@@ -1255,7 +1255,7 @@ test('answers.roots: a named project folder outside the project is a plan error 
 test('plan.js --questions takes --data after its files and refuses an unknown flag', () => {
     const fs = require('node:fs');
     const os = require('node:os');
-    const roots = require('../scripts/roots.js');
+    const roots = require('../scripts/roots/roots.js');
     const { main } = require('../scripts/plan.js');
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plan-main-')));
     const out = [];
@@ -1400,7 +1400,7 @@ test('an .alfred project root refuses a registration named after one of alfred-c
 });
 
 // ---- 0.2.0: hosted keys through the header helper; D5's routes and scopes -----------------------------------------
-const SECRETS_FILE = require('../scripts/roots.js').FILES.secrets;
+const SECRETS_FILE = require('../scripts/roots/roots.js').FILES.secrets;
 const helperOf = (p, id) => { const s = p.steps.find((x) => x.op === 'mcp-add' && x.row === id); return s ? s.entry.headersHelper : undefined; };
 
 test('D5: each keyed route at each scope', () => {
@@ -1475,7 +1475,7 @@ test('the helper command per scope', () => {
 
 test('a helper path holding shell characters reaches node whole, and the command reads back to its path and key name', () => {
     const E = require('../scripts/entries.js');
-    const rootsLib = require('../scripts/roots.js');
+    const rootsLib = require('../scripts/roots/roots.js');
     const { spawnSync } = require('node:child_process');
     const cases = [
         ['posix', '/work/R&D/.preferred-tools/mcp-headers.js', `node '/work/R&D/.preferred-tools/mcp-headers.js' ${G} Bearer`],
@@ -1795,7 +1795,7 @@ test('plan.js --questions with --connectors prints no existing block, reads no l
     const { spawnSync } = require('node:child_process');
     const { world } = require('./helpers.js');
     const inventoryLib = require('../scripts/inventory.js');
-    const cli = require('../scripts/claude-cli.js');
+    const cli = require('../scripts/core/claude-cli.js');
     const w = world();
     try
     {
@@ -2036,10 +2036,10 @@ test('change the root: the old data and the old key file stay, the new key file 
     const fs = require('node:fs');
     const { world, writeJson, helperCmd } = require('./helpers.js');
     const { apply } = require('../scripts/apply.js');
-    const cli = require('../scripts/claude-cli.js');
-    const roots = require('../scripts/roots.js');
-    const keys = require('../scripts/keys.js');
-    const account = require('../scripts/account.js');
+    const cli = require('../scripts/core/claude-cli.js');
+    const roots = require('../scripts/roots/roots.js');
+    const keys = require('../scripts/keys/keys.js');
+    const account = require('../scripts/core/account.js');
     const w = world();
     try
     {
@@ -2142,8 +2142,8 @@ test('configure: the key name and the settings start from the registration as re
 test('the 0.1.x key files are read for names only: a held key is never matched against their values', () => {
     const fs = require('node:fs');
     const { world } = require('./helpers.js');
-    const cli = require('../scripts/claude-cli.js');
-    const keys = require('../scripts/keys.js');
+    const cli = require('../scripts/core/claude-cli.js');
+    const keys = require('../scripts/keys/keys.js');
     const w = world();
     try
     {
@@ -2171,8 +2171,8 @@ test('configure: a 0.1.x project-scope github Docker registration keeps Project 
     const fs = require('node:fs');
     const { world } = require('./helpers.js');
     const { apply } = require('../scripts/apply.js');
-    const cli = require('../scripts/claude-cli.js');
-    const account = require('../scripts/account.js');
+    const cli = require('../scripts/core/claude-cli.js');
+    const account = require('../scripts/core/account.js');
     const fix = require('../scripts/fix.js');
     const docker = { command: 'docker', args: ['run', '-i', '--rm', '-e', G, 'ghcr.io/github/github-mcp-server:v2.1.0', 'stdio'], env: { [G]: `\${${G}}` } };
     const t = asks.all(inv(MAC, { registrations: [reg('github', 'project', docker, 'github', 'local')] }), { targets: ['mcp:github~project'] }, catalog).targets['mcp:github~project'];
@@ -2386,7 +2386,7 @@ test('buildEntry for the sentry bridge at local, project and user scope', () => 
 
 // ---- the sentry bridge (0.4.0) ----------------------------------------------------------------------------------------
 
-const roots = require('../scripts/roots.js');
+const roots = require('../scripts/roots/roots.js');
 const bridgeWorld = () =>
 {
     const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-bplan-')));
@@ -2683,7 +2683,7 @@ function rootMoveWorld(t, pick)
     assert.strictEqual(apply(install, { env: w.env, tmp: path.join(w.dir, 'tmp1'), data, log: () => {} }).failed, null);
     const change = () => plan(inv(), { rootChange: ['project'], roots: { project: { id: 'named', path: 'tools' } } }, { home: w.home, env: w.env });
     const run = (p, tmp) => { const lines = []; const r = apply(p, { env: w.env, tmp: path.join(w.dir, tmp), data, log: (...a) => lines.push(a.join(' ')) }); return { r, text: lines.join('\n') }; };
-    const local = (name) => require('../scripts/account.js').readAccount(w.env, w.project).local[name];
+    const local = (name) => require('../scripts/core/account.js').readAccount(w.env, w.project).local[name];
     const cursor = () => JSON.parse(fs.readFileSync(path.join(w.project, '.cursor', 'mcp.json'), 'utf8')).mcpServers;
     return { w, fs, old, fresh, change, run, local, cursor };
 }

@@ -21,22 +21,22 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const catalogLib = require('./catalog.js');
+const catalogLib = require('./catalog/catalog.js');
 const inventory = require('./inventory.js');
-const cli = require('./claude-cli.js');
-const registryLib = require('./registry.js');
+const cli = require('./core/claude-cli.js');
+const registryLib = require('./catalog/registry.js');
 const E = require('./entries.js');
 const fetchLib = require('./fetch.js');
 const { apply } = require('./apply.js');
-const tmpdir = require('./tmpdir.js');
-const { blockingStdio } = require('./json-file.js');
+const tmpdir = require('./core/tmpdir.js');
+const { blockingStdio } = require('./core/json-file.js');
 const { realMachine, clone, compareVersions, pinnedVersion } = require('./fixes/common.js');
 const { bareName } = inventory;
 const asksLib = require('./asks.js');
-const mcpOrder = require('./mcp-order.js');
+const mcpOrder = require('./mcps-list/mcp-order.js');
 const planLists = require('./plan-lists.js');
-const cursorMcp = require('./cursor-mcp.js');
-const account = require('./account.js');
+const cursorMcp = require('./cursor/cursor-mcp.js');
+const account = require('./core/account.js');
 
 // ---- the pin, edited -------------------------------------------------------------------------------------------------
 
@@ -151,7 +151,7 @@ async function mcpOffers(ctx, out)
 // from the list is named and left to fix.
 async function cursorPinOffers(ctx, out)
 {
-    const kept = require('./kept.js');
+    const kept = require('./core/kept.js');
     const pkg = ctx.catalog.byId.get('sentry').routes.bridge.package;
     let versions = null;
     for (const family of ['project', 'global'])
@@ -190,11 +190,11 @@ async function cursorPinOffers(ctx, out)
 // offered; a hand edit or a newer copy is left to /preferred-tools:fix, with a note.
 function helperOffers(ctx, out)
 {
-    const roots = require('./roots.js');
+    const roots = require('./roots/roots.js');
     const { HELPER_VERSION } = require('./mcp-headers.js');
     const { BRIDGE_VERSION } = require('./mcp-bridge.js');
     const P = E.pathFor(ctx.inv.os);
-    const rctx = { project: ctx.project, home: require('./account.js').homeDir(ctx.env), platform: ctx.inv.os, catalog: ctx.catalog };
+    const rctx = { project: ctx.project, home: require('./core/account.js').homeDir(ctx.env), platform: ctx.inv.os, catalog: ctx.catalog };
     const dirs = new Set(['project', 'global'].map((f) => ctx.inv.roots && ctx.inv.roots[f] && ctx.inv.roots[f].path).filter(Boolean));
     const bridgeDirs = new Set();
     const contextDirs = new Set();
@@ -465,7 +465,7 @@ function updateCursorPin(ctx, offer, tmp, log)
     ];
     const report = apply({ project: ctx.project, steps }, { env: ctx.env, tmp, runCli: ctx.runCli, fetchFile: false, log: (...a) => log(a.join(' ')) });
     if (report.failed) return false;
-    const got = require('./cursor-mcp.js').readCursor(offer.file);
+    const got = require('./cursor/cursor-mcp.js').readCursor(offer.file);
     const pin = got.state === 'ok' ? pinnedVersion(got.doc.mcpServers[offer.name] || {}, offer.package) : null;
     log(`${pin === offer.to ? 'ok    ' : 'CHECK '} ${offer.label}: ${offer.package} ${offer.from} -> ${pin || '?'} (read back from ${offer.file}), cut-off ${offer.cutoff}`);
     return pin === offer.to;
@@ -475,7 +475,7 @@ function updateCursorPin(ctx, offer, tmp, log)
 // root's package.json says CommonJS when it has none (apply.js ensureCommonjs).
 function updateHelper(offer, log)
 {
-    const roots = require('./roots.js');
+    const roots = require('./roots/roots.js');
     const kind = offer.kind === 'bridge' ? 'bridge' : offer.kind === 'context' ? 'serenaContext' : 'helper';
     const before = roots.shippedState(kind, offer.file);
     if (before.state !== 'lower') { log(`CHECK  ${offer.label}: now ${before.state} - left as it is`); return false; }
@@ -542,7 +542,7 @@ function applyUpdates(ctx, ids, out, { tmp, log = console.log, input = {} } = {}
 {
     const res = { applied: [], failed: [], unknown: [], fetchFile: null, dir: null };
     // the uninstall offers turned down (spec D9): shown and left unpicked, or kept out of 'All of them' for alfred-code
-    const declines = require('./declines.js');
+    const declines = require('./core/declines.js');
     let turnedDown;
     try { turnedDown = declines.parse(input['retired-declined']); }
     catch (e) { log(`FAILED ${e.message}`); res.failed.push('retired-declined'); return res; }

@@ -6,8 +6,8 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { world, writeJson, accountKey } = require('./helpers.js');
 const inv = require('../scripts/inventory.js');
-const catalogLib = require('../scripts/catalog.js');
-const account = require('../scripts/account.js');
+const catalogLib = require('../scripts/catalog/catalog.js');
+const account = require('../scripts/core/account.js');
 
 const catalog = catalogLib.load();
 const SERENA = { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20T23:59:59Z', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'], env: { SERENA_HOME: '/x' } };
@@ -306,7 +306,7 @@ test('the CLI form writes every credential value as the marker; nothing it print
     try
     {
         const crypto = require('node:crypto');
-        const { MARKER } = require('../scripts/kept.js');
+        const { MARKER } = require('../scripts/core/kept.js');
         const token = `sntryu_${crypto.randomBytes(16).toString('hex')}`;
         const key = `sk-live-${crypto.randomBytes(16).toString('hex')}`;
         accountWith(w, { local: {
@@ -563,7 +563,7 @@ test('the inventory reads trust and the roots map from --data', () => {
     const w = world();
     try
     {
-        const roots = require('../scripts/roots.js');
+        const roots = require('../scripts/roots/roots.js');
         const data = path.join(w.dir, 'data');
         const named = path.join(w.project, 'tools', 'keys');
         const g = path.join(w.dir, 'global-keys');
@@ -646,7 +646,7 @@ test('inv.cursor reads both Cursor files; entries hold only the names a list mar
         const file = path.join(w.project, '.cursor', 'mcp.json');
         assert.deepStrictEqual([i.cursor.project.file, i.cursor.project.state, i.cursor.project.names], [file, 'ok', ['serena', 'memory', 'mine']]);
         assert.deepStrictEqual(Object.keys(i.cursor.project.entries), ['serena']);
-        assert.deepStrictEqual(i.cursor.project.entries.serena, require('../scripts/kept.js').keep(S, catalog.byId.get('serena')));
+        assert.deepStrictEqual(i.cursor.project.entries.serena, require('../scripts/core/kept.js').keep(S, catalog.byId.get('serena')));
         assert.deepStrictEqual([i.cursor.global.state, i.cursor.global.names, i.cursor.global.entries], ['absent', [], {}]);
         assert.strictEqual(i.cursor.global.file, path.join(account.homeDir(w.env), '.cursor', 'mcp.json'));
     }

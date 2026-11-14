@@ -19,8 +19,8 @@ const inventory = require('../scripts/inventory.js');
 const { plan, render } = require('../scripts/plan.js');
 const { apply } = require('../scripts/apply.js');
 const fetchLib = require('../scripts/fetch.js');
-const account = require('../scripts/account.js');
-const cli = require('../scripts/claude-cli.js');
+const account = require('../scripts/core/account.js');
+const cli = require('../scripts/core/claude-cli.js');
 
 // the REAL home, taken from the OS (not from HOME, which the harness overrides for its children)
 const REAL_HOME = os.userInfo().homedir;

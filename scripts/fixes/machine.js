@@ -17,7 +17,7 @@ const E = require('../entries.js');
 
 function retiredPluginDetect(ctx)
 {
-    const declines = require('../declines.js');
+    const declines = require('../core/declines.js');
     const ids = C.fixOf(ctx, 'retired-plugin').ids || [];
     const declined = declines.read(ctx.data);
     const alfred = Boolean(ctx.inv.alfredCodeEnabled);
@@ -37,9 +37,9 @@ function retiredPluginDetect(ctx)
 // last claude-hud: the account line is shared by every scope, so it stays while another scope still has the plugin.
 function retiredPluginFix(f, ctx)
 {
-    const cli = require('../claude-cli.js');
+    const cli = require('../core/claude-cli.js');
     const inventory = require('../inventory.js');
-    const hud = require('../hud-statusline.js');
+    const hud = require('../hud/hud-statusline.js');
     const command = `claude plugin uninstall ${f.name} --scope ${f.scope}`;
     const r = cli.run(['plugin', 'uninstall', f.name, '--scope', f.scope], { cwd: ctx.inv.project, env: ctx.env });
     if (r.error || r.status !== 0) return { ok: false, detail: `${command} failed - ${String(`${r.stderr || ''}${r.stdout || ''}` || (r.error && r.error.message) || 'no output').trim().split('\n').slice(-1)[0]}` };

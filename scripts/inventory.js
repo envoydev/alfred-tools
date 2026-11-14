@@ -11,14 +11,14 @@
 // registration that matches no row is the user's: it is listed as `own` and nothing in this plugin touches it.
 const fs = require('node:fs');
 const path = require('node:path');
-const catalogLib = require('./catalog.js');
-const account = require('./account.js');
-const cli = require('./claude-cli.js');
-const kept = require('./kept.js');
-const roots = require('./roots.js');
+const catalogLib = require('./catalog/catalog.js');
+const account = require('./core/account.js');
+const cli = require('./core/claude-cli.js');
+const kept = require('./core/kept.js');
+const roots = require('./roots/roots.js');
 const E = require('./entries.js');
 const { readState } = account;
-const { blockingStdio } = require('./json-file.js');
+const { blockingStdio } = require('./core/json-file.js');
 
 // ---- matching a registration to a row -------------------------------------------------------------------------------
 
@@ -251,7 +251,7 @@ function buildInventory({ project, env = process.env, platform = process.platfor
     out.lists = { project: listOf(out, 'project', rootCtx), global: listOf(out, 'global', rootCtx) };
     out.cursor = cursorFiles(out, { platform, env, project: proj }, catalog);
     // the workspace alfred-code records (spec D4a): the folders whose Cursor files take this folder's project servers
-    out.workspace = require('./workspace.js').of(proj, env);
+    out.workspace = require('./roots/workspace.js').of(proj, env);
     const fp = (entry) => existing.fingerprintOf(entry, catalog);
     for (const r of out.registrations)
     {
@@ -289,7 +289,7 @@ function buildInventory({ project, env = process.env, platform = process.platfor
 // skipped from the first 0.5.0 run. -> { file, servers, own, cursorOffer?, note?, old? } | null
 function listOf(inv, family, ctx)
 {
-    const lists = require('./mcps-list.js');
+    const lists = require('./mcps-list/mcps-list.js');
     for (const file of lists.listFiles(inv, family, ctx))
     {
         const l = lists.readList(file);
@@ -308,7 +308,7 @@ function listOf(inv, family, ctx)
 // name it holds, and the entries of the names its family's list marks for Cursor, kept.
 function cursorFiles(inv, ctx, catalog)
 {
-    const cursorMcp = require('./cursor-mcp.js');
+    const cursorMcp = require('./cursor/cursor-mcp.js');
     const marked = (family) =>
     {
         const l = inv.lists[family];

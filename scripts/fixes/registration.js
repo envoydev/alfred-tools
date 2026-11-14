@@ -6,8 +6,8 @@
 // A finding the machine cannot act on carries `blocked` (the reason), is shown, and is never applied.
 const path = require('node:path');
 const E = require('../entries.js');
-const keys = require('../keys.js');
-const roots = require('../roots.js');
+const keys = require('../keys/keys.js');
+const roots = require('../roots/roots.js');
 const C = require('./common.js');
 const { windowsMcpServers, fromHere } = require('../inventory.js');
 
@@ -295,7 +295,7 @@ function cursorBehind(ctx, reg, route, chain, extra)
     const l = ctx.inv.lists && ctx.inv.lists.global;
     const s = l && !l.note && !l.old ? (l.servers || []).find((x) => x.name === reg.name && x.scope === 'user' && (x.clients || []).includes('cursor')) : null;
     if (!s || !s.key) return null;
-    const cursorMcp = require('../cursor-mcp.js');
+    const cursorMcp = require('../cursor/cursor-mcp.js');
     const file = cursorMcp.fileFor('global', ctx);
     const read = cursorMcp.readCursor(file);
     const copy = read.state === 'ok' ? read.doc.mcpServers[reg.name] : null;
