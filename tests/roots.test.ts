@@ -287,3 +287,21 @@ test('the # version line is read', () => {
 test('GITIGNORE keeps mcp-bridge.js and serena-context.yml in git', () => {
     assert.strictEqual(roots.GITIGNORE, '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n');
 });
+
+test('a copy an older version wrote reads lower under either prefix', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-old-prefix-'));
+    try
+    {
+        const file = path.join(dir, 'copy');
+        const swap = (kind: 'helper' | 'bridge' | 'serenaContext', from: RegExp, to: string) => fs.writeFileSync(file, roots.shippedSource(kind).replace(from, to));
+        swap('helper', /^\/\/ alfred-tools mcp-headers \d+/, '// preferred-tools mcp-headers 4');
+        assert.deepStrictEqual(roots.shippedState('helper', file), { state: 'lower', number: 4 });
+        swap('bridge', /^\/\/ alfred-tools mcp-bridge \d+/, '// preferred-tools mcp-bridge 1');
+        assert.deepStrictEqual(roots.shippedState('bridge', file), { state: 'lower', number: 1 });
+        swap('serenaContext', /^# alfred-tools serena-context \d+/, '# preferred-tools serena-context 1');
+        assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'lower', number: 1 });
+        swap('helper', /^\/\/ alfred-tools mcp-headers \d+/, '// preferred-tools mcp-headers 9');
+        assert.deepStrictEqual(roots.shippedState('helper', file), { state: 'edited', number: 9 });
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

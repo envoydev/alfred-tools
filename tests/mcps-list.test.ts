@@ -122,3 +122,12 @@ test('fromRegistration: a route with no key in the entry has key null', () => {
     const s = fromRegistration({ name: 'memory', scope: 'project', route: 'local', entry: { type: 'stdio', command: 'uvx', args: ['mcp-memory-service'] } }, row('memory'), ['claude', 'cursor']);
     assert.equal(s.key, null);
 });
+
+test('a list holding the old marker reads as the new one', () => {
+    const old = '${PREFERRED_TOOLS_KEPT}';
+    write('old-marker.json', JSON.stringify({ version: 1, servers: [srv('github', 'local', { entry: { type: 'stdio', command: 'npx', args: ['-y', 'gh'], env: { GITHUB_TOKEN: old } } })], own: [] }));
+    const read = readList(join(dir, 'old-marker.json'))!;
+    assert.equal(kept.OLD_MARKER, old);
+    assert.equal(read.servers[0]!.entry.env!['GITHUB_TOKEN'], kept.MARKER);
+    assert.ok(!JSON.stringify(read).includes(old));
+});

@@ -138,3 +138,17 @@ test('oldHolding finds a key in a parent folder\'s alfred-code store', () => {
     }
     finally { w.clean(); }
 });
+
+test('the 0.1.x key file is read at both folders', () => {
+    const w = world();
+    try
+    {
+        const files = keys.oldFiles(w.project, w.home);
+        for (const folder of ['.alfred-tools', '.preferred-tools'])
+        {
+            assert.ok(files.includes(path.join(w.project, folder, '.secrets')), `${folder} in the project`);
+            assert.ok(files.includes(path.join(w.home, folder, '.secrets')), `${folder} at home`);
+        }
+    }
+    finally { w.clean(); }
+});

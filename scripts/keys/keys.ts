@@ -14,8 +14,8 @@ import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
 import type { FileNames, KeyChain, KeyHit, TokenField } from './types.ts';
 
-const KEY_FILE = path.join('.alfred-tools', '.secrets');
-const projectFile = (project: string): string => path.join(project, KEY_FILE);
+// 0.1.x's key file, at this plugin's folder and at its former one (spec D2), read in that order
+const KEY_FILES = [path.join('.alfred-tools', '.secrets'), path.join('.preferred-tools', '.secrets')];
 const alfredStores = (project: string): string[] => ['.secrets', '.sensitive-data'].map((storeName) => path.join(project, '.alfred', storeName));
 
 // alfred-code's dotenv grammar (v3.2.1 stack/hooks/layout.js readDotenv): `KEY=value`, `export ` allowed before it, one
@@ -137,7 +137,7 @@ export const filledNames = (files: string[]): FileNames[] => files.map((file) =>
 
 // The key files 0.1.x read, which 0.2.0 reads for names only: alfred-code's store in the project and in each parent folder
 // (its chain walks the parents, so a workspace root's store served its child repos), the project's
-// .alfred-tools/.secrets, then the home one.
+// .alfred-tools/.secrets and its former folder's, then the home ones.
 export function oldFiles(project: string, home: string): string[]
 {
     const stores: string[] = [];
@@ -146,7 +146,7 @@ export function oldFiles(project: string, home: string): string[]
         stores.push(...alfredStores(dir));
         if (path.dirname(dir) === dir) break;
     }
-    return uniq([...stores, projectFile(project), path.join(home, KEY_FILE)]);
+    return uniq([...stores, ...KEY_FILES.map((file) => path.join(project, file)), ...KEY_FILES.map((file) => path.join(home, file))]);
 }
 
 // The first old file holding `name` with a value -> its path | null. The value is never returned.

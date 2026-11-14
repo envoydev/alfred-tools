@@ -33,7 +33,8 @@ export function readList(file: string): ListRead | null
     try { text = fs.readFileSync(file, 'utf8'); }
     catch (caught) { const err = caught as NodeJS.ErrnoException;  return err.code === 'ENOENT' || err.code === 'ENOTDIR' ? null : empty(file, `cannot be read (${err.code})`, 'unreadable'); }
     let doc: RawDoc | null;
-    try { doc = JSON.parse(text.replace(/^﻿/, '')) as RawDoc | null; }
+    // the former name's marker (spec D2) - it is JSON-safe, so the text is swapped before the parse
+    try { doc = JSON.parse(text.replace(/^﻿/, '').replaceAll(kept.OLD_MARKER, kept.MARKER)) as RawDoc | null; }
     catch { return empty(file, 'is not JSON', 'bad'); }
     if (doc && typeof doc === 'object' && doc.version !== LIST_VERSION && newerOrBad(doc.version) === 'newer')
         return empty(file, `is version ${doc.version}, newer than this plugin's ${LIST_VERSION}`, 'newer');

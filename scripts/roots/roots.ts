@@ -19,6 +19,18 @@ import type { Machine, Roots } from '../entries/types.ts';
 import type { Family, IgnoreGap, InUse, InventoryView, MapRead, RecordEntry, Resolved, RootAnswer, RootOption, RootReg, RootsCtx, RootsMap, ShippedKind, ShippedState } from './types.ts';
 
 export const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json', signIns: 'mcp-remote-v1', serenaContext: 'serena-context.yml' };
+// The root folder's name, and the one this plugin gave it under its former name (preferred-tools until 0.4.0, spec D3)
+export const ROOT_NAME = '.alfred-tools';
+export const FORMER_ROOT_NAME = '.preferred-tools';
+// The names that make a folder a root that holds something (spec D3 'holds root files'); its contents are never read.
+export const ROOT_FILE_NAMES = [FILES.secrets, FILES.helper, FILES.bridge, FILES.list, FILES.record, FILES.serenaContext, '.secrets'];
+export function holdsRootFiles(dir: string): boolean
+{
+    let names: string[];
+    try { names = fs.readdirSync(dir); }
+    catch { return false; }
+    return names.some((name) => ROOT_FILE_NAMES.includes(name));
+}
 // The read guard (0.5.0, ruling 13): two deny rules in Claude Code's settings that keep a session's Read tool out of
 // mcp-remote's sign-in tokens and the key file, wherever a root sits.
 export const READ_GUARD = { signIns: 'Read(//**/mcp-remote-v1/**)', secrets: 'Read(//**/.mcps-secrets)' };
@@ -341,8 +353,9 @@ export function ignoreGap(root: string, family: string, { writes = [] }: { write
 }
 
 // The files this plugin copies into a root: the key helper (D4), the URL bridge (0.4.0) and serena's context (0.5.0,
-// D7). Each carries its version on its first line.
-const SHIPPED_LINE: Record<ShippedKind, RegExp> = { helper: /^\/\/ alfred-tools mcp-headers (\d+)\s*$/, bridge: /^\/\/ alfred-tools mcp-bridge (\d+)\s*$/, serenaContext: /^# alfred-tools serena-context (\d+)\s*$/ };
+// D7). Each carries its version on its first line, under this plugin's name or its former one (preferred-tools until
+// 0.4.0 - spec D2): a former-name copy is always older, so one at or above the shipped number was edited by hand.
+const SHIPPED_LINE: Record<ShippedKind, RegExp> = { helper: /^\/\/ (alfred|preferred)-tools mcp-headers (\d+)\s*$/, bridge: /^\/\/ (alfred|preferred)-tools mcp-bridge (\d+)\s*$/, serenaContext: /^# (alfred|preferred)-tools serena-context (\d+)\s*$/ };
 const shippedVersion = (kind: ShippedKind): number => (kind === 'bridge' ? BRIDGE_VERSION : kind === 'serenaContext' ? SERENA_CONTEXT_VERSION : helper.HELPER_VERSION);
 const shippedText: Partial<Record<ShippedKind, string>> = {};
 export const shippedSource = (kind: ShippedKind): string => (shippedText[kind] = shippedText[kind] || fs.readFileSync(path.join(import.meta.dirname, '..', 'copied', FILES[kind]), 'utf8'));
@@ -359,9 +372,10 @@ export function shippedState(kind: ShippedKind, file: string, exists: (filePath:
     catch { return { state: 'absent', number: null }; }
     const match = SHIPPED_LINE[kind].exec(text.split('\n')[0]!);
     if (!match) return { state: 'edited', number: null };
-    const number = Number(match[1]);
+    const number = Number(match[2]);
     const version = shippedVersion(kind);
     if (number < version) return { state: 'lower', number };
+    if (match[1] === 'preferred') return { state: 'edited', number };
     if (number > version) return { state: 'higher', number };
     return { state: helper.digestOf(text) === helper.digestOf(shippedSource(kind)) ? 'same' : 'edited', number };
 }

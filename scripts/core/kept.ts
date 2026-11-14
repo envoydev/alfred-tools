@@ -13,6 +13,8 @@
 import type { Path, RowOf, ServerEntry } from './types.ts';
 
 export const MARKER = '${ALFRED_TOOLS_KEPT}';
+// The marker the plugin wrote under its former name (spec D2): a stored list holding it is read as MARKER.
+export const OLD_MARKER = '${PREFERRED_TOOLS_KEPT}';
 
 // the guard's tests (v3.2.1 :63-67, :143-156), copied so this file masks at least what it blocks
 const SECRET_KEY_RE = /(TOKEN|SECRET|KEY|PASSWORD|PASSWD|DSN|CREDENTIAL|AUTH)$/i;
