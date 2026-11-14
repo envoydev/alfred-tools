@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The file offers: the helper, bridge and serena-context copies behind the plugin's own.
 import { pathFor } from '../entries/platform.ts';
 import { contextArgAt, bridgeParts } from '../entries/entry.ts';

@@ -12,6 +12,11 @@
     "lint": "node tests/lint.ts",
     "validate": "node tests/validate-plugin.ts",
     "refresh-pins": "node scripts/refresh-pins.ts",
-    "proof": "node tests/proof/proof.ts"
+    "proof": "node tests/proof/proof.ts",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "6.0.3"
   }
 }

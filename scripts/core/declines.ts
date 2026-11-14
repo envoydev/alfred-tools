@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // THE DECLINED UNINSTALL OFFERS (spec D9, 0.5.0). typescript-lsp, csharp-lsp and claude-hud left the catalog; update and
 // fix offer once to uninstall each at each scope it is installed. A decline is kept here, in the plugin's persistent
 // folder beside roots.json - `${CLAUDE_PLUGIN_DATA}/retired-declined.json`, `{ version: 1, declined: [{ id, scope }] }` -

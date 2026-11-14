@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The 0.2.0 key rows (spec D7): a hosted key moved out of a registration into the header helper, the helper on disk kept
 // present and current, and a root's .gitignore that keeps its key file out of git. token-sync (stdio keys) is in
 // registration.js.

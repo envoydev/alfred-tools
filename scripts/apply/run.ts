@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 11
 // APPLY - runs a plan's operations in order through the `claude` CLI, reads each back, and stops at the first failure.
 //
 //   node apply.js <plan.json> [--tmp <dir>] [--data <plugin data dir>]

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 import path from 'node:path';
 import { installedOf } from '../inventory/inventory.ts';
 import * as roots from '../roots/roots.ts';

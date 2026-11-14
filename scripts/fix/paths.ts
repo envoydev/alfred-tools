@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The fixes for what 0.2.0 wrote at project scope (spec F7, F8, F3a): a data folder or key helper named relative or
 // through ${HOME} / ${USERPROFILE} (project-relative-path), .mcp.json's servers out of the catalog's order (mcp-order),
 // and a parent folder's hosted server whose helper Claude Code does not run in a child folder (helper-child-folder).

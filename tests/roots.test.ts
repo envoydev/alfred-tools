@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // roots.js - one root folder per scope family (spec D2): the options, the root in use, a named folder, the roots map and
 // the record file. Pure where a ctx stands in for the disk; the map and record tests use a throwaway folder.
 import test from 'node:test';

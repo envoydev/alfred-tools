@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 10
 // REFRESH THE CATALOG'S PINS - a repo script (`npm run refresh-pins`), never run by an install or an update.
 //
 //   node scripts/refresh-pins.ts            print what would move

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // MCP ORDER (spec F8) - .mcp.json's servers in the catalog's order: the servers this plugin manages first, by their row's
 // place in catalog.order (two of one row keep their order), then the user's own and the servers left on their own, in
 // their current order. Only the order of mcpServers' keys changes, never a value, and every other top-level key, the

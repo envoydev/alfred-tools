@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 12
 // THE HOOK REPLAY - does alfred-code break preferred-tools' commands? Every step the four commands take is put through
 // the hooks alfred-code registers, at each released version, in a plain alfred-code project and (from 2.11.0, the first
 // release with workspaces) in a workspace root and its child. No model, no login.

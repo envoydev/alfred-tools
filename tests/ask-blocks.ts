@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The fenced `ask` blocks in commands and skills, held to the AskUserQuestion limits and to scripts/plan/asks-other.ts STATIC.
 //
 //   ```ask <id>

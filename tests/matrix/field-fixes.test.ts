@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The 0.3.0 field fixes end to end: the REAL claude CLI in throwaway homes and accounts (tests/harness.ts), a stub HTTP
 // MCP server on 127.0.0.1 (tests/fake-mcp-http.ts) standing in for a hosted server, every result read back from the
 // files the CLI wrote.

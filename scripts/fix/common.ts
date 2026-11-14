@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // Shared pieces of the fix detectors. A detector is `detect(ctx) -> findings[]`; a registration fix is
 // `fix(entry, finding, ctx, input) -> entry` (a pure edit of the entry AS READ, so the user's pin, cut-off and added
 // args or env survive); a machine fix is `fix(finding, ctx) -> { ok, detail }` and changes the machine.

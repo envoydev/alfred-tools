@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 11
 // FETCH - the slow half of an apply: fills the runtime caches for what apply.js just registered, starts each new server
 // once, then asks the CLI for each status.
 //

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // Every question the walk can put, for the 'no text sends the user to Other' rule (spec D8): tests/lint.ts checks the
 // texts, tests/plan.test.ts and tests/roots.test.ts use the same pattern. One home for the pattern and the fixtures.
 import * as catalogLib from '../scripts/catalog/catalog.ts';

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // A stub OAuth vendor on 127.0.0.1, in the calling process, for the matrix's shared sign-in case (spec M3, D5, F13): the
 // protected-resource and authorization-server metadata, dynamic client registration, `/authorize` redirecting back
 // with a code, `/token` issuing an access token that lives `ttl` seconds and a refresh token, and an MCP endpoint at

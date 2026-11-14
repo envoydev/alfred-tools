@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 12
 // THE UPDATE ENGINE - what is installed and behind its release: every plugin, the pinned MCP servers, the helper, bridge
 // and serena-context copies, and the new ways to pass data (fix's `upgrade` rows, the old plugins' uninstall among them).
 //

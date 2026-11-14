@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // The key questions: which key a hosted route reads, and the name it is kept under.
 import path from 'node:path';
 import { rootOf } from '../entries/locations.ts';

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // A WORKSPACE, AS ALFRED-CODE RECORDS IT (spec D4a, 0.5.0). Cursor never reads a parent folder's .cursor/mcp.json (F12),
 // so the project servers of a workspace folder are written into each member's file below it. Which folders form a
 // workspace is alfred-code's to say (ruling 10): this reads its record, read-only, the way alfred-code's own reader does

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // THE LIST - <root>/mcps.json (spec D1, 0.5.0). One per scope family's root folder: every server the plugin manages in
 // that family, the apps each one is written to, and the servers the user left on their own (`own`, the record's entries
 // unchanged). Read and written only here. A server's entry never holds a key value: a stdio key field holds kept.MARKER

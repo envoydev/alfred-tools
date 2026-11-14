@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The machine fixes: a problem on this machine, not in a registration. The fix changes the machine (a plugin uninstalled,
 // a data folder's .gitignore, a broken npx cache folder removed), so it runs only when the user picked it, and is read
 // back by running the detector again. A fix that changes nothing a running session uses returns `restart: false`; one

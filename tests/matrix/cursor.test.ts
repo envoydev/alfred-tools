@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // CURSOR AND CLAUDE CODE FROM ONE LIST (spec 2026-11-13). Real-CLI cases in a throwaway home and account, each reading
 // the written files, never the exit code alone.
 //

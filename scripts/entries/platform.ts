@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // The platform a registration is built for: the path flavour of its OS and the Python request on Windows ARM64.
 import path from 'node:path';
 

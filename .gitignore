@@ -39,6 +39,8 @@ build/Release
 
 # Dependency directories
 node_modules/
+# no lockfile: the plugin has no runtime dependencies, and the build tools are pinned exactly in package.json
+package-lock.json
 jspm_packages/
 
 # Snowpack dependency directory (https://snowpack.dev/)

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The fixes for the list, <root>/mcps.json (spec D1, D9). A row of kind `file` names no `fix` function: its `steps`
 // function plans list-write and the rest, which fix.js's file pass runs through apply.js as one plan.
 //

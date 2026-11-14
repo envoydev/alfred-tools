@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // alfred-code projects in a throwaway world, for the hook replay (tests/probes/alfred-hooks.ts) and the workspace matrix.
 //
 // ONE ACCOUNT PER VERSION. Every alfred-code release names its marketplace `envoydev`, so two versions in one account

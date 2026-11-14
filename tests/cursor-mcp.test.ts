@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // cursor-mcp.js - Cursor's mcp.json from the list (spec D2): read, refuse, compose, write, read back.
 import test from 'node:test';
 import assert from 'node:assert';

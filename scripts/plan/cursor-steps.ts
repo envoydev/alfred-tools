@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // The Cursor steps of a plan: what it writes into each Cursor file, from the list.
 import fs from 'node:fs';
 import { realpathSync } from 'node:fs';

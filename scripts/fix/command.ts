@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The fix command: reads its flags and runs the detectors, the asks or the fixes.
 import path from 'node:path';
 import * as inventory from '../inventory/inventory.ts';

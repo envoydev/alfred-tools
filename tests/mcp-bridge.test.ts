@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // mcp-bridge.js - the bridge a hosted route of runtime 'bridge' registers (0.4.0): it fills the URL template from
 // .mcps-secrets at each start and runs a pinned mcp-remote through npx, the key in mcp-remote's environment only.
 // Each process case copies the bridge and the helper into a throwaway root and runs it with PATH led by this file's own

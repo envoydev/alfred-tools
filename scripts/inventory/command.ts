@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // The inventory command: reads its flags, builds the inventory and writes or prints it.
 import fs from 'node:fs';
 import { blockingStdio } from '../core/json-file.ts';

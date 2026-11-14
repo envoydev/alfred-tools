@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // Names: whether a registration name is usable at its scope.
 import { bridgeParts } from './entry.ts';
 

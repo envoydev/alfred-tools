@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // One sign-in for both apps (spec D5, ruling 12): the mcp-remote form with its sign-in kept in the family's root.
 
 // ---- one sign-in for both apps (spec D5, ruling 12) ----------------------------------------------------------------

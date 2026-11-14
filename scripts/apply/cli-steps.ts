@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // The CLI steps of an apply: quoting, the calls through the claude CLI, and a key taken back for a replace or a move.
 import * as account from '../core/account.ts';
 import { deepEqual } from '../plan/plan.ts';

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // One MCP pick: its route, scope, name, root, location, key and settings, as plan steps.
 import fs from 'node:fs';
 import path from 'node:path';

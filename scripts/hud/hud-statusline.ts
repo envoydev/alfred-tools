@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 10
 // hud-statusline.js - what is left of claude-hud's setup once 0.5.0 dropped the claude-hud row (spec D8, D9): the
 // recognisers that tell claude-hud's own statusLine from any other, and the removal the `retired-plugin` uninstall runs.
 // Ported from alfred-code scripts/hud-statusline.js; MOUNT_RE is copied below.

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The prereq command: checks what this machine has and prints it.
 import * as catalogLib from '../catalog/catalog.ts';
 import * as account from '../core/account.ts';

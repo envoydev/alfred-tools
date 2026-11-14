@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The workspace cases end to end: the REAL claude CLI in throwaway homes and accounts (tests/harness.ts), alfred-code
 // built by its own installer where a case needs it (tests/probes/alfred-workspace.ts), every result read back from the
 // files the CLI wrote.

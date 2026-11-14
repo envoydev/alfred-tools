@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The golden: every entry the commands run, in fixed worlds over the fake CLI, with its stdout, stderr, exit code and
 // every file it leaves, normalised so two runs on one machine compare equal. The base is recorded before the
 // restructure moves anything; each later task compares against it (docs/superpowers/specs, Proof 2).

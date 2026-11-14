@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 11
 // THE PLAN - answers in, an ordered list of operations out. Nothing here changes anything.
 //
 //   node plan.js <inventory.json> <answers.json> [--out <plan.json>]     the plan, printed, and written for apply.js

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // hud-statusline.js after 0.5.0 (spec D8, D9): the recognisers that tell claude-hud's own statusLine from any other, and
 // the removal the retired-plugin uninstall runs. Every case runs against a throwaway account dir.
 import test from 'node:test';

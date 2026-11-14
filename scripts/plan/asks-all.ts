@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // EVERY QUESTION THE WALK ASKS, as data. A question is { id, header, question, multiSelect, options: [{ label, description }] }:
 // 2 to 4 options, exactly one marked '(Recommended)' and listed first on a single-select; a call carries 1 to 4 questions.
 // 'Other' is added by AskUserQuestion itself and never listed here.

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // The file steps of an apply (spec D2-D4, D6, D8): each skips what is in place.
 import fs from 'node:fs';
 import path from 'node:path';

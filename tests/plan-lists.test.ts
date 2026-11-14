@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // plan-lists.js - the list-write steps a plan writes into each family's mcps.json (spec D1).
 import test from 'node:test';
 import assert from 'node:assert';

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The walk (spec F1, F2): `asks.next` hands the command one step of one tool at a time - settings first, then each
 // tool's route, scope and name, its root when this run has not answered it, its location and extras, its key name and
 // settings - and `done` once nothing is left. Each step is answered with its recommended option here, and recorded into

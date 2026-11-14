@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The registration fixes: each finds a known problem in an installed registration and edits that entry AS READ (its pin,
 // its cut-off and the args or env the user added stay). The edit is applied by `claude mcp remove` + `add-json` through
 // apply.js's mcp-replace, with a rollback; this file never writes.

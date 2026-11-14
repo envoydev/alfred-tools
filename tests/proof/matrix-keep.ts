@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The matrix's written files, kept for the proof: with PT_PROOF_DIR set, a matrix file's test.after calls
 // keepWritten before it removes its root, and every file the golden keeps is copied, normalised, to
 // <PT_PROOF_DIR>/matrix/<label>/<relative path>. Without PT_PROOF_DIR it does nothing.

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // Step 9: the fix engine - every detector found and not found, the fixes as pure edits of the entry as read, the
 // composition into one replace per registration, the asks, and the apply path against the fake claude.
 import test from 'node:test';

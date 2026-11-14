@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // The other questions: a tool's own ask, remove, Cursor, drift, the apps, and the static ones.
 import { REC, keyStateOf } from './asks-keys.ts';
 import { installedItems, packed } from './asks-picks.ts';

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 12
 // PREREQUISITES - what each picked tool needs on this machine, checked read-only.
 //
 //   node prereq.js <answers.json> [--json] [--audit]   the tools in answers.picks, each on its picked route, and each

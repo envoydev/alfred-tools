@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The unit suite's test names, keyed by file (without its extension, so a .js and its .ts compare equal) and the path
 // of names from the top-level test down. Used as a node:test reporter (its events carry the file; TAP output does
 // not), and run by proof.js beside the spec reporter, so the suite runs once.

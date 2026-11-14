@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // Location roots: a logical root, where it is written, and the entry's location arguments and env.
 import fs from 'node:fs';
 import path from 'node:path';

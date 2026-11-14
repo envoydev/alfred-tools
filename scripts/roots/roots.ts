@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // ROOT FOLDERS (spec D2) - one root per scope family: the project root serves project and local scope, the global root
 // serves global (user) scope. A root holds each tool's data folder `<root>/<name>`, the key file, the header helper, the
 // record of the user's answers and, unless it is `.alfred`, a `.gitignore`. The roots map in the plugin's data folder

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // The one place the `claude` CLI is spawned. Scripts READ files; every write to .mcp.json, the account file and the
 // plugin records goes through this (invariant: the CLI is the only writer).
 import { spawnSync } from 'node:child_process';

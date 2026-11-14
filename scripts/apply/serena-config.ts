@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // SERENA'S BASE MODES (spec D7, F9). <SERENA_HOME>/serena_config.yml lists `base_modes`, and with its default the manual
 // Serena hands the model describes edit tools the plugin's context leaves out. This sets `base_modes: []`.
 //

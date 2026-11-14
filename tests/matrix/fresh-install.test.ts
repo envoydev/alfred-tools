@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // Step 10 check: a fresh install for every catalog row and route, from an answers file, through the REAL claude CLI in
 // the throwaway world (tests/harness.ts), then read back from the files the CLI wrote - never from an exit code.
 //

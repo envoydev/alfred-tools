@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // A stub HTTP MCP server on 127.0.0.1, in the calling process: it answers initialize and tools/list, and records per
 // request the path, the JSON-RPC method and whether the `Authorization` header equals the expected value - never the
 // value itself. Used by tests/probes/headers-helper.ts and the matrix's key cases (keys.test.js, workspace.test.js W4).

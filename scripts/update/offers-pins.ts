@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The pin offers: each pinned MCP server behind a release at least 7 days old.
 import * as inventory from '../inventory/inventory.ts';
 import * as registryLib from '../catalog/registry.ts';

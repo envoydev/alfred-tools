@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 12
 // THE HEADER HELPER - where does Claude Code run an MCP server's `headersHelper`, and what reaches the server? A stub
 // HTTP MCP server on 127.0.0.1 (in this process) records, per request, the path, the JSON-RPC method and whether the
 // `Authorization` header equals the expected value - never the value. The real `claude` CLI registers servers whose

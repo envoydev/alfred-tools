@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // 0.4.0's bridge end to end: the REAL claude CLI in a throwaway home and account (tests/harness.ts), the real mcp-remote
 // from npm in the throwaway npm cache, and a stub HTTP MCP server on 127.0.0.1 (tests/fake-mcp-http.ts) standing in for
 // Sentry. Every result is read back from what the CLI wrote and what the stub saw.

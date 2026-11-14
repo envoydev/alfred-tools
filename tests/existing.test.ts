@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // Servers already set up (spec D6, F4): a matching registration, a plugin's server and a claude.ai connector. One the user
 // leaves on its own is recorded in the root's preferred-tools.json; a managed one has no record.
 import test from 'node:test';

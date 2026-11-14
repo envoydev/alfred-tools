@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // The context a plan is made in: the machine, the project, the roots and the catalog.
 import { alfredData } from '../entries/locations.ts';
 import { liveReader } from './asks-keys.ts';

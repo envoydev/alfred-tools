@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // Do the tools START? The other matrix files prove a registration is written right; this one launches it. Each local
 // row is installed through the real CLI in the throwaway world, its packages fetched by fetch.js as the command runs it,
 // read back from the file the CLI wrote, and started exactly as written - command, args and env, ${VAR} expanded as

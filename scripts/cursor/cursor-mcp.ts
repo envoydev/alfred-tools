@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // CURSOR'S FILES - <project>/.cursor/mcp.json and ~/.cursor/mcp.json, written from the lists (spec D2, 0.5.0). Cursor has
 // no CLI that adds a server, so this is the one writer of those files besides the user: it replaces only the names it
 // manages, keeps every other entry with its keys and values in their order, and refuses a file it does not recognise -

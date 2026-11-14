@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 12
 // A FAKE `claude` for the tests. It records every call's argv (FAKE_CLAUDE_LOG, JSON lines) and emulates what the real
 // CLI was MEASURED doing (Claude Code 2.1.311, docs/sources.md): `mcp add-json` / `remove` write .mcp.json or the
 // account file; `plugin install` over an installed plugin is a no-op at the same scope, flips a disabled row on, and adds

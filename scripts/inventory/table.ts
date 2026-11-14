@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 11
 // THE TABLE - the whole catalog for this OS as one numbered table, with what is installed at each scope.
 //
 //   node table.js <inventory.json>

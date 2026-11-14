@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // Printing a plan: each step as the command it runs, and the notes.
 import { pathFor } from '../entries/platform.ts';
 import * as roots from '../roots/roots.ts';

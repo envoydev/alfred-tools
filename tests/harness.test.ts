@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // Step 7 check: the harness runs the REAL claude CLI in a throwaway world and leaves the real account byte-identical.
 // Skipped (not failed) when no claude CLI is on PATH.
 import test from 'node:test';

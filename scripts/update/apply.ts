@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // Applying the picked offers: plugins, pins, files and the new ways to pass data.
 import fs from 'node:fs';
 import os from 'node:os';

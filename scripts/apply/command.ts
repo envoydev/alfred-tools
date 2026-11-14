@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // The apply command: reads the plan file and its flags, applies it and releases <tmp>.
 import fs from 'node:fs';
 import { blockingStdio } from '../core/json-file.ts';

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 12
 // THE .mcp.json WALK - which project files Claude Code loads from a folder, its parents and its subfolders, which one
 // wins a name clash, where a subfolder session writes, and what approves a project server. The real CLI in a throwaway
 // home and account, logged out, no model.

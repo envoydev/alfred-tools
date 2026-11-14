@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // SERVERS ALREADY SET UP (spec D6, F4) - a registration that matches a catalog row, an MCP server an enabled plugin
 // provides, and a claude.ai connector this session has loaded. A matching registration is managed by configure, update
 // and fix; one the user leaves on its own in configure is saved in the root's mcps.json, in its `own`, by the apply's

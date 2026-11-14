@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // The plan command: reads its files and flags, prints the plan or the questions, and writes the plan file.
 import fs from 'node:fs';
 import * as catalogLib from '../catalog/catalog.ts';

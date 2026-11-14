@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 12
 // The proof that nothing changed (docs/superpowers/specs, Proof 1-4): record a tree's base, then compare a later tree
 // against it.
 //   node tests/proof/proof.ts --record <dir>         the golden, test names, copied hashes, lint and validate results

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // The pick questions: which tools, in calls of at most four, and which apps.
 import { installedOf, fromHere, otherWindowsMcp } from '../inventory/inventory.ts';
 import * as roots from '../roots/roots.ts';

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // The catalog, loaded and indexed. Everything else reads rows through here, so the shape lives in one place.
 import fs from 'node:fs';
 import path from 'node:path';

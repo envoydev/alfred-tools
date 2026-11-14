@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // A repair's tail (spec D1, D9): the list and Cursor steps after a fix or an update rewrote registrations.
 import fs from 'node:fs';
 import { pathFor } from '../entries/platform.ts';

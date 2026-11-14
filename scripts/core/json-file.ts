@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // The one JSON reader for every file this plugin parses that a person may have edited (.mcp.json, settings.json, the
 // account's .claude.json). An editor on Windows saves UTF-8 with a BOM, and a bare JSON.parse on it throws - which a
 // `catch { return {} }` reader turns into 'the file is empty'. One leading BOM is stripped; anything else wrong with the

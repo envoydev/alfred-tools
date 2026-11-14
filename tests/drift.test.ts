@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // client-drift and cursor-file (spec D9, 0.5.0): a list entry whose copy in Claude Code or Cursor was edited or removed
 // by hand, asked per entry - never in 'Apply all found' - and a Cursor file preferred-tools cannot read, as advice.
 // Every case runs against the fake claude in a throwaway world.

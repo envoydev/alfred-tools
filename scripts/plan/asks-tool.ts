@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // One tool's questions: its route, scope and name, and configure's change questions.
 import path from 'node:path';
 import { keyOf, fromHere } from '../inventory/inventory.ts';

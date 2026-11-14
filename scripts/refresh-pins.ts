@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 12
 // The entry for `npm run refresh-pins`; the work is in catalog/refresh-pins.js.
 import { blockingStdio } from './core/json-file.ts';
 import { main } from './catalog/refresh-pins.ts';

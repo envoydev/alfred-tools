@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // THE LIST STEPS - what a plan writes into each family's <root>/mcps.json (spec D1, 0.5.0). Nothing here changes
 // anything: apply.js's list-write step does, and only for the registrations the apply wrote and read back.
 //

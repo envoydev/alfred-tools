@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 12
 // THE FIX ENGINE - known problems and their recorded fixes (catalog/fixes.json, detectors in scripts/fix/).
 //
 //   node fix.js --detect [--only <fix id | tool | registration name>] [--json] [--project <dir>] [--data <dir>]

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The key cases end to end (spec D3-D7): the REAL claude CLI in throwaway homes and accounts (tests/harness.ts), a stub
 // HTTP MCP server on 127.0.0.1 (tests/fake-mcp-http.ts) standing in for github's hosted server, and a fake key in the
 // throwaway root's .mcps-secrets, filled after the apply wrote its name - as the user does. Every result is read back

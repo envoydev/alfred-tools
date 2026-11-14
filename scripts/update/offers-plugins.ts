@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The plugin offers: each installed plugin behind its marketplace's release.
 import fs from 'node:fs';
 import path from 'node:path';

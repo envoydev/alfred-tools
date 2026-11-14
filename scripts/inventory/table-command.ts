@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // The table command: reads the inventory file and prints the table.
 import fs from 'node:fs';
 import { render } from './table.ts';

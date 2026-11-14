@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 12
 // JSON shape checks that need no test runner: every shipped JSON file parses, the manifest has the one version and the
 // id that must never change, and no component path in a command or skill points outside ${CLAUDE_PLUGIN_ROOT}.
 import fs from 'node:fs';

@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // Shared test scaffolding: a throwaway project and account dir, and the fake `claude` on PATH.
 import fs from 'node:fs';
 import os from 'node:os';

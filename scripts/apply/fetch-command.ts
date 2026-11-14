@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // The fetch command: runs a fetch file and releases its <tmp>.
 import fs from 'node:fs';
 import path from 'node:path';

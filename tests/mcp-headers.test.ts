@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // mcp-headers.js - the header helper a hosted registration names as `headersHelper` (spec D4). Each test copies it into
 // a throwaway root and runs it with its working folder elsewhere and HOME / USERPROFILE pointing into the throwaway world,
 // as Claude Code runs it: with CLAUDE_CODE_MCP_SERVER_NAME and _URL set. `{ byHand: true }` first runs it without them.

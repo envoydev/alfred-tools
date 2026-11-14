@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // mcps-list.js - the list of servers the plugin manages, one per root folder (spec D1): read, merge, write.
 import test from 'node:test';
 import assert from 'node:assert';

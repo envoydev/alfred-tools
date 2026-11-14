@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // KEPT - no live credential in a file a command line names.
 //
 // alfred-code's secret guard (v3.2.1 stack/hooks/guard-secret-value.js) refuses a script run that names a JSON file

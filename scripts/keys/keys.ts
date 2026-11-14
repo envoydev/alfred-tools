@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // KEYS - the key files, and how a key goes into a stdio registration (spec D3, D7).
 //
 // A key is read here, in the process that writes the registration, and goes nowhere else: never printed, never in a file

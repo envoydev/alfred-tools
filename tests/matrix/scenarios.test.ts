@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // Step 12: the temp-project matrix beyond a fresh install. Every case runs the REAL claude CLI in a throwaway home and
 // account (tests/harness.ts) and reads the result back from the files the CLI wrote - never from an exit code alone.
 //

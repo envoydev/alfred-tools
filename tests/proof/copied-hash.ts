@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The SHA-256 of the three files the plugin copies into a root, wherever the tree keeps them: scripts/copied/ once
 // they move there, else scripts/. They must not change a byte (docs/superpowers/specs, Decision 2).
 import crypto from 'node:crypto';

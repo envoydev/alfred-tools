@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // Registry lookups for pins: which release of a package may be offered. One rule for /preferred-tools:update and for
 // `npm run refresh-pins`: the newest STABLE release that is at least `days` old (the age gate) and newer than the pin.
 // A newer release that is too young is reported as held back, never offered.

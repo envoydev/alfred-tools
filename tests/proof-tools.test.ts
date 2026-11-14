@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 12
 // The proof harness (tests/proof/): what it masks, what it compares, and that its inputs reach every form the
 // commands run.
 import test from 'node:test';

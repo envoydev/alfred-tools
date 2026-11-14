@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 10
 // Rebuilds catalog/reserved-names.json from the alfred-code checkout beside this repo (or --alfred <dir>): the names
 // alfred-code's retire path may remove a registration under, which no catalog default and no chosen name may use.
 //   A = every id in meta/retired-plugins.json whose retiredIn is 2.10.1 (the retires that can still fire)

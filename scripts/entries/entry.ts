@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 10
 // BUILDING A REGISTRATION ENTRY - the pure part of the plan. A fresh add builds from the catalog row; a change to an
 // installed row edits the entry as read (see plan.js), using the helpers here for the pieces it touches.
 // Nothing here reads a machine: the OS, the arch, the home and the project come in through `ctx`.

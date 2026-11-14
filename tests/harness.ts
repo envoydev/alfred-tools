@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 12
 // THE TEMP-PROJECT HARNESS - runs the plugin's scripts against the REAL `claude` CLI in a throwaway world, with no model
 // in the loop. The walk's asks are stood in for by an answers object fed to plan.js and apply.js, so every matrix case is
 // a script run.

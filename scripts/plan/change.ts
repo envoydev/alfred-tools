@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 // One configure change: an installed registration by its key, and a root folder's change.
 import fs from 'node:fs';
 import { pathFor } from '../entries/platform.ts';

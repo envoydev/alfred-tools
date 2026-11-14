@@ -1,3 +1,4 @@
+// @ts-nocheck - typed in Task 11
 import { formatRoot, validWindowsSerenaHome, recommendedSide, otherPlace, serenaWindowsHome, serenaSpaceFree, alfredRoot, logicalRoot } from '../entries/locations.ts';
 import * as roots from '../roots/roots.ts';
 import { REC } from './asks-keys.ts';

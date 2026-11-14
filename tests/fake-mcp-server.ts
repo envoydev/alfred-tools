@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-nocheck - typed in Task 12
 // A stdio MCP server for fetch.js's first start: `answer` replies to initialize and keeps running, as a real server does;
 // `exit` exits 3 before answering, as a server with a bad launch does. With `--log <file> --tag <tag>` it appends
 // {"tag", "cwd"} to the file as one JSON line when it starts, so a probe can tell which registrations a session started,
