@@ -1,7 +1,7 @@
 'use strict';
 // The apply command: reads the plan file and its flags, applies it and releases <tmp>.
 const fs = require('node:fs');
-const { blockingStdio, stripBom } = require('../core/json-file.js');
+const { blockingStdio } = require('../core/json-file.js');
 const tmpdir = require('../core/tmpdir.js');
 const { apply } = require('./run.js');
 

@@ -1322,7 +1322,7 @@ test('appium-sdk-env at project scope finds and proposes the SDK homes as at loc
 
 // ---- 0.3.0: 0.2.0's relative project paths, the .mcp.json order and a parent's helper (F7, F8, F3a) -------------------
 
-const asks = require('../scripts/asks.js');
+const { PARENT_HELPER_IN_CHILD } = require('../scripts/plan/asks-keys.js');
 const existingLib = require('../scripts/inventory/existing.js');
 const GH = { type: 'http', url: 'https://api.githubcopilot.com/mcp/' };
 const C7 = { type: 'http', url: 'https://mcp.context7.com/mcp' };
@@ -1425,7 +1425,7 @@ test('mcp-order: found when out of order, not found when in order or when a serv
 test('helper-child-folder: found from a child for an inherited helper, not found at the root', () =>
 {
     const fs = require('node:fs');
-    if (asks.PARENT_HELPER_IN_CHILD) { assert.ok(!catalog.fixes.some((f) => f.id === 'helper-child-folder')); return; }
+    if (PARENT_HELPER_IN_CHILD) { assert.ok(!catalog.fixes.some((f) => f.id === 'helper-child-folder')); return; }
     const w = world();
     try
     {
@@ -1697,7 +1697,7 @@ test('the file pass runs after the registration pass, detects on what it wrote, 
 
 test("install's first touch retires the old record, and a configure 'manage' answer given then survives a later fix run", () =>
 {
-    const { plan } = require('../scripts/plan.js');
+    const { plan } = require('../scripts/plan/plan.js');
     const { apply } = require('../scripts/apply/run.js');
     const X = require('../scripts/inventory/existing.js');
     const w = world();
@@ -1904,7 +1904,7 @@ test('a root of the user\'s own files gets the advice to add !<file> for the bri
 const kept5 = require('../scripts/core/kept.js');
 const installBoth = (w, answers) =>
 {
-    const { plan } = require('../scripts/plan.js');
+    const { plan } = require('../scripts/plan/plan.js');
     const { apply } = require('../scripts/apply/run.js');
     const p = plan(inventory.buildInventory({ project: w.project, env: w.env }), { clients: ['claude', 'cursor'], ...answers }, { home: w.home, env: w.env });
     assert.deepStrictEqual(p.errors, []);

@@ -7,7 +7,7 @@ const { spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const { world, writeJson, readJson, accountKey, tempOf, files, helperCmd } = require('./helpers.js');
 const inventory = require('../scripts/inventory/inventory.js');
-const { plan } = require('../scripts/plan.js');
+const { plan } = require('../scripts/plan/plan.js');
 const { apply } = require('../scripts/apply/run.js');
 const account = require('../scripts/core/account.js');
 const cli = require('../scripts/core/claude-cli.js');
@@ -653,7 +653,7 @@ test('configure recommends the name the registration uses', () => {
         // the questions read the inventory file the command passes - masked - and the live registration in-process
         const inv = inventory.keptOf(inventory.buildInventory({ project: w.project, env: w.env }));
         assert.ok(!JSON.stringify(inv).includes(live), 'the inventory is masked');
-        const q = require('../scripts/asks.js').all(inv, { targets: ['mcp:github~local', 'mcp:gh-docker~local'] }, require('../scripts/catalog/catalog.js').load(), { env: w.env, home: w.home });
+        const q = require('../scripts/plan/asks-all.js').all(inv, { targets: ['mcp:github~local', 'mcp:gh-docker~local'] }, require('../scripts/catalog/catalog.js').load(), { env: w.env, home: w.home });
         assert.strictEqual(q.keyNames['mcp:github~local'].question.options[0].label, 'ACME_GITHUB_TOKEN (Recommended)', 'the helper\'s argument');
         assert.strictEqual(q.keyNames['mcp:gh-docker~local'].question.options[0].label, 'MY_GITHUB_TOKEN (Recommended)', 'the name whose value equals the written-in key');
         assert.ok(!JSON.stringify(q).includes(live));

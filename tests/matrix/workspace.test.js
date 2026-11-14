@@ -24,7 +24,9 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const cli = require('../../scripts/core/claude-cli.js');
 const account = require('../../scripts/core/account.js');
-const asks = require('../../scripts/asks.js');
+const { pickQuestions } = require('../../scripts/plan/asks-picks.js');
+const { changeQuestions } = require('../../scripts/plan/asks-tool.js');
+const { all } = require('../../scripts/plan/asks-all.js');
 const catalogLib = require('../../scripts/catalog/catalog.js');
 const fix = require('../../scripts/fix.js');
 const roots = require('../../scripts/roots/roots.js');
@@ -73,7 +75,7 @@ function inheritSteps(h, parent, child)
     const inv = h.inventory(child);
     const inh = inv.registrations.filter((r) => r.scope === 'inherited' && r.name === 'context7');
     assert.deepStrictEqual(inh.map((r) => [r.from, r.approval]), [[parent, 'pending']], 'listed inherited from the parent, pending here');
-    const option = asks.pickQuestions(inv, catalog).flat().flatMap((q) => q.options).find((o) => o.label.startsWith('context7'));
+    const option = pickQuestions(inv, catalog).flat().flatMap((q) => q.options).find((o) => o.label.startsWith('context7'));
     assert.strictEqual(option.label, 'context7 (inherited from .. as context7, pending)');
     const mine = h.run(child, { picks: { context7: { route: 'remote', scope: 'local', token: false } } });
     noErrors(mine);
@@ -82,7 +84,7 @@ function inheritSteps(h, parent, child)
     assert.ok(!localOf(h, parent).context7, "the parent's account entry is not written");
     assert.strictEqual(sha(file), before, "the parent's .mcp.json is byte-identical");
     // the root folder (root:project) is listed too since 0.5.0: the child's list lives in it
-    assert.deepStrictEqual(Object.values(asks.changeQuestions(h.inventory(child), catalog).keys).filter((k) => k.startsWith('mcp:')), ['mcp:context7~local'], 'configure: no inherited option');
+    assert.deepStrictEqual(Object.values(changeQuestions(h.inventory(child), catalog).keys).filter((k) => k.startsWith('mcp:')), ['mcp:context7~local'], 'configure: no inherited option');
     const rm = h.run(child, { remove: [{ kind: 'mcp', name: 'context7', scope: 'local' }] });
     ok(rm);
     assert.ok(!localOf(h, child).context7);
@@ -294,7 +296,7 @@ test('W4 - keys with alfred-code: the root is .alfred, a key left in a 0.1.x sto
     const catalog = fake.stubCatalog(s.port);
     try
     {
-        const q = asks.all(h.inventory(b.root, { catalog }), { rows: ['github'], routes: { github: 'remote' }, scopes: { github: 'local' } }, catalog, { env: h.env, home: h.home });
+        const q = all(h.inventory(b.root, { catalog }), { rows: ['github'], routes: { github: 'remote' }, scopes: { github: 'local' } }, catalog, { env: h.env, home: h.home });
         const opts = q.keyNames.github.question.options;
         assert.ok(opts.some((o) => o.label === 'ACME_GITHUB_ACCESS_TOKEN' && o.description === `in ${store} - move it to .mcps-secrets under this name`), JSON.stringify(opts));
         const gh = h.run(b.root, { picks: { github: { route: 'remote', scope: 'local' } } }, { catalog });

@@ -11,7 +11,7 @@ const { world, readJson, writeJson } = require('./helpers.js');
 const inventory = require('../scripts/inventory/inventory.js');
 const fix = require('../scripts/fix.js');
 const cli = require('../scripts/core/claude-cli.js');
-const { plan } = require('../scripts/plan.js');
+const { plan } = require('../scripts/plan/plan.js');
 const { apply } = require('../scripts/apply/run.js');
 
 const noMachine = () => ({ exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1, stdout: '', stderr: '' }), nodeVersion: '24.0.0' });
@@ -57,7 +57,7 @@ const labels = (q) => q.options.map((o) => o.label);
 test('fixes/lists.js loads before plan-lists.js and both export every function', () =>
 {
     const scripts = path.join(__dirname, '..', 'scripts');
-    for (const order of [['fixes/lists.js', 'plan-lists.js'], ['plan-lists.js', 'fixes/lists.js']])
+    for (const order of [['fixes/lists.js', 'plan/lists.js', 'plan/cursor-steps.js', 'plan/repair-tail.js'], ['plan/repair-tail.js', 'plan/cursor-steps.js', 'plan/lists.js', 'fixes/lists.js']])
     {
         const code = `const out = ${JSON.stringify(order)}.map((f) => require(${JSON.stringify(scripts)} + '/' + f)); const bad = out.flatMap((m, i) => Object.entries(m).filter(([, v]) => v === undefined).map(([k]) => ${JSON.stringify(order)}[i] + ':' + k)); if (bad.length) { console.log(bad.join(',')); process.exit(1); }`;
         const r = spawnSync(process.execPath, ['-e', code], { encoding: 'utf8' });

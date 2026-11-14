@@ -2,9 +2,10 @@
 // Every question the walk can put, for the 'no text sends the user to Other' rule (spec D8): tests/lint.js checks the
 // texts, tests/plan.test.js and tests/roots.test.js use the same pattern. One home for the pattern and the fixtures.
 const catalogLib = require('../scripts/catalog/catalog.js');
-const asks = require('../scripts/asks.js');
+const { all } = require('../scripts/plan/asks-all.js');
+const { ownStep } = require('../scripts/plan/walk.js');
 const existing = require('../scripts/inventory/existing.js');
-const { plan } = require('../scripts/plan.js');
+const { plan } = require('../scripts/plan/plan.js');
 
 // alfred-code 3.9.2 stack/hooks/guard-stop-contract.js: an ask that sends the user to the Other field. 'under Other',
 // which today's three typed values used, is not matched by it and is checked beside it.
@@ -41,11 +42,11 @@ function walkQuestions()
         }).filter(Boolean);
         const pluginServers = [{ plugin: 'other-plugin@market', server: 'context7', rowId: 'context7', entry: { type: 'http', url: 'https://mcp.context7.com/mcp' } }];
         const i = inv(base, { alfredCodeEnabled: alfred, registrations: regs, pluginServers });
-        const q = asks.all(i, { rows: catalog.tools.map((r) => r.id), targets: regs.map((r) => `mcp:${r.name}~${r.scope}`) }, catalog, { env: {}, home });
+        const q = all(i, { rows: catalog.tools.map((r) => r.id), targets: regs.map((r) => `mcp:${r.name}~${r.scope}`) }, catalog, { env: {}, home });
         const items = existing.items(i, CONNECTORS, catalog, { home, exists: () => false });
         // every bridge route (0.4.0): its tool questions and its URL-name questions
         const bridged = rows.filter((r) => Object.values(r.routes).some((x) => x.runtime === 'bridge'));
-        const qb = asks.all(i, { rows: bridged.map((r) => r.id), routes: Object.fromEntries(bridged.map((r) => [r.id, Object.keys(r.routes).find((k) => r.routes[k].runtime === 'bridge')])) }, catalog, { env: {}, home });
+        const qb = all(i, { rows: bridged.map((r) => r.id), routes: Object.fromEntries(bridged.map((r) => [r.id, Object.keys(r.routes).find((k) => r.routes[k].runtime === 'bridge')])) }, catalog, { env: {}, home });
         const list = [
             ...Object.values(q.static).filter((x) => x.options), ...callsOf(q.pick), ...callsOf(q.change), ...callsOf(q.remove), ...q.roots.questions,
             ...Object.values(q.tools).flatMap((t) => [...(t.first || []), ...(t.questions || []), ...(t.route ? [t.route] : [])]),
@@ -55,7 +56,7 @@ function walkQuestions()
             ...Object.values(qb.urlNames).flatMap((m) => Object.values(m).flatMap(qOf)),
             ...items.flatMap((it) => qOf(existing.ownQuestion(it))),
             // the walk's own question for each registration target (spec F4)
-            ...regs.map((r) => asks.ownStep({ key: `mcp:${r.name}~${r.scope}`, name: r.name, scope: r.scope }, `${base.project}${base.os === 'win32' ? '\\' : '/'}.preferred-tools`).question),
+            ...regs.map((r) => ownStep({ key: `mcp:${r.name}~${r.scope}`, name: r.name, scope: r.scope }, `${base.project}${base.os === 'win32' ? '\\' : '/'}.preferred-tools`).question),
         ];
         for (const question of list) out.push({ where, question });
     }

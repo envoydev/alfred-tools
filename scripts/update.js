@@ -35,9 +35,12 @@ const tmpdir = require('./core/tmpdir.js');
 const { blockingStdio } = require('./core/json-file.js');
 const { realMachine, clone, compareVersions, pinnedVersion } = require('./fixes/common.js');
 const { bareName } = inventory;
-const asksLib = require('./asks.js');
+const { REC } = require('./plan/asks-keys.js');
+const { chunk } = require('./plan/asks-picks.js');
+const { cursorNameQuestion, STATIC, cursorOfferQuestion } = require('./plan/asks-other.js');
 const mcpOrder = require('./mcps-list/mcp-order.js');
-const planLists = require('./plan-lists.js');
+const { takenNames, reapproveLine } = require('./plan/cursor-steps.js');
+const { changedOutside, repairTail } = require('./plan/repair-tail.js');
 const cursorMcp = require('./cursor/cursor-mcp.js');
 const account = require('./core/account.js');
 
@@ -285,7 +288,7 @@ function makeCtx({ inv, project, catalog = catalogLib.load(), env = process.env,
 // -> { offers, unchecked, skipped, held, errors, notes, waiting }
 async function check(ctx)
 {
-    const out = { offers: [], unchecked: [], skipped: [], held: [], errors: [], notes: [], waiting: 0, outside: planLists.changedOutside(ctx.inv, ctx.catalog), cursorOffers: [] };
+    const out = { offers: [], unchecked: [], skipped: [], held: [], errors: [], notes: [], waiting: 0, outside: changedOutside(ctx.inv, ctx.catalog), cursorOffers: [] };
     pluginOffers(ctx, out);
     await mcpOffers(ctx, out);
     await cursorPinOffers(ctx, out);
@@ -322,7 +325,7 @@ function cursorOffers(ctx, out)
         if (!servers.length || !file) continue;
         const root = path.dirname(file);
         const upserts = servers.map((x) => ({ server: { ...x, clients: ['claude', 'cursor'] }, cursorFile: null }));
-        const taken = planLists.takenNames(ctx.inv, { ...cctx, catalog: ctx.catalog }, upserts);
+        const taken = takenNames(ctx.inv, { ...cctx, catalog: ctx.catalog }, upserts);
         out.cursorOffers.push({ id: `cursor-offer:${root}`, family, root, list: file, servers: servers.map((x) => ({ name: x.name, scope: x.scope })), taken, needs: brought.length ? pending.id : null });
     }
 }
@@ -386,28 +389,28 @@ function questions(out)
 {
     const items = [...out.offers, ...out.unchecked];
     // Cursor's offer, one per root, and the names Cursor already has, asked right after 'Set them up for Cursor too'
-    const cursor = { cursorOffers: (out.cursorOffers || []).map(cursorOfferAsk), cursorNameQuestions: (out.cursorOffers || []).flatMap((o) => o.taken.map((t) => asksLib.cursorNameQuestion(t))) };
+    const cursor = { cursorOffers: (out.cursorOffers || []).map(cursorOfferAsk), cursorNameQuestions: (out.cursorOffers || []).flatMap((o) => o.taken.map((t) => cursorNameQuestion(t))) };
     if (!items.length) return { offer: null, pick: [], ...cursor };
     const groups = [['catalog', 'Catalog plugins'], ['other', 'Other plugins'], ['mcp', 'MCP servers'], ['helper', 'Key helpers'], ['upgrade', 'New ways to pass data', 'Data passing']];
     const qs = [];
     for (const [g, title, header] of groups)
     {
         const list = items.filter((o) => o.group === g);
-        asksLib.chunk(list, 4).forEach((part) => qs.push({
+        chunk(list, 4).forEach((part) => qs.push({
             id: `update-${g}`, header: header || title.slice(0, 12), multiSelect: true, question: `${title}: which do you want to update?`,
             // AskUserQuestion takes 2 to 4 options: a group of one gets 'None of these' beside it
             options: [...part.map((o) => ({ label: o.kind === 'upgrade' ? `${o.label}: ${o.fix}` : `${o.label}: ${o.from || '?'} -> ${o.to || 'latest'}`, description: o.id })), ...(part.length === 1 ? [{ label: 'None of these', description: 'none' }] : [])],
         }));
     }
-    const offer = { ...asksLib.STATIC.updateOffer };
-    if (!out.offers.length) offer.options = offer.options.filter((o) => o.label !== `All of them${asksLib.REC}`).map((o, i) => (i === 0 ? { ...o, label: `${o.label}${asksLib.REC}` } : o));
-    return { offer, pick: asksLib.chunk(qs, 4), ...cursor };
+    const offer = { ...STATIC.updateOffer };
+    if (!out.offers.length) offer.options = offer.options.filter((o) => o.label !== `All of them${REC}`).map((o, i) => (i === 0 ? { ...o, label: `${o.label}${REC}` } : o));
+    return { offer, pick: chunk(qs, 4), ...cursor };
 }
 
 // The ask cursor-offer (spec D9), asks.js's text; `answers` maps each label to the value passed back.
 function cursorOfferAsk(o)
 {
-    const q = asksLib.cursorOfferQuestion(o.root, o.servers.length);
+    const q = cursorOfferQuestion(o.root, o.servers.length);
     return { ...q.question, answers: q.answers };
 }
 
@@ -442,7 +445,7 @@ function updateMcp(ctx, offer, tmp, log)
     // stand now - an earlier step of this run may have written them
     const notes = [];
     const now = inventory.buildInventory({ project: ctx.project, env: ctx.env, run: ctx.runCli, data: ctx.data, catalog: ctx.catalog });
-    const tail = planLists.repairTail(now, { platform: now.os, project: ctx.project, home: account.homeDir(ctx.env), env: ctx.env, catalog: ctx.catalog, notes }, [replace]);
+    const tail = repairTail(now, { platform: now.os, project: ctx.project, home: account.homeDir(ctx.env), env: ctx.env, catalog: ctx.catalog, notes }, [replace]);
     for (const n of notes) log(`note   ${n}`);
     const plan = { project: ctx.project, alfredCodeEnabled: Boolean(ctx.inv && ctx.inv.alfredCodeEnabled), steps: mcpOrder.withOrderStep([replace, ...(fetch ? [fetch] : []), ...tail], ctx.project, mcpOrder.ownProjectNames(ctx.inv || {})), expect: [{ kind: 'mcp', name: offer.name, scope: offer.scope, route: offer.route }] };
     const report = apply(plan, { env: ctx.env, tmp, runCli: ctx.runCli, fetchFile: false, log: (...a) => log(a.join(' ')) });
@@ -523,7 +526,7 @@ function applyCursorOffer(ctx, o, answer, input, dir, log)
         log(`${r.failed ? 'FAILED' : 'ok    '} ${o.id}: not now - kept in ${o.list}`);
         return !r.failed;
     }
-    const { plan } = require('./plan.js');
+    const { plan } = require('./plan/plan.js');
     const inv = inventory.buildInventory({ project: ctx.project, env: ctx.env, run: ctx.runCli, data: ctx.data, catalog: ctx.catalog });
     const change = Object.fromEntries(o.servers.map((x) => [`mcp:${x.name}~${x.scope}`, { clients: ['claude', 'cursor'] }]));
     const cursorNames = {};
@@ -586,7 +589,7 @@ function applyUpdates(ctx, ids, out, { tmp, log = console.log, input = {} } = {}
         (ok ? res.applied : res.failed).push(o.id);
     }
     // Cursor asks to approve a changed entry again (spec Risks)
-    if (ctx.reapprove.length) log('', planLists.reapproveLine([...new Set(ctx.reapprove)]));
+    if (ctx.reapprove.length) log('', reapproveLine([...new Set(ctx.reapprove)]));
     // every rewritten server in one fetch file, for fetch.js in the background (apply.js says why); a server rewritten
     // twice in this run is fetched once at its scope, as it was written last
     const last = new Map();

@@ -1,5 +1,5 @@
 'use strict';
-// The fenced `ask` blocks in commands and skills, held to the AskUserQuestion limits and to scripts/asks.js STATIC.
+// The fenced `ask` blocks in commands and skills, held to the AskUserQuestion limits and to scripts/plan/asks-other.js STATIC.
 //
 //   ```ask <id>
 //   The question?
@@ -9,7 +9,7 @@
 //
 // <id> is a key of asks.STATIC, and the block's labels must equal that ask's labels in order, so the command's text and
 // the data the tests hold to the limits cannot drift apart. 2 to 4 options, exactly one '(Recommended)', and it is first.
-const asks = require('../scripts/asks.js');
+const { STATIC } = require('../scripts/plan/asks-other.js');
 
 const OPTION = /^- '(.+)' - (.+)$/;
 
@@ -41,7 +41,7 @@ function parseAskBlocks(text)
 
 const staticAsk = (id) =>
 {
-    const q = asks.STATIC[id];
+    const q = STATIC[id];
     if (!q) return null;
     // a function that names its own placeholders gets them (cursor-name-taken: '<file>', '<name>'), else '<n>', '<m>', '<k>'
     return typeof q === 'function' ? q(...(q.placeholders || ['<n>', '<m>', '<k>'])) : q;

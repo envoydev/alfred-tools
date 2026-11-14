@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const sc = require('../scripts/apply/serena-config.js');
-const planLib = require('../scripts/plan.js');
+const { plan } = require('../scripts/plan/plan.js');
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-serena-')));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -77,7 +77,7 @@ test('a Windows <profile>\\.serena home is edited and the plan carries the share
 
 test('install\'s plan carries the base_modes line for each serena home kind', () => {
     const inv = { version: 1, os: 'darwin', arch: 'arm64', project: '/work/shop', cli: { ok: true }, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false, sources: {} };
-    const p = planLib.plan(inv, { picks: { serena: { scope: 'project' } } }, { home: '/h', env: {}, exists: () => false, machine: { docker: true } });
+    const p = plan(inv, { picks: { serena: { scope: 'project' } } }, { home: '/h', env: {}, exists: () => false, machine: { docker: true } });
     assert.deepStrictEqual(p.errors, []);
     const home = p.steps.find((s) => s.op === 'mcp-add').entry.env.SERENA_HOME;
     assert.ok(p.notes.includes(`serena's settings at ${home}/serena_config.yml: base_modes: [] after its first start, so its manual names only the tools it has`), p.notes.join('\n'));

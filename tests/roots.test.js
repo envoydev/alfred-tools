@@ -10,7 +10,7 @@ const path = require('node:path');
 const POSIX_FIXTURE = process.platform === 'win32' && 'NOT RUN: POSIX fixture paths meet node\'s win32 path module on this host';
 const { spawnSync } = require('node:child_process');
 const roots = require('../scripts/roots/roots.js');
-const asks = require('../scripts/asks.js');
+const asks = require('../scripts/plan/asks-all.js');
 const catalogLib = require('../scripts/catalog/catalog.js');
 
 const catalog = catalogLib.load();

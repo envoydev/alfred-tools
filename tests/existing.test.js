@@ -9,7 +9,7 @@ const { world, writeJson, readJson } = require('./helpers.js');
 const catalog = require('../scripts/catalog/catalog.js').load();
 const X = require('../scripts/inventory/existing.js');
 const inventory = require('../scripts/inventory/inventory.js');
-const { plan } = require('../scripts/plan.js');
+const { plan } = require('../scripts/plan/plan.js');
 const { apply } = require('../scripts/apply/run.js');
 const cli = require('../scripts/core/claude-cli.js');
 

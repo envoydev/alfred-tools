@@ -74,7 +74,7 @@ test('the walks write what the step sets (`next.set`, the one location left) and
 test("install maps both API key answers: 'No key' is written, since 'Use a key from .mcps-secrets' is the default when a key is found", () => {
     const text = fs.readFileSync(path.join(__dirname, '..', 'commands', 'install.md'), 'utf8');
     const row = text.split('\n').find((l) => l.startsWith('| API key'));
-    // the labels toolAsk prints (scripts/asks.js), each mapped
+    // the labels toolAsk prints (scripts/plan/asks-other.js), each mapped
     for (const label of ['Use a key from .mcps-secrets', 'No key - lower rate limits', 'Sign in with OAuth']) assert.ok(row && row.includes(`'${label}'`), `${label}: ${row}`);
     assert.ok(row.includes('"token": true') && row.includes('"token": false'), row);
 });
@@ -87,8 +87,9 @@ test('install has no step for servers already set up', () => {
 
 test('asks.js never requires plan.js: the shared readers (currentOf, logicalRoot) live in entries.js, so there is no require cycle', () => {
     const fs = require('node:fs');
-    const src = fs.readFileSync(require.resolve('../scripts/asks.js'), 'utf8');
-    assert.doesNotMatch(src, /require\('\.\/plan\.js'\)/);
+    const plan = path.join(__dirname, '..', 'scripts', 'plan');
+    for (const f of fs.readdirSync(plan).filter((x) => /^(asks-.*|walk)\.js$/.test(x)))
+        assert.doesNotMatch(fs.readFileSync(path.join(plan, f), 'utf8'), /require\('\.\/(plan|context|pick|change|render|command)\.js'\)/, f);
     const { logicalRoot } = require('../scripts/entries/locations.js');
     const { currentOf } = require('../scripts/entries/entry.js');
     assert.strictEqual(typeof currentOf, 'function');
@@ -98,8 +99,8 @@ test('asks.js never requires plan.js: the shared readers (currentOf, logicalRoot
 
 test('staticAsk fills a STATIC function\'s own placeholders', () => {
     const { staticAsk } = require('./ask-blocks.js');
-    const asks = require('../scripts/asks.js');
-    assert.deepStrictEqual(asks.STATIC['cursor-name-taken'].placeholders, ['<file>', '<name>']);
+    const { STATIC } = require('../scripts/plan/asks-other.js');
+    assert.deepStrictEqual(STATIC['cursor-name-taken'].placeholders, ['<file>', '<name>']);
     const q = staticAsk('cursor-name-taken');
     assert.match(q.question, /^Cursor's <file> already has a server named <name> that preferred-tools did not write/);
     assert.deepStrictEqual(q.options.map((o) => o.label), ["Replace it with the plugin's (Recommended)", "Keep Cursor's own"]);

@@ -5,8 +5,16 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const catalogLib = require('../scripts/catalog/catalog.js');
-const { plan, render, argvOf, makeCtx, fileSteps } = require('../scripts/plan.js');
-const asks = require('../scripts/asks.js');
+const { plan } = require('../scripts/plan/plan.js');
+const { render, argvOf } = require('../scripts/plan/render.js');
+const { makeCtx } = require('../scripts/plan/context.js');
+const { fileSteps } = require('../scripts/plan/pick.js');
+const { scopeOfLabel, SCOPE_LABEL, PARENT_HELPER_IN_CHILD, keyNameQuestion, settingsQuestion, SCOPE_TEXT } = require('../scripts/plan/asks-keys.js');
+const { pickQuestions, packed, alsoProvided } = require('../scripts/plan/asks-picks.js');
+const { scopeQuestion, routeQuestion, changeQuestions, scopesFor } = require('../scripts/plan/asks-tool.js');
+const { locationQuestion } = require('../scripts/plan/asks-location.js');
+const { toolAsk, STATIC, toolQuestions, removeQuestions } = require('../scripts/plan/asks-other.js');
+const asks = require('../scripts/plan/asks-all.js');
 const inventoryLib = require('../scripts/inventory/inventory.js');
 const { MARKER } = require('../scripts/core/kept.js');
 
@@ -250,7 +258,7 @@ test('scopes: every scope writes absolute paths with ~ expanded; project scope t
 });
 
 test('every MCP route offers user, project and local: recommended first, then user, project, local', () => {
-    const scopes = (id, route, base = MAC, home = '/Users/me') => asks.scopeQuestion(catalog.byId.get(id), inv(base), { route, ctx: { project: base.project, platform: base.os, home, env: {}, exists: () => false } }).options.map((o) => asks.scopeOfLabel(o.label));
+    const scopes = (id, route, base = MAC, home = '/Users/me') => scopeQuestion(catalog.byId.get(id), inv(base), { route, ctx: { project: base.project, platform: base.os, home, env: {}, exists: () => false } }).options.map((o) => scopeOfLabel(o.label));
     assert.deepStrictEqual(scopes('serena', 'local'), ['local', 'user', 'project']);
     assert.deepStrictEqual(scopes('context7', 'remote'), ['user', 'project', 'local']);
     assert.deepStrictEqual(scopes('context7', 'local'), ['local', 'user', 'project']);
@@ -509,7 +517,7 @@ test('every question has 2 to 4 options, one Recommended and first, and a call h
     for (const base of [MAC, LINUX, WIN, WINARM])
     {
         const i = inv(base);
-        const calls = asks.pickQuestions(i, catalog);
+        const calls = pickQuestions(i, catalog);
         for (const call of calls) { assert.ok(call.length >= 1 && call.length <= 4); call.forEach(checkQuestion); }
         const offered = calls.flat().flatMap((q) => q.options).length;
         const rows = catalog.tools.filter((r) => r.os.includes(i.os)).length;
@@ -521,16 +529,16 @@ test('every question has 2 to 4 options, one Recommended and first, and a call h
             {
                 // a row with a data folder asks scope and name first; its second call (the folder, an extra) may be empty,
                 // and an empty call is not made
-                const t = asks.toolAsk(row, i, { route, ctx, catalog });
+                const t = toolAsk(row, i, { route, ctx, catalog });
                 const calls = [t.first, t.questions].filter((c) => c && c.length);
                 assert.ok(calls.length >= 1, `${row.id}: no question at all`);
                 for (const c of calls) { assert.ok(c.length <= 4, `${row.id}: ${c.length} questions in one call`); c.forEach(checkQuestion); }
             }
-            const rq = row.kind === 'mcp' ? asks.routeQuestion(row) : null;
+            const rq = row.kind === 'mcp' ? routeQuestion(row) : null;
             if (rq) { checkQuestion(rq); assert.strictEqual(rq.options.length, Object.keys(row.routes).length); }
         }
     }
-    Object.values(asks.STATIC).map((q) => (typeof q === 'function' ? q(1, 2, 3) : q)).forEach(checkQuestion);
+    Object.values(STATIC).map((q) => (typeof q === 'function' ? q(1, 2, 3) : q)).forEach(checkQuestion);
 });
 
 test('no ask names git or remote state: alfred-code\'s stop guard reads such a word as a repository measurement and sends Claude to git fetch', () => {
@@ -559,10 +567,10 @@ test('no ask names git or remote state: alfred-code\'s stop guard reads such a w
         for (const row of rows)
         {
             const ctx = { project: i.project, platform: i.os, arch: i.arch, home, env: {} };
-            for (const route of row.kind === 'mcp' ? Object.keys(row.routes) : [undefined]) asks.toolQuestions(row, i, { route, ctx, catalog }).forEach(add);
+            for (const route of row.kind === 'mcp' ? Object.keys(row.routes) : [undefined]) toolQuestions(row, i, { route, ctx, catalog }).forEach(add);
         }
     }
-    Object.values(asks.STATIC).map((q) => (typeof q === 'function' ? q(1, 2, 3) : q)).forEach(add);
+    Object.values(STATIC).map((q) => (typeof q === 'function' ? q(1, 2, 3) : q)).forEach(add);
     const fs = require('node:fs');
     const { parseAskBlocks } = require('./ask-blocks.js');
     for (const f of fs.readdirSync(path.join(__dirname, '..', 'commands'))) parseAskBlocks(fs.readFileSync(path.join(__dirname, '..', 'commands', f), 'utf8')).forEach(add);
@@ -571,7 +579,7 @@ test('no ask names git or remote state: alfred-code\'s stop guard reads such a w
 });
 
 test('the grouping: Code, Docs and forges, Browsers, Machine and monitoring; two machine rows on Linux, windows-control only on Windows', () => {
-    const calls = (b) => asks.pickQuestions(inv(b), catalog)[0];
+    const calls = (b) => pickQuestions(inv(b), catalog)[0];
     assert.deepStrictEqual(calls(MAC).map((q) => q.options.length), [2, 4, 4, 3]);
     assert.deepStrictEqual(calls(LINUX).map((q) => q.options.length), [2, 4, 4, 2]);
     assert.match(calls(WIN)[3].options.map((o) => o.label).join(), /windows-control/);
@@ -584,10 +592,10 @@ test('install offers only what is not installed; configure offers what is, one o
         registrations: [reg('shop-serena', 'local', { command: 'uvx', args: ['--from', 'serena-agent@2.1.0'] }, 'serena', 'local'), reg('serena', 'user', { command: 'uvx', args: ['--from', 'serena-agent@2.1.0'] }, 'serena', 'local'), reg('mine', 'user', { command: 'my-server' })],
         plugins: [{ id: 'claude-hud@claude-hud', plugin: 'claude-hud', scope: 'user', version: '0.13.1', enabled: true, rowId: null, alfredRetired: false }],
     });
-    const offered = asks.pickQuestions(i, catalog).flat().flatMap((q) => q.options.map((o) => o.label));
+    const offered = pickQuestions(i, catalog).flat().flatMap((q) => q.options.map((o) => o.label));
     assert.ok(!offered.includes('serena') && !offered.some((l) => l.startsWith('claude-hud')), 'installed rows are configure\'s; an old plugin is no row');
     assert.strictEqual(offered.length, catalog.tools.filter((r) => r.os.includes('darwin')).length - 1);
-    const ch = asks.changeQuestions(i, catalog);
+    const ch = changeQuestions(i, catalog);
     const labels = ch.calls.flat().flatMap((q) => q.options.map((o) => o.label));
     assert.deepStrictEqual(labels, ['shop-serena (serena, local)', 'serena (serena, user)'], 'a row at two scopes is two options; the user\'s own server and an old plugin are not offered');
     assert.deepStrictEqual(ch.keys, { 'shop-serena (serena, local)': 'mcp:shop-serena~local', 'serena (serena, user)': 'mcp:serena~user' });
@@ -597,20 +605,20 @@ test('install offers only what is not installed; configure offers what is, one o
 test('a multi-select never has one option: a lone item joins a neighbour or takes one from it, and one in all gets None', () => {
     const g = (id) => ({ id, label: id });
     const items = (spec) => spec.flatMap(([grp, n]) => Array.from({ length: n }, (_, k) => ({ group: grp, label: `${grp.id}${k}`, description: 'd' })));
-    const sizes = (spec) => asks.packed(items(spec), { id: 'x', question: 'which?', none: 'nothing' }).flat().map((q) => q.options.length);
+    const sizes = (spec) => packed(items(spec), { id: 'x', question: 'which?', none: 'nothing' }).flat().map((q) => q.options.length);
     const [a, b, c, d] = ['code', 'docs', 'browsers', 'machine'].map(g);
     assert.deepStrictEqual(sizes([[a, 4], [b, 4], [c, 4], [d, 4]]), [4, 4, 4, 4]);
     assert.deepStrictEqual(sizes([[a, 3], [b, 1], [c, 4]]), [4, 4], 'a lone item joins the group before it that has room');
     assert.deepStrictEqual(sizes([[a, 4], [b, 1], [c, 4]]), [3, 2, 4], 'both neighbours full: it takes one from the one before');
     assert.deepStrictEqual(sizes([[a, 1], [b, 4]]), [2, 3]);
     assert.deepStrictEqual(sizes([[a, 5]]), [3, 2], 'a group of five splits 3 + 2, never 4 + 1');
-    const one = asks.packed(items([[a, 1]]), { id: 'x', question: 'which?', none: 'nothing' })[0][0];
+    const one = packed(items([[a, 1]]), { id: 'x', question: 'which?', none: 'nothing' })[0][0];
     assert.deepStrictEqual(one.options.map((o) => o.label), ['code0', 'None of these']);
-    const mixed = asks.packed(items([[a, 3], [b, 1]]), { id: 'x', question: 'which?', none: 'nothing' })[0][0];
+    const mixed = packed(items([[a, 3], [b, 1]]), { id: 'x', question: 'which?', none: 'nothing' })[0][0];
     assert.strictEqual(mixed.header, 'Tools');
     assert.strictEqual(mixed.question, 'Which?');
     for (const n of [1, 2, 3, 5, 6, 7, 9, 13, 17])
-        for (const call of asks.packed(items([[a, n], [b, 1], [c, 2]]), { id: 'x', question: 'which?', none: 'nothing' })) { assert.ok(call.length <= 4); call.forEach(checkQuestion); }
+        for (const call of packed(items([[a, n], [b, 1], [c, 2]]), { id: 'x', question: 'which?', none: 'nothing' })) { assert.ok(call.length <= 4); call.forEach(checkQuestion); }
 });
 
 test('install only adds: a tool installed for every project gets this project\'s own copy, and the account-wide one is never touched', () => {
@@ -657,17 +665,17 @@ test('a copy and a configure change on Windows and Linux: each OS\'s paths, the 
 
 test('a hosted row installed for every project at its recommended Global scope is still offered as this project\'s own copy', () => {
     const i = inv(MAC, { registrations: [installed('github', { route: 'remote', scope: 'user' }), installed('context7', { route: 'remote', scope: 'user' })] });
-    const offered = asks.pickQuestions(i, catalog).flat().flatMap((q) => q.options.map((o) => o.label));
+    const offered = pickQuestions(i, catalog).flat().flatMap((q) => q.options.map((o) => o.label));
     assert.ok(offered.includes('github (installed for every project as github)'), offered.join('\n'));
     assert.ok(offered.includes('context7 (installed for every project as context7)'), offered.join('\n'));
     // an old plugin is no row, so it is never offered
     const hud = inv(MAC, { plugins: [{ id: 'claude-hud@claude-hud', plugin: 'claude-hud', scope: 'user', version: '0.13.1', enabled: true, rowId: null, alfredRetired: false }] });
-    assert.ok(!asks.pickQuestions(hud, catalog).flat().flatMap((q) => q.options.map((o) => o.label)).some((l) => l.startsWith('claude-hud')));
+    assert.ok(!pickQuestions(hud, catalog).flat().flatMap((q) => q.options.map((o) => o.label)).some((l) => l.startsWith('claude-hud')));
 });
 
 test('install questions for a copy: the taken scope is not offered, and an account-default folder becomes the project one', { skip: POSIX_FIXTURE }, () => {
     const i = inv(MAC, { registrations: [reg('memory', 'user', { command: 'uvx', args: ['--from', 'mcp-memory-service[sqlite]==12.1.1'] }, 'memory', 'local')] });
-    const offered = asks.pickQuestions(i, catalog).flat().flatMap((q) => q.options);
+    const offered = pickQuestions(i, catalog).flat().flatMap((q) => q.options);
     const mem = offered.find((o) => o.label.startsWith('memory'));
     assert.strictEqual(mem.label, 'memory (installed for every project as memory)');
     assert.match(mem.description, /adds this project's own copy; the one for every project stays/);
@@ -731,7 +739,7 @@ test('configure questions start from what is installed: its route, scope, name, 
 
 test('the scope question follows the route: its recommended scope first, then user, project, local', () => {
     const i = inv(MAC);
-    const scopes = (id, route) => asks.scopeQuestion(catalog.byId.get(id), i, { route, ctx: { project: '/p', platform: 'darwin', home: '/h', env: {} } }).options.map((o) => asks.scopeOfLabel(o.label));
+    const scopes = (id, route) => scopeQuestion(catalog.byId.get(id), i, { route, ctx: { project: '/p', platform: 'darwin', home: '/h', env: {} } }).options.map((o) => scopeOfLabel(o.label));
     assert.deepStrictEqual(scopes('serena', 'local'), ['local', 'user', 'project']);
     assert.deepStrictEqual(scopes('context7', 'remote'), ['user', 'project', 'local']);
     assert.deepStrictEqual(scopes('context7', 'local'), ['local', 'user', 'project']);
@@ -782,7 +790,7 @@ test('answers.machine from prereq.js reaches the plan: no docker picks the githu
 
 test('--questions takes the route answered so far: it decides the recommended scope', () => {
     const i = inv(MAC);
-    const scopes = (route) => asks.all(i, { rows: ['context7'], routes: { context7: route } }, catalog).tools.context7.questions.find((q) => q.id === 'scope-context7').options.map((o) => asks.scopeOfLabel(o.label));
+    const scopes = (route) => asks.all(i, { rows: ['context7'], routes: { context7: route } }, catalog).tools.context7.questions.find((q) => q.id === 'scope-context7').options.map((o) => scopeOfLabel(o.label));
     assert.deepStrictEqual(scopes('remote'), ['user', 'project', 'local']);
     assert.deepStrictEqual(scopes('local'), ['local', 'user', 'project']);
     assert.strictEqual(asks.all(i, { rows: ['serena'] }, catalog).tools.serena.route, null, 'a one-route row has no route ask');
@@ -796,7 +804,7 @@ test('the remove asks carry what to remove in their descriptions, in a form the 
         ],
         plugins: [{ id: 'claude-hud@claude-hud', plugin: 'claude-hud', scope: 'user', version: '0.13.1', enabled: true, errors: [], rowId: null, alfredRetired: false }],
     });
-    const options = asks.removeQuestions(i, catalog).flat().flatMap((q) => q.options);
+    const options = removeQuestions(i, catalog).flat().flatMap((q) => q.options);
     assert.strictEqual(options.length, 2, 'an old plugin is not removed here');
     for (const o of options) assert.match(o.description, /^claude mcp remove \S+ -s (local|project|user)$/);
     assert.deepStrictEqual(options.map((o) => o.description), ['claude mcp remove proj-serena -s local', 'claude mcp remove context7 -s project']);
@@ -804,7 +812,7 @@ test('the remove asks carry what to remove in their descriptions, in a form the 
 
 test('location: alfred-code data on disk is a second answer, not the recommended one, and absent without the folder', () => {
     const ctx = (exists) => ({ project: '/work/shop', platform: 'darwin', arch: 'arm64', home: '/Users/me', env: {}, exists });
-    const loc = (exists) => asks.toolQuestions(catalog.byId.get('playwright-chrome'), inv(MAC), { route: 'local', ctx: ctx(exists), catalog }).find((q) => q.id === 'location-playwright-chrome');
+    const loc = (exists) => toolQuestions(catalog.byId.get('playwright-chrome'), inv(MAC), { route: 'local', ctx: ctx(exists), catalog }).find((q) => q.id === 'location-playwright-chrome');
     const withData = loc((p) => p === '/work/shop/.alfred/chrome-control');
     checkQuestion(withData);
     assert.strictEqual(withData.options[0].label, "The project root's folder (Recommended)");
@@ -854,14 +862,14 @@ const inheritedC7 = (approval = 'pending', extra = {}) => reg('context7', 'inher
 
 test('install offers an inherited row as this project\'s own copy, labelled with its folder and approval', () => {
     const i = inv(MAC, { registrations: [inheritedC7()] });
-    const o = asks.pickQuestions(i, catalog).flat().flatMap((q) => q.options).find((x) => x.label.startsWith('context7'));
+    const o = pickQuestions(i, catalog).flat().flatMap((q) => q.options).find((x) => x.label.startsWith('context7'));
     assert.strictEqual(o.label, 'context7 (inherited from .. as context7, pending)');
     assert.match(o.description, /^adds this project's own copy; the one inherited from \.\. stays in its folder - /);
     const both = inv(MAC, { registrations: [inheritedC7('approved'), reg('c7', 'user', C7_HOSTED, 'context7', 'remote')] });
-    assert.strictEqual(asks.pickQuestions(both, catalog).flat().flatMap((q) => q.options).find((x) => x.label.startsWith('context7')).label,
+    assert.strictEqual(pickQuestions(both, catalog).flat().flatMap((q) => q.options).find((x) => x.label.startsWith('context7')).label,
         'context7 (inherited from .. as context7, approved; installed for every project as c7)');
     const two = inv(MAC, { registrations: [inheritedC7(), inheritedC7('pending', { from: '/', file: '/.mcp.json' })] });
-    assert.match(asks.pickQuestions(two, catalog).flat().flatMap((q) => q.options).find((x) => x.label.startsWith('context7')).description,
+    assert.match(pickQuestions(two, catalog).flat().flatMap((q) => q.options).find((x) => x.label.startsWith('context7')).description,
         /^adds this project's own copy; the one inherited from \.\. and the one inherited from \.\.\/\.\. stay in their folders - /);
     const q = asks.all(i, { rows: ['context7'], routes: { context7: 'remote' } }, catalog);
     assert.match(q.tools.context7.questions.find((x) => x.id === 'name-context7').options[0].description, /used instead of the one inherited from \.\./);
@@ -873,9 +881,9 @@ test('install offers an inherited row as this project\'s own copy, labelled with
 test('configure never lists an inherited server', () => {
     const own = reg('c7', 'local', { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.4.4'] }, 'context7', 'local');
     const i = inv(MAC, { registrations: [inheritedC7(), own] });
-    const ch = asks.changeQuestions(i, catalog);
+    const ch = changeQuestions(i, catalog);
     assert.deepStrictEqual(Object.values(ch.keys), ['mcp:c7~local']);
-    assert.deepStrictEqual(asks.removeQuestions(i, catalog).flat().flatMap((q) => q.options.map((o) => o.label)).filter((l) => /inherited/.test(l)), []);
+    assert.deepStrictEqual(removeQuestions(i, catalog).flat().flatMap((q) => q.options.map((o) => o.label)).filter((l) => /inherited/.test(l)), []);
     assert.strictEqual(inventoryLib.targetOf(i, 'mcp:context7~inherited'), null);
     assert.ok(plan(i, { change: { 'mcp:context7~inherited': { row: 'context7', name: 'x' } } }, opts('/h')).errors.length > 0, 'a change keyed on it is refused');
 });
@@ -895,7 +903,7 @@ test('a local copy over an inherited one notes which Claude Code uses', () => {
 
 const WMCP = { command: 'uvx', args: ['--from', 'windows-mcp==0.8.8', 'windows-mcp', 'serve'] };
 const alfredWin = (scope = 'user') => ({ id: 'windows-control@envoydev', plugin: 'windows-control', marketplace: 'envoydev', scope, enabled: true, rowId: null, alfredRetired: true });
-const wdOption = (i) => asks.pickQuestions(i, catalog).flat().flatMap((q) => q.options).find((o) => o.label.startsWith(catalog.byId.get('windows-control').label));
+const wdOption = (i) => pickQuestions(i, catalog).flat().flatMap((q) => q.options).find((o) => o.label.startsWith(catalog.byId.get('windows-control').label));
 const wdNotes = (p) => p.notes.filter((n) => n.startsWith('windows-control: keep one windows-mcp per Windows desktop'));
 
 test('the windows-control pick names a windows-mcp that already starts here', () => {
@@ -1013,22 +1021,22 @@ test('configure: a local .alfred folder moved to project scope stays absolute, p
 
 // ---- the location question (D4) and scope and name first (D5) -----------------------------------------------------
 test('location labels name the place; descriptions give the exact folder; the answers map covers every label', () => {
-    const q = (scope, alfred, cat = catalog) => asks.locationQuestion(cat.byId.get('memory'), inv(WIN, { alfredCodeEnabled: alfred }), { scope, ctx: { project: WIN.project, platform: 'win32', home: 'C:\\Users\\mac', env: {}, exists: (p) => alfred && p === 'C:\\work\\shop\\.alfred\\.gitignore' } });
+    const q = (scope, alfred, cat = catalog) => locationQuestion(cat.byId.get('memory'), inv(WIN, { alfredCodeEnabled: alfred }), { scope, ctx: { project: WIN.project, platform: 'win32', home: 'C:\\Users\\mac', env: {}, exists: (p) => alfred && p === 'C:\\work\\shop\\.alfred\\.gitignore' } });
     // memory keeps its data in the root of its scope: one place, nothing to ask
     for (const scope of ['local', 'project']) assert.deepStrictEqual([q(scope, true).question, q(scope, true).only], [null, { side: 'project' }], scope);
     const unproven = q('project', true, withoutRelative('memory'));
     assert.deepStrictEqual([unproven.question, unproven.only], [null, { side: 'project' }], 'proven relative or not');
     // a tool with one place asks nothing
-    const pw = asks.locationQuestion(catalog.byId.get('playwright-chrome'), inv(MAC, { alfredCodeEnabled: true }), { scope: 'local', ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: ALFRED } });
+    const pw = locationQuestion(catalog.byId.get('playwright-chrome'), inv(MAC, { alfredCodeEnabled: true }), { scope: 'local', ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: ALFRED } });
     assert.deepStrictEqual([pw.question, pw.only], [null, { side: 'project' }]);
     // serena: a folder in each project downloads its language servers once per project
-    const serena = asks.locationQuestion(catalog.byId.get('serena'), inv(MAC, { alfredCodeEnabled: true }), { scope: 'local', current: { name: 'serena', scope: 'local', rootStr: '/Users/me/.serena' }, ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: ALFRED } });
+    const serena = locationQuestion(catalog.byId.get('serena'), inv(MAC, { alfredCodeEnabled: true }), { scope: 'local', current: { name: 'serena', scope: 'local', rootStr: '/Users/me/.serena' }, ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: ALFRED } });
     assert.deepStrictEqual(serena.question.options.map((o) => o.label), ['The folder it uses now (Recommended)', "The project root's folder"]);
     assert.match(serena.question.options[1].description, /^\/work\/shop\/\.alfred\/serena - this project's own; its language servers \(about 327MB\) download once per project$/);
 });
 
 test('serena on Windows: the root when it is space-free, the profile .serena when the root has a space, Another space-free folder', () => {
-    const q = (project, scope) => asks.locationQuestion(catalog.byId.get('serena'), inv({ ...WIN, project }, { alfredCodeEnabled: true }), { scope, ctx: { project, platform: 'win32', home: 'C:\\Users\\me', env: {}, exists: (p) => p === `${project}\\.alfred\\.gitignore` } });
+    const q = (project, scope) => locationQuestion(catalog.byId.get('serena'), inv({ ...WIN, project }, { alfredCodeEnabled: true }), { scope, ctx: { project, platform: 'win32', home: 'C:\\Users\\me', env: {}, exists: (p) => p === `${project}\\.alfred\\.gitignore` } });
     assert.deepStrictEqual(q('C:\\work\\shop', 'local'), { question: null, answers: {}, only: { side: 'project' } });
     const spaced = q('C:\\my work\\shop', 'local');
     assert.deepStrictEqual(spaced.question.options.map((o) => o.label), ["Your profile's .serena (Recommended)", 'Another space-free folder']);
@@ -1088,9 +1096,9 @@ test('every question has 2 to 4 options, one Recommended and first: each scope, 
                     const exists = (p) => p === gi || (old && /alfred/.test(p) && !p.endsWith('.gitignore'));
                     const ctx = { project: base.project, platform: base.os, arch: base.arch, home: base.os === 'win32' ? 'C:\\Users\\me' : '/Users/me', env: {}, exists, isDir: () => true };
                     for (const row of cat.tools.filter((r) => r.os.includes(base.os) && r.locations))
-                        for (const scope of asks.scopesFor(row, row.recommendedRoute, ctx))
+                        for (const scope of scopesFor(row, row.recommendedRoute, ctx))
                         {
-                            const l = asks.locationQuestion(row, i, { scope, ctx });
+                            const l = locationQuestion(row, i, { scope, ctx });
                             const at = `${base.os} ${row.id} ${scope} alfred:${alfred} 2.x:${old}`;
                             if (!l.question) { assert.ok(l.only, at); continue; }
                             checkQuestion(l.question);
@@ -1098,7 +1106,7 @@ test('every question has 2 to 4 options, one Recommended and first: each scope, 
                         }
                     for (const row of cat.tools.filter((r) => r.os.includes(base.os)))
                     {
-                        const s = asks.scopeQuestion(row, i, { ctx });
+                        const s = scopeQuestion(row, i, { ctx });
                         if (s) checkQuestion(s);
                     }
                 }
@@ -1175,7 +1183,7 @@ test('serena on Windows with a spaced root and profile: a space-free folder is o
     const home = 'C:\\Users\\Jane Doe';
     const project = 'C:\\my work\\shop';
     const ctx = { project, platform: 'win32', home, env: {}, exists: () => false };
-    const l = asks.locationQuestion(catalog.byId.get('serena'), inv({ ...WIN, project }), { scope: 'local', ctx });
+    const l = locationQuestion(catalog.byId.get('serena'), inv({ ...WIN, project }), { scope: 'local', ctx });
     assert.ok(l.question, 'asked');
     checkQuestion(l.question);
     assert.strictEqual(l.question.options[0].label, 'A space-free folder (Recommended)');
@@ -1186,7 +1194,7 @@ test('serena on Windows with a spaced root and profile: a space-free folder is o
     assert.deepStrictEqual(p.errors, []);
     assert.strictEqual(addStep(p).entry.env.SERENA_HOME, 'C:\\serena-home');
     // the system drive, when the environment names it
-    const d = asks.locationQuestion(catalog.byId.get('serena'), inv({ ...WIN, project }), { scope: 'local', ctx: { ...ctx, env: { SystemDrive: 'D:' } } });
+    const d = locationQuestion(catalog.byId.get('serena'), inv({ ...WIN, project }), { scope: 'local', ctx: { ...ctx, env: { SystemDrive: 'D:' } } });
     assert.deepStrictEqual(d.answers['A space-free folder (Recommended)'], { side: 'path', path: 'D:\\serena-home' });
 });
 
@@ -1203,10 +1211,10 @@ test("the question's recommended folder and the plan's default write the same en
                     const i = inv(base, { alfredCodeEnabled: alfred });
                     const ctx = { project: base.project, platform: base.os, arch: base.arch, home, env: {}, exists };
                     for (const row of located.filter((r) => r.os.includes(base.os)))
-                        for (const scope of asks.scopesFor(row, row.recommendedRoute, ctx))
+                        for (const scope of scopesFor(row, row.recommendedRoute, ctx))
                         {
                             const at = `${base.os} ${home} ${row.id} ${scope} alfred:${alfred} name:${name}`;
-                            const l = asks.locationQuestion(row, i, { scope, name, ctx });
+                            const l = locationQuestion(row, i, { scope, name, ctx });
                             if (l.question) checkQuestion(l.question);
                             const rec = l.question ? l.answers[l.question.options[0].label] : l.only;
                             assert.ok(rec, `${at}: the recommended option has an answer`);
@@ -1224,8 +1232,8 @@ test('scope options read Global, Project and Local, the recommended first; the v
     assert.deepStrictEqual(q.options.map((o) => o.label), ['Global (Recommended)', 'Project', 'Local']);
     assert.match(q.options[0].description, /every project on this machine \(Claude Code's user scope, in ~\/\.claude\.json\)/);
     assert.match(q.options[2].description, /this project, only you \(~\/\.claude\.json, under this project\)/);
-    assert.deepStrictEqual(q.options.map((o) => asks.scopeOfLabel(o.label)), ['user', 'project', 'local']);
-    assert.deepStrictEqual(asks.SCOPE_LABEL, { user: 'Global', project: 'Project', local: 'Local' });
+    assert.deepStrictEqual(q.options.map((o) => scopeOfLabel(o.label)), ['user', 'project', 'local']);
+    assert.deepStrictEqual(SCOPE_LABEL, { user: 'Global', project: 'Project', local: 'Local' });
     const step = addStep(plan(inv(MAC), pickOne('atlassian', { scope: 'user' }), opts('/Users/me')));
     assert.deepStrictEqual(argvOf(step).slice(-2), ['-s', 'user']);
 });
@@ -1256,7 +1264,7 @@ test('plan.js --questions takes --data after its files and refuses an unknown fl
     const fs = require('node:fs');
     const os = require('node:os');
     const roots = require('../scripts/roots/roots.js');
-    const { main } = require('../scripts/plan.js');
+    const { main } = require('../scripts/plan/command.js');
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plan-main-')));
     const out = [];
     const log = console.log;
@@ -1314,7 +1322,7 @@ test('a pick\'s data folder is <root>/<name>, absolute at every scope', () => {
 });
 
 test('memory: its data in the root of its scope - the project root at project and local scope, the global root at user scope, nothing asked', () => {
-    const q = (scope, rootAnswers = null) => asks.locationQuestion(catalog.byId.get('memory'), inv(MAC), { scope, ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false, roots: rootAnswers } });
+    const q = (scope, rootAnswers = null) => locationQuestion(catalog.byId.get('memory'), inv(MAC), { scope, ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false, roots: rootAnswers } });
     for (const scope of ['local', 'project']) assert.deepStrictEqual([q(scope).question, q(scope).only], [null, { side: 'project' }], scope);
     const far = q('project', { project: '/work/shop/.preferred-tools', global: '/srv/keys', globalNamed: true });
     assert.deepStrictEqual([far.question, far.only], [null, { side: 'project' }]);
@@ -1330,12 +1338,12 @@ test('memory: its data in the root of its scope - the project root at project an
 test('serena on Windows: a spaced root gets the space-free folder recommended; project scope as local scope', () => {
     const serena = catalog.byId.get('serena');
     const ctxOf = (project, home) => ({ project, platform: 'win32', home, env: {}, exists: () => false });
-    const spaced = asks.locationQuestion(serena, inv({ ...WIN, project: 'C:\\my work\\shop' }), { scope: 'local', ctx: ctxOf('C:\\my work\\shop', 'C:\\Users\\me') });
+    const spaced = locationQuestion(serena, inv({ ...WIN, project: 'C:\\my work\\shop' }), { scope: 'local', ctx: ctxOf('C:\\my work\\shop', 'C:\\Users\\me') });
     assert.deepStrictEqual(spaced.question.options.map((o) => o.label), ["Your profile's .serena (Recommended)", 'Another space-free folder']);
     assert.match(spaced.question.options[1].description, /asked next$/);
-    const both = asks.locationQuestion(serena, inv(WIN), { scope: 'user', ctx: ctxOf('C:\\work\\shop', 'C:\\Users\\Jo Doe') });
+    const both = locationQuestion(serena, inv(WIN), { scope: 'user', ctx: ctxOf('C:\\work\\shop', 'C:\\Users\\Jo Doe') });
     assert.deepStrictEqual(both.question.options.map((o) => o.label), ['A space-free folder (Recommended)', 'Another space-free folder']);
-    const clean = asks.locationQuestion(serena, inv(WIN), { scope: 'local', ctx: ctxOf('C:\\work\\shop', 'C:\\Users\\Jo Doe') });
+    const clean = locationQuestion(serena, inv(WIN), { scope: 'local', ctx: ctxOf('C:\\work\\shop', 'C:\\Users\\Jo Doe') });
     assert.deepStrictEqual([clean.question, clean.only], [null, { side: 'project' }], 'a space-free root: <root>\\<name>, nothing to ask');
     const home = (base, home, pick = {}) => addStep(plan(inv(base), pickOne('serena', pick), opts(home))).entry.env.SERENA_HOME;
     assert.strictEqual(home(WIN, 'C:\\Users\\Jo Doe'), 'C:\\work\\shop\\.preferred-tools\\serena');
@@ -1348,10 +1356,10 @@ test('serena on Windows: a spaced root gets the space-free folder recommended; p
 test('alfred-code 2.x data on disk adds \'Carry over alfred-code 2.x data\' beside <root>/<name>', () => {
     const pw = catalog.byId.get('playwright-chrome');
     const ctx = (present) => ({ project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: (p) => present.includes(p) });
-    const old = asks.locationQuestion(pw, inv(MAC), { scope: 'local', ctx: ctx(['/work/shop/.alfred/chrome-control']) });
+    const old = locationQuestion(pw, inv(MAC), { scope: 'local', ctx: ctx(['/work/shop/.alfred/chrome-control']) });
     assert.deepStrictEqual(old.question.options.map((o) => o.label), ["The project root's folder (Recommended)", 'Carry over alfred-code 2.x data']);
     assert.deepStrictEqual(Object.values(old.answers), [{ side: 'project' }, { side: 'alfred' }]);
-    const none = asks.locationQuestion(pw, inv(MAC), { scope: 'local', ctx: ctx([]) });
+    const none = locationQuestion(pw, inv(MAC), { scope: 'local', ctx: ctx([]) });
     assert.deepStrictEqual([none.question, none.only], [null, { side: 'project' }]);
 });
 
@@ -1510,7 +1518,7 @@ test('no hosted entry holds Authorization or a ${VAR} for a key, at any scope', 
 });
 
 test('a hosted keyed route recommends global; a stdio keyed route is not offered at project scope', () => {
-    const labels = (id, route) => asks.scopeQuestion(catalog.byId.get(id), inv(MAC), { route, ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } }).options.map((o) => o.label);
+    const labels = (id, route) => scopeQuestion(catalog.byId.get(id), inv(MAC), { route, ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } }).options.map((o) => o.label);
     assert.deepStrictEqual(labels('github', 'remote'), ['Global (Recommended)', 'Project', 'Local']);
     assert.deepStrictEqual(labels('github', 'local'), ['Local (Recommended)', 'Global']);
     assert.deepStrictEqual(labels('sentry', 'local'), ['Local (Recommended)', 'Global']);
@@ -1526,8 +1534,8 @@ test('context7 hosted: global recommended and the key first, filled or not (spec
     {
         const ctx = () => ({ project: w.project, platform: process.platform, home: w.home, env: {} });
         const i = inv({ ...MAC, os: process.platform, project: w.project });
-        const scopeOf = () => asks.scopeQuestion(catalog.byId.get('context7'), i, { route: 'remote', ctx: ctx() }).options[0].label;
-        const keyQ = (scope) => asks.toolAsk(catalog.byId.get('context7'), i, { route: 'remote', scope, ctx: ctx(), catalog }).questions.find((q) => q.id === 'token-context7');
+        const scopeOf = () => scopeQuestion(catalog.byId.get('context7'), i, { route: 'remote', ctx: ctx() }).options[0].label;
+        const keyQ = (scope) => toolAsk(catalog.byId.get('context7'), i, { route: 'remote', scope, ctx: ctx(), catalog }).questions.find((q) => q.id === 'token-context7');
         assert.strictEqual(scopeOf(), 'Global (Recommended)');
         assert.deepStrictEqual(keyQ('project').options.map((o) => o.label), ['Use a key from .mcps-secrets (Recommended)', 'No key - lower rate limits']);
         const p0 = plan(i, pickOne('context7', { route: 'remote' }), { home: w.home, env: {} });
@@ -1548,7 +1556,7 @@ test('context7 hosted: global recommended and the key first, filled or not (spec
 
 test('sentry: a key recommended, with Sentry-Bearer; OAuth when picked', () => {
     const ctx = { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false };
-    const q = asks.toolAsk(catalog.byId.get('sentry'), inv(MAC), { route: 'remote', scope: 'project', ctx, catalog }).questions.find((x) => x.id === 'token-sentry');
+    const q = toolAsk(catalog.byId.get('sentry'), inv(MAC), { route: 'remote', scope: 'project', ctx, catalog }).questions.find((x) => x.id === 'token-sentry');
     assert.deepStrictEqual(q.options.map((o) => o.label), ['Use a key from .mcps-secrets (Recommended)', 'Sign in with OAuth']);
     const p = plan(inv(MAC), pickOne('sentry', { route: 'remote', token: false }), opts('/Users/me'));
     assert.deepStrictEqual([addStep(p).scope, addStep(p).entry.headersHelper, p.oauth.map((x) => x.row)], ['user', undefined, ['sentry']]);
@@ -1561,8 +1569,8 @@ test('the plan notes an untrusted folder, a project-scope helper\'s child folder
     const p = plan(inv(MAC, { trusted: false }), { picks: { github: { route: 'remote', scope: 'project' }, context7: { route: 'remote', scope: 'local', token: true } } }, opts('/Users/me'));
     const count = (re) => p.notes.filter((n) => re.test(n)).length;
     assert.strictEqual(count(/accept the trust dialog the next time Claude Code starts in \/work\/shop - until then the server connects without its key/), 1);
-    assert.strictEqual(count(/a session started in a child folder connects without this key/), asks.PARENT_HELPER_IN_CHILD ? 0 : 1);
-    if (!asks.PARENT_HELPER_IN_CHILD) assert.match(p.notes.find((n) => /child folder connects without/.test(n)), /^github:/);
+    assert.strictEqual(count(/a session started in a child folder connects without this key/), PARENT_HELPER_IN_CHILD ? 0 : 1);
+    if (!PARENT_HELPER_IN_CHILD) assert.match(p.notes.find((n) => /child folder connects without/.test(n)), /^github:/);
     assert.strictEqual(count(/node must be on the PATH Claude Code starts with/), 1);
     const trusted = plan(inv(MAC, { trusted: true }), pickOne('github', { route: 'remote', scope: 'user' }), opts('/Users/me'));
     assert.ok(!trusted.notes.some((n) => /trust dialog|child folder/.test(n)), trusted.notes.join('\n'));
@@ -1597,7 +1605,7 @@ test('key name options: the default, names found holding the row id, \'A name yo
     {
         const fake = (n) => `v${n}-${Date.now()}-not-printed`;
         const ctx = () => ({ project: w.project, platform: process.platform, home: w.home, env: {} });
-        const q = () => asks.keyNameQuestion(catalog.byId.get('github'), 'remote', 'user', ctx());
+        const q = () => keyNameQuestion(catalog.byId.get('github'), 'remote', 'user', ctx());
         const labels = (k) => k.question.options.map((o) => o.label);
         let k = q();
         assert.deepStrictEqual(labels(k), [`${G} (Recommended)`, 'A name you choose']);
@@ -1621,8 +1629,8 @@ test('key name options: the default, names found holding the row id, \'A name yo
         assert.ok(!/not-printed/.test(JSON.stringify(k)), 'names only, never a value');
         assert.ok(!k.question.options.some((o) => OTHER_RE.test(o.description) || /under Other/.test(o.description)));
         // no key name for a route that takes no key, or a stdio route at project scope
-        assert.strictEqual(asks.keyNameQuestion(catalog.byId.get('gitlab'), 'remote', 'user', ctx()).question.id, 'keyname-gitlab');
-        assert.strictEqual(asks.keyNameQuestion(catalog.byId.get('context7'), 'local', 'project', ctx()), null);
+        assert.strictEqual(keyNameQuestion(catalog.byId.get('gitlab'), 'remote', 'user', ctx()).question.id, 'keyname-gitlab');
+        assert.strictEqual(keyNameQuestion(catalog.byId.get('context7'), 'local', 'project', ctx()), null);
     }
     finally { w.clean(); }
 });
@@ -1644,7 +1652,7 @@ test('a key name outside ^[A-Za-z_][A-Za-z0-9_]*$ is a plan error that states th
 });
 
 test('settings: \'Keep these settings\' lists NAME=value; \'No settings\' for an empty env; pairs merge into env', () => {
-    const s = (id, route, entry = null) => asks.settingsQuestion(catalog.byId.get(id), route, { entry });
+    const s = (id, route, entry = null) => settingsQuestion(catalog.byId.get(id), route, { entry });
     const a = s('appium', 'local');
     assert.deepStrictEqual(a.question.options.map((o) => o.label), ['Keep these settings (Recommended)', 'Change or add a setting']);
     assert.deepStrictEqual([a.question.id, a.question.header, a.question.question], ['settings-appium', 'Settings', "appium's settings"]);
@@ -1760,21 +1768,21 @@ const S_VAR = 'SENTRY_ACCESS_TOKEN';
 
 // ---- 0.2.0: servers already set up (spec D6; plan R12) ---------------------------------------------------------------
 test("a tool answered 'own' is not offered; 'add' is offered with the two-servers note", () => {
-    const asks = require('../scripts/asks.js');
+    const { pickQuestions } = require('../scripts/plan/asks-picks.js');
     const labels = (calls) => calls.flat().flatMap((x) => x.options.map((o) => o.label));
     const has = (calls, id) => labels(calls).some((l) => l === id || l.startsWith(`${id} (`));
     const sentry = reg('sentry', 'user', { type: 'http', url: 'https://mcp.sentry.dev/mcp' }, 'sentry', 'remote', { choice: null });
     const c7 = { plugin: 'docs@m', server: 'c7', entry: { type: 'http', url: 'https://mcp.context7.com/mcp' }, rowId: 'context7', route: 'remote', choice: null };
     const i = inv(MAC, { registrations: [sentry], pluginServers: [c7], lists: { project: null, global: null } });
-    for (const id of ['sentry', 'context7', 'atlassian']) assert.ok(has(asks.pickQuestions(i, catalog), id), id);
-    const own = asks.pickQuestions(i, catalog, { 'mcp:sentry~user': 'own', 'plugin-mcp:docs@m/c7': 'own', 'connector:Atlassian': 'own' });
+    for (const id of ['sentry', 'context7', 'atlassian']) assert.ok(has(pickQuestions(i, catalog), id), id);
+    const own = pickQuestions(i, catalog, { 'mcp:sentry~user': 'own', 'plugin-mcp:docs@m/c7': 'own', 'connector:Atlassian': 'own' });
     for (const id of ['sentry', 'context7', 'atlassian']) assert.ok(!has(own, id), id);
     assert.ok(has(own, 'github'), 'a tool not answered is still offered');
     // recorded on their own: the same
     const recorded = inv(MAC, { registrations: [{ ...sentry, choice: 'own' }], pluginServers: [{ ...c7, choice: 'own' }], lists: { project: null, global: { file: '/Users/me/.preferred-tools/mcps.json', servers: [], own: [{ connector: 'Atlassian', choice: 'own' }] } } });
-    for (const id of ['sentry', 'context7', 'atlassian']) assert.ok(!has(asks.pickQuestions(recorded, catalog), id), id);
+    for (const id of ['sentry', 'context7', 'atlassian']) assert.ok(!has(pickQuestions(recorded, catalog), id), id);
     // 'add' and 'manage': offered; 'add' says two servers then run
-    const add = asks.pickQuestions(i, catalog, { 'plugin-mcp:docs@m/c7': 'add', 'connector:Atlassian': 'add', 'mcp:sentry~user': 'manage' });
+    const add = pickQuestions(i, catalog, { 'plugin-mcp:docs@m/c7': 'add', 'connector:Atlassian': 'add', 'mcp:sentry~user': 'manage' });
     const opt = (id) => add.flat().flatMap((x) => x.options).find((o) => o.label === id || o.label.startsWith(`${id} (`));
     assert.match(opt('context7').description, /two servers of context7 then run - docs's and this one/);
     assert.match(opt('atlassian').description, /two servers of atlassian then run - claude\.ai's and this one/);
@@ -1818,12 +1826,13 @@ test('plan.js --questions with --connectors prints no existing block, reads no l
 });
 
 test("configure: the 'On their own' group, and 'Let preferred-tools manage it' plans only a list-write step", () => {
-    const asks = require('../scripts/asks.js');
+    const { changeQuestions } = require('../scripts/plan/asks-tool.js');
+    const asks = require('../scripts/plan/asks-all.js');
     const gh = reg('github', 'user', { type: 'http', url: 'https://api.githubcopilot.com/mcp/' }, 'github', 'remote', { choice: 'own' });
     const c7 = reg('context7', 'local', { type: 'http', url: 'https://mcp.context7.com/mcp' }, 'context7', 'remote', { choice: null });
     const ghOwn = { name: 'github', scope: 'user', fingerprint: 'url:api.githubcopilot.com/mcp', choice: 'own' };
     const i = inv(MAC, { registrations: [gh, c7], pluginServers: [], lists: { project: null, global: { file: '/Users/me/.preferred-tools/mcps.json', servers: [], own: [ghOwn] } } });
-    const ch = asks.changeQuestions(i, catalog);
+    const ch = changeQuestions(i, catalog);
     assert.strictEqual(ch.keys['github (github, user) - on its own'], 'mcp:github~user');
     assert.strictEqual(ch.keys['context7 (context7, local)'], 'mcp:context7~local');
     assert.ok(!('github (github, user)' in ch.keys), 'not among the servers configure changes');
@@ -1965,14 +1974,14 @@ test("configure: 'Leave it on its own' writes one own entry in the family root's
 test('the pick list labels a row that a claude.ai connector or an enabled plugin already provides, and the plan names the two servers', () => {
     const X = require('../scripts/inventory/existing.js');
     const label = (calls, id) => calls.flat().flatMap((x) => x.options.map((o) => o.label)).find((l) => l === id || l.startsWith(`${id} (`));
-    assert.strictEqual(label(asks.pickQuestions(inv(MAC), catalog, {}, ['GitLab']), 'gitlab'), 'gitlab (also connected through claude.ai)');
-    assert.strictEqual(label(asks.pickQuestions(inv(MAC), catalog), 'gitlab'), 'gitlab');
+    assert.strictEqual(label(pickQuestions(inv(MAC), catalog, {}, ['GitLab']), 'gitlab'), 'gitlab (also connected through claude.ai)');
+    assert.strictEqual(label(pickQuestions(inv(MAC), catalog), 'gitlab'), 'gitlab');
     const ps = { plugin: 'gitlab-tools@acme', server: 'gitlab', rowId: 'gitlab', route: 'remote', entry: { type: 'http', url: 'https://gitlab.com/api/v4/mcp' }, choice: null };
     const plugin = (enabled) => ({ id: 'gitlab-tools@acme', plugin: 'gitlab-tools', scope: 'user', enabled, enabledHere: enabled });
     const withPlugin = inv(MAC, { pluginServers: [ps], plugins: [plugin(true)] });
-    assert.strictEqual(label(asks.pickQuestions(withPlugin, catalog), 'gitlab'), 'gitlab (also provided by the gitlab-tools plugin)');
-    assert.strictEqual(label(asks.pickQuestions(inv(MAC, { pluginServers: [ps], plugins: [plugin(false)] }), catalog), 'gitlab'), 'gitlab', 'a disabled plugin provides nothing');
-    assert.deepStrictEqual(asks.alsoProvided(withPlugin, 'gitlab', ['GitLab']).map((a) => a.owner), ['claude.ai', 'gitlab-tools']);
+    assert.strictEqual(label(pickQuestions(withPlugin, catalog), 'gitlab'), 'gitlab (also provided by the gitlab-tools plugin)');
+    assert.strictEqual(label(pickQuestions(inv(MAC, { pluginServers: [ps], plugins: [plugin(false)] }), catalog), 'gitlab'), 'gitlab', 'a disabled plugin provides nothing');
+    assert.deepStrictEqual(alsoProvided(withPlugin, 'gitlab', ['GitLab']).map((a) => a.owner), ['claude.ai', 'gitlab-tools']);
     const viaConnector = plan(inv(MAC), pickOne('gitlab'), opts('/Users/me', { connectors: ['GitLab'] }));
     assert.ok(viaConnector.notes.includes(X.twoServers('gitlab', 'claude.ai')), viaConnector.notes.join('\n'));
     const viaPlugin = plan(withPlugin, pickOne('gitlab'), opts('/Users/me'));
@@ -2002,7 +2011,7 @@ test('change the root: each managed registration of the family is re-added with 
     const gh = reg('github', 'local', ghHelper(OLD_ROOT), 'github', 'remote');
     const i = inv(MAC, { registrations: [pw, gh], roots: usedRoots(OLD_ROOT) });
     // the configure pick: a 'Root folders' group, one option per family in use, its path in the description
-    const ch = asks.changeQuestions(i, catalog);
+    const ch = changeQuestions(i, catalog);
     assert.strictEqual(ch.keys['Project root folder'], 'root:project');
     assert.ok(!('Global root folder' in ch.keys), 'no global root in use: not offered');
     const opt = ch.calls.flat().flatMap((q) => q.options).find((o) => o.label === 'Project root folder');
@@ -2092,7 +2101,7 @@ test('change the root: the other family\'s registrations are untouched', () => {
     const pw = installed('playwright-chrome', { scope: 'local' });
     const sentry = reg('sentry', 'user', { type: 'http', url: 'https://mcp.sentry.dev/mcp', headersHelper: 'node /Users/me/.preferred-tools/mcp-headers.js SENTRY_ACCESS_TOKEN Sentry-Bearer' }, 'sentry', 'remote');
     const i = inv(MAC, { registrations: [pw, sentry], roots: usedRoots(OLD_ROOT, '/Users/me/.preferred-tools') });
-    const ch = asks.changeQuestions(i, catalog);
+    const ch = changeQuestions(i, catalog);
     assert.deepStrictEqual(['Project root folder', 'Global root folder'].map((l) => ch.keys[l]), ['root:project', 'root:global']);
     const project = plan(i, { rootChange: ['project'], roots: { project: { id: 'named', path: 'tools' } } }, opts('/Users/me'));
     assert.deepStrictEqual(project.errors, []);
@@ -2246,7 +2255,7 @@ test('serena on Windows at project scope: <project root>\\serena, or the fallbac
     assert.deepStrictEqual(spaced.errors, []);
     assert.strictEqual(addStep(spaced).entry.env.SERENA_HOME, 'C:\\Users\\dev\\.serena');
     // Project is offered on Windows whatever the profile path
-    assert.ok(asks.scopesFor(catalog.byId.get('serena'), 'local', { platform: 'win32', home: 'C:\\Users\\Jo Doe', env: {} }).includes('project'));
+    assert.ok(scopesFor(catalog.byId.get('serena'), 'local', { platform: 'win32', home: 'C:\\Users\\Jo Doe', env: {} }).includes('project'));
 });
 
 test('memory follows the root: the project root at project and local scope, the global root at user scope', () => {
@@ -2254,7 +2263,7 @@ test('memory follows the root: the project root at project and local scope, the 
     assert.strictEqual(db('local'), '/work/shop/.preferred-tools/memory/memory.db');
     assert.strictEqual(db('project'), '/work/shop/.preferred-tools/memory/memory.db');
     assert.strictEqual(db('user'), '/Users/me/.preferred-tools/memory/memory.db');
-    const q = asks.locationQuestion(catalog.byId.get('memory'), inv(MAC), { scope: 'local', ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
+    const q = locationQuestion(catalog.byId.get('memory'), inv(MAC), { scope: 'local', ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
     assert.ok(!(q.question ? q.question.options : []).some((o) => o.label.startsWith("The global root's folder")));
 });
 
@@ -2301,13 +2310,13 @@ test('no note says a session in another folder creates the data folder there; a 
 
 test('every scope question words Project as the folder\'s .mcp.json that names this machine\'s paths', () => {
     const want = "the .mcp.json in this folder - every session started here or below it; it names this machine's paths, so a teammate's clone points at yours, and never holds a key";
-    assert.strictEqual(asks.SCOPE_TEXT.project, want);
+    assert.strictEqual(SCOPE_TEXT.project, want);
     // a hosted keyed route adds why a child folder's session has no key (docs/sources.md M1); the bridge connects there
     // (F3), so its Project option says nothing of the kind
-    const child = asks.PARENT_HELPER_IN_CHILD ? '' : "; a session started in a child folder connects without the key - Claude Code does not run a parent folder's helper there";
+    const child = PARENT_HELPER_IN_CHILD ? '' : "; a session started in a child folder connects without the key - Claude Code does not run a parent folder's helper there";
     for (const [id, route, tail] of [['memory', 'local', ''], ['context7', 'remote', child], ['context7', 'local', ''], ['sentry', 'bridge', '']])
     {
-        const q = asks.scopeQuestion(catalog.byId.get(id), inv(MAC), { route, ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
+        const q = scopeQuestion(catalog.byId.get(id), inv(MAC), { route, ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
         assert.strictEqual(q.options.find((o) => o.label.startsWith('Project')).description, `${want}${tail}`, `${id}/${route}`);
     }
 });
@@ -2315,7 +2324,7 @@ test('every scope question words Project as the folder\'s .mcp.json that names t
 // ---- 0.3.0: 'needs authentication' explained (F3) ---------------------------------------------------------------------
 
 test('a hosted keyed registration gets its reconnect line in the plan: filled, unfilled, unfilled anonymous', () => {
-    const { reconnectLine } = require('../scripts/plan.js');
+    const { reconnectLine } = require('../scripts/plan/render.js');
     const { world } = require('./helpers.js');
     const w = world();
     try
@@ -2347,9 +2356,9 @@ test('the project-scope helper note says why, once', () => {
     const p = plan(inv(MAC, { trusted: true }), { picks: { github: { route: 'remote', scope: 'project' }, context7: { route: 'remote', scope: 'project', token: true } } }, opts('/Users/me'));
     const why = "a session started in a child folder connects without this key - Claude Code does not run a parent folder's helper there; pick Global, or install it in that folder too";
     const child = p.notes.filter((n) => /child (folder|project)/.test(n));
-    if (asks.PARENT_HELPER_IN_CHILD) return assert.deepStrictEqual(child, []);
+    if (PARENT_HELPER_IN_CHILD) return assert.deepStrictEqual(child, []);
     assert.deepStrictEqual(child.sort(), [`context7: ${why}`, `github: ${why}`]);
-    const q = asks.scopeQuestion(catalog.byId.get('github'), inv(MAC), { route: 'remote', ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
+    const q = scopeQuestion(catalog.byId.get('github'), inv(MAC), { route: 'remote', ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
     assert.match(q.options.find((o) => o.label.startsWith('Project')).description, /; a session started in a child folder connects without the key - Claude Code does not run a parent folder's helper there$/);
 });
 
@@ -2587,7 +2596,7 @@ test('two URL parts under one name are refused at install and configure, and not
 // ---- 0.3.0 review, Important 1: the key's format reaches the user on the recommended path ---------------------------
 
 test('an unfilled reconnect line names what the key must be: atlassian email:api_token, gitlab a fine-grained token', () => {
-    const { reconnectLine } = require('../scripts/plan.js');
+    const { reconnectLine } = require('../scripts/plan/render.js');
     const { world } = require('./helpers.js');
     const w = world();
     try

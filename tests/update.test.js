@@ -7,7 +7,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { world, writeJson, readJson, tempOf, helperCmd } = require('./helpers.js');
 const inventory = require('../scripts/inventory/inventory.js');
-const { plan } = require('../scripts/plan.js');
+const { plan } = require('../scripts/plan/plan.js');
 const { apply } = require('../scripts/apply/run.js');
 const cli = require('../scripts/core/claude-cli.js');
 const update = require('../scripts/update.js');
@@ -951,7 +951,7 @@ test('update moves the shared sign-in form\'s mcp-remote pin, and the list and t
 
 test('a pin move that changes Cursor\'s copy prints the re-approval line in the plan and the update report', async () =>
 {
-    const planLists = require('../scripts/plan-lists.js');
+    const { repairTail } = require('../scripts/plan/repair-tail.js');
     const LINE = /Cursor asks you to approve atlassian again - it re-asks whenever an entry changes/;
     const w = world();
     try
@@ -961,7 +961,7 @@ test('a pin move that changes Cursor\'s copy prints the re-approval line in the 
         const r = inv.registrations.find((x) => x.name === 'atlassian');
         const step = { op: 'mcp-replace', name: 'atlassian', scope: 'user', old: r.entry, entry: update.bumpEntry(r.entry, 'mcp-remote', '0.17.0', '2026-10-27T23:59:59Z'), row: 'atlassian', route: r.route };
         const notes = [];
-        const tail = planLists.repairTail(inv, { platform: process.platform, project: w.project, home: w.home, env: w.env, notes }, [step]);
+        const tail = repairTail(inv, { platform: process.platform, project: w.project, home: w.home, env: w.env, notes }, [step]);
         assert.deepStrictEqual(tail.map((s) => s.op), ['list-write', 'cursor-write']);
         assert.deepStrictEqual(tail[1].reapprove, ['atlassian']);
         assert.ok(notes.some((n) => LINE.test(n)), notes.join('\n'));

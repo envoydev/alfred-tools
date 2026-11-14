@@ -2,8 +2,7 @@
 // The file steps of an apply (spec D2-D4, D6, D8): each skips what is in place.
 const fs = require('node:fs');
 const path = require('node:path');
-const { blockingStdio, stripBom } = require('../core/json-file.js');
-const kept = require('../core/kept.js');
+const { stripBom } = require('../core/json-file.js');
 const keys = require('../keys/keys.js');
 const catalogLib = require('../catalog/catalog.js');
 const roots = require('../roots/roots.js');

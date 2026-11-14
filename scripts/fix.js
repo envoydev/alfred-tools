@@ -29,15 +29,17 @@ const { blockingStdio } = require('./core/json-file.js');
 const { writeJob, job, nextLines } = require('./apply/fetch.js');
 const F = require('./fixes/index.js');
 const { realMachine, clone } = require('./fixes/common.js');
-const { deepEqual, useRoots, fileSteps, reconnectLine } = require('./plan.js');
+const { deepEqual } = require('./plan/plan.js');
+const { useRoots, fileSteps } = require('./plan/pick.js');
+const { reconnectLine } = require('./plan/render.js');
 const { helperNameOf, contextArgAt } = require('./entries/entry.js');
 const { fetchStep } = require('./entries/names.js');
 const mcpOrder = require('./mcps-list/mcp-order.js');
 const keys = require('./keys/keys.js');
 const roots = require('./roots/roots.js');
 const declines = require('./core/declines.js');
-const planLists = require('./plan-lists.js');
-const asksLib = require('./asks.js');
+const { repairTail } = require('./plan/repair-tail.js');
+const { driftQuestion } = require('./plan/asks-other.js');
 
 function makeCtx({ inv, catalog = catalogLib.load(), env = process.env, machine, platform, arch, data = null })
 {
@@ -127,7 +129,7 @@ function questions(detected)
     const drifted = detected.found.filter((f) => f.id === 'client-drift' && !f.blocked);
     const driftQs = drifted.map((f) =>
     {
-        const q = asksLib.driftQuestion(f);
+        const q = driftQuestion(f);
         const first = f.app === 'cursor' && drifted.find((x) => x.app === 'claude' && x.name === f.name && x.scope === f.scope);
         return { ...q.question, answers: q.answers, ...(first ? { askAfter: { id: `drift-claude-${f.name}~${f.scope}`, answers: ['restore', 'leave'] } } : {}) };
     });
@@ -249,7 +251,7 @@ function applyFixes(ctx, ids, { only, name, scope, input = {}, tmp, log = consol
     // key token-sync found behind is refilled with the list as it is
     const refresh = todo.filter((x) => x.id === 'token-sync' && x.cursorOnly).map((x) => ({ name: x.name, scope: x.scope }));
     const tailNotes = [];
-    const tail = steps.length || refresh.length ? planLists.repairTail(ctx.inv, { platform: ctx.platform, project: ctx.inv.project, home: ctx.home, env: ctx.env, catalog: ctx.catalog, notes: tailNotes }, steps, { refresh }) : [];
+    const tail = steps.length || refresh.length ? repairTail(ctx.inv, { platform: ctx.platform, project: ctx.inv.project, home: ctx.home, env: ctx.env, catalog: ctx.catalog, notes: tailNotes }, steps, { refresh }) : [];
     if (steps.length || tail.length)
     {
         // a fix that changes what is fetched (a python request, a cut-off, cmd /c) is fetched once it is written

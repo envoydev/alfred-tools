@@ -1,7 +1,7 @@
 'use strict';
 // The CLI steps of an apply: quoting, the calls through the claude CLI, and a key taken back for a replace or a move.
 const account = require('../core/account.js');
-const { argvOf, deepEqual, reconnectLine } = require('../plan.js');
+const { deepEqual } = require('../plan/plan.js');
 const kept = require('../core/kept.js');
 const keys = require('../keys/keys.js');
 

@@ -10,7 +10,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const roots = require('../roots/roots.js');
 const lists = require('../mcps-list/mcps-list.js');
-const planLists = require('../plan-lists.js');
+const { importUnlisted } = require('../plan/lists.js');
+const { SCOPES, folderList } = require('../plan/cursor-steps.js');
+const { readGuardOf, denyReadStep } = require('../plan/repair-tail.js');
 const kept = require('../core/kept.js');
 const keys = require('../keys/keys.js');
 const cursorMcp = require('../cursor/cursor-mcp.js');
@@ -34,7 +36,7 @@ function listImportDetect(ctx)
         const l = ctx.inv.lists && ctx.inv.lists[family];
         // a list or record this plugin cannot read, or one a newer plugin wrote, is left as it is
         if (l && l.note) continue;
-        const servers = planLists.importUnlisted(ctx.inv, family, ctx.catalog, { roots: r });
+        const servers = importUnlisted(ctx.inv, family, ctx.catalog, { roots: r });
         const file = l ? l.file : r[family] ? P.join(r[family], roots.FILES.list) : null;
         if (!file) continue;
         const beside = P.join(P.dirname(file), roots.FILES.record);
@@ -90,13 +92,13 @@ function readGuardDetect(ctx)
     const signIns = has(roots.FILES.signIns);
     if (signIns) { want.push(roots.READ_GUARD.signIns); why.push(`${P.join(signIns, roots.FILES.signIns)}/`); }
     if (!want.length) return [];
-    const g = planLists.readGuardOf(ctx, want);
+    const g = readGuardOf(ctx, want);
     if (g.bad) return [{ id: 'read-guard', name: g.file, scope: null, rules: want, found: `${g.file}: not a settings object preferred-tools can read`, blocked: `add ${want.join(' and ')} to permissions.deny yourself` }];
     if (!g.rules.length) return [];
     return [{ id: 'read-guard', name: g.file, scope: null, rules: g.rules, found: `${g.file} does not deny ${g.rules.join(' or ')} - an AI session's Read tool can open ${why.join(' and ')}` }];
 }
 
-const readGuardSteps = (f) => [planLists.denyReadStep(f.name, f.rules)];
+const readGuardSteps = (f) => [denyReadStep(f.name, f.rules)];
 
 // serena-base-modes (0.5.0, D7): a managed serena's home, other than an alfred-code 2.x one, whose serena_config.yml
 // lists base modes. Read by serena-config.js, which reads that key alone and never the file's other lines.
@@ -199,7 +201,7 @@ function clientDriftDetect(ctx)
         const read = cursorMcp.readCursor(file);
         if (read.state !== 'ok' && read.state !== 'absent') continue;
         const have = read.doc.mcpServers;
-        for (const [name, m] of cursorMcp.managedSet([{ file: l.file, scopes: planLists.SCOPES[family], servers }]))
+        for (const [name, m] of cursorMcp.managedSet([{ file: l.file, scopes: SCOPES[family], servers }]))
         {
             const s = servers.find((x) => x.name === name && x.scope === m.scope);
             compare(Object.hasOwn(have, name) ? have[name] : undefined, m.entry, s, 'cursor', { ...where, file });
@@ -214,10 +216,10 @@ function clientDriftDetect(ctx)
         if (read.state === 'ok' || read.state === 'absent')
         {
             const own = usableList(ctx, 'project');
-            const seen = new Set(own ? cursorMcp.managedSet([{ file: own.file, scopes: planLists.SCOPES.project, servers: own.servers || [] }]).keys() : []);
+            const seen = new Set(own ? cursorMcp.managedSet([{ file: own.file, scopes: SCOPES.project, servers: own.servers || [] }]).keys() : []);
             for (const up of ws.ancestors)
             {
-                const fl = planLists.folderList(ctx.inv, up, cctx);
+                const fl = folderList(ctx.inv, up, cctx);
                 if (!fl) continue;
                 for (const [name, m] of cursorMcp.managedSet([{ file: fl.file, scopes: ['project'], servers: fl.servers }]))
                 {
@@ -249,7 +251,7 @@ function clientDriftSteps(f, ctx, input = {})
     const why = `${f.name} (${f.scope}): ${answer === 'keep' ? `the change in ${APP[f.app]} kept` : answer === 'drop' ? `${APP[f.app]} taken off its list entry` : `${APP[f.app]}'s copy restored from the list`}`;
     const listStep = (server) => ({ op: 'list-write', file: f.list, family: f.family, upserts: server ? [{ server, after: null, cursorFile: null }] : [], drops: server ? [] : [{ key, after: null }], own: null, why: `${f.list}: ${why}` });
     // Cursor's copy of this one name, the file's other entries as they are
-    const cursorStep = () => ({ op: 'cursor-write', file: f.file || cursorMcp.fileFor(f.family, cursorCtx(ctx)), family: f.family, lists: [{ file: f.list, scopes: f.inherited ? ['project'] : planLists.SCOPES[f.family] }], before: [f.name], only: [f.name], skip: [], replace: [], why: `${f.file || 'Cursor'}: ${why}` });
+    const cursorStep = () => ({ op: 'cursor-write', file: f.file || cursorMcp.fileFor(f.family, cursorCtx(ctx)), family: f.family, lists: [{ file: f.list, scopes: f.inherited ? ['project'] : SCOPES[f.family] }], before: [f.name], only: [f.name], skip: [], replace: [], why: `${f.file || 'Cursor'}: ${why}` });
     const reg = (ctx.inv.registrations || []).find((r) => r.name === f.name && r.scope === f.scope && r.scope !== 'inherited');
     const claudeStep = (entry) => (reg
         ? { op: 'mcp-replace', name: f.name, scope: f.scope, old: reg.entry, entry, row: f.row, route: f.route, why }
