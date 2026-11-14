@@ -8,7 +8,7 @@ import * as catalogLib from '../scripts/catalog/catalog.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import { renderPlan, argvOf, reconnectLine } from '../scripts/plan/render.ts';
 import { makeCtx } from '../scripts/plan/context.ts';
-import { fileSteps } from '../scripts/plan/pick.ts';
+import { fileSteps } from '../scripts/plan/root-files.ts';
 import { scopeOfLabel, SCOPE_LABEL, PARENT_HELPER_IN_CHILD, keyNameQuestion, settingsQuestion, SCOPE_TEXT } from '../scripts/plan/asks-keys.ts';
 import { pickQuestions, packed, alsoProvided } from '../scripts/plan/asks-picks.ts';
 import { scopeQuestion, routeQuestion, changeQuestions, scopesFor } from '../scripts/plan/asks-tool.ts';

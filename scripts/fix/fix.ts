@@ -27,7 +27,7 @@ import { writeJob, fetchJob, nextLines } from '../apply/fetch.ts';
 import * as F from './fix-functions.ts';
 import { realMachine, clone } from './common.ts';
 import { deepEqual } from '../plan/plan.ts';
-import { useRoots, fileSteps } from '../plan/pick.ts';
+import { useRoots, fileSteps } from '../plan/root-files.ts';
 import { reconnectLine } from '../plan/render.ts';
 import { helperNameOf, contextArgAt } from '../entries/entry.ts';
 import { fetchStep } from '../entries/names.ts';
