@@ -10,7 +10,7 @@ import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { deepEqual } from '../core/json-file.ts';
 import { REG_OPS, listSteps } from './lists.ts';
 import { cursorSteps, SCOPES, heldCopies, keepOf } from './cursor-steps.ts';
-import type { Env } from '../core/types.ts';
+import type { Env, ServerEntry } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
 import type { CursorWritePlanStep, DenyReadStep, FileStep, ListCtx, ListWriteStep, McpAddStep, PlanOut, PlanStep, RegistrationStep, RepairCtx } from './types.ts';
@@ -20,9 +20,11 @@ import type { CursorWritePlanStep, DenyReadStep, FileStep, ListCtx, ListWriteSte
 // What a fix or an update writes after its registration steps: each list the steps' servers sit in, from the
 // registrations as read back, and Cursor's files from those lists - a copy Cursor lacks or one changed by hand left out
 // and named. Only lists that exist are written: a family with none waits for list-import. `refresh`: [{ name, scope }]
-// whose Cursor copy is refilled from .mcps-secrets at apply with no list change (token-sync). Notes go to ctx.notes.
+// whose Cursor copy is refilled from .mcps-secrets at apply with no list change (token-sync). `repoint`: [{ name, scope }]
+// whose list entry and Cursor copy follow a moved root (root-repoint, spec D3), `normalize` re-pointing an entry - a
+// Cursor copy that differs from its list only by the moved root is written, not held. Notes go to ctx.notes.
 // -> [step]
-export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: PlanStep[], { refresh = [] }: { refresh?: { name: string; scope: string }[] } = {}): PlanStep[]
+export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: PlanStep[], { refresh = [], repoint = [], normalize }: { refresh?: { name: string; scope: string }[]; repoint?: { name: string; scope: string }[]; normalize?: ((entry: ServerEntry) => ServerEntry) | undefined } = {}): PlanStep[]
 {
     const catalog = context.catalog || catalogLib.load();
     const notes = context.notes || [];
@@ -36,7 +38,7 @@ export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: P
         const prior = familyList ? (familyList.servers || []).find((server) => lists.serverKey(server) === key) : null;
         if (prior && prior.cursorEntry) formFor.set(key!, 'two');
     }
-    const tctx: ListCtx = { platform: context.platform, project: context.project || inventory.project, home: context.home, env: context.env || {}, catalog, roots: null, uses: [], formFor, exists: context.exists };
+    const tctx: ListCtx = { platform: context.platform, project: context.project || inventory.project, home: context.home, env: context.env || {}, catalog, roots: null, uses: [], formFor, exists: context.exists, normalizeCopy: normalize };
     const out: PlanOut = { steps: [], notes, errors: [] };
     const listW = listSteps(inventory, tctx, out, regSteps);
     // the key's name, from the key files of the roots in use
@@ -48,6 +50,23 @@ export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: P
                 const files = keys.stdioChain({ scope: upsert.server.scope, projectRoot: rootPaths.project, globalRoot: rootPaths.global });
                 if (files.length) upsert.keyFiles = files;
             }
+    // a re-pointed server the registration steps did not reach: its list entry as listed, re-pointed (root-repoint)
+    for (const item of repoint)
+    {
+        const family = roots.familyOf(item.scope);
+        const familyList = usable(family);
+        const prior = familyList ? (familyList.servers || []).find((server) => server.name === item.name && server.scope === item.scope) : null;
+        if (!familyList || !prior) continue;
+        let write = listW.find((step): step is ListWriteStep => step.op === 'list-write' && step.file === familyList.file);
+        if (!write)
+        {
+            write = { op: 'list-write', file: familyList.file, family, upserts: [], drops: [], own: null, why: `${familyList.file}: the paths into the moved root re-pointed` };
+            listW.push(write);
+        }
+        if (write.upserts.some((upsert) => upsert.server.name === item.name && upsert.server.scope === item.scope)) continue;
+        const again = (entry: ServerEntry) => (normalize ? normalize(entry) : entry);
+        write.upserts.push({ server: { ...prior, entry: again(prior.entry), ...(prior.cursorEntry ? { cursorEntry: again(prior.cursorEntry) } : {}) }, after: null, cursorFile: null });
+    }
     out.steps = [...regSteps, ...listW];
     const cursor = cursorSteps(inventory, tctx, out, {});
     for (const error of out.errors) notes.push(`${error} - Cursor's file is left; run /alfred-tools:configure`);

@@ -37,7 +37,7 @@ import * as roots from '../roots/roots.ts';
 import * as declines from '../core/declines.ts';
 import { repairTail } from '../plan/repair-tail.ts';
 import { driftQuestion } from '../plan/asks-other.ts';
-import type { Declined, Env } from '../core/types.ts';
+import type { Declined, Env, ServerEntry } from '../core/types.ts';
 import type { Catalog, CatalogRoute } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
 import type { JobStep } from '../apply/types.ts';
@@ -231,7 +231,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     const groups = new Map<string, Finding[]>();
     // R9: a fix that gives a registration a helper brings its root's file steps - the .gitignore and the helper - first
     const fileCtx: { platform: string; project: string; roots: Roots | null; uses: RootUse[] } = { platform: context.platform, project: context.inventory.project, roots: null, uses: [] };
-    for (const finding of todo.filter((candidate) => candidate.kind === 'registration')) groups.set(`${finding.scope}\u0000${finding.name}`, [...(groups.get(`${finding.scope}\u0000${finding.name}`) || []), finding]);
+    for (const finding of todo.filter((candidate) => candidate.kind === 'registration' && !candidate.tailOnly)) groups.set(`${finding.scope}\u0000${finding.name}`, [...(groups.get(`${finding.scope}\u0000${finding.name}`) || []), finding]);
     for (const list of groups.values())
     {
         const withRoots = list.find((candidate) => candidate.roots);
@@ -254,8 +254,13 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     // each list the repaired servers sit in, and Cursor's files from them, in the same run (spec D1); a Cursor copy whose
     // key token-sync found behind is refilled with the list as it is
     const refresh = todo.filter((finding) => finding.id === 'token-sync' && finding.cursorOnly).map((finding) => ({ name: finding.name, scope: finding.scope! }));
+    // a server root-repoint found: its list entry and Cursor's copy follow the moved root (spec D3), even when Claude
+    // Code's entry is already right; a copy that differs from the list only by the moved root is not a hand edit
+    const repoint = todo.filter((finding) => finding.id === 'root-repoint').map((finding) => ({ name: finding.name, scope: finding.scope! }));
+    const movedNow = repoint.length ? F.movedRoots(context) : [];
+    const normalize = movedNow.length ? (entry: ServerEntry) => F.repointEntry(entry, movedNow, F.machineOf(context)) : undefined;
     const tailNotes: string[] = [];
-    const tail = steps.length || refresh.length ? repairTail(context.inventory, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, notes: tailNotes }, steps, { refresh }) : [];
+    const tail = steps.length || refresh.length || repoint.length ? repairTail(context.inventory, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, notes: tailNotes }, steps, { refresh, repoint, normalize }) : [];
     if (steps.length || tail.length)
     {
         // a fix that changes what is fetched (a python request, a cut-off, cmd /c) is fetched once it is written

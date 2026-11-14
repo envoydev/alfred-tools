@@ -1980,3 +1980,148 @@ test('token-sync with a key changed in .mcps-secrets refills ~/.cursor/mcp.json 
     }
     finally { w.clean(); }
 });
+
+// ---- the rename (spec D3) -----------------------------------------------------------------------------------------
+const moved = [{ from: '/h/.preferred-tools', to: '/h/.alfred-tools' }];
+const posixMachine = { platform: 'darwin', home: '/h', project: '/p' };
+const repoint = (entry: ServerEntry, list = moved, machine: Machine = posixMachine) => (F as unknown as { repointEntry: (e: ServerEntry, m: typeof moved, c: Machine) => ServerEntry }).repointEntry(entry, list, machine);
+
+test('repointEntry rewrites each written form of a moved root and nothing else', () =>
+{
+    const entry: ServerEntry = { type: 'stdio', command: 'node', args: ['/h/.preferred-tools/x', '~/.preferred-tools/y', '${HOME}/.preferred-tools', '/elsewhere/.preferred-tools', '--data=/h/.preferred-tools/d'], env: { MCP_REMOTE_CONFIG_DIR: '/h/.preferred-tools', OTHER: 'keep' }, url: 'https://x/.preferred-tools' } as ServerEntry;
+    const out = repoint(entry);
+    assert.deepStrictEqual(out.args, ['/h/.alfred-tools/x', '~/.alfred-tools/y', '${HOME}/.alfred-tools', '/elsewhere/.preferred-tools', '--data=/h/.alfred-tools/d']);
+    assert.deepStrictEqual(out.env, { MCP_REMOTE_CONFIG_DIR: '/h/.alfred-tools', OTHER: 'keep' });
+    assert.strictEqual((out as { url?: string }).url, 'https://x/.preferred-tools');
+    assert.deepStrictEqual(repoint({ type: 'stdio', command: 'npx', args: ['-y', 'pkg'] }), { type: 'stdio', command: 'npx', args: ['-y', 'pkg'] });
+});
+
+test('repointEntry rewrites the helper inside headersHelper, a quoted path with a space kept quoted', () =>
+{
+    const spaced = [{ from: '/Users/my name/.preferred-tools', to: '/Users/my name/.alfred-tools' }];
+    const machine = { platform: 'darwin', home: '/Users/my name', project: '/p' };
+    const out = repoint({ type: 'http', url: 'https://u', headersHelper: "node '/Users/my name/.preferred-tools/mcp-headers.js' K Bearer" }, spaced, machine);
+    assert.strictEqual(out.headersHelper, "node '/Users/my name/.alfred-tools/mcp-headers.js' K Bearer");
+    const plain = repoint({ type: 'http', url: 'https://u', headersHelper: 'node /h/.preferred-tools/mcp-headers.js K Bearer /h/.preferred-tools' });
+    assert.strictEqual(plain.headersHelper, 'node /h/.alfred-tools/mcp-headers.js K Bearer /h/.alfred-tools');
+});
+
+test("repointEntry rewrites a path inside a Windows cmd /c wrapper's arguments", () =>
+{
+    const winMoved = [{ from: 'C:\\Users\\x\\.preferred-tools', to: 'C:\\Users\\x\\.alfred-tools' }];
+    const machine = { platform: 'win32', home: 'C:\\Users\\x', project: 'C:\\p' };
+    const out = repoint({ type: 'stdio', command: 'cmd', args: ['/c', 'node', 'C:\\Users\\x\\.preferred-tools\\mcp-bridge.js', 'https://u'] }, winMoved, machine);
+    assert.deepStrictEqual(out.args, ['/c', 'node', 'C:\\Users\\x\\.alfred-tools\\mcp-bridge.js', 'https://u']);
+});
+
+test('repointEntry on win32 matches case-insensitively and keeps the written case of the rest', () =>
+{
+    const winMoved = [{ from: 'C:\\Users\\x\\.preferred-tools', to: 'C:\\Users\\x\\.alfred-tools' }];
+    const machine = { platform: 'win32', home: 'C:\\Users\\x', project: 'C:\\p' };
+    const out = repoint({ type: 'stdio', command: 'node', args: ['c:\\Users\\x\\.Preferred-Tools\\mcp-headers.js', 'C:/Users/x/.preferred-tools/pw'] }, winMoved, machine);
+    assert.deepStrictEqual(out.args, ['c:\\Users\\x\\.alfred-tools\\mcp-headers.js', 'C:/Users/x/.alfred-tools/pw']);
+});
+
+// a 0.5.0 install whose files were moved: serena set up for both apps, then every place it is written named back to the
+// former folder while the folder itself is .alfred-tools - what a move leaves before root-repoint runs
+const formerOf = <T>(value: T): T => JSON.parse(JSON.stringify(value).replaceAll('.alfred-tools', '.preferred-tools'));
+function movedSerena(w: World, { reg = true, list = true, cursor = true } = {})
+{
+    installBoth(w, { picks: { serena: { scope: 'local' } } });
+    const listFile = path.join(w.project, '.alfred-tools', 'mcps.json');
+    const cursorFile = path.join(w.project, '.cursor', 'mcp.json');
+    if (reg)
+    {
+        const e = localEntry(w, 'serena')!;
+        cli.runClaude(['mcp', 'remove', 'serena', '-s', 'local'], { cwd: w.project, env: w.env });
+        seed(w, 'serena', 'local', formerOf(e));
+    }
+    if (list) { const doc = readJson(listFile); doc.servers[0].entry = formerOf(doc.servers[0].entry); writeJson(listFile, doc); }
+    if (cursor) { const doc = readJson(cursorFile); doc.mcpServers.serena = formerOf(doc.mcpServers.serena); writeJson(cursorFile, doc); }
+    return { listFile, cursorFile };
+}
+const namesFormer = (value: unknown) => JSON.stringify(value).includes('.preferred-tools');
+
+test('root-repoint finds a managed registration naming a moved root, not a user-owned one, not while the old folder still holds root files', () =>
+{
+    const w = world();
+    try
+    {
+        movedSerena(w);
+        seed(w, 'mine', 'local', { type: 'stdio', command: 'node', args: [path.join(w.project, '.preferred-tools', 'x.js')] });
+        const found = detect(ctxOf(w), 'root-repoint').found;
+        assert.deepStrictEqual(found.map((f) => [f.id, f.name, f.scope, Boolean(f.tailOnly)]), [['root-repoint', 'serena', 'local', false]]);
+        assert.match(found[0]!.found, /Claude Code's entry, the list .*, Cursor's copy name .*\.preferred-tools - the folder moved to .*\.alfred-tools/);
+        put(path.join(w.project, '.preferred-tools', '.mcps-secrets'), '');
+        assert.deepStrictEqual(detect(ctxOf(w), 'root-repoint').found, [], 'a .preferred-tools holding root files has not moved');
+    }
+    finally { w.clean(); }
+});
+
+test('root-repoint applied: one mcp-replace with the re-pointed entry; the Cursor copy and the list follow', () =>
+{
+    const w = world();
+    try
+    {
+        const { listFile, cursorFile } = movedSerena(w);
+        const l = logged();
+        const res = applyFixes(ctxOf(w), ['root-repoint'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.strictEqual(res.failed, null, l.text());
+        assert.strictEqual(w.writes().filter((a) => a[1] === 'add-json').length - 2, 1, 'one add-json after the install and the seed');
+        for (const [what, value] of [['registration', localEntry(w, 'serena')], ['list', readJson(listFile).servers[0]], ['cursor', readJson(cursorFile).mcpServers.serena]] as const)
+            assert.ok(!namesFormer(value) && JSON.stringify(value).includes('.alfred-tools'), `${what}: ${JSON.stringify(value)}`);
+        assert.deepStrictEqual(detect(ctxOf(w), 'root-repoint').found, []);
+    }
+    finally { w.clean(); }
+});
+
+test('root-repoint with only the Cursor copy stale: no mcp-replace, the repair tail rewrites the copy', () =>
+{
+    const w = world();
+    try
+    {
+        const { cursorFile } = movedSerena(w, { reg: false, list: false });
+        const [f] = detect(ctxOf(w), 'root-repoint').found as [Finding];
+        assert.ok(f.tailOnly);
+        const calls = w.writes().length;
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w), ['root-repoint'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(w.writes().length, calls, 'Claude Code is not touched');
+        assert.ok(!namesFormer(readJson(cursorFile).mcpServers.serena), l.text());
+        assert.deepStrictEqual(detect(ctxOf(w), 'root-repoint').found, []);
+    }
+    finally { w.clean(); }
+});
+
+test('root-repoint with only the list entry stale: no mcp-replace, the list entry is re-pointed', () =>
+{
+    const w = world();
+    try
+    {
+        const { listFile } = movedSerena(w, { reg: false, cursor: false });
+        const calls = w.writes().length;
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w), ['root-repoint'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(w.writes().length, calls, 'Claude Code is not touched');
+        assert.ok(!namesFormer(readJson(listFile).servers[0]), l.text());
+        assert.deepStrictEqual(detect(ctxOf(w), 'root-repoint').found, []);
+    }
+    finally { w.clean(); }
+});
+
+test('a Cursor copy changed by hand and naming the old root is still held and named', () =>
+{
+    const w = world();
+    try
+    {
+        const { cursorFile } = movedSerena(w, { reg: false, list: false });
+        const doc = readJson(cursorFile);
+        doc.mcpServers.serena.args.push('--mine');
+        writeJson(cursorFile, doc);
+        const l = logged();
+        applyFixes(ctxOf(w), ['root-repoint'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.ok(readJson(cursorFile).mcpServers.serena.args.includes('--mine'), 'the hand edit is kept');
+        assert.match(l.text(), /serena: Cursor's copy was changed by hand - left/);
+    }
+    finally { w.clean(); }
+});

@@ -229,13 +229,15 @@ export const keepOf = (catalog: Catalog, value: ServerEntry, row: string | null)
 
 // The managed names a cursor-write leaves alone (spec D1, D9): each the file lacks (a hand removal) or holds with another
 // value than its list, compared after kept.maskCredentials. Named in the plan; the names this plan drops are not held.
-export function heldCopies(file: string, before: Map<string, Managed>, after: Map<string, Managed>, context: { catalog?: Catalog | undefined }, out: Pick<PlanOut, 'notes'>): string[]
+export function heldCopies(file: string, before: Map<string, Managed>, after: Map<string, Managed>, context: { catalog?: Catalog | undefined; normalizeCopy?: ((entry: ServerEntry) => ServerEntry) | undefined }, out: Pick<PlanOut, 'notes'>): string[]
 {
     const catalog = context.catalog || catalogLib.load();
     const read = cursorMcp.readCursor(file);
     if (read.state !== 'ok') return [];
     const have = read.doc!.mcpServers;
     const hold: string[] = [];
+    // a path difference the caller is about to settle (root-repoint's moved root) is not a hand edit
+    const normalize = context.normalizeCopy || ((entry: ServerEntry) => entry);
     for (const [name, managed] of before)
     {
         if (!after.has(name)) continue;
@@ -244,7 +246,7 @@ export function heldCopies(file: string, before: Map<string, Managed>, after: Ma
             hold.push(name);
             out.notes.push(`${name} is on the list for Cursor but not in ${file} - left; run /alfred-tools:fix`);
         }
-        else if (!deepEqual(keepOf(catalog, have[name]!, managed.row), keepOf(catalog, managed.entry, managed.row)))
+        else if (!deepEqual(keepOf(catalog, normalize(have[name]!), managed.row), keepOf(catalog, normalize(managed.entry), managed.row)))
         {
             hold.push(name);
             out.notes.push(`${name}: Cursor's copy was changed by hand - left; run /alfred-tools:fix`);

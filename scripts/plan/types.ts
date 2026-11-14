@@ -354,6 +354,7 @@ export interface ListCtx extends Machine
     clientsOnly?: ClientsOnly[] | null | undefined;
     recordEntries?: Record<string, OwnEntry[]> | undefined;
     recordLive?: Live | undefined;
+    normalizeCopy?: ((entry: ServerEntry) => ServerEntry) | undefined;
 }
 // The plan's own context: makeCtx's, the changes it plans, and what planMcp records for the lists.
 export interface PlanCtx extends MadeCtx, ListCtx

@@ -105,6 +105,13 @@ export interface Finding
     route?: string | null | undefined; // stored - do not rename
     from?: number | null; // stored - do not rename
     fixes?: { secrets: boolean; helper: boolean; signIns: boolean; unignore: string[] }; // stored - do not rename
+    tailOnly?: boolean; // stored - do not rename
+}
+// A default root this plugin renamed: the folder under its former name and the one it is now (spec D3).
+export interface MovedRoot
+{
+    from: string;
+    to: string;
 }
 // A path project-relative-path writes out: where it is (an env key, the arg after a flag, or the helper), as written,
 // as it will be, and as it means today when the two differ.
