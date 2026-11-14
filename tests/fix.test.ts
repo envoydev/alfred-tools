@@ -23,7 +23,8 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import * as declines from '../scripts/core/declines.ts';
 import { add } from '../scripts/core/declines.ts';
-import { spawnSync, spawnSync as spawnx } from 'node:child_process';
+import { spawn, spawnSync, spawnSync as spawnx } from 'node:child_process';
+import { once } from 'node:events';
 import { fill, SHAPES } from '../scripts/hud/hud-statusline.ts';
 import * as rootsLib from '../scripts/roots/roots.ts';
 import { HELPER_VERSION as HV } from '../scripts/copied/mcp-headers.js';
@@ -2190,7 +2191,22 @@ test('a rename whose folder already moved reports it, never throws (a project th
     finally { w.clean(); }
 });
 
-test('a rename Windows refuses names the servers that keep files in the folder, and how to stop them first', () =>
+// Hold `root` so its rename fails, the way each host refuses it: on Windows a process whose working folder is inside it
+// (measured: EPERM, docs/sources.md A7 - a read-only folder does not stop a rename there); elsewhere a folder the rename
+// cannot write. -> the error code the rename meets and how to let go
+async function holdFolder(parent: string, root: string): Promise<{ code: string; release: () => Promise<void> }>
+{
+    if (process.platform !== 'win32')
+    {
+        fs.chmodSync(parent, 0o555);
+        return { code: 'EACCES', release: async () => { fs.chmodSync(parent, 0o755); } };
+    }
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { cwd: root, stdio: 'ignore' });
+    await once(child, 'spawn');
+    return { code: 'EPERM', release: async () => { const exited = once(child, 'exit'); child.kill(); await exited; } };
+}
+
+test('a rename Windows refuses names the servers that keep files in the folder, and how to stop them first', async () =>
 {
     const w = world();
     try
@@ -2198,18 +2214,17 @@ test('a rename Windows refuses names the servers that keep files in the folder, 
         const root = oldRoot(w);
         seed(w, 'mine', 'local', { type: 'stdio', command: 'node', args: [path.join(root, 'server.js')] });
         const [f] = moveOf(w) as [Finding];
-        // a folder the rename cannot touch stands in for one Windows keeps in use (measured: EPERM while a file is open)
-        fs.chmodSync(w.project, 0o555);
+        const hold = await holdFolder(w.project, root);
         try
         {
             const win = F.rootMoveFix(f, { ...ctxOf(w), platform: 'win32' });
-            assert.strictEqual(win.ok, false);
-            assert.match(win.detail, /not moved: a file in it is open \(EACCES\) - in \/mcp disable mine \(a server that keeps files in it\), close Claude Code and Cursor, start Claude Code again, run \/alfred-tools:update, then enable them in \/mcp/);
-            const posix = F.rootMoveFix(f, ctxOf(w));
-            assert.match(posix.detail, /not moved: EACCES/);
+            assert.strictEqual(win.ok, false, win.detail);
+            assert.match(win.detail, new RegExp(`not moved: a file in it is open \\(${hold.code}\\) - in /mcp disable mine \\(a server that keeps files in it\\), close Claude Code and Cursor, start Claude Code again, run /alfred-tools:update, then enable them in /mcp`));
+            const posix = F.rootMoveFix(f, { ...ctxOf(w), platform: 'linux' });
+            assert.match(posix.detail, new RegExp(`not moved: ${hold.code}`));
             assert.doesNotMatch(posix.detail, /a file in it is open/, 'the open-file advice is for Windows only');
         }
-        finally { fs.chmodSync(w.project, 0o755); }
+        finally { await hold.release(); }
     }
     finally { w.clean(); }
 });

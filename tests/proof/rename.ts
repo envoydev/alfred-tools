@@ -156,7 +156,8 @@ function run(listFile: string): void
             const lines = original.split('\n');
             if (item.line < 1 || item.line > lines.length) throw new Refused('no such line');
             const lineStart = lines.slice(0, item.line - 1).reduce((sum, text) => sum + text.length + 1, 0);
-            const position = moved(lineStart + item.column - 1, batches.get(file) ?? []);
+            // the edits are kept under the program's own name for the file ('/' on Windows too), never path.resolve's
+            const position = moved(lineStart + item.column - 1, batches.get(source.fileName) ?? []);
             const after = source.text.charAt(position + item.name.length);
             if (source.text.slice(position, position + item.name.length) !== item.name || /[\w$]/.test(after))
                 throw new Refused(`the position holds '${source.text.slice(position, position + item.name.length)}'`);

@@ -8,13 +8,14 @@ import * as golden from './golden.ts';
 
 // What changes from run to run beyond the golden's masks: a key a test generates (a hex run), the temp folder spelled
 // case-folded in a deny rule ([pP][rR]...), the update- folders update makes, and uv's cache, which is not ours.
-const TMP = [...new Set([os.tmpdir(), fs.realpathSync(os.tmpdir())])].map((p) => p.split(path.sep).join('/'));
+// The temp folder in every spelling a file holds it: '/', a Windows '\', and JSON's escaped '\\' - longest first.
+const TMP = [...new Set([os.tmpdir(), fs.realpathSync(os.tmpdir())].flatMap((p) => { const parts = p.split(/[\\/]/); return [parts.join('/'), parts.join('\\'), parts.join('\\\\')]; }))].sort((a, b) => b.length - a.length);
 const unfold = (t: string) => t.replace(/\[([a-z])([A-Z])\]/g, (m: string, lower: string, upper: string) => (lower.toUpperCase() === upper ? lower : m));
 export function steady(text: string)
 {
     let t = unfold(text);
     for (const tmp of TMP) t = t.split(tmp).join('<TMP>').split(tmp.toLowerCase()).join('<TMP>');
-    return t.replace(/<TMP>\/[^/"\s)]+/g, '<TMP>/<TEMP>').replace(/update-[A-Za-z0-9]{6}/g, 'update-XXXXXX').replace(/[0-9a-f]{16,}/g, '<HEX>');
+    return t.replace(/<TMP>(?:\/|\\{1,2})[^/\\"\s)]+/g, '<TMP>/<TEMP>').replace(/update-[A-Za-z0-9]{6}/g, 'update-XXXXXX').replace(/[0-9a-f]{16,}/g, '<HEX>');
 }
 
 export function keepWritten(root: string, label: string, env = process.env)

@@ -29,9 +29,6 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
-    # Windows reports but does not fail the run: 4 tests still fail there (fix, plan, proof-rename, proof-tools), each
-    # a Windows bug or a POSIX-only test not yet told apart. Drop this once they pass.
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     steps:
       - uses: actions/checkout@v7
         with:

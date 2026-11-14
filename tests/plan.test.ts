@@ -2762,8 +2762,8 @@ test('install stops while a moved folder waits for its registrations to be re-po
         const helper = path.join(project, '.preferred-tools', 'mcp-headers.js');
         const gh = reg('github', 'local', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${helper} ACME_GH Bearer` }, 'github', 'remote');
         const mine = reg('mine', 'local', { type: 'stdio', command: 'node', args: [path.join(project, '.preferred-tools', 'x.js')] });
-        assert.deepStrictEqual(plan(inv({ ...MAC, project }, { registrations: [gh] }), pickOne('serena'), opts(home)).errors, [REPOINT_FIRST]);
-        assert.deepStrictEqual(plan(inv({ ...MAC, project }, { registrations: [mine] }), pickOne('serena'), opts(home)).errors.filter((e) => e === REPOINT_FIRST), [], 'the user\'s own server does not stop it');
+        assert.deepStrictEqual(plan(inv({ ...MAC, os: process.platform, project }, { registrations: [gh] }), pickOne('serena'), opts(home)).errors, [REPOINT_FIRST]);
+        assert.deepStrictEqual(plan(inv({ ...MAC, os: process.platform, project }, { registrations: [mine] }), pickOne('serena'), opts(home)).errors.filter((e) => e === REPOINT_FIRST), [], 'the user\'s own server does not stop it');
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
