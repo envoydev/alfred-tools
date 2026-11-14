@@ -1,0 +1,200 @@
+// THE RENAME (spec 2026-11-14, D3-D5) end to end: the REAL claude CLI in throwaway homes and accounts (tests/harness.ts).
+// A machine set up by preferred-tools is made the way it would be - today's install, then written back to the old names:
+// the folders `.preferred-tools`, the old copied files (tests/matrix/fixtures, byte for byte), every registration
+// re-added through the CLI naming the old folders, the roots map in the old id's data folder. Then update runs as the
+// command does - check, apply all, RECHECK, check, apply all - and every written file is read back.
+//
+//   R1  a 0.4.0 machine: the 0.4.x record and no list, helper 4 and bridge 1, gitlab and memory at project scope,
+//       sentry's bridge at user scope - Claude Code only
+//   R2  a pre-rename 0.5.0 machine: lists with the old kept marker, Cursor's copies, serena's context 1
+import test from 'node:test';
+import assert from 'node:assert';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import * as cli from '../../scripts/core/claude-cli.ts';
+import * as account from '../../scripts/core/account.ts';
+import * as kept from '../../scripts/core/kept.ts';
+import * as roots from '../../scripts/roots/roots.ts';
+import * as catalogLib from '../../scripts/catalog/catalog.ts';
+import * as existing from '../../scripts/inventory/existing.ts';
+import { runUpdateCommand } from '../../scripts/update/command.ts';
+import * as fake from '../fake-mcp-http.ts';
+import type { MachineProbe } from '../../scripts/fix/types.ts';
+import type { McpsList } from '../../scripts/mcps-list/types.ts';
+import { Harness } from '../harness.ts';
+import { keepWritten } from '../proof/matrix-keep.ts';
+
+const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
+const T = { skip: skipAll, timeout: 900000 };
+const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-r-')));
+test.after(() => { keepWritten(base, 'rename'); fs.rmSync(base, { recursive: true, force: true }); });
+
+const catalog = catalogLib.load();
+const FIXTURES = path.join(import.meta.dirname, 'fixtures');
+const OLD = '.preferred-tools';
+const NEW = '.alfred-tools';
+const key = () => `mx-${crypto.randomBytes(12).toString('hex')}`;
+const readJson = (file: string) => JSON.parse(fs.readFileSync(file, 'utf8'));
+const exists = (file: string) => fs.existsSync(file);
+// a machine with no runtimes and no Cursor on it, and a registry that answers nothing: only the rename's offers move
+const noMachine = { which: () => null, run: () => ({ status: 1, stdout: '', stderr: '' }), nodeVersion: process.versions.node } as unknown as MachineProbe;
+const noRegistry = { versionsOf: async () => { throw new Error('no registry in this case'); } };
+
+// a world whose plugin data folder is named as Claude Code names it (`<plugin>-<marketplace>`, A1), every project server approved
+function world(name: string)
+{
+    const h = new Harness({ root: path.join(base, name) });
+    h.data = path.join(h.root, 'plugins-data', 'alfred-tools-envoydev');
+    fs.mkdirSync(h.data, { recursive: true });
+    fs.writeFileSync(path.join(h.account, 'settings.json'), JSON.stringify({ enableAllProjectMcpServers: true }));
+    return h;
+}
+
+const listOf = (root: string): McpsList | null => (exists(path.join(root, roots.FILES.list)) ? readJson(path.join(root, roots.FILES.list)) : null);
+const back = (text: string) => text.split(NEW).join(OLD).split(kept.MARKER).join(kept.OLD_MARKER);
+const rewrite = (file: string) => { if (exists(file)) fs.writeFileSync(file, back(fs.readFileSync(file, 'utf8'))); };
+
+// Today's install written back to what preferred-tools left: `record` makes it 0.4.0 (the record, no list, no context)
+function age(h: Harness, dir: string, { record }: { record: boolean })
+{
+    const rootsOf = [path.join(dir, NEW), path.join(h.home, NEW)].filter(exists);
+    const servers = rootsOf.flatMap((root) => (listOf(root)?.servers || []).map((s) => ({ ...s, root })));
+    for (const s of servers)
+    {
+        const entry = account.readRegistration(s.name, s.scope, dir, h.env);
+        assert.ok(entry, `${s.name} (${s.scope}) is registered`);
+        assert.strictEqual(h.claude(dir, ['mcp', 'remove', s.name, '-s', s.scope]).status, 0);
+        assert.strictEqual(h.claude(dir, ['mcp', 'add-json', s.name, back(JSON.stringify(entry)), '-s', s.scope]).status, 0, `${s.name} re-added`);
+    }
+    for (const file of [path.join(dir, '.cursor', 'mcp.json'), path.join(h.home, '.cursor', 'mcp.json')]) rewrite(file);
+    for (const root of rootsOf)
+    {
+        const list = path.join(root, roots.FILES.list);
+        if (record)
+        {
+            const doc = readJson(list) as McpsList;
+            fs.writeFileSync(path.join(root, roots.FILES.record), back(JSON.stringify({ version: 1, servers: doc.servers.map((s) => ({ name: s.name, scope: s.scope, fingerprint: existing.fingerprintOf(s.entry, catalog), choice: 'manage' })) }, null, 2)));
+            fs.rmSync(list);
+            fs.rmSync(path.join(root, roots.FILES.serenaContext), { force: true });
+        }
+        else
+        {
+            rewrite(list);
+            if (exists(path.join(root, roots.FILES.serenaContext))) fs.copyFileSync(path.join(FIXTURES, '0.5.0', 'serena-context.yml'), path.join(root, roots.FILES.serenaContext));
+        }
+        for (const file of [roots.FILES.helper, roots.FILES.bridge]) if (exists(path.join(root, file))) fs.copyFileSync(path.join(FIXTURES, '0.4.0', file), path.join(root, file));
+        fs.renameSync(root, path.join(path.dirname(root), OLD));
+    }
+    // the roots map, where the plugin kept it under its former id
+    const former = path.join(path.dirname(h.data), 'preferred-tools-envoydev');
+    fs.mkdirSync(former, { recursive: true });
+    fs.writeFileSync(path.join(former, roots.FILES.map), back(fs.readFileSync(path.join(h.data, roots.FILES.map), 'utf8')));
+    fs.rmSync(path.join(h.data, roots.FILES.map));
+    return servers;
+}
+
+// update as the command runs it: check, apply all; on RECHECK, check and apply all once more
+async function updateAll(h: Harness, dir: string)
+{
+    const go = async (argv: string[]) =>
+    {
+        const lines: string[] = [];
+        const tmp = argv.includes('--apply') ? ['--tmp', fs.mkdtempSync(path.join(h.root, 'update-'))] : [];
+        const code = await runUpdateCommand([...argv, ...tmp, '--no-refresh', '--project', dir, '--data', h.data], { env: h.env, out: (s) => lines.push(s), machine: noMachine, registry: noRegistry, now: Date.now() });
+        return { code, text: lines.join('\n') };
+    };
+    const first = await go(['--check', '--json']);
+    const firstIds = (JSON.parse(first.text).offers as { id: string }[]).map((o) => o.id);
+    assert.ok(firstIds.some((id) => id.startsWith('upgrade:root-move:')), first.text);
+    assert.ok(firstIds.every((id) => /^upgrade:(root-move|root-repoint|retired-plugin):/.test(id)), `only the move is offered first: ${firstIds.join(', ')}`);
+    const applied = await go(['--apply', 'all']);
+    assert.strictEqual(applied.code, 0, applied.text);
+    assert.match(applied.text, /^RECHECK - the folders moved; checking again$/m);
+    const second = await go(['--check', '--json']);
+    const secondIds = (JSON.parse(second.text).offers as { id: string }[]).map((o) => o.id);
+    assert.ok(!secondIds.some((id) => /root-move|root-repoint/.test(id)), secondIds.join(', '));
+    const again = secondIds.length ? await go(['--apply', 'all']) : { code: 0, text: '' };
+    assert.strictEqual(again.code, 0, again.text);
+    assert.doesNotMatch(again.text, /RECHECK/);
+    return { first, applied, second, again };
+}
+
+// no file or registration the update left names the old folder
+function noOld(h: Harness, dir: string, label: string)
+{
+    const files = [path.join(dir, '.mcp.json'), account.accountFile(h.env), path.join(dir, '.cursor', 'mcp.json'), path.join(h.home, '.cursor', 'mcp.json'), path.join(h.data, roots.FILES.map), path.join(dir, NEW, roots.FILES.list), path.join(h.home, NEW, roots.FILES.list)];
+    for (const file of files.filter(exists)) assert.ok(!fs.readFileSync(file, 'utf8').includes(OLD), `${label}: ${file} still names ${OLD}`);
+    for (const at of [dir, h.home]) assert.ok(!exists(path.join(at, OLD)), `${label}: ${path.join(at, OLD)} is gone`);
+}
+
+const firstLine = (file: string) => fs.readFileSync(file, 'utf8').split('\n')[0];
+
+test('R1 - a 0.4.0 machine: one update moves both folders, imports the record into a list, rewrites the copied files and re-points every registration', T, async () =>
+{
+    const h = world('r1');
+    const dir = h.project('p');
+    const r = h.run(dir, { picks: { gitlab: { scope: 'project', token: true }, memory: { scope: 'project' }, sentry: { route: 'bridge', scope: 'user', token: true } } });
+    assert.deepStrictEqual(r.plan.errors, [], r.rendered);
+    assert.strictEqual(r.report.failed, null, `${r.rendered}\n${r.text}`);
+    const gitlabKey = key();
+    fake.fill(path.join(dir, NEW, roots.FILES.secrets), 'GITLAB_TOKEN', gitlabKey);
+    const servers = age(h, dir, { record: true });
+    assert.deepStrictEqual(servers.map((s) => `${s.name}~${s.scope}`).sort(), ['gitlab~project', 'memory~project', 'sentry~user']);
+    assert.ok(readJson(path.join(dir, '.mcp.json')).mcpServers.gitlab.headersHelper.includes(OLD), 'the 0.4.0 registration names the old folder');
+
+    await updateAll(h, dir);
+    noOld(h, dir, 'R1');
+    for (const at of [dir, h.home])
+    {
+        const root = path.join(at, NEW);
+        assert.ok(listOf(root), `${root}: the record came in as a list`);
+        assert.ok(!exists(path.join(root, roots.FILES.record)), `${root}: the record is gone`);
+        assert.strictEqual(firstLine(path.join(root, roots.FILES.helper)), '// alfred-tools mcp-headers 5');
+    }
+    assert.strictEqual(firstLine(path.join(h.home, NEW, roots.FILES.bridge)), '// alfred-tools mcp-bridge 2');
+    const project = readJson(path.join(dir, '.mcp.json')).mcpServers;
+    assert.ok(project.gitlab.headersHelper.includes(path.join(dir, NEW, roots.FILES.helper)), project.gitlab.headersHelper);
+    assert.ok(JSON.stringify(project.memory).includes(path.join(dir, NEW, 'memory')), JSON.stringify(project.memory));
+    const sentry = account.readRegistration('sentry', 'user', dir, h.env)!;
+    assert.strictEqual(sentry.args![0], path.join(h.home, NEW, roots.FILES.bridge));
+    const map = readJson(path.join(h.data, roots.FILES.map));
+    assert.strictEqual(map.global, path.join(h.home, NEW));
+    assert.strictEqual(map.projects[roots.mapKey(dir)], path.join(dir, NEW));
+    // the moved helper reads the moved key file: the key reaches the header (compared, never printed)
+    const helper = spawnSync(process.execPath, [path.join(dir, NEW, roots.FILES.helper), 'GITLAB_TOKEN', 'Bearer'], { cwd: dir, env: { ...h.env, CLAUDE_CODE_MCP_SERVER_NAME: 'gitlab' }, encoding: 'utf8' });
+    assert.strictEqual(helper.status, 0, 'the helper runs');
+    assert.ok(helper.stdout.includes(`Bearer ${gitlabKey}`), 'the moved helper finds the key in the moved .mcps-secrets');
+    assert.ok(h.realUntouched().ok, 'the real home and account are untouched');
+});
+
+test('R2 - a pre-rename 0.5.0 machine: lists, Cursor\'s copies, the old kept marker and serena\'s context 1, moved by one update', T, async () =>
+{
+    const h = world('r2');
+    const dir = h.project('p');
+    // the stdio keyed route holds its key in the registration, and its list entry the kept marker in its place
+    fs.mkdirSync(path.join(dir, NEW), { recursive: true });
+    fake.fill(path.join(dir, NEW, roots.FILES.secrets), 'CONTEXT7_API_KEY', key());
+    const r = h.run(dir, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'project' }, memory: { scope: 'project' }, context7: { route: 'local', scope: 'local', token: true }, gitlab: { scope: 'user', token: true } } });
+    assert.deepStrictEqual(r.plan.errors, [], r.rendered);
+    assert.strictEqual(r.report.failed, null, `${r.rendered}\n${r.text}`);
+    const servers = age(h, dir, { record: false });
+    const oldList = fs.readFileSync(path.join(dir, OLD, roots.FILES.list), 'utf8') + (exists(path.join(h.home, OLD, roots.FILES.list)) ? fs.readFileSync(path.join(h.home, OLD, roots.FILES.list), 'utf8') : '');
+    assert.ok(oldList.includes(kept.OLD_MARKER), 'the pre-rename list holds the old kept marker');
+
+    await updateAll(h, dir);
+    noOld(h, dir, 'R2');
+    const lists = [listOf(path.join(dir, NEW)), listOf(path.join(h.home, NEW))].filter(Boolean) as McpsList[];
+    assert.deepStrictEqual(lists.flatMap((l) => l.servers.map((s) => `${s.name}~${s.scope}`)).sort(), servers.map((s) => `${s.name}~${s.scope}`).sort(), 'every server still listed');
+    const listText = lists.map((l) => JSON.stringify(l)).join('\n');
+    assert.ok(!listText.includes(kept.OLD_MARKER), 'no old marker left');
+    assert.ok(listText.includes(kept.MARKER), 'the kept marker reads in its new name');
+    assert.strictEqual(firstLine(path.join(dir, NEW, roots.FILES.serenaContext)), '# alfred-tools serena-context 2');
+    for (const root of [path.join(dir, NEW), path.join(h.home, NEW)].filter((root) => exists(path.join(root, roots.FILES.helper))))
+        assert.strictEqual(firstLine(path.join(root, roots.FILES.helper)), '// alfred-tools mcp-headers 5');
+    const cursorProject = readJson(path.join(dir, '.cursor', 'mcp.json')).mcpServers;
+    assert.ok(JSON.stringify(cursorProject.serena).includes(path.join(dir, NEW)), JSON.stringify(cursorProject.serena));
+    assert.ok(h.realUntouched().ok, 'the real home and account are untouched');
+});
