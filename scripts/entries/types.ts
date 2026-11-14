@@ -1,0 +1,108 @@
+// The shapes entries/ builds and reads: a logical root, the machine a registration is built for, an installed
+// registration and the answers read back from it, the parts of a helper or bridge launch, and a fetch step.
+import type { Env, ServerEntry } from '../core/types.ts';
+import type { Catalog } from '../catalog/types.ts';
+
+// A root before it is written: under the project, under the account home, or an absolute path.
+export type Root = { kind: 'project'; rel: string } | { kind: 'home'; rel: string } | { kind: 'abs'; path: string };
+
+// The two scope families' root folders, once the plan or the questions resolved them.
+export interface Roots
+{
+    project?: string | null | undefined;
+    global?: string | null | undefined;
+    globalNamed?: boolean | undefined;
+    projectNamed?: boolean | undefined;
+}
+
+// The machine a registration is built for. Nothing in entries/ reads a machine itself.
+export interface Machine
+{
+    platform: string;
+    project: string;
+    home: string;
+    arch?: string | undefined;
+    env?: Env | undefined;
+    roots?: Roots | null | undefined;
+    machine?: { docker?: boolean | undefined } | null | undefined;
+    exists?: ((file: string) => boolean) | undefined;
+    isDir?: ((file: string) => boolean) | undefined;
+    catalog?: Catalog | undefined;
+}
+
+// An installed registration, as the inventory reads it.
+export interface Registration
+{
+    name: string;
+    scope: string;
+    route?: string | null | undefined;
+    entry: ServerEntry;
+}
+
+// The installed registration's own answers, read back from its entry.
+export interface Current
+{
+    name: string;
+    scope: string;
+    route: string | null | undefined;
+    entry: ServerEntry;
+    rootStr: string | null;
+    executablePath: string | undefined;
+    token: boolean;
+    keyName: string | null;
+    urlNames?: Record<string, string>;
+    host: string | null;
+}
+
+// The answers a fresh entry is built from.
+export interface BuildAnswers
+{
+    scope: string;
+    rootStr?: string | null | undefined;
+    executablePath?: string | null | undefined;
+    token?: boolean | undefined;
+    keyName?: string | null | undefined;
+    params?: Record<string, string> | undefined;
+    urlNames?: Record<string, string> | undefined;
+}
+
+// A `headersHelper` command's helper file and the arguments after it.
+export interface HelperParts
+{
+    path: string;
+    args: string[];
+}
+
+// A bridge launch: `node <path>/mcp-bridge.js <template> <KEY> <SCHEME> <pkg> [<root>]`.
+export interface BridgeParts
+{
+    path: string;
+    template: string;
+    keyName: string | null;
+    scheme: string | null;
+    pkg: string | null;
+    globalRoot: string | null;
+}
+
+// The shared sign-in form's URL, its folder and the mcp-remote pin.
+export interface SignInParts
+{
+    url: string;
+    dir: string;
+    pin: string;
+}
+
+// A plan step that fetches what a written registration launches into the runtime's cache.
+export interface FetchStep
+{
+    op: 'fetch';
+    name: string;
+    row: string | null | undefined;
+    what: string;
+    argv: string[];
+    env: Record<string, string>;
+    why: string;
+}
+
+// A row's default data folder: a root (and alfred-code's, when on disk), or a question to put.
+export type DefaultRoot = { root: Root; alfred?: Root; needsInput?: undefined } | { needsInput: string; root?: undefined; alfred?: undefined };

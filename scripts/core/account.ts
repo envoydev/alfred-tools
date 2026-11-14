@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 10
 // THE ACCOUNT DIR - one definition, used by every script. The dir is CLAUDE_CONFIG_DIR, else ~/.claude. The account
 // file is the one the CLI was MEASURED writing (Claude Code 2.1.311, docs/sources.md): $CLAUDE_CONFIG_DIR/.claude.json,
 // else ~/.claude.json. Its `projects` map is keyed by the project's REAL path on macOS and Linux (macOS /tmp is
@@ -8,12 +7,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parseJson } from './json-file.ts';
+import type { Account, AccountFile, AccountProject, Env, ReadState, ServerEntry } from './types.ts';
 
-export const homeDir = (env = process.env) => env.HOME || env.USERPROFILE || os.homedir();
-export const configDir = (env = process.env) => (env.CLAUDE_CONFIG_DIR ? path.resolve(env.CLAUDE_CONFIG_DIR) : path.join(homeDir(env), '.claude'));
-export const accountFile = (env = process.env) => (env.CLAUDE_CONFIG_DIR ? path.join(path.resolve(env.CLAUDE_CONFIG_DIR), '.claude.json') : path.join(homeDir(env), '.claude.json'));
+export const homeDir = (env: Env = process.env): string => env.HOME || env.USERPROFILE || os.homedir();
+export const configDir = (env: Env = process.env): string => (env.CLAUDE_CONFIG_DIR ? path.resolve(env.CLAUDE_CONFIG_DIR) : path.join(homeDir(env), '.claude'));
+export const accountFile = (env: Env = process.env): string => (env.CLAUDE_CONFIG_DIR ? path.join(path.resolve(env.CLAUDE_CONFIG_DIR), '.claude.json') : path.join(homeDir(env), '.claude.json'));
 
-export function projectKey(dir)
+export function projectKey(dir: string): string
 {
     try { return fs.realpathSync.native(dir); }
     catch { return path.resolve(dir); }
@@ -23,7 +23,7 @@ export function projectKey(dir)
 // one, else the folder itself (https://code.claude.com/docs/en/permissions, 'Project allow rules and workspace trust';
 // the local key MEASURED, M4). `git rev-parse` runs only when the folder holds no `.git` of its own; no git, or not a
 // repository: the folder.
-export function localRoot(project)
+export function localRoot(project: string): string
 {
     if (fs.existsSync(path.join(project, '.git')) || !fs.existsSync(project)) return project;
     const r = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: project, encoding: 'utf8', windowsHide: true });
@@ -31,7 +31,7 @@ export function localRoot(project)
 }
 
 // `~` and `~/x` to the home directory (the script expands it; the server never sees a `~`).
-export function expandHome(p, env = process.env)
+export function expandHome(p: string, env: Env = process.env): string
 {
     if (p === '~') return homeDir(env);
     if (/^~[\\/]/.test(p)) return path.join(homeDir(env), p.slice(2));
@@ -39,31 +39,31 @@ export function expandHome(p, env = process.env)
 }
 
 // A JSON file as a state, never a throw: ok | missing | empty | malformed (| unreadable).
-export function readState(file)
+export function readState<Doc = Record<string, unknown>>(file: string): ReadState<Doc>
 {
-    let text;
+    let text: string;
     try { text = fs.readFileSync(file, 'utf8'); }
-    catch (err) { return { file, state: err.code === 'ENOENT' ? 'missing' : 'unreadable', doc: null, error: err.code === 'ENOENT' ? null : err.message }; }
+    catch (caught) { const err = caught as NodeJS.ErrnoException; return { file, state: err.code === 'ENOENT' ? 'missing' : 'unreadable', doc: null, error: err.code === 'ENOENT' ? null : err.message }; }
     if (!text.trim()) return { file, state: 'empty', doc: null, error: null };
     try
     {
         const doc = parseJson(text);
         if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) return { file, state: 'malformed', doc: null, error: 'not a JSON object' };
-        return { file, state: 'ok', doc, error: null };
+        return { file, state: 'ok', doc: doc as Doc, error: null };
     }
-    catch (err) { return { file, state: 'malformed', doc: null, error: err.message }; }
+    catch (err) { return { file, state: 'malformed', doc: null, error: (err as Error).message }; }
 }
 
 // This project's `projects` entry. Claude Code keys it by the folder it started in, MEASURED (docs/sources.md): the
 // real path on macOS (the disk's case, whatever was typed) and Linux; on Windows the cwd as typed, `\` written as `/`,
 // the typed case kept. So on win32 the key typed as this cwd wins, then the real path's, then either in any case (NTFS
 // opens both); elsewhere a key matches exactly - macOS can be a case-sensitive volume.
-export function projectEntry(projects, project, platform = process.platform)
+export function projectEntry(projects: Record<string, AccountProject>, project: string, platform: string = process.platform): AccountProject | undefined
 {
     if (platform !== 'win32') return projects[projectKey(project)] || projects[path.resolve(project)];
-    let real = null;
+    let real: string | null = null;
     try { real = fs.realpathSync.native(project); } catch { /* a folder not on disk has no real path */ }
-    const want = [path.win32.resolve(project), real].filter(Boolean).map((p) => p.replace(/\\/g, '/'));
+    const want = [path.win32.resolve(project), real].filter((p): p is string => Boolean(p)).map((p) => p.replace(/\\/g, '/'));
     const key = want.find((w) => Object.hasOwn(projects, w))
         ?? Object.keys(projects).find((k) => want.some((w) => w.toLowerCase() === k.toLowerCase()));
     return key === undefined ? undefined : projects[key];
@@ -72,22 +72,22 @@ export function projectEntry(projects, project, platform = process.platform)
 // The account file, narrowed to what the inventory needs: user servers, and this project's local servers - keyed on the
 // git root when the project is a folder inside a repository, as the CLI keys them from a subfolder (MEASURED,
 // docs/sources.md '.mcp.json in parent folders', M4).
-export function readAccount(env, project, platform = process.platform)
+export function readAccount(env: Env, project: string, platform: string = process.platform): Account
 {
     const file = accountFile(env);
-    const s = readState(file);
-    const doc = s.doc || {};
+    const s = readState<AccountFile>(file);
+    const doc: AccountFile = s.doc || {};
     const projects = doc.projects && typeof doc.projects === 'object' ? doc.projects : {};
     const mine = projectEntry(projects, localRoot(project), platform) || {};
     return { ...s, user: doc.mcpServers || {}, local: mine.mcpServers || {}, projects };
 }
 
 // What the CLI wrote for one server at one scope, read from the file it wrote it to.
-export function readRegistration(name, scope, project, env)
+export function readRegistration(name: string, scope: string, project: string, env: Env): ServerEntry | undefined
 {
     if (scope === 'project')
     {
-        const s = readState(path.join(project, '.mcp.json'));
+        const s = readState<AccountProject>(path.join(project, '.mcp.json'));
         return s.doc && s.doc.mcpServers ? s.doc.mcpServers[name] : undefined;
     }
     const a = readAccount(env, project);

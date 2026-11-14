@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 10
 // KEPT - no live credential in a file a command line names.
 //
 // alfred-code's secret guard (v3.2.1 stack/hooks/guard-secret-value.js) refuses a script run that names a JSON file
@@ -11,55 +10,62 @@
 // else: a known token shape, a PEM private key, a connection string's `Password=` and a URL's userinfo password. Never
 // masked: a value of nothing but ${NAME} / ${NAME:-default} placeholders after at most one scheme word (`Bearer
 // ${CONTEXT7_API_KEY}`), and a catalog row's location keys, which configure reads.
+import type { CatalogRow } from '../catalog/types.ts';
+import type { ServerEntry } from './types.ts';
+
 export const MARKER = '${PREFERRED_TOOLS_KEPT}';
+
+// The catalog row a registration matched, for its location keys; null for the user's own.
+type RowOf = CatalogRow | null | undefined;
+type Path = (string | number)[];
 
 // the guard's tests (v3.2.1 :63-67, :143-156), copied so this file masks at least what it blocks
 const SECRET_KEY_RE = /(TOKEN|SECRET|KEY|PASSWORD|PASSWD|DSN|CREDENTIAL|AUTH)$/i;
 const FILE_KEY_EXTRA = /(?:^|[._-])pass(?:phrase)?$|(?:^|[._-])(?:client|private)[-_]?key[-_]?data$|^requirepass$/i;
 const CAMEL_PASS = /[a-z0-9](?:Pass(?:phrase)?|PWD|Pwd)$/;
-export const credKey = (k) => SECRET_KEY_RE.test(k) || FILE_KEY_EXTRA.test(k) || CAMEL_PASS.test(k);
+export const credKey = (k: string): boolean => SECRET_KEY_RE.test(k) || FILE_KEY_EXTRA.test(k) || CAMEL_PASS.test(k);
 const SHAPE = /\b(?:sntryu_[0-9a-f]{16,}|ctx7sk-[0-9a-f-]{16,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/g;
 const PEM = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----|$)/g;
 const PAIR = /((?:^|[;,])\s*(?:password|pwd)\s*=\s*)([^;,]*)/gi;
 const USERINFO = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]*:)([^@\s/]+)(?=@)/gi;
 const PLACEHOLDERS = /^\s*(?:[A-Za-z][\w-]*\s+)?(?:\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\})+\s*$/;
 
-const live = (s) => typeof s === 'string' && s.trim() !== '' && !PLACEHOLDERS.test(s);
-const maskParts = (s) => s.replace(PEM, MARKER).replace(SHAPE, MARKER)
-    .replace(PAIR, (all, head, value) => (live(value) ? head + MARKER : all))
-    .replace(USERINFO, (all, head, value) => (live(value) ? head + MARKER : all));
-const keepString = (s, whole) => (!live(s) ? s : whole ? MARKER : maskParts(s));
+const live = (s: unknown): boolean => typeof s === 'string' && s.trim() !== '' && !PLACEHOLDERS.test(s);
+const maskParts = (s: string): string => s.replace(PEM, MARKER).replace(SHAPE, MARKER)
+    .replace(PAIR, (all: string, head: string, value: string) => (live(value) ? head + MARKER : all))
+    .replace(USERINFO, (all: string, head: string, value: string) => (live(value) ? head + MARKER : all));
+const keepString = (s: string, whole: boolean): string => (!live(s) ? s : whole ? MARKER : maskParts(s));
 // `--api-key` -> 'api-key'; a bare value or a lone dash -> null
-const flagName = (a) => (typeof a === 'string' && /^--?[A-Za-z]/.test(a) ? a.replace(/^--?/, '').split('=')[0] : null);
+const flagName = (a: unknown): string | null => (typeof a === 'string' && /^--?[A-Za-z]/.test(a) ? a.replace(/^--?/, '').split('=')[0]! : null);
 
-function locationKeys(row)
+function locationKeys(row: RowOf): { env: Set<string>; arg: Set<string> }
 {
     const derived = (row && row.locations && row.locations.derived) || [];
     return { env: new Set(derived.filter((d) => d.in === 'env').map((d) => d.key)), arg: new Set(derived.filter((d) => d.in === 'arg').map((d) => d.key)) };
 }
 
 // an argument list: a value after a credential flag is masked whole, one after a location flag never
-function keepArgs(args, whole, locArgs = new Set())
+function keepArgs(args: unknown[], whole: boolean, locArgs: Set<string> = new Set()): unknown[]
 {
     return args.map((a, i) =>
     {
         if (typeof a !== 'string') return keepNode(a, '', whole);
         const prev = i > 0 ? args[i - 1] : null;
-        if (locArgs.has(prev)) return a;
+        if (locArgs.has(prev as string)) return a;
         const eq = a.indexOf('=');
         if (flagName(a) && eq > 0)
         {
             const flag = a.slice(0, eq);
             if (locArgs.has(flag)) return a;
             const value = a.slice(eq + 1);
-            return `${flag}=${keepString(value, whole || credKey(flagName(flag)))}`;
+            return `${flag}=${keepString(value, whole || credKey(flagName(flag)!))}`;
         }
         if (flagName(a)) return a;
-        return keepString(a, whole || Boolean(flagName(prev) && !prev.includes('=') && credKey(flagName(prev))));
+        return keepString(a, whole || Boolean(flagName(prev) && !(prev as string).includes('=') && credKey(flagName(prev)!)));
     });
 }
 
-function keepNode(node, key, whole)
+function keepNode(node: unknown, key: string, whole: boolean): unknown
 {
     if (typeof node === 'string') return keepString(node, whole || credKey(key));
     if (Array.isArray(node)) return keepArgs(node, whole || credKey(key));
@@ -70,33 +76,33 @@ function keepNode(node, key, whole)
 
 // keep(entry, row) -> a copy with every credential value as MARKER. `row` is the catalog row the registration matched,
 // for its location keys; null for the user's own.
-export function keep(entry, row)
+export function keep<Entry>(entry: Entry, row?: RowOf): Entry
 {
     if (!entry || typeof entry !== 'object') return entry;
     const loc = locationKeys(row);
-    const out = {};
+    const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(entry))
     {
-        if (k === 'args' && Array.isArray(v)) out.args = keepArgs(v, false, loc.arg);
-        else if (k === 'headers' && v && typeof v === 'object' && !Array.isArray(v)) out.headers = Object.fromEntries(Object.entries(v).map(([h, x]) => [h, keepNode(x, h, true)]));
-        else if (k === 'env' && v && typeof v === 'object' && !Array.isArray(v)) out.env = Object.fromEntries(Object.entries(v).map(([e, x]) => [e, loc.env.has(e) ? x : keepNode(x, e, false)]));
+        if (k === 'args' && Array.isArray(v)) out['args'] = keepArgs(v, false, loc.arg);
+        else if (k === 'headers' && v && typeof v === 'object' && !Array.isArray(v)) out['headers'] = Object.fromEntries(Object.entries(v).map(([h, x]) => [h, keepNode(x, h, true)]));
+        else if (k === 'env' && v && typeof v === 'object' && !Array.isArray(v)) out['env'] = Object.fromEntries(Object.entries(v).map(([e, x]) => [e, loc.env.has(e) ? x : keepNode(x, e, false)]));
         else out[k] = keepNode(v, k, false);
     }
-    return out;
+    return out as Entry;
 }
 
-const at = (node, path) => path.reduce((o, k) => (o == null ? undefined : o[k]), node);
+const at = (node: unknown, path: Path): unknown => path.reduce<unknown>((o, k) => (o == null ? undefined : (o as Record<string | number, unknown>)[k]), node);
 
 // restore(entry, source, row) -> { entry } | { error }. Each string holding MARKER takes the string at the same place in
 // `source` (the registration as it is now) whose kept text equals it; an arg takes the first unused source arg whose
 // kept text equals it, in order, so an arg a splice moved still finds its value.
-export function restore(entry, source, row)
+export function restore<Entry>(entry: Entry, source: ServerEntry | null | undefined, row?: RowOf): { entry: Entry; error?: undefined } | { error: string; entry?: undefined }
 {
-    const kept = keep(source || {}, row);
-    const sourceArgs = Array.isArray(source && source.args) ? source.args : [];
-    const used = new Set();
-    let error = null;
-    const walk = (node, path) =>
+    const kept: { args?: unknown[] | undefined } = keep(source || {}, row);
+    const sourceArgs = Array.isArray(source && source.args) ? source!.args! : [];
+    const used = new Set<number>();
+    let error: string | null = null;
+    const walk = (node: unknown, path: Path): unknown =>
     {
         if (typeof node === 'string')
         {
@@ -115,27 +121,27 @@ export function restore(entry, source, row)
         if (!node || typeof node !== 'object') return node;
         return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, walk(v, [...path, k])]));
     };
-    const out = walk(entry, []);
+    const out = walk(entry, []) as Entry;
     return error ? { error } : { entry: out };
 }
 
-export const holdsKept = (node) => JSON.stringify(node === undefined ? null : node).includes(MARKER);
+export const holdsKept = (node: unknown): boolean => JSON.stringify(node === undefined ? null : node).includes(MARKER);
 
 // credentialPaths(entry, row) -> the dotted path of every credential value the entry holds, live or already MARKER
 // ('headers.X-API-Key', 'args.3', 'url'), for the check that a committed file never gets one.
-export function credentialPaths(entry, row)
+export function credentialPaths(entry: unknown, row?: RowOf): string[]
 {
     const masked = keep(entry, row);
-    const out = [];
-    const walk = (node, kept, path) =>
+    const out: string[] = [];
+    const walk = (node: unknown, kept: unknown, path: string[]): void =>
     {
         if (typeof node === 'string') { if (node !== kept || node.includes(MARKER)) out.push(path.join('.')); return; }
-        if (node && typeof node === 'object') for (const k of Object.keys(node)) walk(node[k], kept == null ? undefined : kept[k], [...path, k]);
+        if (node && typeof node === 'object') for (const k of Object.keys(node)) walk((node as Record<string, unknown>)[k], kept == null ? undefined : (kept as Record<string, unknown>)[k], [...path, k]);
     };
     walk(entry, masked, []);
     return out;
 }
 
 // A value shaped like a known key (SHAPE) or a PEM block - tested in this process, never returned.
-export const looksLikeKey = (v) => new RegExp(SHAPE.source).test(String(v)) || new RegExp(PEM.source).test(String(v));
+export const looksLikeKey = (v: unknown): boolean => new RegExp(SHAPE.source).test(String(v)) || new RegExp(PEM.source).test(String(v));
 

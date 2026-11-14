@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 10
 // Prints a fresh temp folder in the form this machine's Node resolves (mktemp -d gives a POSIX path that a native Windows
 // Node cannot open). The walk keeps its inventory, answers and plan files in it.
 //
@@ -14,10 +13,10 @@ import path from 'node:path';
 
 export const PREFIX = 'preferred-tools-';
 const MAX_AGE_MS = 24 * 3600 * 1000;
-const tempRoot = () => fs.realpathSync(os.tmpdir());
+const tempRoot = (): string => fs.realpathSync(os.tmpdir());
 
 // true for a folder this plugin made: its real parent is the real temp folder and its name starts preferred-tools-
-export function ours(dir)
+export function ours(dir: string): boolean
 {
     try
     {
@@ -28,7 +27,7 @@ export function ours(dir)
 }
 
 // -> true when removed. A folder that is not ours is left, with a line saying so.
-export function release(dir, log = console.log)
+export function release(dir: string | null | undefined, log: (line: string) => void = console.log): boolean
 {
     if (!dir) return false;
     if (!ours(dir)) { log(`${dir} left as it is: not a folder preferred-tools made in the temp folder`); return false; }
@@ -37,7 +36,7 @@ export function release(dir, log = console.log)
 }
 
 // this plugin's folders older than 24 hours; a folder another user owns, or one that is not a folder, is skipped
-export function sweep(now = Date.now())
+export function sweep(now: number = Date.now()): void
 {
     const root = tempRoot();
     for (const name of fs.readdirSync(root))
@@ -53,7 +52,7 @@ export function sweep(now = Date.now())
     }
 }
 
-export function make()
+export function make(): string
 {
     try { sweep(); } catch { /* a temp folder that cannot be listed still makes a new one */ }
     return fs.mkdtempSync(path.join(tempRoot(), PREFIX));

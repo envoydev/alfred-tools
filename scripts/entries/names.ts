@@ -1,11 +1,13 @@
-// @ts-nocheck - typed in Task 10
 // Names: whether a registration name is usable at its scope.
 import { bridgeParts } from './entry.ts';
+import type { ServerEntry } from '../core/types.ts';
+import type { Catalog } from '../catalog/types.ts';
+import type { FetchStep } from './types.ts';
 
 // ---- names ----------------------------------------------------------------------------------------------------------
 
 // null when the name is usable, else the reason. `taken` = the registrations at the target scope, as inventory reads them.
-export function nameProblem(name, { catalog, taken = [], self = null })
+export function nameProblem(name: string, { catalog, taken = [], self = null }: { catalog: Catalog; taken?: { name: string; scope: string }[]; self?: { name: string; scope: string } | null }): string | null
 {
     if (!new RegExp(catalog.rules.nameRe).test(name)) return `'${name}' must match ${catalog.rules.nameRe}`;
     if (catalog.reserved.has(name)) return `'${name}' is a name alfred-code once registered and may retire`;
@@ -20,7 +22,7 @@ export function nameProblem(name, { catalog, taken = [], self = null })
 // exactly what it launches - same pin, same cut-off, from its env - into the runtime's cache. -> a plan step, or null for a
 // launch with nothing to fetch (a hosted URL, a binary) or, given the entry it replaces, one that fetches the same thing.
 const UVX_VALUE = new Set(['--python', '-p', '--exclude-newer', '--from', '--with', '--with-requirements', '--with-editable', '--index', '--index-url', '--extra-index-url']);
-export function fetchStep(name, entry, rowId, old)
+export function fetchStep(name: string, entry: ServerEntry | null | undefined, rowId: string | null | undefined, old?: ServerEntry | null): FetchStep | null
 {
     const step = fetchOf(name, entry, rowId);
     const was = old ? fetchOf(name, old, rowId) : null;
@@ -28,7 +30,7 @@ export function fetchStep(name, entry, rowId, old)
     return step;
 }
 
-function fetchOf(name, entry, rowId)
+function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: string | null | undefined): FetchStep | null
 {
     if (!entry || !entry.command) return null;
     const bridge = bridgeParts(entry);
@@ -39,12 +41,12 @@ function fetchOf(name, entry, rowId)
         const argv = /^[A-Za-z]:/.test(bridge.path) ? ['cmd', '/c', ...npm] : npm;
         return { op: 'fetch', name, row: rowId, what: bridge.pkg, argv, env: entry.env || {}, why: `${rowId || name}: fetch ${bridge.pkg} so the first start answers in time` };
     }
-    let cmd = entry.command;
+    let cmd: string | undefined = entry.command;
     let args = (entry.args || []).slice();
     const viaCmd = /^cmd(\.exe)?$/i.test(cmd) && /^\/c$/i.test(args[0] || '');
     if (viaCmd) { cmd = args[1]; args = args.slice(2); }
-    let argv;
-    let what;
+    let argv: string[];
+    let what: string | undefined;
     if (/^npx(\.cmd)?$/i.test(cmd || ''))
     {
         what = args.find((a) => !a.startsWith('-'));
@@ -55,11 +57,11 @@ function fetchOf(name, entry, rowId)
     else if (/^uvx(\.exe)?$/i.test(cmd || ''))
     {
         // the options up to the tool's own command, then its --help: uv builds the environment and runs nothing else
-        const out = [];
+        const out: string[] = [];
         for (let i = 0; i < args.length; i++)
         {
-            if (args[i].startsWith('-')) { out.push(args[i]); if (UVX_VALUE.has(args[i])) out.push(args[++i]); continue; }
-            out.push(args[i], '--help');
+            if (args[i]!.startsWith('-')) { out.push(args[i]!); if (UVX_VALUE.has(args[i]!)) out.push(args[++i]!); continue; }
+            out.push(args[i]!, '--help');
             break;
         }
         what = out[out.indexOf('--from') + 1] || out[out.length - 2];
@@ -73,6 +75,6 @@ function fetchOf(name, entry, rowId)
     }
     else return null;
     if (viaCmd) argv = [entry.command, '/c', ...argv];
-    return { op: 'fetch', name, row: rowId, what, argv, env: entry.env || {}, why: `${rowId || name}: fetch ${what} so the first start answers in time` };
+    return { op: 'fetch', name, row: rowId, what: what!, argv, env: entry.env || {}, why: `${rowId || name}: fetch ${what} so the first start answers in time` };
 }
 

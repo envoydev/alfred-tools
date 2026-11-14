@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 10
 // Registry lookups for pins: which release of a package may be offered. One rule for /preferred-tools:update and for
 // `npm run refresh-pins`: the newest STABLE release that is at least `days` old (the age gate) and newer than the pin.
 // A newer release that is too young is reported as held back, never offered.
@@ -7,15 +6,17 @@
 //   PREFERRED_TOOLS_NPM_URL   default https://registry.npmjs.org
 //   PREFERRED_TOOLS_PYPI_URL  default https://pypi.org/pypi
 import { compareVersions } from '../fix/common.ts';
+import type { Env } from '../core/types.ts';
+import type { Aged, Choice, FetchFn, NpmDoc, PypiDoc, Release } from './types.ts';
 
 export const DAY = 86400000;
 export const AGE_DAYS = 7;
 export const STABLE = { npm: /^\d+\.\d+\.\d+$/, pypi: /^\d+(\.\d+)*$/ }; // no -rc / -beta / a1 / b2 / .dev / .post
 
-const npmBase = (env) => (env.PREFERRED_TOOLS_NPM_URL || 'https://registry.npmjs.org').replace(/\/$/, '');
-const pypiBase = (env) => (env.PREFERRED_TOOLS_PYPI_URL || 'https://pypi.org/pypi').replace(/\/$/, '');
+const npmBase = (env: Env): string => (env.PREFERRED_TOOLS_NPM_URL || 'https://registry.npmjs.org').replace(/\/$/, '');
+const pypiBase = (env: Env): string => (env.PREFERRED_TOOLS_PYPI_URL || 'https://pypi.org/pypi').replace(/\/$/, '');
 
-async function getJson(url, fetchFn)
+async function getJson(url: string, fetchFn: FetchFn): Promise<unknown>
 {
     const res = await fetchFn(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(30000) });
     if (!res.ok) throw new Error(`${url} answered HTTP ${res.status}`);
@@ -23,19 +24,19 @@ async function getJson(url, fetchFn)
 }
 
 // -> [{ version, time (ms) }]; a deprecated (npm) or fully yanked (PyPI) release is left out.
-export async function versionsOf(registry, name, { env = process.env, fetchFn = fetch } = {})
+export async function versionsOf(registry: string, name: string, { env = process.env, fetchFn = fetch }: { env?: Env; fetchFn?: FetchFn } = {}): Promise<Release[]>
 {
     if (registry === 'npm')
     {
-        const doc = await getJson(`${npmBase(env)}/${name.replace('/', '%2F')}`, fetchFn);
+        const doc = await getJson(`${npmBase(env)}/${name.replace('/', '%2F')}`, fetchFn) as NpmDoc;
         return Object.keys(doc.versions || {})
-            .filter((v) => !(doc.versions[v] || {}).deprecated && doc.time && doc.time[v])
-            .map((v) => ({ version: v, time: Date.parse(doc.time[v]) }));
+            .filter((v) => !(doc.versions![v] || {}).deprecated && doc.time && doc.time[v])
+            .map((v) => ({ version: v, time: Date.parse(doc.time![v]!) }));
     }
     if (registry === 'pypi')
     {
-        const doc = await getJson(`${pypiBase(env)}/${name}/json`, fetchFn);
-        const out = [];
+        const doc = await getJson(`${pypiBase(env)}/${name}/json`, fetchFn) as PypiDoc;
+        const out: Release[] = [];
         for (const [v, files] of Object.entries(doc.releases || {}))
         {
             const live = (files || []).filter((f) => !f.yanked);
@@ -49,12 +50,12 @@ export async function versionsOf(registry, name, { env = process.env, fetchFn = 
 
 // -> { offer: { version, ageDays } | null, held: [{ version, ageDays }] (newer than `current`, too young, newest first) }
 // `current` null means no pin to compare: every stable release counts as newer.
-export function choose(versions, { registry, now = Date.now(), days = AGE_DAYS, current = null })
+export function choose(versions: Release[], { registry, now = Date.now(), days = AGE_DAYS, current = null }: { registry: string; now?: number; days?: number; current?: string | null }): Choice
 {
-    const stable = versions.filter((v) => STABLE[registry].test(v.version) && Number.isFinite(v.time));
+    const stable = versions.filter((v) => STABLE[registry as keyof typeof STABLE].test(v.version) && Number.isFinite(v.time));
     const newer = stable.filter((v) => current === null || compareVersions(v.version, current) === 1);
-    newer.sort((a, b) => compareVersions(b.version, a.version));
-    const age = (v) => Math.floor((now - v.time) / DAY);
+    newer.sort((a, b) => compareVersions(b.version, a.version)!);
+    const age = (v: Release): number => Math.floor((now - v.time) / DAY);
     const ok = newer.find((v) => now - v.time >= days * DAY);
     return {
         offer: ok ? { version: ok.version, ageDays: age(ok) } : null,
@@ -63,10 +64,10 @@ export function choose(versions, { registry, now = Date.now(), days = AGE_DAYS, 
 }
 
 // The bump day's cut-off, in the catalog's spelling: the end of that UTC day.
-export const cutoffOf = (now = Date.now()) => `${new Date(now).toISOString().slice(0, 10)}T23:59:59Z`;
+export const cutoffOf = (now: number = Date.now()): string => `${new Date(now).toISOString().slice(0, 10)}T23:59:59Z`;
 
 // One line for a package's held-back releases: the newest, and how many more are under the gate.
-export const heldLine = (pkgName, held, days = AGE_DAYS) => (held.length
-    ? `${pkgName} ${held[0].version} is ${held[0].ageDays} day(s) old - held back until it is ${days}${held.length > 1 ? ` (${held.length - 1} more newer than the pin are younger than ${days} days)` : ''}`
+export const heldLine = (pkgName: string, held: Aged[], days: number = AGE_DAYS): string | null => (held.length
+    ? `${pkgName} ${held[0]!.version} is ${held[0]!.ageDays} day(s) old - held back until it is ${days}${held.length > 1 ? ` (${held.length - 1} more newer than the pin are younger than ${days} days)` : ''}`
     : null);
 
