@@ -37,9 +37,9 @@ export interface ServerEntry
     type?: string | undefined; // stored - do not rename
     command?: string | undefined; // stored - do not rename
     args?: string[] | undefined; // stored - do not rename
-    env?: Record<string, string> | undefined; // stored - do not rename
+    env?: (Record<string, string> & { SERENA_HOME?: string }) | undefined; // stored - do not rename
     url?: string | undefined; // stored - do not rename
-    headers?: Record<string, string> | undefined; // stored - do not rename
+    headers?: (Record<string, string> & { Authorization?: string }) | undefined; // stored - do not rename
     headersHelper?: string | undefined; // stored - do not rename
     [key: string]: Json | undefined;
 }

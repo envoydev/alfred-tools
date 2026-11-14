@@ -11,7 +11,7 @@ import { matchEntry } from '../inventory/inventory.ts';
 import type { ServerMap } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { InventoryView } from '../roots/types.ts';
-import type { FileOps, OrderStep, StepLike } from './types.ts';
+import type { FileOps, OrderStep, StepEnd, StepLike } from './types.ts';
 
 const LEFT = 'left as it is - /preferred-tools:fix (mcp-order) orders it';
 const WHY = '.mcp.json: the catalog servers in your order, your own after them - no value changes';
@@ -117,7 +117,7 @@ export function ownProjectNames(inv: InventoryView, existing: Record<string, str
 // The steps with the order step last, when one of them writes a project-scope registration.
 export function withOrderStep<Step extends StepLike>(steps: Step[], project: string, own: string[] = []): (Step | OrderStep)[]
 {
-    const writes = steps.some((s) => (['mcp-add', 'mcp-replace'].includes(s.op as string) && s.scope === 'project') || (s.op === 'mcp-move' && s.to && s.to.scope === 'project'));
+    const writes = steps.some((s) => (['mcp-add', 'mcp-replace'].includes(s.op as string) && s.scope === 'project') || (s.op === 'mcp-move' && s.to && (s.to as StepEnd).scope === 'project'));
     if (!writes) return steps;
     const P = /^(?:[A-Za-z]:[\\/]|\\\\)/.test(project) ? path.win32 : path.posix;
     return [...steps, { op: 'order-mcp-json', file: P.join(project, '.mcp.json'), own, why: WHY } as OrderStep];

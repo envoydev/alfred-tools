@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 11
 // THE TABLE - the whole catalog for this OS as one numbered table, with what is installed at each scope.
 //
 //   node table.js <inventory.json>
@@ -10,49 +9,52 @@
 import * as catalogLib from '../catalog/catalog.ts';
 import { fromHere } from './inventory.ts';
 import { pinnedVersion, launchArgs } from '../fix/common.ts';
+import type { ServerEntry } from '../core/types.ts';
+import type { Catalog, CatalogRow } from '../catalog/types.ts';
+import type { Inventory, Shadow } from './types.ts';
 
 const SCOPES = ['local', 'project', 'user'];
 
 // The pin a registration carries: the package version, the image tag, or null (a hosted URL, a binary).
-export function pinOf(row, routeId, entry)
+export function pinOf(row: CatalogRow, routeId: string | null, entry: ServerEntry): string | null | undefined
 {
-    const def = (row.routes || {})[routeId];
+    const def = (row.routes || {})[routeId!];
     if (!def) return null;
     if (def.runtime === 'docker')
     {
-        const image = launchArgs(entry).find((a) => a.startsWith(def.image.name));
+        const image = launchArgs(entry).find((a) => a.startsWith(def.image!.name));
         return image && image.includes(':') ? image.slice(image.lastIndexOf(':') + 1) : null;
     }
     return def.package ? pinnedVersion(entry, def.package.name) : null;
 }
 
-const cellOf = (items) => (items.length ? items.join('; ') : '-');
+const cellOf = (items: string[]): string => (items.length ? items.join('; ') : '-');
 
-export function render(inv, catalog = catalogLib.load())
+export function render(inv: Inventory, catalog: Catalog = catalogLib.load()): string
 {
     const rows = catalog.tools.filter((r) => r.os.includes(inv.os));
     const body = rows.map((row, i) =>
     {
-        const cells = Object.fromEntries(SCOPES.map((s) => [s, []]));
+        const cells: Record<string, string[]> = Object.fromEntries(SCOPES.map((s) => [s, []]));
         for (const r of inv.registrations.filter((x) => x.rowId === row.id && !x.alfredRetired && x.scope !== 'inherited'))
         {
             const pin = pinOf(row, r.route, r.entry);
-            cells[r.scope].push(`${r.name} [${r.route}${pin ? `, ${pin}` : ''}]`);
+            cells[r.scope]!.push(`${r.name} [${r.route}${pin ? `, ${pin}` : ''}]`);
         }
         const group = catalog.groups.find((g) => g.id === row.group);
-        return [String(i + 1), group.label, row.label, row.kind, Object.keys(row.routes).join('/'), ...SCOPES.map((s) => cellOf(cells[s]))];
+        return [String(i + 1), group!.label, row.label, row.kind, Object.keys(row.routes).join('/'), ...SCOPES.map((s) => cellOf(cells[s]!))];
     });
     const head = ['#', 'group', 'tool', 'kind', 'routes', ...SCOPES];
-    const widths = head.map((h, c) => Math.max(h.length, ...body.map((r) => r[c].length)));
-    const line = (cols) => cols.map((v, c) => v.padEnd(widths[c])).join('  ').trimEnd();
+    const widths = head.map((h, c) => Math.max(h.length, ...body.map((r) => r[c]!.length)));
+    const line = (cols: string[]) => cols.map((v, c) => v.padEnd(widths[c]!)).join('  ').trimEnd();
     const out = [line(head), line(widths.map((w) => '-'.repeat(w))), ...body.map(line)];
 
-    const notes = [];
+    const notes: string[] = [];
     const own = inv.registrations.filter((r) => r.own && !r.alfredRetired && r.scope !== 'inherited');
     if (own.length) notes.push(`Your own, not in this catalog and never touched: ${own.map((r) => `${r.name} (${r.scope})`).join(', ')}.`);
     const inherited = inv.registrations.filter((r) => r.scope === 'inherited');
-    const usedBy = (s) => (s.scope === 'inherited' ? `the one in ${fromHere(inv, s.from)} wins` : `the ${s.scope} one wins`);
-    if (inherited.length) notes.push(`Inherited from a parent folder's .mcp.json - change them there: ${inherited.map((r) => `${r.name} (from ${fromHere(inv, r.from)}, ${r.approval}${r.shadowed ? `, not used here: ${usedBy(r.shadowed)}` : ''})`).join(', ')}.`);
+    const usedBy = (s: Shadow) => (s.scope === 'inherited' ? `the one in ${fromHere(inv, s.from!)} wins` : `the ${s.scope} one wins`);
+    if (inherited.length) notes.push(`Inherited from a parent folder's .mcp.json - change them there: ${inherited.map((r) => `${r.name} (from ${fromHere(inv, r.from!)}, ${r.approval}${r.shadowed ? `, not used here: ${usedBy(r.shadowed)}` : ''})`).join(', ')}.`);
     const retired = inv.registrations.filter((r) => r.alfredRetired && r.scope !== 'inherited');
     if (retired.length) notes.push(`Under names alfred-code once registered, left alone: ${retired.map((r) => `${r.name} (${r.scope})`).join(', ')}.`);
     const other = catalog.tools.filter((r) => !r.os.includes(inv.os));

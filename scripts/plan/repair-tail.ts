@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 11
 // A repair's tail (spec D1, D9): the list and Cursor steps after a fix or an update rewrote registrations.
 import fs from 'node:fs';
 import { pathFor } from '../entries/platform.ts';
@@ -11,6 +10,10 @@ import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { deepEqual } from '../core/json-file.ts';
 import { REG_OPS, listSteps } from './lists.ts';
 import { cursorSteps, SCOPES, heldCopies, keepOf } from './cursor-steps.ts';
+import type { Env } from '../core/types.ts';
+import type { Catalog } from '../catalog/types.ts';
+import type { Inventory } from '../inventory/types.ts';
+import type { CursorWritePlanStep, DenyReadStep, FileStep, ListCtx, ListWriteStep, McpAddStep, PlanOut, PlanStep, RegistrationStep, RepairCtx } from './types.ts';
 
 // ---- a repair's tail (spec D1, D9) -------------------------------------------------------------------------------------
 
@@ -19,27 +22,27 @@ import { cursorSteps, SCOPES, heldCopies, keepOf } from './cursor-steps.ts';
 // and named. Only lists that exist are written: a family with none waits for list-import. `refresh`: [{ name, scope }]
 // whose Cursor copy is refilled from .mcps-secrets at apply with no list change (token-sync). Notes go to ctx.notes.
 // -> [step]
-export function repairTail(inv, ctx, regSteps, { refresh = [] } = {})
+export function repairTail(inv: Inventory, ctx: RepairCtx, regSteps: PlanStep[], { refresh = [] }: { refresh?: { name: string; scope: string }[] } = {}): PlanStep[]
 {
     const catalog = ctx.catalog || catalogLib.load();
     const notes = ctx.notes || [];
-    const usable = (fam) => { const l = inv.lists && inv.lists[fam]; return l && !l.note && !l.old ? l : null; };
+    const usable = (fam: string) => { const l = inv.lists && inv.lists[fam]; return l && !l.note && !l.old ? l : null; };
     // a two-form entry keeps two forms: apply builds Cursor's bridge again from the entry as read, its pin kept
-    const formFor = new Map();
-    for (const s of regSteps.filter((x) => REG_OPS.includes(x.op)))
+    const formFor = new Map<string, string | null>();
+    for (const s of regSteps.filter((x): x is RegistrationStep => REG_OPS.includes(x.op)))
     {
         const key = lists.regKey(s);
         const l = usable(roots.familyOf(s.op === 'mcp-move' ? s.to.scope : s.scope));
         const prior = l ? (l.servers || []).find((x) => lists.serverKey(x) === key) : null;
-        if (prior && prior.cursorEntry) formFor.set(key, 'two');
+        if (prior && prior.cursorEntry) formFor.set(key!, 'two');
     }
-    const tctx = { platform: ctx.platform, project: ctx.project || inv.project, home: ctx.home, env: ctx.env || {}, catalog, roots: null, uses: [], formFor, exists: ctx.exists };
-    const out = { steps: [], notes, errors: [] };
+    const tctx: ListCtx = { platform: ctx.platform, project: ctx.project || inv.project, home: ctx.home, env: ctx.env || {}, catalog, roots: null, uses: [], formFor, exists: ctx.exists };
+    const out: PlanOut = { steps: [], notes, errors: [] };
     const listW = listSteps(inv, tctx, out, regSteps);
     // the key's name, from the key files of the roots in use
     const r = { project: inv.roots && inv.roots.project ? inv.roots.project.path : null, global: inv.roots && inv.roots.global ? inv.roots.global.path : null };
     for (const w of listW)
-        for (const u of w.upserts || [])
+        for (const u of (w as ListWriteStep).upserts || [])
             if (!u.keyFiles)
             {
                 const files = keys.stdioChain({ scope: u.server.scope, projectRoot: r.project, globalRoot: r.global });
@@ -69,10 +72,10 @@ export function repairTail(inv, ctx, regSteps, { refresh = [] } = {})
 // What changed outside preferred-tools (spec D1): each list entry whose Claude registration differs after kept.keep,
 // then each the list names that Claude Code no longer has. Install, configure and update print these first; only fix
 // changes either. -> [line]
-export function changedOutside(inv, catalog = catalogLib.load())
+export function changedOutside(inv: Inventory, catalog: Catalog = catalogLib.load()): string[]
 {
-    const changed = [];
-    const missing = [];
+    const changed: string[] = [];
+    const missing: string[] = [];
     for (const family of ['project', 'global'])
     {
         const l = inv.lists && inv.lists[family];
@@ -94,19 +97,19 @@ export function changedOutside(inv, catalog = catalogLib.load())
 // The settings file the deny rules go in, and which of `want` it lacks: { file, rules } | { file, bad: true }. Shared by
 // install and configure (denyReadSteps) and fix's read-guard row. Claude Code's own settings: CLAUDE_CONFIG_DIR, else
 // ~/.claude - from ctx.home, so a test never reads the real one.
-export function readGuardOf(ctx, want)
+export function readGuardOf(ctx: { platform: string; home: string; env?: Env | undefined }, want: string[]): { file: string; bad: true; rules?: undefined } | { file: string; rules: string[]; bad?: undefined }
 {
     const P = pathFor(ctx.platform);
     const env = ctx.env || {};
     const file = env.CLAUDE_CONFIG_DIR ? P.resolve(env.CLAUDE_CONFIG_DIR, 'settings.json') : P.join(ctx.home, '.claude', 'settings.json');
-    let text = null;
+    let text: string | null = null;
     try { text = fs.readFileSync(file, 'utf8'); } catch { /* absent: {} */ }
-    let deny = [];
+    let deny: string[] = [];
     if (text !== null)
     {
-        let doc = null;
+        let doc: { permissions?: { deny?: string[] } } | null = null;
         try { doc = JSON.parse(text.replace(/^\uFEFF/, '')); } catch { /* below */ }
-        const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
+        const isObject = (v: unknown): v is object => (v && typeof v === 'object' && !Array.isArray(v)) as boolean;
         if (!isObject(doc) || (doc.permissions !== undefined && !isObject(doc.permissions)) || (doc.permissions && doc.permissions.deny !== undefined && !Array.isArray(doc.permissions.deny))) return { file, bad: true };
         deny = (doc.permissions && doc.permissions.deny) || [];
     }
@@ -114,17 +117,17 @@ export function readGuardOf(ctx, want)
 }
 
 // The deny-read step as one plan line - or none when the file has every rule.
-export function denyReadStep(file, rules)
+export function denyReadStep(file: string, rules: string[]): DenyReadStep
 {
     return { op: 'deny-read', file, rules, why: `${file}: keeps an AI session's Read tool out of ${rules.map((r) => (r === roots.READ_GUARD.signIns ? 'the sign-in tokens' : 'the key file')).join(' and ')}` };
 }
 
-export function denyReadSteps(steps, ctx, out)
+export function denyReadSteps(steps: PlanStep[], ctx: { platform: string; home: string; env?: Env | undefined }, out: Pick<PlanOut, 'notes'>): DenyReadStep[]
 {
     const want = [
-        steps.some((x) => ['mcp-add', 'mcp-replace', 'mcp-move'].includes(x.op) && signInParts(x.entry)) && roots.READ_GUARD.signIns,
+        steps.some((x) => ['mcp-add', 'mcp-replace', 'mcp-move'].includes(x.op) && signInParts((x as McpAddStep).entry)) && roots.READ_GUARD.signIns,
         steps.some((x) => x.op === 'ensure-key-name') && roots.READ_GUARD.secrets,
-    ].filter(Boolean);
+    ].filter(Boolean) as string[];
     if (!want.length) return [];
     const g = readGuardOf(ctx, want);
     if (g.bad)
@@ -136,7 +139,7 @@ export function denyReadSteps(steps, ctx, out)
 }
 
 // The plan line of a list-write, retire-record, cursor-write or deny-read step.
-export function renderLine(s)
+export function renderLine(s: ListWriteStep | FileStep | CursorWritePlanStep | DenyReadStep): string
 {
     if (s.op === 'deny-read') return `   adds ${s.rules.join(' and ')} to permissions.deny in ${s.file}  (keeps AI sessions out of the sign-in tokens and the key file)`;
     if (s.op === 'cursor-write') return [`   writes ${s.file}  (Cursor: the servers set up for it; your own entries kept)`, ...(s.replace || []).map((n) => `   replaces your own ${n} in ${s.file}`)].join('\n');

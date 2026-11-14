@@ -1,14 +1,14 @@
-// @ts-nocheck - typed in Task 11
 // Printing a plan: each step as the command it runs, and the notes.
 import { pathFor } from '../entries/platform.ts';
 import * as roots from '../roots/roots.ts';
 import { renderLine } from './repair-tail.ts';
+import type { CursorWritePlanStep, KeyLine, Plan, PlanStep, Reconnect } from './types.ts';
 
 // ---- printing -------------------------------------------------------------------------------------------------------
 
-const shq = (s) => (/^[A-Za-z0-9_\-./:=@,+]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`);
+const shq = (s: string): string => (/^[A-Za-z0-9_\-./:=@,+]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`);
 
-export function argvOf(step)
+export function argvOf(step: PlanStep): string[] | null
 {
     switch (step.op)
     {
@@ -19,7 +19,7 @@ export function argvOf(step)
 }
 
 // The plan's line for one key: who reads it, from which files, and whether its name is filled there - never a value.
-function keyLine(k)
+function keyLine(k: KeyLine): string
 {
     const reader = k.kind === 'helper' ? 'mcp-headers.js reads it each time Claude Code connects' : k.kind === 'bridge' ? 'mcp-bridge.js reads it each time the server starts' : 'the apply writes it into the registration';
     const parts = [`Key: ${k.name} (${k.scope} scope) - ${k.variable}; ${reader}, from ${k.files.join(', then ')}. The key is never printed.`];
@@ -33,24 +33,24 @@ function keyLine(k)
 // for a server whose helper printed {}: nothing has measured it. An unfilled one names what the key must be - the
 // route's hint (atlassian's email:api_token, gitlab's fine-grained token) - since the recommended path asks nothing
 // that would show it (0.3.0 review, Important 1).
-export function reconnectLine({ name, variable, file, filled, anonymous, hint = null })
+export function reconnectLine({ name, variable, file, filled, anonymous, hint = null }: Pick<Reconnect, 'name' | 'variable' | 'file' | 'filled' | 'anonymous'> & { hint?: string | null }): string
 {
     if (filled) return `${name}: connects with its key at the next session start; in a session already running, /mcp -> ${name} -> Reconnect`;
     return `${name}: fill ${variable} in ${file}${hint ? ` (${hint})` : ''}, then Reconnect it in /mcp - until then ${anonymous ? 'it runs without the key, at lower rate limits' : 'it connects without the key, and /mcp shows needs authentication'}`;
 }
 
-export function render(p)
+export function render(p: Plan): string
 {
-    const lines = [];
+    const lines: string[] = [];
     const P = pathFor(p.os);
-    if ((p.outside || []).length) lines.push(...p.outside, '');
+    if ((p.outside || []).length) lines.push(...p.outside!, '');
     if (p.errors.length) lines.push('Cannot plan:', ...p.errors.map((e) => `  ! ${e}`), '');
     if (!p.steps.length && !p.errors.length) lines.push('Nothing to do: every answer already matches what is installed - no claude call, no file written.');
     // which apps (spec D3): stated once, with the Cursor file each scope writes
     if (p.apps)
     {
         lines.push(`Apps: ${p.apps.includes('cursor') ? 'Claude Code and Cursor' : 'Claude Code'}`);
-        for (const s of p.steps.filter((x) => x.op === 'cursor-write')) lines.push(`  ${s.family === 'global' ? 'Global scope' : 'Project and Local scope'} in Cursor: ${s.file}`);
+        for (const s of p.steps.filter((x): x is CursorWritePlanStep => x.op === 'cursor-write')) lines.push(`  ${s.family === 'global' ? 'Global scope' : 'Project and Local scope'} in Cursor: ${s.file}`);
         lines.push('');
     }
     p.steps.forEach((s, i) =>
@@ -75,7 +75,7 @@ export function render(p)
     if (p.keys.length) lines.push('', ...p.keys.map(keyLine));
     if ((p.reconnect || []).length) lines.push('', ...p.reconnect.map(reconnectLine));
     // the shared sign-in (D5) opens the browser at the first start in either app; the rest sign in through /mcp
-    for (const o of p.oauth.filter((x) => x.signin)) lines.push('', `OAuth: ${o.name}: your browser opens to sign in the first time it starts, in Claude Code or Cursor; the sign-in is kept in ${P.join(o.root, roots.FILES.signIns)}/ and serves both.`);
+    for (const o of p.oauth.filter((x) => x.signin)) lines.push('', `OAuth: ${o.name}: your browser opens to sign in the first time it starts, in Claude Code or Cursor; the sign-in is kept in ${P.join(o.root!, roots.FILES.signIns)}/ and serves both.`);
     const viaMcp = p.oauth.filter((x) => !x.signin);
     if (viaMcp.length) lines.push('', `OAuth: run /mcp once in a session to log in to ${viaMcp.map((o) => o.name).join(', ')}.`);
     if (p.dangerous.length) lines.push('', ...p.dangerous.map((d) => `Code-running tool on '${d.name}': ${d.tools.map((t) => `${t.tool} (${t.why})`).join('; ')}. This plugin adds no guard.`));
@@ -86,7 +86,7 @@ export function render(p)
 
 // The prose says Global for user scope (spec D1): 'global (user scope)' the first time, 'global scope' after. The commands
 // keep the value (`-s user`, `--scope user`).
-export function globalWords(text)
+export function globalWords(text: string): string
 {
     let first = true;
     return text.replace(/\buser scope\b/g, () => { if (!first) return 'global scope'; first = false; return 'global (user scope)'; });

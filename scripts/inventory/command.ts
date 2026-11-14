@@ -1,17 +1,16 @@
-// @ts-nocheck - typed in Task 11
 // The inventory command: reads its flags, builds the inventory and writes or prints it.
 import fs from 'node:fs';
 import { blockingStdio } from '../core/json-file.ts';
 import { buildInventory, keptOf } from './inventory.ts';
 
-export function main(argv)
+export function main(argv: string[]): number
 {
     blockingStdio();
-    const val = (flag) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : undefined; };
+    const val = (flag: string) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : undefined; };
     const project = val('--project') || process.cwd();
     const outFile = val('--json');
     const inv = buildInventory({ project, data: val('--data') || null });
-    if (!inv.cli.ok)
+    if (!inv.cli!.ok)
     {
         console.error('preferred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.');
         return 3;

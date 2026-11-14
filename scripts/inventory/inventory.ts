@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 11
 // THE INVENTORY - what is installed, read-only, no server started.
 //
 //   node inventory.js --project <dir> --json <out> [--data <plugin data dir>]   (--data: the roots map, spec D2)
@@ -22,13 +21,19 @@ import * as existing from './existing.ts';
 import { of } from '../roots/workspace.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
+import type { Account, Env, FileState, ServerEntry, ServerMap } from '../core/types.ts';
+import type { Catalog, Fingerprint } from '../catalog/types.ts';
+import type { Family, InventoryView, RootsCtx } from '../roots/types.ts';
+import type { CursorOf } from '../cursor/types.ts';
+import type { OwnEntry } from '../mcps-list/types.ts';
+import type { Approval, ApprovalCtx, BuildOptions, Installed, InvList, InvRegistration, Inventory, MarketplaceListRow, McpJsonDoc, PluginListRow, PluginRow, SettingsDoc, Shadow, WindowsMcp } from './types.ts';
 
 const { readState } = account;
 
 // ---- matching a registration to a row -------------------------------------------------------------------------------
 
 // `cmd /c npx ...` and `cmd.exe /d /s /c npx ...` are the Windows spelling of `npx ...`: look through the wrapper.
-export function launchTokens(entry)
+export function launchTokens(entry: ServerEntry): { command: string; args: string[] }
 {
     const command = String(entry.command || '');
     let args = Array.isArray(entry.args) ? entry.args.map(String) : [];
@@ -41,7 +46,7 @@ export function launchTokens(entry)
 }
 
 // 'serena-agent@2.1.0', 'mcp-memory-service[sqlite]==12.1.1', '@playwright/mcp@0.0.83', 'ghcr.io/x/y:v2' -> the bare name.
-export function bareName(token)
+export function bareName(token: string): string
 {
     const lead = token.startsWith('@') ? '@' : '';
     const body = lead ? token.slice(1) : token;
@@ -49,27 +54,27 @@ export function bareName(token)
     return lead + (cut >= 0 ? body.slice(0, cut) : body);
 }
 
-const flagValue = (args, flag) =>
+const flagValue = (args: string[], flag: string): string | undefined =>
 {
     for (let i = 0; i < args.length; i++)
     {
         if (args[i] === flag) return args[i + 1];
-        if (args[i].startsWith(`${flag}=`)) return args[i].slice(flag.length + 1);
+        if (args[i]!.startsWith(`${flag}=`)) return args[i]!.slice(flag.length + 1);
     }
     return undefined;
 };
 
-export function matchesFingerprint(entry, f)
+export function matchesFingerprint(entry: ServerEntry, f: Fingerprint): boolean
 {
     // a bridge (0.4.0): `node <root>/mcp-bridge.js <template> ...`, matched by the file's exact name and the template's host
     // and path - never by the URL branch below, which would take every hosted URL for a fingerprint with no host
     const bridge = bridgeParts(entry);
-    if (f.bridge) return Boolean(bridge) && bridge.template.replace(/^https?:\/\//i, '').toLowerCase().startsWith(f.bridge);
+    if (f.bridge) return Boolean(bridge) && bridge!.template.replace(/^https?:\/\//i, '').toLowerCase().startsWith(f.bridge);
     if (bridge) return false;
-    const byUrl = (url) =>
+    const byUrl = (url: unknown) =>
     {
         if (f.pkg || f.command) return false;
-        let u;
+        let u: URL;
         try { u = new URL(String(url)); } catch { return false; }
         if (f.host && u.hostname.toLowerCase() !== f.host) return false;
         return u.pathname.startsWith(f.pathPrefix || '/');
@@ -89,7 +94,7 @@ export function matchesFingerprint(entry, f)
 }
 
 // The catalog row and route a registration's launch belongs to, or null (the user's own).
-export function matchEntry(entry, catalog)
+export function matchEntry(entry: ServerEntry | null | undefined, catalog: Catalog): { rowId: string; route: string } | null
 {
     if (!entry || typeof entry !== 'object') return null;
     for (const row of catalog.tools)
@@ -103,7 +108,7 @@ export function matchEntry(entry, catalog)
 
 // ---- reading the scopes ---------------------------------------------------------------------------------------------
 
-const settingsOf = (scope, project, env) => path.join(
+const settingsOf = (scope: string, project: string, env: Env): string => path.join(
     scope === 'user' ? account.configDir(env) : path.join(project, '.claude'),
     scope === 'local' ? 'settings.local.json' : 'settings.json');
 
@@ -112,12 +117,12 @@ const settingsOf = (scope, project, env) => path.join(
 // from the real path: the nearest file wins a name, a local registration beats them all, and a malformed file loses
 // only its own servers (MEASURED, docs/sources.md '.mcp.json in parent folders', M1-M6).
 
-const realOf = (p) => { try { return fs.realpathSync.native(p); } catch { return path.resolve(p); } };
+const realOf = (p: string): string => { try { return fs.realpathSync.native(p); } catch { return path.resolve(p); } };
 
 // -> [{ dir, file }], nearest first, the project's own file left out
-export function ancestorMcpFiles(project)
+export function ancestorMcpFiles(project: string): { dir: string; file: string }[]
 {
-    const out = [];
+    const out: { dir: string; file: string }[] = [];
     for (let dir = realOf(project), up = path.dirname(dir); up !== dir; dir = up, up = path.dirname(dir))
     {
         const file = path.join(up, '.mcp.json');
@@ -129,7 +134,7 @@ export function ancestorMcpFiles(project)
 // The settings files a session started in `proj` reads, nearest first: the trust root's settings.local.json (the git
 // root, else the folder), this folder's settings.local.json, then its settings.json - a parent folder's settings.json
 // never counts (MEASURED: M7 for approvals, P4 and P5 for enabledPlugins). -> [file]
-function hereSettings(proj)
+function hereSettings(proj: string): string[]
 {
     const root = account.localRoot(proj);
     return [...new Set([path.join(root, '.claude', 'settings.local.json'), path.join(proj, '.claude', 'settings.local.json'), path.join(proj, '.claude', 'settings.json')])];
@@ -137,41 +142,41 @@ function hereSettings(proj)
 
 // What decides a parent's server here: the user settings, this folder's settings files, and its account entry and
 // trust, all keyed on the trust root (the git root, else the folder).
-function approvalContext(proj, env, acct, platform)
+function approvalContext(proj: string, env: Env, acct: Account, platform: string): ApprovalCtx
 {
     const root = account.localRoot(proj);
-    const entry = account.projectEntry(acct.projects || {}, root, platform) || {};
-    return { user: readState(settingsOf('user', proj, env)).doc, folder: hereSettings(proj).map((f) => readState(f).doc), entry, trusted: entry.hasTrustDialogAccepted === true };
+    const entry = (account.projectEntry(acct.projects || {}, root, platform) || {}) as Account['projects'][string];
+    return { user: readState<SettingsDoc>(settingsOf('user', proj, env)).doc, folder: hereSettings(proj).map((f) => readState<SettingsDoc>(f).doc), entry, trusted: entry.hasTrustDialogAccepted === true };
 }
 
-const names = (doc, key, name) => Boolean(doc) && Array.isArray(doc[key]) && doc[key].includes(name);
-const approves = (doc, name) => Boolean(doc) && (doc.enableAllProjectMcpServers === true || names(doc, 'enabledMcpjsonServers', name));
+const names = (doc: SettingsDoc | null, key: string, name: string): boolean => Boolean(doc) && Array.isArray(doc![key]) && (doc![key] as unknown[]).includes(name);
+const approves = (doc: SettingsDoc | null, name: string): boolean => Boolean(doc) && (doc!.enableAllProjectMcpServers === true || names(doc, 'enabledMcpjsonServers', name));
 
 // approved | pending | rejected, as `claude mcp list` says it here (MEASURED, M7; the MCP docs' 'Project server approvals
 // and workspace trust'): a disabledMcpjsonServers entry anywhere rejects; the user settings approve in any folder; this
 // folder's settings and account entry approve only once it is trusted; a parent folder's settings never count.
-function approvalOf(name, a)
+function approvalOf(name: string, a: ApprovalCtx): Approval
 {
     if ([a.user, ...a.folder, a.entry].some((d) => names(d, 'disabledMcpjsonServers', name))) return 'rejected';
     if (approves(a.user, name) || (a.trusted && [...a.folder, a.entry].some((d) => approves(d, name)))) return 'approved';
     return 'pending';
 }
 
-export function pluginRows(listJson, project, env, catalog, alfredCheck)
+export function pluginRows(listJson: PluginListRow[], project: string, env: Env, catalog: Catalog, _alfredCheck?: unknown): PluginRow[]
 {
-    const rows = [];
-    const here = [...hereSettings(project), settingsOf('user', project, env)].map((f) => readState(f).doc);
-    const flagIn = (doc, id) => (doc && doc.enabledPlugins ? doc.enabledPlugins[id] : undefined);
+    const rows: PluginRow[] = [];
+    const here = [...hereSettings(project), settingsOf('user', project, env)].map((f) => readState<SettingsDoc>(f).doc);
+    const flagIn = (doc: SettingsDoc | null, id: string) => (doc && doc.enabledPlugins ? doc.enabledPlugins[id] : undefined);
     for (const r of Array.isArray(listJson) ? listJson : [])
     {
         const [name, marketplace = ''] = String(r.id).split('@');
         const scoped = r.scope === 'project' || r.scope === 'local';
         if (scoped && r.projectPath && account.projectKey(r.projectPath) !== account.projectKey(project)) continue; // another project's
         let enabled = r.enabled;
-        let enabledFrom = 'list';
+        let enabledFrom: PluginRow['enabledFrom'] = 'list';
         if (['user', 'project', 'local'].includes(r.scope))
         {
-            const flag = flagIn(readState(settingsOf(r.scope, project, env)).doc, r.id);
+            const flag = flagIn(readState<SettingsDoc>(settingsOf(r.scope, project, env)).doc, r.id);
             if (typeof flag === 'boolean') { enabled = flag; enabledFrom = 'settings'; }
         }
         // Two readings, kept apart: `enabled` is the install scope's own, which configure and update act on (an `enable`
@@ -180,31 +185,31 @@ export function pluginRows(listJson, project, env, catalog, alfredCheck)
         // P1-P6). Only the windows-mcp count reads it.
         const flagHere = here.map((doc) => flagIn(doc, r.id)).find((v) => typeof v === 'boolean');
         const enabledHere = typeof flagHere === 'boolean' ? flagHere : enabled;
-        const row = catalog.tools.find((t) => t.kind === 'plugin' && t.plugin === name && t.marketplace.name === marketplace);
+        const row = catalog.tools.find((t) => t.kind === 'plugin' && t.plugin === name && t.marketplace!.name === marketplace);
         rows.push({
-            id: r.id, plugin: name, marketplace, scope: r.scope, version: r.version, enabled, enabledFrom, enabledHere,
-            errors: r.errors || [], rowId: row ? row.id : null, alfredRetired: catalog.reserved.has(name),
+            id: r.id, plugin: name!, marketplace, scope: r.scope, version: r.version, enabled, enabledFrom, enabledHere,
+            errors: r.errors || [], rowId: row ? row.id : null, alfredRetired: catalog.reserved.has(name!),
         });
     }
     return rows;
 }
 
-export function buildInventory({ project, env = process.env, platform = process.platform, arch = process.arch, catalog = catalogLib.load(), run = cli.run, data = null })
+export function buildInventory({ project, env = process.env, platform = process.platform, arch = process.arch, catalog = catalogLib.load(), run = cli.run, data = null }: BuildOptions): Inventory
 {
     const proj = path.resolve(project);
-    const out = {
+    const out: Inventory = {
         version: 1, project: proj, os: platform, arch, cli: null, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false,
         sources: {},
     };
 
-    const mcp = readState(path.join(proj, '.mcp.json'));
+    const mcp = readState<McpJsonDoc>(path.join(proj, '.mcp.json'));
     const acct = account.readAccount(env, proj, platform);
     out.sources = { project: { file: mcp.file, state: mcp.state }, account: { file: acct.file, state: acct.state }, local: { file: acct.file, state: acct.state }, user: { file: acct.file, state: acct.state } };
-    for (const [scope, s] of [['project', mcp], ['local', acct], ['user', acct]])
+    for (const [scope, s] of [['project', mcp], ['local', acct], ['user', acct]] as [string, { file: string; state: FileState; error: string | null }][])
         if (s.state === 'malformed' || s.state === 'unreadable') out.unreadable.push({ scope, file: s.file, state: s.state, error: s.error });
 
     const approval = approvalContext(proj, env, acct, platform);
-    const scopes = [['project', (mcp.doc && mcp.doc.mcpServers) || {}], ['local', acct.local], ['user', acct.user]];
+    const scopes = [['project', (mcp.doc && mcp.doc.mcpServers) || {}], ['local', acct.local], ['user', acct.user]] as [string, ServerMap][];
     for (const [scope, servers] of scopes)
     {
         if (!servers || typeof servers !== 'object') continue;
@@ -224,12 +229,12 @@ export function buildInventory({ project, env = process.env, platform = process.
     }
 
     // the parents' servers, nearest first; `shadowed` names what Claude Code uses in their place
-    const wins = new Map(Object.keys(acct.local || {}).map((n) => [n, { scope: 'local', from: null }]));
+    const wins = new Map<string, Shadow>(Object.keys(acct.local || {}).map((n): [string, Shadow] => [n, { scope: 'local', from: null }]));
     for (const n of Object.keys((mcp.doc && mcp.doc.mcpServers) || {})) if (!wins.has(n)) wins.set(n, { scope: 'project', from: proj });
     out.sources.inherited = [];
     for (const { dir, file } of ancestorMcpFiles(proj))
     {
-        const s = readState(file);
+        const s = readState<McpJsonDoc>(file);
         out.sources.inherited.push({ file, state: s.state });
         if (s.state === 'malformed' || s.state === 'unreadable') { out.unreadable.push({ scope: 'inherited', file, state: s.state, error: s.error }); continue; }
         const servers = s.doc && s.doc.mcpServers && typeof s.doc.mcpServers === 'object' ? s.doc.mcpServers : {};
@@ -256,7 +261,7 @@ export function buildInventory({ project, env = process.env, platform = process.
     out.cursor = cursorFiles(out, { platform, env, project: proj }, catalog);
     // the workspace alfred-code records (spec D4a): the folders whose Cursor files take this folder's project servers
     out.workspace = of(proj, env);
-    const fp = (entry) => existing.fingerprintOf(entry, catalog);
+    const fp = (entry: ServerEntry) => existing.fingerprintOf(entry, catalog);
     for (const r of out.registrations)
     {
         const rec = r.scope === 'inherited' || !r.rowId ? null : out.lists[roots.familyOf(r.scope)];
@@ -268,12 +273,12 @@ export function buildInventory({ project, env = process.env, platform = process.
     if (!version) return out;
 
     const list = run(['plugin', 'list', '--json'], { cwd: proj, env });
-    let listJson = [];
-    try { listJson = JSON.parse(list.stdout || '[]'); } catch { out.unreadable.push({ scope: 'plugins', file: 'claude plugin list --json', state: 'malformed', error: 'not JSON' }); }
+    let listJson: PluginListRow[] = [];
+    try { listJson = JSON.parse(list.stdout || '[]') as PluginListRow[]; } catch { out.unreadable.push({ scope: 'plugins', file: 'claude plugin list --json', state: 'malformed', error: 'not JSON' }); }
     out.plugins = pluginRows(listJson, proj, env, catalog);
     out.alfredCodeEnabled = out.plugins.some((p) => p.plugin === 'alfred-code' && p.enabled);
     // each MCP server a plugin that loads here provides, read from its install folder and matched as a registration is
-    const installPath = new Map((Array.isArray(listJson) ? listJson : []).map((r) => [`${r.id}~${r.scope}`, r.installPath]));
+    const installPath = new Map((Array.isArray(listJson) ? listJson : []).map((r): [string, string | undefined] => [`${r.id}~${r.scope}`, r.installPath]));
     for (const p of out.plugins.filter((x) => x.enabledHere))
         for (const s of existing.pluginServers(installPath.get(`${p.id}~${p.scope}`)))
         {
@@ -283,7 +288,7 @@ export function buildInventory({ project, env = process.env, platform = process.
         }
 
     const mk = run(['plugin', 'marketplace', 'list', '--json'], { cwd: proj, env });
-    try { out.marketplaces = JSON.parse(mk.stdout || '[]').map((m) => ({ name: m.name, source: m.repo || m.url || m.path || '', installLocation: m.installLocation || '' })); }
+    try { out.marketplaces = (JSON.parse(mk.stdout || '[]') as MarketplaceListRow[]).map((m) => ({ name: m.name, source: m.repo || m.url || m.path || '', installLocation: m.installLocation || '' })); }
     catch { out.marketplaces = []; }
     return out;
 }
@@ -291,7 +296,7 @@ export function buildInventory({ project, env = process.env, platform = process.
 // The family's list: the first mcps.json the commands' order finds (mcpsList.listFiles). While the family has none, its
 // `own` is the first 0.4.x record's (`old` names that file, `file` the list beside it), so a server left on its own is
 // skipped from the first 0.5.0 run. -> { file, servers, own, cursorOffer?, note?, old? } | null
-function listOf(inv, family, ctx)
+function listOf(inv: InventoryView, family: Family, ctx: RootsCtx): InvList | null
 {
     for (const file of lists.listFiles(inv, family, ctx))
     {
@@ -309,11 +314,11 @@ function listOf(inv, family, ctx)
 
 // Cursor's two files (spec D2): the project's for project and local scope, the home's for user scope. Each lists every
 // name it holds, and the entries of the names its family's list marks for Cursor, kept.
-function cursorFiles(inv, ctx, catalog)
+function cursorFiles(inv: Inventory, ctx: { platform: string; env: Env; project: string }, catalog: Catalog): { project: CursorOf; global: CursorOf }
 {
-    const marked = (family) =>
+    const marked = (family: string) =>
     {
-        const l = inv.lists[family];
+        const l = inv.lists![family];
         return l && !l.note ? (l.servers || []).filter((s) => (s.clients || []).includes('cursor')) : [];
     };
     return {
@@ -323,32 +328,32 @@ function cursorFiles(inv, ctx, catalog)
 }
 
 // A recorded choice that still holds: the entry found, its fingerprint the launch's now, its choice one of `allowed`.
-function choiceIn(list, match, fingerprint, allowed)
+function choiceIn(list: InvList | null | undefined, match: (e: OwnEntry) => boolean, fingerprint: string | null, allowed: string[]): string | null
 {
     const e = list ? (list.own || []).find(match) : null;
-    return e && e.fingerprint === fingerprint && allowed.includes(e.choice) ? e.choice : null;
+    return e && e.fingerprint === fingerprint && allowed.includes(e.choice as string) ? e.choice! : null;
 }
 
 // The inventory as a file or a print holds it: every credential value as kept.js's marker, so no command line names a
 // file with a live one (alfred-code's guard refuses it) and nothing printed puts one in the chat. apply.js takes the
 // real values back from the registrations themselves.
-export function keptOf(inv, catalog = catalogLib.load())
+export function keptOf(inv: Inventory, catalog: Catalog = catalogLib.load()): Inventory
 {
-    const keep = (x) => ({ ...x, entry: kept.keep(x.entry, x.rowId ? catalog.byId.get(x.rowId) : null) });
+    const keep = <Item extends { entry: ServerEntry; rowId: string | null }>(x: Item): Item => ({ ...x, entry: kept.keep(x.entry, x.rowId ? catalog.byId.get(x.rowId) : null) });
     return { ...inv, registrations: inv.registrations.map(keep), ...(inv.pluginServers ? { pluginServers: inv.pluginServers.map(keep) } : {}) };
 }
 
 // A parent folder as the project names it: '..', '../..', from the real folder, as the walk found it.
-export const fromHere = (inv, dir) => path.relative(realOf(inv.project), dir).split(path.sep).join('/') || '.';
+export const fromHere = (inv: { project: string }, dir: string): string => path.relative(realOf(inv.project), dir).split(path.sep).join('/') || '.';
 
 // What a row looks like installed: every registration or plugin that belongs to it, with its scope.
-export function installedOf(inv, rowId)
+export function installedOf(inv: Inventory, rowId: string): Installed[]
 {
     return [
-        ...inv.registrations.filter((r) => r.rowId === rowId && !r.alfredRetired).map((r) => (r.scope === 'inherited'
+        ...inv.registrations.filter((r) => r.rowId === rowId && !r.alfredRetired).map((r): Installed => (r.scope === 'inherited'
             ? { kind: 'mcp', name: r.name, scope: r.scope, from: r.from, route: r.route, entry: r.entry, approval: r.approval }
             : { kind: 'mcp', name: r.name, scope: r.scope, route: r.route, entry: r.entry })),
-        ...inv.plugins.filter((p) => p.rowId === rowId && !p.alfredRetired).map((p) => ({ kind: 'plugin', name: p.id, scope: p.scope, version: p.version, enabled: p.enabled })),
+        ...inv.plugins.filter((p) => p.rowId === rowId && !p.alfredRetired).map((p): Installed => ({ kind: 'plugin', name: p.id, scope: p.scope, version: p.version, enabled: p.enabled })),
     ];
 }
 
@@ -360,37 +365,37 @@ export function installedOf(inv, rowId)
 // marketplace dropped says so only in `errors` (plugin-cli-evidence S13, S25).
 // -> [{ name, scope, kind, owner: 'catalog' | 'alfred-code', from }]
 const WINDOWS_MCP_PLUGINS = ['windows-control', 'windows-desktop'];
-const NEAREST = { local: 0, project: 1, inherited: 2, user: 3 };
-export function windowsMcpServers(inv)
+const NEAREST: Record<string, number> = { local: 0, project: 1, inherited: 2, user: 3 };
+export function windowsMcpServers(inv: { registrations: InvRegistration[]; plugins?: PluginRow[] }): WindowsMcp[]
 {
     const starts = inv.registrations.filter((r) => (r.scope === 'inherited' ? r.approval === 'approved' && !r.shadowed : r.scope !== 'project' || !r.approval || r.approval === 'approved'));
-    const wins = new Map();
-    for (const r of starts.slice().sort((a, b) => NEAREST[a.scope] - NEAREST[b.scope])) if (!wins.has(r.name)) wins.set(r.name, r);
+    const wins = new Map<string, InvRegistration>();
+    for (const r of starts.slice().sort((a, b) => NEAREST[a.scope]! - NEAREST[b.scope]!)) if (!wins.has(r.name)) wins.set(r.name, r);
     // one plugin id is one server, however many scopes hold an install row for it (S28): the nearest row names it
     const loads = (inv.plugins || []).filter((p) => (p.enabledHere ?? p.enabled) && !(p.errors || []).length && p.marketplace === 'envoydev' && WINDOWS_MCP_PLUGINS.includes(p.plugin));
-    const nearest = new Map();
-    for (const p of loads.slice().sort((a, b) => NEAREST[a.scope] - NEAREST[b.scope])) if (!nearest.has(p.id)) nearest.set(p.id, p);
+    const nearest = new Map<string, PluginRow>();
+    for (const p of loads.slice().sort((a, b) => NEAREST[a.scope]! - NEAREST[b.scope]!)) if (!nearest.has(p.id)) nearest.set(p.id, p);
     return [
         ...[...wins.values()].filter((r) => r.rowId === 'windows-control' || (r.alfredRetired && r.name === 'windows-control'))
-            .map((r) => ({ name: r.name, scope: r.scope, kind: 'mcp', owner: r.alfredRetired ? 'alfred-code' : 'catalog', from: r.from || null })),
-        ...loads.filter((p) => nearest.get(p.id) === p).map((p) => ({ name: p.id, scope: p.scope, kind: 'plugin', owner: 'alfred-code', from: null })),
+            .map((r): WindowsMcp => ({ name: r.name, scope: r.scope, kind: 'mcp', owner: r.alfredRetired ? 'alfred-code' : 'catalog', from: r.from || null })),
+        ...loads.filter((p) => nearest.get(p.id) === p).map((p): WindowsMcp => ({ name: p.id, scope: p.scope, kind: 'plugin', owner: 'alfred-code', from: null })),
     ];
 }
 
 // The windows-mcp servers here that a new registration under `name` does not replace - one of the same name is the same
 // server, whichever scope wins - as 'name (scope)'.
-export const otherWindowsMcp = (inv, name) => windowsMcpServers(inv).filter((s) => s.kind === 'plugin' || s.name !== name).map((s) => `${s.name} (${s.scope})`);
+export const otherWindowsMcp = (inv: Inventory, name: string): string[] => windowsMcpServers(inv).filter((s) => s.kind === 'plugin' || s.name !== name).map((s) => `${s.name} (${s.scope})`);
 
 // One installed thing, by the key configure asks with: `mcp:<name>~<scope>` or `plugin:<plugin id>~<scope>` (the same
 // shape as update.js's offer ids). -> { kind, item } or null when nothing is installed under that key.
-export const keyOf = (kind, name, scope) => `${kind}:${name}~${scope}`;
-export function targetOf(inv, key)
+export const keyOf = (kind: string, name: string, scope: string): string => `${kind}:${name}~${scope}`;
+export function targetOf(inv: Inventory, key: string | null | undefined): { kind: string; item: InvRegistration | PluginRow } | null
 {
     const m = /^(mcp|plugin):(.+)~(local|project|user)$/.exec(key || '');
     if (!m) return null;
     const item = m[1] === 'mcp'
         ? inv.registrations.find((r) => r.name === m[2] && r.scope === m[3])
         : inv.plugins.find((p) => p.id === m[2] && p.scope === m[3]);
-    return item ? { kind: m[1], item } : null;
+    return item ? { kind: m[1]!, item } : null;
 }
 

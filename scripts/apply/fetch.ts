@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 11
 // FETCH - the slow half of an apply: fills the runtime caches for what apply.js just registered, starts each new server
 // once, then asks the CLI for each status.
 //
@@ -26,27 +25,31 @@ import { expandVars } from '../entries/locations.ts';
 import { bridgeParts } from '../entries/entry.ts';
 import { signInParts } from '../entries/sign-in.ts';
 import * as serenaConfig from './serena-config.ts';
+import type { ChildProcessByStdio } from 'node:child_process';
+import type { Readable, Writable } from 'node:stream';
+import type { Env, ServerEntry } from '../core/types.ts';
+import type { FetchJob, FetchOptions, FetchRun, JobStep, Log, RunCli, StartResult, Status } from './types.ts';
 
 export const VERSION = 1;
 const START_MS = 600000;
 const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'preferred-tools', version: '0' } } };
 // ${VAR} and ${VAR:-default}, as Claude Code expands them in an MCP entry (entries.js expandVars)
-export const expand = (s, env) => expandVars(s, env).value;
+export const expand = (s: unknown, env: Env): string => expandVars(s, env).value;
 // the first ${VAR} with no default that is not set: a start without it only fails
-export const unsetVar = (entry, env) => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((m) => m[1]).find((k) => env[k] === undefined) || null;
+export const unsetVar = (entry: ServerEntry, env: Env): string | null => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((m) => m[1]!).find((k) => env[k] === undefined) || null;
 
 // The runtime itself (npm, uvx, docker), never the claude CLI, and with no limit of Claude Code's. On Windows it goes
 // through the shell so npm.cmd resolves.
-export const realFetch = (argv, { cwd, env }) => spawnSync(argv[0], argv.slice(1), { cwd, env, encoding: 'utf8', timeout: 1800000, windowsHide: true, shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
+export const realFetch = (argv: string[], { cwd, env }: { cwd: string; env: Env }) => spawnSync(argv[0]!, argv.slice(1), { cwd, env, encoding: 'utf8', timeout: 1800000, windowsHide: true, shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
 
 // A server and everything it started: TERM, then KILL after 5 s (Windows: taskkill /T /F). -> Promise, once it is gone
-function stopTree(child)
+function stopTree(child: ChildProcessByStdio<Writable, Readable, Readable>): Promise<void>
 {
-    return new Promise((resolve) =>
+    return new Promise<void>((resolve) =>
     {
         if (child.exitCode !== null || child.signalCode !== null) return resolve();
         if (process.platform === 'win32') { spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }); return resolve(); }
-        const kill = (sig) => { try { process.kill(-child.pid, sig); } catch { /* already gone */ } };
+        const kill = (sig: NodeJS.Signals) => { try { process.kill(-child.pid!, sig); } catch { /* already gone */ } };
         const hard = setTimeout(() => { kill('SIGKILL'); resolve(); }, 5000);
         child.once('exit', () => { clearTimeout(hard); kill('SIGKILL'); resolve(); });
         kill('SIGTERM');
@@ -55,20 +58,20 @@ function stopTree(child)
 
 // The server started exactly as written - command, args and env, ${VAR} expanded - and sent `initialize` over stdio,
 // as Claude Code's first start sends it. -> Promise<{ ok, ms, why? }>
-export function realStart(entry, { cwd, env, ms = START_MS })
+export function realStart(entry: ServerEntry, { cwd, env, ms = START_MS }: { cwd: string; env: Env; ms?: number }): Promise<StartResult>
 {
     return new Promise((resolve) =>
     {
-        const childEnv = { ...env };
+        const childEnv: Env = { ...env };
         for (const [k, v] of Object.entries(entry.env || {})) childEnv[k] = expand(v, env);
         const t0 = Date.now();
-        let child;
+        let child: ChildProcessByStdio<Writable, Readable, Readable>;
         try { child = spawn(expand(entry.command, env), (entry.args || []).map((a) => expand(a, env)), { cwd, env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32', windowsHide: true }); }
-        catch (e) { resolve({ ok: false, ms: 0, why: e.message }); return; }
+        catch (caught) { const e = caught as NodeJS.ErrnoException; resolve({ ok: false, ms: 0, why: e.message }); return; }
         let out = '';
         let err = '';
         let settled = false;
-        const done = (r) =>
+        const done = (r: { ok: boolean; why?: string }) =>
         {
             if (settled) return;
             settled = true;
@@ -84,10 +87,10 @@ export function realStart(entry, { cwd, env, ms = START_MS })
         child.stdout.on('data', (d) =>
         {
             const lines = `${out}${d}`.split('\n');
-            out = lines.pop();
+            out = lines.pop()!;
             for (const line of lines)
             {
-                let msg;
+                let msg: { id?: unknown; result?: unknown; error?: unknown };
                 try { msg = JSON.parse(line); } catch { continue; }
                 if (msg.id === 1) return done(msg.result ? { ok: true } : { ok: false, why: `initialize error: ${JSON.stringify(msg.error)}` });
             }
@@ -97,16 +100,16 @@ export function realStart(entry, { cwd, env, ms = START_MS })
 }
 
 // -> the job apply.js hands over: { version, project, fetch: [fetch steps, each with the scope it was written at], check: [server names] }
-export const job = (project, fetch, check) => ({ version: VERSION, project, fetch, check: [...new Set(check)] });
+export const job = (project: string, fetch: JobStep[], check: string[]): FetchJob => ({ version: VERSION, project, fetch, check: [...new Set(check)] });
 
 // Each step's argv and env as kept.js keeps them, so the file a command line names holds no live credential: a download
 // needs none (a kept value expands to ''), and the first start reads the registration itself.
 // `append` adds to a fetch file already there (fix: a registration's fetch, then a machine fix's): its steps are kept
 // already, so only the new ones go through kept.keep.
-export function writeJob(file, j, { append = false } = {})
+export function writeJob(file: string, j: FetchJob, { append = false }: { append?: boolean } = {}): string
 {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    const prior = append && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+    const prior: FetchJob | null = append && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
     const fetch = j.fetch.map((s) => { const k = kept.keep({ args: s.argv, env: s.env }, null); return { ...s, argv: k.args, env: k.env }; });
     const out = prior ? { ...prior, fetch: [...prior.fetch, ...fetch], check: [...new Set([...prior.check, ...j.check])] } : { ...j, fetch };
     fs.writeFileSync(file, `${JSON.stringify(out, null, 2)}\n`);
@@ -114,13 +117,13 @@ export function writeJob(file, j, { append = false } = {})
 }
 
 // The lines apply.js prints for the command: the file, and what fetch.js will do with it.
-export const nextLines = (file, j) => [
+export const nextLines = (file: string, j: FetchJob): string[] => [
     `Fetch next, in the background (a first download can take minutes): ${file}`,
     `  fetches ${j.fetch.map((s) => s.what).join(', ')} and starts each once, then reports the status of ${j.check.join(', ')} (claude mcp get)`,
 ];
 
 // Each server's status line as `claude mcp get` prints it - a health check of up to 30 s each. -> [{ name, out }]
-export function status(names, { cwd, env, runCli = cli.run, log = console.log })
+export function status(names: string[], { cwd, env, runCli = cli.run, log = console.log }: { cwd: string; env: Env; runCli?: RunCli; log?: Log }): Status[]
 {
     if (names.length) log('', 'Status, from the CLI:');
     return names.map((name) =>
@@ -135,15 +138,15 @@ export function status(names, { cwd, env, runCli = cli.run, log = console.log })
 }
 
 // -> Promise<{ fetched: [what], started: [name], skipped: [line], warnings: [detail], status: [{ name, out }] }>
-export async function run(j, { env = process.env, runFetch = realFetch, start = realStart, runCli = cli.run, log = console.log } = {})
+export async function run(j: FetchJob, { env = process.env, runFetch = realFetch, start = realStart, runCli = cli.run, log = console.log }: FetchOptions = {}): Promise<FetchRun>
 {
-    const res = { fetched: [], started: [], skipped: [], warnings: [], status: [] };
+    const res: FetchRun = { fetched: [], started: [], skipped: [], warnings: [], status: [] };
     const cwd = j.project;
-    const warn = (n, detail) => { res.warnings.push(detail); log(`${n}. warn   ${detail}`); };
+    const warn = (n: number, detail: string) => { res.warnings.push(detail); log(`${n}. warn   ${detail}`); };
     for (const [i, step] of j.fetch.entries())
     {
         const n = i + 1;
-        const stepEnv = { ...env };
+        const stepEnv: Env = { ...env };
         for (const [k, v] of Object.entries(step.env || {})) stepEnv[k] = expand(v, env);
         log(`${n}. ...    fetching ${step.what} for '${step.name}'`);
         const t0 = Date.now();

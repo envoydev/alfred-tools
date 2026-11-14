@@ -230,8 +230,8 @@ export function buildEntry(row: CatalogRow, routeId: string, a: BuildAnswers, ct
     const extra: string[] = [];
     for (const [key, spec] of Object.entries(route.optionalArgs || {}))
     {
-        if (key === 'executablePath' && a.executablePath) extra.push(...spec.map((s) => subst(s, { value: a.executablePath! })));
-        if (key === 'token' && a.token) extra.push(...spec);
+        if (key === 'executablePath' && a.executablePath) extra.push(...spec!.map((s) => subst(s, { value: a.executablePath! })));
+        if (key === 'token' && a.token) extra.push(...spec!);
     }
     if (route.runtime === 'uvx')
     {

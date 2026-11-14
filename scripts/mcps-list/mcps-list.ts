@@ -18,7 +18,7 @@ import type { CatalogRow } from '../catalog/types.ts';
 import type { TokenField } from '../keys/types.ts';
 import type { Registration } from '../entries/types.ts';
 import type { Family, InventoryView, RootsCtx } from '../roots/types.ts';
-import type { ListChanges, ListRead, ListServer, Live, McpsList, OldRecord, OwnEntry, ReadState, StepLike } from './types.ts';
+import type { ListChanges, ListRead, ListServer, Live, McpsList, OldRecord, OwnEntry, ReadState, StepEnd, StepLike } from './types.ts';
 
 // A list or record file as parsed, before it is checked.
 interface RawDoc
@@ -73,14 +73,14 @@ export const serverKey = (s: { name: string; scope: string }): string => `mcp:${
 export function regKey(step: StepLike | null | undefined): string | null
 {
     if (!step || typeof step.op !== 'string' || !step.op.startsWith('mcp-')) return null;
-    if (step.op === 'mcp-move' && step.to) return `mcp:${step.to.name}~${step.to.scope}`;
+    if (step.op === 'mcp-move' && step.to) return `mcp:${(step.to as StepEnd).name}~${(step.to as StepEnd).scope}`;
     return typeof step.name === 'string' && typeof step.scope === 'string' ? `mcp:${step.name}~${step.scope}` : null;
 }
 
 // The list with this plan's changes: each upsert replaces the server with its key in place or is appended, each drop
 // removes its key, `own` (roots.ownOnly's result) replaces the own entries when given, and `cursorOffer` is set when
 // given. -> a new doc
-export function mergeList(list: McpsList | null | undefined, { upserts = [], drops = [], own, cursorOffer }: ListChanges = {}): McpsList
+export function mergeList(list: Omit<McpsList, 'version'> | null | undefined, { upserts = [], drops = [], own, cursorOffer }: ListChanges = {}): McpsList
 {
     const servers = ((list && list.servers) || []).slice();
     for (const s of upserts)

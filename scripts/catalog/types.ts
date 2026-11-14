@@ -59,7 +59,7 @@ export interface CatalogRoute
     authMode?: string; // stored - do not rename
     helper?: RouteHelper; // stored - do not rename
     tokenVar?: string; // stored - do not rename
-    optionalArgs?: Record<string, string[]>; // stored - do not rename
+    optionalArgs?: { executablePath?: string[]; token?: string[]; [arg: string]: string[] | undefined }; // stored - do not rename
     image?: { name: string; tag: string }; // stored - do not rename
     fallback?: RouteFallback; // stored - do not rename
     keyless?: string; // stored - do not rename

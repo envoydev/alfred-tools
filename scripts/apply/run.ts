@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 11
 // APPLY - runs a plan's operations in order through the `claude` CLI, reads each back, and stops at the first failure.
 //
 //   node apply.js <plan.json> [--tmp <dir>] [--data <plugin data dir>]
@@ -34,11 +33,13 @@ import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { addAndVerify, rowOf, removeAndVerify, restoreBy, makeRunner, restoreStep, fillStep } from './cli-steps.ts';
 import { rootIgnore, writeHelper, writeShipped, moveRootFile, ensureKeyName, listWrite, retireRecord, denyRead, recordRoot, failureLists } from './file-steps.ts';
 import { emptyBaseModes } from './serena-config.ts';
+import type { Endpoint, McpAddStep, McpMoveStep, McpReplaceStep, PlanStep, Reconnect } from '../plan/types.ts';
+import type { ApplyCtx, ApplyOptions, ApplyPlan, ApplyReport, StepResult, Status } from './types.ts';
 
 // One operation. { ok, detail, extra[] }
-export function runStep(step, ctx)
+export function runStep(step: PlanStep, ctx: ApplyCtx): StepResult
 {
-    const call = ctx.call;
+    const call = ctx.call!;
     switch (step.op)
     {
         case 'ensure-dir': {
@@ -89,31 +90,31 @@ export function runStep(step, ctx)
 // halfway. The slow half - the fetch steps and the `claude mcp get` status, minutes on a first install - goes to
 // <tmp>/fetch.json (or `fetchFile`; false writes none, for a caller that collects several applies) for fetch.js, which
 // the command runs in the background.
-export function apply(plan, { env = process.env, tmp, runCli = cli.run, log = console.log, fetchFile, data = null } = {})
+export function apply(plan: ApplyPlan, { env = process.env, tmp, runCli = cli.run, log = console.log, fetchFile, data = null }: ApplyOptions = {}): ApplyReport
 {
     const project = plan.project;
-    const report = { applied: [], failed: null, notRun: [], readback: [], keys: [], noop: false, toFetch: [], fetch: null, fetchFile: null, tmp: tmp || null, appliedKeys: new Set(), cursorFiles: new Set(), lists: [] };
+    const report: ApplyReport = { applied: [], failed: null, notRun: [], readback: [], keys: [], noop: false, toFetch: [], fetch: null, fetchFile: null, tmp: tmp || null, appliedKeys: new Set(), cursorFiles: new Set(), lists: [] };
     if (!plan.steps.length)
     {
         report.noop = true;
         log('Nothing to apply: every answer already matches what is installed. No claude call was made.');
         return report;
     }
-    const ctx = { project, env, tmp: tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-')), runCli, catalog: catalogLib.load(), alfredEnabled: Boolean(plan.alfredCodeEnabled), data };
+    const ctx: ApplyCtx = { project, env, tmp: tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-')), runCli, catalog: catalogLib.load(), alfredEnabled: Boolean(plan.alfredCodeEnabled), data };
     ctx.call = makeRunner(ctx);
     ctx.report = report;
     report.tmp = ctx.tmp;
     for (let i = 0; i < plan.steps.length; i++)
     {
-        const step = plan.steps[i];
+        const step = plan.steps[i]!;
         if (step.op === 'fetch') { report.toFetch.push(step); log(`${i + 1}. later  ${step.why} (fetch.ts, after the read-back)`); continue; }
         const ready = restoreStep(step, ctx);
-        const filled = ready.error ? null : fillStep(ready.step, ctx);
+        const filled = ready.error ? null : fillStep(ready.step!, ctx);
         // a step that throws (a .cursor that is a file, a read-only target) is a failed step, so the failure path below
         // still takes Cursor off the list entries it never reached (spec D1)
-        let r;
-        try { r = ready.error ? { ok: false, detail: ready.error } : runStep(filled.step, ctx); }
-        catch (e) { r = { ok: false, detail: `${step.op}: ${e.message}` }; }
+        let r: StepResult;
+        try { r = ready.error ? { ok: false, detail: ready.error } : runStep(filled!.step, ctx); }
+        catch (caught) { const e = caught as NodeJS.ErrnoException; r = { ok: false, detail: `${step.op}: ${e.message}` }; }
         log(`${i + 1}. ${r.ok ? 'ok    ' : 'FAILED'} ${r.detail}`);
         if (filled && filled.note) { report.keys.push(filled.note); log(`   key: ${filled.note}`); }
         if (r.ok)
@@ -147,9 +148,9 @@ export function apply(plan, { env = process.env, tmp, runCli = cli.run, log = co
     // what was written and read back: with a package to fetch, fetch.js fetches it and then asks the CLI for the status;
     // with none (a hosted URL, a rename, a move), the status is asked here
     const done = new Set(report.applied.map((a) => a.i));
-    const written = plan.steps.filter((s, i) => done.has(i + 1) && ['mcp-add', 'mcp-replace', 'mcp-move'].includes(s.op)).map((s) => s.to || { name: s.name, scope: s.scope });
+    const written = plan.steps.filter((s, i) => done.has(i + 1) && ['mcp-add', 'mcp-replace', 'mcp-move'].includes(s.op)).map((s): Endpoint => (s as McpMoveStep).to || { name: (s as McpAddStep).name, scope: (s as McpAddStep).scope });
     // a bridge whose key or URL names are not filled yet exits at its start: its status would only say so (0.4.0 Ruling 11)
-    const unfilled = new Set(plan.steps.filter((s) => s.filled === false).map((s) => (s.to ? s.to.name : s.name)));
+    const unfilled = new Set(plan.steps.filter((s) => (s as McpReplaceStep).filled === false).map((s) => ((s as McpMoveStep).to ? (s as McpMoveStep).to.name : (s as McpReplaceStep).name)));
     const fresh = written.map((w) => w.name).filter((n) => !unfilled.has(n));
     const scopeOf = new Map(written.map((w) => [w.name, w.scope]));
     // a hosted keyed server fetches nothing: its status is asked now, so a refused key is named here (spec F3)
@@ -157,7 +158,7 @@ export function apply(plan, { env = process.env, tmp, runCli = cli.run, log = co
     const now = new Set(reconnect.map((r) => r.name));
     const toFetch = report.toFetch.filter((s) => scopeOf.has(s.name)).map((s) => ({ ...s, scope: scopeOf.get(s.name) }));
     report.fetch = job(project, toFetch, toFetch.length ? fresh.filter((n) => !now.has(n)) : fresh);
-    let statuses = [];
+    let statuses: Status[] = [];
     if (!report.fetch.fetch.length) statuses = status(fresh, { cwd: project, env, runCli, log });
     else
     {
@@ -177,11 +178,11 @@ export function apply(plan, { env = process.env, tmp, runCli = cli.run, log = co
 // tests/matrix/field-fixes.test.ts X7, docs/sources.md 'Claude Code - a refused key'): a server that is down, errs or
 // asks for OAuth gives another reason.
 export const REFUSED = /Server rejected the Authorization header minted by the configured headersHelper \(HTTP 40[13]\)/;
-export const refusedLine = ({ name, variable, hint }) => `${name}: the server refused the key in ${variable} - ${hint || 'check the value'}`;
+export const refusedLine = ({ name, variable, hint }: Pick<Reconnect, 'name' | 'variable' | 'hint'>): string => `${name}: the server refused the key in ${variable} - ${hint || 'check the value'}`;
 
 // After the read-back: each hosted keyed server's reconnect line, then a refused key named - or, in a folder whose trust
 // is not accepted, the trust line, since the helper never ran and the key never left the file.
-export function reconnectLines(reconnect, statuses, project)
+export function reconnectLines(reconnect: Reconnect[], statuses: Status[], project: string): string[]
 {
     const lines = reconnect.map(reconnectLine);
     for (const r of reconnect.filter((x) => x.filled))

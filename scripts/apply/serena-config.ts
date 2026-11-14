@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 11
 // SERENA'S BASE MODES (spec D7, F9). <SERENA_HOME>/serena_config.yml lists `base_modes`, and with its default the manual
 // Serena hands the model describes edit tools the plugin's context leaves out. This sets `base_modes: []`.
 //
@@ -6,48 +5,49 @@
 // byte, writes through a temporary file with the file's own mode, and never prints, returns or logs the file's text.
 import fs from 'node:fs';
 import path from 'node:path';
+import type { ServerEntry } from '../core/types.ts';
 
 export const CONFIG = 'serena_config.yml';
 const KEY = /^base_modes[ \t]*:(.*?)(\r?)$/;
 
-export const configOf = (home) => (/^[A-Za-z]:[\\/]|\\\\/.test(home) ? path.win32 : path.posix).join(home, CONFIG);
+export const configOf = (home: string): string => (/^[A-Za-z]:[\\/]|\\\\/.test(home) ? path.win32 : path.posix).join(home, CONFIG);
 
 // The lines of a text with their endings: [[body, eol]].
-function linesOf(text)
+function linesOf(text: string): [string, string][]
 {
-    const out = [];
+    const out: [string, string][] = [];
     const re = /([^\n]*?)(\r?\n|$)/g;
-    let m;
+    let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null)
     {
         if (m[0] === '') break;
-        out.push([m[1], m[2]]);
+        out.push([m[1]!, m[2]!]);
     }
     return out;
 }
 
 // Where base_modes sits: { at, end, inline } over the lines - `end` past its items - or null when the file has no key.
-function locate(lines)
+function locate(lines: [string, string][]): { at: number; end: number; inline: string } | null
 {
     const at = lines.findIndex(([body]) => KEY.test(body));
     if (at < 0) return null;
-    const value = KEY.exec(lines[at][0])[1].replace(/\s+#.*$/, '').trim();
+    const value = KEY.exec(lines[at]![0])![1]!.replace(/\s+#.*$/, '').trim();
     let end = at + 1;
     if (value.startsWith('[') && !value.includes(']'))
     {
         // a flow list over several lines: up to the line that closes it
-        while (end < lines.length && !lines[end][0].includes(']')) end += 1;
+        while (end < lines.length && !lines[end]![0].includes(']')) end += 1;
         end = Math.min(end + 1, lines.length);
     }
     else if (value === '')
-        while (end < lines.length && /^[ \t]*-([ \t]|$)/.test(lines[end][0])) end += 1;
+        while (end < lines.length && /^[ \t]*-([ \t]|$)/.test(lines[end]![0])) end += 1;
     return { at, end, inline: value };
 }
 
-const readText = (file) => { try { return fs.readFileSync(file, 'utf8'); } catch { return null; } };
+const readText = (file: string): string | null => { try { return fs.readFileSync(file, 'utf8'); } catch { return null; } };
 
 // -> 'absent' (no file, or no base_modes key) | 'empty' (base_modes: []) | 'set'
-export function baseModesState(file)
+export function baseModesState(file: string): 'absent' | 'empty' | 'set'
 {
     const text = readText(file);
     if (text === null) return 'absent';
@@ -60,19 +60,19 @@ export function baseModesState(file)
 }
 
 // base_modes: [] in place of the key and its items (or appended when the file has no key). -> { changed, detail }
-export function emptyBaseModes(file)
+export function emptyBaseModes(file: string): { changed: boolean; detail: string }
 {
     const text = readText(file);
     if (text === null) return { changed: false, detail: `${file} is not there yet - serena writes it at its first start` };
     const lines = linesOf(text);
     const loc = locate(lines);
     const eol = text.includes('\r\n') ? '\r\n' : '\n';
-    let next;
+    let next: string;
     if (!loc) next = `${text}${text === '' || /\n$/.test(text) ? '' : eol}base_modes: []${eol}`;
     else
     {
         if (loc.inline === '[]') return { changed: false, detail: `${file}: base_modes is [] already` };
-        const keyEol = lines[loc.end - 1][1] || lines[loc.at][1] || '';
+        const keyEol = lines[loc.end - 1]![1] || lines[loc.at]![1] || '';
         const head = lines.slice(0, loc.at).map(([b, e]) => b + e).join('');
         const tail = lines.slice(loc.end).map(([b, e]) => b + e).join('');
         next = `${head}base_modes: []${keyEol}${tail}`;
@@ -89,7 +89,7 @@ export function emptyBaseModes(file)
 // Which homes the edit may touch (D7): never an alfred-code 2.x home (.alfred/serena/home), shared with its old setup;
 // on Windows the home is Serena's own default (<profile>\.serena) or a typed space-free folder, which every other Serena
 // on the machine reads too. -> { ok, shared?, reason? }
-export function editableHome(home, ctx = {})
+export function editableHome(home: string, ctx: { platform?: string } = {}): { ok: false; reason: string; shared?: undefined } | { ok: true; shared: boolean; reason?: undefined }
 {
     const p = String(home || '').replace(/\\/g, '/').replace(/\/+$/, '');
     if (/(^|\/)\.alfred\/serena\/home$/.test(p))
@@ -99,7 +99,7 @@ export function editableHome(home, ctx = {})
 
 // The plan line for a serena add, replace or move: what the edit will do to its home, before the user confirms.
 // -> string | null
-export function planNote(entry, ctx = {})
+export function planNote(entry: ServerEntry | null | undefined, ctx: { platform?: string } = {}): string | null
 {
     const home = entry && entry.env && entry.env.SERENA_HOME;
     if (!home) return null;

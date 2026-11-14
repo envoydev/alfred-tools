@@ -69,14 +69,16 @@ export interface ListChanges
     cursorOffer?: string | null | undefined;
 }
 
-// A plan step as the list and the order step read it.
+// A plan step as the list and the order step read it: a move's `to` is its new name and scope (a root file's move
+// names a path there).
 export interface StepLike
 {
     op?: unknown;
     name?: unknown;
     scope?: unknown;
-    to?: { name?: string | undefined; scope?: string | undefined } | null | undefined;
+    to?: unknown;
 }
+export type StepEnd = { name: string; scope: string };
 
 // The step that orders .mcp.json's servers.
 export interface OrderStep

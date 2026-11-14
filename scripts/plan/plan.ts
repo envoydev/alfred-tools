@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 11
 // THE PLAN - answers in, an ordered list of operations out. Nothing here changes anything.
 //
 //   node plan.js <inventory.json> <answers.json> [--out <plan.json>]     the plan, printed, and written for apply.js
@@ -32,15 +31,17 @@ import { makeCtx } from './context.ts';
 import { planMcp, fileSteps } from './pick.ts';
 import { planChange, planRemove, planExisting, planRootChange, movedLists } from './change.ts';
 export { deepEqual };
+import type { Inventory } from '../inventory/types.ts';
+import type { Answers, Plan, PlanCtx, PlanOptions, PlanStep } from './types.ts';
 
 // ---- the plan -------------------------------------------------------------------------------------------------------
 
-export function plan(inv, answers, opts = {})
+export function plan(inv: Inventory, answers: Answers, opts: PlanOptions = {}): Plan
 {
     const catalog = opts.catalog || catalogLib.load();
     // answers.machine: what prereq.js found (docker: false picks github's binary fallback); an explicit option wins
-    const ctx = { ...makeCtx(inv, { ...opts, machine: opts.machine || answers.machine }), changing: new Set(Object.keys(answers.change || {})), uses: [], rootMoves: [] };
-    const out = { version: 1, project: inv.project, os: inv.os, alfredCodeEnabled: Boolean(inv.alfredCodeEnabled), steps: [], notes: [], errors: [], unchanged: [], keys: [], reconnect: [], oauth: [], dangerous: [], expect: [] };
+    const ctx: PlanCtx = { ...makeCtx(inv, { ...opts, machine: opts.machine || answers.machine }), changing: new Set(Object.keys(answers.change || {})), uses: [], rootMoves: [] };
+    const out: Plan = { version: 1, project: inv.project, os: inv.os, alfredCodeEnabled: Boolean(inv.alfredCodeEnabled), steps: [], notes: [], errors: [], unchanged: [], keys: [], reconnect: [], oauth: [], dangerous: [], expect: [] };
     // the root folders (spec D2): every data folder, key file and helper of a family sits in its root
     const resolved = roots.resolve(inv, answers.roots, { ...ctx, catalog });
     out.errors.push(...resolved.errors);
@@ -84,7 +85,7 @@ export function plan(inv, answers, opts = {})
     // a root change's moved list is the list from here on: its writes and Cursor's read it at its new path
     const listInv = movedLists(inv, ctx.rootMoves);
     const files = fileSteps(listInv, ctx, out, out.steps);
-    const moves = ctx.rootMoves.map((m) => ({ op: 'move-root-file', from: m.from, to: m.to, why: `the ${m.family} root moves: ${m.name} goes with it` }));
+    const moves = ctx.rootMoves.map((m): PlanStep => ({ op: 'move-root-file', from: m.from, to: m.to, why: `the ${m.family} root moves: ${m.name} goes with it` }));
     const ignores = files.before.filter((x) => x.op === 'root-ignore');
     out.steps = [...ignores, ...moves, ...files.before.filter((x) => x.op !== 'root-ignore'), ...out.steps, ...files.after];
     // Cursor's files from the lists, after the list-write steps they read (spec D2)
