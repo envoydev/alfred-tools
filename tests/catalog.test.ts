@@ -167,9 +167,9 @@ test('code-running tools are named per row', () => {
     assert.deepStrictEqual(danger('macos-control'), ['Shell']);
 });
 
-test('retired-plugin names the three plugins the catalog dropped, and no row', () => {
+test('retired-plugin names the three plugins the catalog dropped and this plugin\'s former id, and no row', () => {
     const r = cat.fixes.find((f) => f.id === 'retired-plugin')!;
-    assert.deepStrictEqual(r.ids, ['typescript-lsp@claude-plugins-official', 'csharp-lsp@claude-plugins-official', 'claude-hud@claude-hud']);
+    assert.deepStrictEqual(r.ids, ['typescript-lsp@claude-plugins-official', 'csharp-lsp@claude-plugins-official', 'claude-hud@claude-hud', 'preferred-tools@envoydev']);
     assert.deepStrictEqual([r.kind, r.upgrade, r.tool], ['machine', '0.5.0', []]);
 });
 

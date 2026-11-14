@@ -2345,3 +2345,95 @@ test('after a move, a second apply finds nothing and prints no RECHECK', () =>
     }
     finally { w.clean(); }
 });
+
+// ---- the roots map and the former plugin (spec D4, D5) -------------------------------------------------------------
+const OLD_ID = 'preferred-tools@envoydev';
+function dataDirs(w: World)
+{
+    const data = path.join(w.dir, 'plugins-data', 'alfred-tools-envoydev');
+    const former = path.join(w.dir, 'plugins-data', 'preferred-tools-envoydev');
+    fs.mkdirSync(data, { recursive: true });
+    fs.mkdirSync(former, { recursive: true });
+    return { data, former };
+}
+const mapOf = (projects: Record<string, string>, global: string | null = null) => ({ version: 1, global, projects });
+
+test('the roots map carries over from the old data folder, re-pointed', () =>
+{
+    const w = world();
+    try
+    {
+        oldRoot(w);
+        const { data, former } = dataDirs(w);
+        const key = rootsLib.mapKey(w.project);
+        writeJson(path.join(former, 'roots.json'), mapOf({ [key]: formerRoot(w.project), other: '/elsewhere/keys' }));
+        const found = moveOf(w, { data });
+        assert.deepStrictEqual(found.map((f) => [f.name, Boolean(f.blocked)]), [['project', false], ['data', false]]);
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w, { data }), ['root-move'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.deepStrictEqual(readJson(path.join(data, 'roots.json')), mapOf({ [key]: ptRoot(w), other: '/elsewhere/keys' }));
+        assert.deepStrictEqual(readJson(path.join(former, 'roots.json')), mapOf({ [key]: formerRoot(w.project), other: '/elsewhere/keys' }), 'the old folder is never written');
+        assert.deepStrictEqual(moveOf(w, { data }), []);
+    }
+    finally { w.clean(); }
+});
+
+test('an existing map is kept and re-pointed on a later move; no --data, no data finding', () =>
+{
+    const w = world();
+    try
+    {
+        oldRoot(w);
+        const { data, former } = dataDirs(w);
+        const key = rootsLib.mapKey(w.project);
+        writeJson(path.join(former, 'roots.json'), mapOf({ old: '/x' }));
+        writeJson(path.join(data, 'roots.json'), mapOf({ [key]: formerRoot(w.project) }));
+        assert.deepStrictEqual(moveOf(w, { data }).map((f) => f.name), ['project'], 'a map already here is not replaced');
+        assert.deepStrictEqual(moveOf(w).map((f) => f.name), ['project']);
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w, { data }), ['root-move'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.deepStrictEqual(readJson(path.join(data, 'roots.json')), mapOf({ [key]: ptRoot(w) }));
+    }
+    finally { w.clean(); }
+});
+
+test('a data finding alone gates nothing; a data-only apply prints no RECHECK', () =>
+{
+    const w = world();
+    try
+    {
+        const { data, former } = dataDirs(w);
+        writeJson(path.join(former, 'roots.json'), mapOf({ old: '/x' }));
+        seed(w, 'github', 'local', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: helperCmd(path.join(ptRoot(w), 'mcp-headers.js'), 'ACME_GH', 'Bearer') });
+        const d = detect(ctxOf(w, { data }));
+        assert.strictEqual(d.afterMove, undefined);
+        assert.ok(d.found.some((f) => f.id === 'root-move' && f.name === 'data') && d.found.some((f) => f.id === 'helper-missing'), JSON.stringify(ids(d.found)));
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w, { data }), ['root-move'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.deepStrictEqual(readJson(path.join(data, 'roots.json')), mapOf({ old: '/x' }));
+        assert.doesNotMatch(l.text(), /RECHECK/);
+    }
+    finally { w.clean(); }
+});
+
+test('retired-plugin offers preferred-tools@envoydev with its text, outside the alfred flag; its uninstall is blocked while the data finding is open', () =>
+{
+    const ctx = ctxFor({ plugins: [plug(OLD_ID, 'user')] });
+    const both = { ...ctx, inventory: { ...ctx.inventory, alfredCodeEnabled: true } };
+    const [f] = detect(both).found.filter((x) => x.id === 'retired-plugin') as [Finding];
+    assert.deepStrictEqual([f.name, f.scope, f.alfred, Boolean(f.blocked)], [OLD_ID, 'user', false, false]);
+    assert.match(f.found, /preferred-tools@envoydev is this plugin under its former name, installed at user scope - alfred-tools replaces it/);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-old-data-'));
+    try
+    {
+        const data = path.join(dir, 'alfred-tools-envoydev');
+        writeJson(path.join(dir, 'preferred-tools-envoydev', 'roots.json'), mapOf({}));
+        fs.mkdirSync(data);
+        const open = detect(makeCtx({ inventory: ctx.inventory, catalog, machine: noMachine(), data, env: ctx.env })).found.filter((x) => x.id === 'retired-plugin') as [Finding];
+        assert.match(open[0]!.blocked!, /the roots map in .*preferred-tools-envoydev comes over first/);
+        // running as the former id (an update during the release window), it never offers to uninstall itself
+        const self = detect(makeCtx({ inventory: ctx.inventory, catalog, machine: noMachine(), data: path.join(dir, 'preferred-tools-envoydev'), env: ctx.env })).found.filter((x) => x.id === 'retired-plugin');
+        assert.deepStrictEqual(self, []);
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

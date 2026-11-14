@@ -69,7 +69,7 @@ export function upgradeOffers(context: UpdateCtx, out: UpdateCheck): void
     {
         // an uninstall the user turned down is theirs to keep: no offer, no note, nothing waiting (spec D9)
         if (finding.declined) continue;
-        if (finding.id === 'retired-plugin')
+        if (finding.id === 'retired-plugin' && !finding.blocked)
         {
             // one offer per id and scope, so picking one uninstalls only that scope; where alfred-code is set up it is
             // named and kept out of 'All of them'

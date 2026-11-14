@@ -107,6 +107,25 @@ export function readMap(dataDir: string | null | undefined): MapRead
     return { version: MAP_VERSION, global: typeof doc.global === 'string' && doc.global ? doc.global : null, projects };
 }
 
+// The map written whole, through a temporary file beside it.
+export function writeMap(dataDir: string, map: RootsMap): void
+{
+    fs.mkdirSync(dataDir, { recursive: true });
+    const file = path.join(dataDir, FILES.map);
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, `${JSON.stringify({ version: MAP_VERSION, global: map.global, projects: map.projects }, null, 2)}\n`);
+    fs.renameSync(tmp, file);
+}
+
+// The data folder the plugin had under its former name (spec D4): `<plugins>/data/preferred-tools-<marketplace>` beside
+// this one. Null when this folder is not alfred-tools'.
+export function dataSibling(dataDir: string | null | undefined): string | null
+{
+    if (!dataDir) return null;
+    const base = path.basename(dataDir);
+    return /^alfred-tools-/.test(base) ? path.join(path.dirname(dataDir), base.replace(/^alfred-tools-/, 'preferred-tools-')) : null;
+}
+
 // The map's key for a project: its trust root (the git root, else the folder), as the account file keys it.
 export const mapKey = (project: string): string => account.projectKey(account.localRoot(project));
 

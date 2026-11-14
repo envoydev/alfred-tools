@@ -303,7 +303,8 @@
       "ids": [
         "typescript-lsp@claude-plugins-official",
         "csharp-lsp@claude-plugins-official",
-        "claude-hud@claude-hud"
+        "claude-hud@claude-hud",
+        "preferred-tools@envoydev"
       ],
       "os": [
         "darwin",
@@ -311,11 +312,11 @@
         "win32"
       ],
       "kind": "machine",
-      "symptom": "a plugin the catalog no longer lists - it works in Claude Code alone - is installed at a scope, and its uninstall was not declined there",
+      "symptom": "a plugin the catalog no longer lists - it works in Claude Code alone - or this plugin under its former name, preferred-tools, is installed at a scope, and its uninstall was not declined there",
       "detect": "retiredPluginDetect",
       "fix": "retiredPluginFix",
-      "verifiedOn": "this build: tests/fix.test.js and tests/update.test.js retired-plugin (2026-11-13)",
-      "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D8, D9"
+      "verifiedOn": "this build: tests/fix.test.ts and tests/update.test.ts retired-plugin (2026-11-13), preferred-tools@envoydev (2026-11-14)",
+      "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D8, D9; docs/superpowers/specs/2026-11-14-alfred-tools-rename-design.md D5"
     },
     {
       "id": "read-guard",

@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as C from './common.ts';
+import * as rename from './rename.ts';
 import { rootOfEntry } from '../entries/locations.ts';
 import { bridgeParts } from '../entries/entry.ts';
 import { fetchStep } from '../entries/names.ts';
@@ -27,12 +28,24 @@ export function retiredPluginDetect(context: FixCtx): Finding[]
     const ids = C.fixOf(context, 'retired-plugin')!.ids || [];
     const declined = declines.read(context.data);
     const alfred = Boolean(context.inventory.alfredCodeEnabled);
-    return (context.inventory.plugins || []).filter((plugin) => ids.includes(plugin.id)).map((plugin) =>
+    // run under the former name (its data folder says so), it never offers to uninstall itself
+    const self = Boolean(context.data) && path.basename(context.data!).startsWith('preferred-tools-');
+    const carry = rename.mapToCarry(context.data);
+    return (context.inventory.plugins || []).filter((plugin) => ids.includes(plugin.id) && !(self && plugin.id === rename.OLD_PLUGIN_ID)).map((plugin) =>
     {
+        const proposal = { command: `claude plugin uninstall ${plugin.id} --scope ${plugin.scope}` };
+        if (plugin.id === rename.OLD_PLUGIN_ID)
+        {
+            // the former plugin (spec D5): its own text, never alfred-code's; its uninstall deletes its data folder (A3),
+            // so it waits while that folder's roots map has not come over
+            const old = { id: 'retired-plugin', name: plugin.id, scope: plugin.scope, alfred: false, found: `${plugin.id} is this plugin under its former name, installed at ${plugin.scope} scope - alfred-tools replaces it`, proposal };
+            if (declined.some((declinedPlugin) => declines.same(declinedPlugin, plugin))) return { ...old, declined: true, blocked: `${plugin.id} is kept at ${plugin.scope}; remove it with ${proposal.command}` };
+            return carry ? { ...old, blocked: `the roots map in ${path.dirname(carry.from)} comes over first; then run /alfred-tools:fix` } : old;
+        }
         const base = {
             id: 'retired-plugin', name: plugin.id, scope: plugin.scope, alfred,
             found: `${plugin.id} is installed at ${plugin.scope} scope; alfred-tools no longer lists it - it works in Claude Code alone${alfred ? `; ${plugin.id} - alfred-code also installs it, and this removes it for both` : ''}`,
-            proposal: { command: `claude plugin uninstall ${plugin.id} --scope ${plugin.scope}` },
+            proposal,
         };
         if (!declined.some((declinedPlugin) => declines.same(declinedPlugin, plugin))) return base;
         return { ...base, declined: true, blocked: `${plugin.id} is kept at ${plugin.scope}; remove it with claude plugin uninstall ${plugin.id} --scope ${plugin.scope}` };

@@ -1168,3 +1168,19 @@ test('root-repoint alone gates the check too', async () => {
     }
     finally { w.clean(); }
 });
+
+test('a blocked old-plugin uninstall is a note, not an offer', async () => {
+    const w = world();
+    try
+    {
+        seed(w, { markets: [], installed: [['preferred-tools@envoydev', '0.4.0', 'user']] });
+        const data = path.join(w.dir, 'plugins-data', 'alfred-tools-envoydev');
+        fs.mkdirSync(data, { recursive: true });
+        writeJson(path.join(w.dir, 'plugins-data', 'preferred-tools-envoydev', 'roots.json'), { version: 1, global: null, projects: {} });
+        const out = JSON.parse((await run(w, ['--check', '--json', '--no-refresh', '--data', data])).text);
+        assert.ok(!out.offers.some((o: { id: string }) => o.id.startsWith('upgrade:retired-plugin:preferred-tools@envoydev')), JSON.stringify(out.offers.map((o: { id: string }) => o.id)));
+        assert.ok(out.notes.some((n: string) => /preferred-tools@envoydev.*comes over first/.test(n)), JSON.stringify(out.notes));
+        assert.ok(out.offers.some((o: { id: string }) => o.id === 'upgrade:root-move:data'));
+    }
+    finally { w.clean(); }
+});

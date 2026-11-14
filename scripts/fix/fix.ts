@@ -242,8 +242,11 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     // the folder move (spec D3) comes first: each picked root renamed, then everything else found again on the moved
     // folders - the copied files a moved root holds brought up to date, and every managed server naming a moved root
     // re-pointed in this same apply
-    const moves = todo.filter((finding) => finding.id === 'root-move' && finding.moveFrom);
-    if (moves.length)
+    // the former plugin's roots map comes over after the folders, so it is re-pointed at them as it is copied (spec D4)
+    const allMoves = todo.filter((finding) => finding.id === 'root-move' && finding.moveFrom);
+    const moves = allMoves.filter((finding) => finding.name !== 'data');
+    const dataMove = allMoves.find((finding) => finding.name === 'data');
+    if (allMoves.length)
     {
         for (const finding of moves)
         {
@@ -262,11 +265,19 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
                 log(`${written.ok ? 'ok    ' : 'FAILED'} root-move: ${written.detail}`);
                 if (!written.ok) { result.failed = written.detail; return result; }
             }
+        if (dataMove)
+        {
+            const carried = F.rootMoveFix(dataMove, context);
+            log(`${carried.ok ? 'ok    ' : 'FAILED'} root-move: ${carried.detail}`);
+            if (!carried.ok) { result.failed = carried.detail; return result; }
+        }
+        const repointed = F.repointDataMap(context.data, moves.map((finding) => ({ from: finding.moveFrom!, to: finding.moveTo! })), F.machineOf(context));
+        if (repointed) log(`ok     root-move: ${repointed.detail}`);
         const now = detectAll(context).found;
         const same = (left: Finding, right: Finding) => left.id === right.id && left.name === right.name && left.scope === right.scope && left.app === right.app;
         const rest = todo.filter((finding) => finding.id !== 'root-move').map((finding) => now.find((candidate) => same(candidate, finding))).filter((finding): finding is Finding => Boolean(finding) && !finding!.blocked);
         todo = [...rest, ...now.filter((finding) => finding.id === 'root-repoint' && !finding.blocked && !rest.some((candidate) => same(candidate, finding)))];
-        for (const finding of moves) { result.applied.push(finding); log(`fixed       root-move on ${where(finding)}`); }
+        for (const finding of allMoves) { result.applied.push(finding); log(`fixed       root-move on ${where(finding)}`); }
     }
 
     // registration fixes: one replace per registration, the fixes composed in the catalog's order

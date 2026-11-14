@@ -3,6 +3,7 @@
 // root at `.alfred-tools`: its Claude Code entry through the registration pass, its list entry and Cursor's copy through
 // the repair tail. A registration the user owns is never touched.
 import fs from 'node:fs';
+import path from 'node:path';
 import * as roots from '../roots/roots.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { deepEqual } from '../core/json-file.ts';
@@ -10,6 +11,7 @@ import { pathFor } from '../entries/platform.ts';
 import * as C from './common.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Machine } from '../entries/types.ts';
+import type { RootsMap } from '../roots/types.ts';
 import type { Finding, FixCtx, MachineFixResult, MovedRoot } from './types.ts';
 
 // The plugin under its former name: its uninstall is offered beside the move (spec D5), never held back by it.
@@ -171,7 +173,38 @@ export function rootMoveDetect(context: FixCtx): Finding[]
         const global = move.families.includes('global') ? '; another project whose registrations name ~/.preferred-tools, or whose helper reads keys from it, works again when /alfred-tools:update runs in it' : '';
         out.push({ ...base, found: `renames ${move.from} to ${move.to} (keys, list, helpers, sign-ins and data move unread) and points ${mine.length} registration(s) at it; close other Claude Code and Cursor windows first${global}` });
     }
+    const carry = mapToCarry(context.data);
+    if (carry) out.push({ id: 'root-move', row: null, name: 'data', scope: null, moveFrom: carry.from, moveTo: carry.to, found: `copies the roots map ${carry.from} to ${carry.to}, its moved folders re-pointed; the old one is left as it was` });
     return out;
+}
+
+// The roots map the former plugin kept (spec D4), while this plugin's data folder has none: { from, to } files, else null.
+export function mapToCarry(data: string | null | undefined): { from: string; to: string } | null
+{
+    const sibling = roots.dataSibling(data);
+    if (!sibling) return null;
+    const from = path.join(sibling, roots.FILES.map);
+    const to = path.join(data!, roots.FILES.map);
+    return fs.existsSync(from) && !fs.existsSync(to) ? { from, to } : null;
+}
+
+// A map's roots that sit in a moved folder, pointed at the new one; the input is left as it was.
+export function repointMap(map: RootsMap, moved: MovedRoot[], machine: Machine): RootsMap
+{
+    const one = (root: string | null): string | null => (root ? repointText(root, moved, machine, false) : root);
+    return { version: map.version, global: one(map.global), projects: Object.fromEntries(Object.entries(map.projects).map(([key, root]) => [key, one(root)!])) };
+}
+
+// <data>/roots.json re-pointed at the moved folders; a map read with a note (newer, bad, unreadable) is never written.
+export function repointDataMap(data: string | null | undefined, moved: MovedRoot[], machine: Machine): MachineFixResult | null
+{
+    if (!data || !moved.length) return null;
+    const map = roots.readMap(data);
+    if (map.state) return null;
+    const next = repointMap(map, moved, machine);
+    if (deepEqual(next, { version: map.version, global: map.global, projects: map.projects })) return null;
+    roots.writeMap(data, next);
+    return { ok: true, detail: `re-pointed ${path.join(data, roots.FILES.map)} at the moved folders` };
 }
 
 // The first written path in `entry` that resolves into `root`, for the line that names an unmanaged registration.
@@ -185,9 +218,17 @@ function firstPath(entry: ServerEntry, root: string, machine: Machine): string
     return helperLine ? `${entry.headersHelper} (headersHelper)` : root;
 }
 
-// The rename, one call: an empty .alfred-tools is removed first; nothing inside is read (spec D3).
-export function rootMoveFix(finding: Finding, _context: FixCtx): MachineFixResult
+// The rename, one call: an empty .alfred-tools is removed first; nothing inside is read (spec D3). The data finding copies
+// the former plugin's roots map instead, re-pointed at the folders moved so far; the old file is never written.
+export function rootMoveFix(finding: Finding, context: FixCtx): MachineFixResult
 {
+    if (finding.name === 'data')
+    {
+        const map = roots.readMap(path.dirname(finding.moveFrom!));
+        if (map.state) return { ok: false, detail: `${map.note} - not copied; delete it or fix it, then run /alfred-tools:fix` };
+        roots.writeMap(path.dirname(finding.moveTo!), repointMap(map, movedRoots(context), machineOf(context)));
+        return { ok: true, detail: `copied the roots map ${finding.moveFrom} to ${finding.moveTo}` };
+    }
     const from = finding.moveFrom!;
     const to = finding.moveTo!;
     try
