@@ -29,6 +29,9 @@ the work; you paste what it prints and ask.
   fix's own code. A finding that needs the user - a key not filled yet, a folder to name - is a note naming
   `/preferred-tools:fix`, never an offer.
 
+If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
+preferred-tools needs Node 22.18 or newer - `node --version` shows yours.
+
 ## 1. What is behind
 
 ```

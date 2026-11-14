@@ -6,8 +6,11 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --detect), Bash(
 ---
 
 Find the known problems in what is installed and apply the recorded fix for each one the user picks. Every fix row is
-in `catalog/fixes.json`; the detectors are in `scripts/fixes/`. A row whose detector finds nothing is not shown. The
+in `catalog/fixes.json`; the detectors are in `scripts/fix/`. A row whose detector finds nothing is not shown. The
 argument, when given, narrows everything below to one fix id, tool or registration name: `$ARGUMENTS`.
+
+If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
+preferred-tools needs Node 22.18 or newer - `node --version` shows yours.
 
 ## 1. Detect
 

@@ -10,7 +10,7 @@ async function main(argv)
 {
     blockingStdio();
     const file = argv[0];
-    if (!file) { console.error('usage: fetch.js <fetch.json>'); return 2; }
+    if (!file) { console.error('usage: fetch.ts <fetch.json>'); return 2; }
     let j;
     try { j = JSON.parse(fs.readFileSync(file, 'utf8')); }
     catch (e) { console.error(`fetch: cannot read ${file} (${e.message})`); return 2; }

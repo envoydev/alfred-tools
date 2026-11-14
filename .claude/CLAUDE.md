@@ -53,9 +53,9 @@ private project names, no absolute local paths, no tokens, nothing from a user's
 - **The `claude` CLI is the only writer** of `.mcp.json` and the account `.claude.json`: `claude mcp add-json`,
   `remove` and `get`, and `claude plugin install`, `update`, `uninstall` and `list --json`. Scripts read those files,
   never write them - with one exception (the user's ruling, 2026-11-11, 'Reorder-only write'): after its CLI calls,
-  `scripts/mcp-order.js` rewrites `.mcp.json` with the same servers and values in `catalog.order`, the user's own after
+  `scripts/mcps-list/mcp-order.ts` rewrites `.mcp.json` with the same servers and values in `catalog.order`, the user's own after
   them, checks that nothing but the order changed, and writes through a temporary file.
-- **Cursor's two files are written by `scripts/cursor-mcp.js`** (0.5.0, the user's ruling 2, 2026-11-12), a second
+- **Cursor's two files are written by `scripts/cursor/cursor-mcp.ts`** (0.5.0, the user's ruling 2, 2026-11-12), a second
   exception: Cursor has no CLI that adds a server (`docs/sources.md`, F11), so the `cursor-write` step writes
   `<project>/.cursor/mcp.json` and `~/.cursor/mcp.json` from the list, through a temporary file, keeping every entry the
   user added and asking before it replaces a name the list does not mark for Cursor.
@@ -70,7 +70,7 @@ private project names, no absolute local paths, no tokens, nothing from a user's
   that matches no row is the user's and is never touched. The exceptions to 'no ledger': the list `<root>/mcps.json`
   (0.5.0, the user's ruling 2, 2026-11-12) - every server the plugin manages in that scope family, with its apps
   (`clients`), its Claude Code entry and Cursor's copy where it differs, never a key value, read and written only by
-  `scripts/mcps-list.js`; its `own` array holds the servers left on their own (the user's ruling, 2026-11-11, 'Managed
+  `scripts/mcps-list/mcps-list.ts`; its `own` array holds the servers left on their own (the user's ruling, 2026-11-11, 'Managed
   by default'), which install, configure, update and fix skip, and replaces 0.2.0-0.4.x's record
   `<root>/preferred-tools.json`, which update moves in and renames `preferred-tools.json.0.4.bak` - and the roots map
   `${CLAUDE_PLUGIN_DATA}/roots.json` (2026-11-10), which finds a named root again. A left entry whose fingerprint
@@ -82,9 +82,9 @@ private project names, no absolute local paths, no tokens, nothing from a user's
   that will be in root of .preferred-tools or .alfred', replacing the key-file rule of 2026-10-29). The user writes
   every value; the plugin writes names only (`ensure-key-name`). A hosted keyed route reads its key through the header
   helper `mcp-headers.js` each time Claude Code connects, and its registration holds neither the key nor a `${VAR}` for
-  it. A stdio keyed route is written in by `apply.js` at local and global scope, and is not offered at project scope.
-  The 0.1.x key files (alfred-code's store, `.preferred-tools/.secrets`) are read for names only. `scripts/keys.js` holds
-  the chains. No key in a file a command line names (`scripts/kept.js`), none printed, none asked for. A key is the
+  it. A stdio keyed route is written in by `apply.ts` at local and global scope, and is not offered at project scope.
+  The 0.1.x key files (alfred-code's store, `.preferred-tools/.secrets`) are read for names only. `scripts/keys/keys.ts` holds
+  the chains. No key in a file a command line names (`scripts/core/kept.ts`), none printed, none asked for. A key is the
   recommended way into every hosted route (2026-11-11), recommended at Global scope, since Claude Code runs no parent
   folder's helper in a child folder; with no key, a route that has OAuth uses it. The bridge (0.4.0) reads the key and
   the URL's names through the helper's reader, and passes the key to mcp-remote in its environment only.
@@ -98,14 +98,14 @@ private project names, no absolute local paths, no tokens, nothing from a user's
   expanded by the script: one data folder whatever folder Claude starts in, at the cost that the committed `.mcp.json`
   names this machine's path. Never a key in `.mcp.json`. Every file the plugin writes for a scope family sits in that
   family's root folder (project root: project and local scope; global root: global scope), memory's data included.
-- **`allowed-tools` pre-approves read-only calls only.** `apply.js`, `fetch.js`, `fix.js --apply`, `update.js --apply` and the
-  `hud-statusline.js` writes are never listed, so Claude Code's own prompt guards a change beside the command's written ask. `tests/lint.js`
+- **`allowed-tools` pre-approves read-only calls only.** `apply.ts`, `fetch.ts`, `fix.ts --apply`, `update.ts --apply` and the
+  `hud-statusline.ts` writes are never listed, so Claude Code's own prompt guards a change beside the command's written ask. `tests/lint.ts`
   enforces it.
 - **Script paths go through the plugin root.** A command's shell runs in the user's project, so every call is
   `node "${CLAUDE_PLUGIN_ROOT}/scripts/<file>"`.
 - **Asks stay within the AskUserQuestion limits** (1-4 questions per call, 2-4 options each). Exactly one option is
   marked `(Recommended)`, listed first, and nothing is applied before the plan is confirmed.
-- **Zero runtime dependencies.** Node 22 built-ins only. A plugin's Node dependencies install only with a lockfile and
+- **Zero runtime dependencies.** Node 22.18 built-ins only. A plugin's Node dependencies install only with a lockfile and
   `--ignore-scripts`, and `claude plugin update` installs none of the new `dependencies` a release adds. So the
   manifest never declares `dependencies`.
 

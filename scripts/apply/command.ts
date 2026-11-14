@@ -9,7 +9,7 @@ function main(argv)
 {
     blockingStdio();
     const file = argv[0];
-    if (!file) { console.error('usage: apply.js <plan.json> [--tmp <dir>] [--data <plugin data dir>]'); return 2; }
+    if (!file) { console.error('usage: apply.ts <plan.json> [--tmp <dir>] [--data <plugin data dir>]'); return 2; }
     const plan = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (plan.errors && plan.errors.length) { console.error(`apply: the plan has errors - nothing applied:\n${plan.errors.map((e) => `  ! ${e}`).join('\n')}`); return 1; }
     const flag = (name) => { const at = argv.indexOf(name); return at >= 0 ? argv[at + 1] : undefined; };

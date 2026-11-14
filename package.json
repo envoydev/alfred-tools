@@ -4,7 +4,7 @@
   "private": true,
   "description": "Build and test scripts for the preferred-tools Claude Code plugin. The plugin has no runtime dependencies.",
   "license": "MIT",
-  "engines": { "node": ">=22" },
+  "engines": { "node": "^22.18.0 || >=23.6.0" },
   "scripts": {
     "test": "node --test tests/*.test.ts",
     "matrix": "node --test --test-concurrency=1 tests/matrix/*.test.ts",

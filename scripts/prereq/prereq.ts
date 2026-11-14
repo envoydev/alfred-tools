@@ -102,7 +102,7 @@ function check(picks, ctx, catalog = catalogLib.load(), { withAudit = false } = 
         const needs = ids.map((id) =>
         {
             const fn = CHECKS[id];
-            if (!fn) throw new Error(`${rowId}: prerequisite '${id}' has no check in prereq.js`);
+            if (!fn) throw new Error(`${rowId}: prerequisite '${id}' has no check in prereq.ts`);
             const r = fn(ctx);
             if (r.machine) Object.assign(out.machine, r.machine);
             return { id, ok: r.ok, found: r.found || null, install: r.install || null };

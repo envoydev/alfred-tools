@@ -40,7 +40,7 @@ function main(argv)
         console.log(same ? 'reserved-names.json matches alfred-code' : `reserved-names.json differs from alfred-code:\n  file ${have}\n  now  ${names}`);
         return same ? 0 : 1;
     }
-    const doc = { note: 'Names alfred-code once registered and may retire. Built by scripts/refresh-reserved.js; do not hand-edit.', names };
+    const doc = { note: 'Names alfred-code once registered and may retire. Built by scripts/refresh-reserved.ts; do not hand-edit.', names };
     fs.writeFileSync(FILE, JSON.stringify(doc, null, 2) + '\n');
     console.log(`wrote ${names.length} names`);
     return 0;

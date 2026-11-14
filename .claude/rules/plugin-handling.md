@@ -14,7 +14,7 @@ Adding, changing, renaming or removing anything the plugin ships. `.claude/CLAUD
 ## One home per item
 
 - A command is `commands/<name>.md`, manual (`disable-model-invocation: true`); its work is a script in `scripts/`, called as `node "${CLAUDE_PLUGIN_ROOT}/scripts/<file>"`. `allowed-tools` lists read-only calls only.
-- A tool is one row in `catalog/tools.json`, a known problem one row in `catalog/fixes.json` with its code under `scripts/fixes/`. Every outside fact a row rests on goes into `docs/sources.md` with its URL and date.
+- A tool is one row in `catalog/tools.json`, a known problem one row in `catalog/fixes.json` with its code under `scripts/fix/`. Every outside fact a row rests on goes into `docs/sources.md` with its URL and date.
 - The repo root is the plugin root, and Claude Code scans its default folders whatever the manifest says: never add `skills/`, `agents/`, `hooks/`, `bin/`, `.mcp.json` or another default component path unless the plugin ships it.
 
 ## One version

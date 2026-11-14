@@ -40,7 +40,7 @@ async function main(argv, { env = process.env, out = (s) => process.stdout.write
 {
     let args;
     try { args = parseArgs(argv); }
-    catch (e) { out(`update: ${e.message}\nusage: node scripts/update.js --check | --questions | --apply <id,id|all|none> [--input key=value] [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`); return 2; }
+    catch (e) { out(`update: ${e.message}\nusage: node scripts/update.ts --check | --questions | --apply <id,id|all|none> [--input key=value] [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`); return 2; }
     const project = path.resolve(args.project || process.cwd());
     const inv = inventory.buildInventory({ project, env, run: runCli || cli.run, data: args.data || null });
     if (!inv.cli.ok) { out('preferred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }

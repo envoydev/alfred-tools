@@ -79,6 +79,18 @@ for (const file of textFiles)
     });
 }
 
+// The scripts are .ts and run on Node's type stripping (22.18 and newer): each command says what an older Node prints
+// and what to tell the user, before its first script call in the body (the frontmatter, allowed-tools included, is
+// skipped, as the CALL check skips it). Read with its line breaks folded, since prose wraps.
+const OLD_NODE = 'If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user: preferred-tools needs Node 22.18 or newer - `node --version` shows yours.';
+for (const file of fs.readdirSync(path.join(root, 'commands')).filter((f) => f.endsWith('.md')).map((f) => path.join(root, 'commands', f)))
+{
+    const body = fs.readFileSync(file, 'utf8').replace(/^---\n[\s\S]*?\n---\n/, '').replace(/\s+/g, ' ');
+    const call = body.indexOf('node "${CLAUDE_PLUGIN_ROOT}/scripts/');
+    const rule = body.indexOf(OLD_NODE);
+    if (call >= 0 && (rule < 0 || rule > call)) problems.push(`${path.relative(root, file)}: no old-Node rule ('${OLD_NODE.slice(0, 40)}...') before its first script call`);
+}
+
 // install asks only about the tools picked (0.3.0, spec F1, F4): no step about servers already set up, and a missing
 // prerequisite is asked one tool per call, as the walk asks one tool at a time
 {

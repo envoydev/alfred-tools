@@ -29,6 +29,8 @@ changed or removed with `/preferred-tools:configure`; say so whenever the user a
   folder you name, a name you choose, a setting, a browser binary, a host), ask for that one value in a single line of
   text - no `AskUserQuestion` - and end the turn; the user's next message is the value. A value the user typed as the
   Other answer to that question is taken the same way.
+- If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
+  preferred-tools needs Node 22.18 or newer - `node --version` shows yours.
 - Every file below lives in one temp folder. Make it once with `node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"` and call
   its path `<tmp>`.
 

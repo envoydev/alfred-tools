@@ -72,7 +72,7 @@ function render(out, { write })
 async function main(argv, { out = (s) => process.stdout.write(`${s}\n`), registry, now, file = FILE, env = process.env } = {})
 {
     const unknown = argv.filter((a) => a !== '--write');
-    if (unknown.length) { out(`refresh-pins: unknown argument '${unknown[0]}'\nusage: node scripts/refresh-pins.js [--write]`); return 2; }
+    if (unknown.length) { out(`refresh-pins: unknown argument '${unknown[0]}'\nusage: node scripts/refresh-pins.ts [--write]`); return 2; }
     const write = argv.includes('--write');
     const tools = JSON.parse(fs.readFileSync(file, 'utf8'));
     const result = await refresh(tools, { registry: registry || { versionsOf: (reg, name) => registryLib.versionsOf(reg, name, { env }) }, now });

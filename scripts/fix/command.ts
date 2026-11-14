@@ -44,7 +44,7 @@ function main(argv, { env = process.env, out = (s) => process.stdout.write(`${s}
 {
     let args;
     try { args = parseArgs(argv); }
-    catch (e) { out(`fix: ${e.message}\nusage: node scripts/fix.js --detect | --questions | --apply <id,id|all> [--only <x>] [--input key=value] [--project <dir>] [--data <dir>]`); return 2; }
+    catch (e) { out(`fix: ${e.message}\nusage: node scripts/fix.ts --detect | --questions | --apply <id,id|all> [--only <x>] [--input key=value] [--project <dir>] [--data <dir>]`); return 2; }
     const project = path.resolve(args.project || process.cwd());
     const data = args.data || null;
     const inv = inventory.buildInventory({ project, env, data });

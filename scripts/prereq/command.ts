@@ -11,7 +11,7 @@ function main(argv, { env = process.env, machine, platform = process.platform, o
     let picks;
     try { picks = picksFrom(argv, catalog); }
     catch (e) { out(`prereq: ${e.message}`); return 2; }
-    if (!picks) { out('usage: prereq.js <answers.json> | --rows id,id  [--json]'); return 2; }
+    if (!picks) { out('usage: prereq.ts <answers.json> | --rows id,id  [--json]'); return 2; }
     const unknown = picks.filter((p) => !catalog.byId.has(p.row));
     if (unknown.length) { out(`prereq: unknown tool ${unknown.map((u) => u.row).join(', ')}`); return 2; }
     const ctx = { platform, env, home: account.homeDir(env), machine: machine || realMachine({ env, platform }) };

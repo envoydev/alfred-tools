@@ -105,7 +105,7 @@ function apply(plan, { env = process.env, tmp, runCli = cli.run, log = console.l
     for (let i = 0; i < plan.steps.length; i++)
     {
         const step = plan.steps[i];
-        if (step.op === 'fetch') { report.toFetch.push(step); log(`${i + 1}. later  ${step.why} (fetch.js, after the read-back)`); continue; }
+        if (step.op === 'fetch') { report.toFetch.push(step); log(`${i + 1}. later  ${step.why} (fetch.ts, after the read-back)`); continue; }
         const ready = restoreStep(step, ctx);
         const filled = ready.error ? null : fillStep(ready.step, ctx);
         // a step that throws (a .cursor that is a file, a read-only target) is a failed step, so the failure path below

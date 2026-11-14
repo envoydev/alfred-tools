@@ -32,14 +32,14 @@ function parseArgs(argv)
     return out;
 }
 
-const USAGE = 'usage: plan.js <inventory.json> <answers.json> [--out plan.json] [--data <dir>]\n       plan.js --questions <inventory.json> [<picks.json>] [--data <dir>] [--connectors <Name>,<Name>]';
+const USAGE = 'usage: plan.ts <inventory.json> <answers.json> [--out plan.json] [--data <dir>]\n       plan.ts --questions <inventory.json> [<picks.json>] [--data <dir>] [--connectors <Name>,<Name>]';
 
 function main(argv)
 {
     blockingStdio();
     const read = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
     const args = parseArgs(argv);
-    if (args.error) { console.error(`plan.js: ${args.error}\n${USAGE}`); return 2; }
+    if (args.error) { console.error(`plan.ts: ${args.error}\n${USAGE}`); return 2; }
     const [invFile, second] = args.files;
     if (!invFile || (!args.questions && !second)) { console.error(USAGE); return 2; }
     const inv = read(invFile);

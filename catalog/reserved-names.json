@@ -1,5 +1,5 @@
 {
-  "note": "Names alfred-code once registered and may retire. Built by scripts/refresh-reserved.js; do not hand-edit.",
+  "note": "Names alfred-code once registered and may retire. Built by scripts/refresh-reserved.ts; do not hand-edit.",
   "names": [
     "alfred-documentation",
     "alfred-memory",
