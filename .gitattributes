@@ -1,1 +1,5 @@
+# LF everywhere, in the repo and in the working tree, on every platform. Without this, git's core.autocrlf (on by
+# default on Windows) checks text files out with CRLF, and the lint's multi-line text checks on commands/*.md fail
+# there though the files are right (seen on the first CI run, windows-latest).
+* text=auto eol=lf
 scripts/copied/mcp-headers.js text eol=lf

@@ -697,13 +697,18 @@ test('a hosted row installed for every project at its recommended Global scope i
     assert.ok(!pickQuestions(hud, catalog).flat().flatMap((q) => q.options.map((o) => o.label)).some((l) => l.startsWith('claude-hud')));
 });
 
-test('install questions for a copy: the taken scope is not offered, and an account-default folder becomes the project one', { skip: POSIX_FIXTURE }, () => {
+test('install questions for a copy: the taken scope is not offered, and an account-default folder becomes the project one', { skip: POSIX_FIXTURE }, (t) => {
+    // a home of its own holding alfred-code's old memory folder, the second place that makes the location a question:
+    // read from the real home, this passed only on a machine that still had ~/.alfred-memory
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plan-home-'));
+    t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+    fs.mkdirSync(path.join(home, '.alfred-memory'));
     const i = inv(MAC, { registrations: [reg('memory', 'user', { command: 'uvx', args: ['--from', 'mcp-memory-service[sqlite]==12.1.1'] }, 'memory', 'local')] });
     const offered = pickQuestions(i, catalog).flat().flatMap((q) => q.options);
     const mem = offered.find((o) => o.label.startsWith('memory'));
     assert.strictEqual(mem!.label, 'memory (installed for every project as memory)');
     assert.match(mem!.description, /adds this project's own copy; the one for every project stays/);
-    const q = asks.allQuestions(i, { rows: ['memory'] }, catalog);
+    const q = asks.allQuestions(i, { rows: ['memory'] }, catalog, { home });
     // memory has a data folder: its scope and name come first, in a call of their own
     assert.deepStrictEqual((q.tools as ToolsKeyed).memory!.first!.map((x) => x.id), ['scope-memory', 'name-memory']);
     assert.deepStrictEqual((q.tools as ToolsKeyed).memory!.first!.find((x) => x.id === 'scope-memory')!.options.map((o) => o.label), ['Local (Recommended)', 'Project'], 'the copy\'s user scope is not offered again');
