@@ -2,7 +2,7 @@
 description: "Install preferred MCP servers that are not installed yet, for Claude Code and Cursor: pick, set up, one confirmed plan"
 argument-hint: "[tool id]"
 disable-model-invocation: true
-allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.js"), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/table.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.js" *)
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/table.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" *)
 ---
 
 Walk the user through installing preferred tools that are not installed here yet. The scripts do the work and print what
@@ -14,7 +14,7 @@ changed or removed with `/preferred-tools:configure`; say so whenever the user a
 ## Rules
 
 - **Nothing is applied before one confirmation** (step 6). Every earlier step reads and asks.
-- **The `claude` CLI is the only writer** of `.mcp.json` and the account file; `apply.js` calls it. Never edit those
+- **The `claude` CLI is the only writer** of `.mcp.json` and the account file; `apply.ts` calls it. Never edit those
   files by hand.
 - **A registration that matches no catalog row is the user's.** It is listed, never touched.
 - **Scopes are Global, Project and Local.** Global is `user` scope - every project on this machine.
@@ -29,13 +29,13 @@ changed or removed with `/preferred-tools:configure`; say so whenever the user a
   folder you name, a name you choose, a setting, a browser binary, a host), ask for that one value in a single line of
   text - no `AskUserQuestion` - and end the turn; the user's next message is the value. A value the user typed as the
   Other answer to that question is taken the same way.
-- Every file below lives in one temp folder. Make it once with `node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.js"` and call
+- Every file below lives in one temp folder. Make it once with `node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"` and call
   its path `<tmp>`.
 
 ## 1. Inventory
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.js" --json <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.ts" --json <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 It reads `.mcp.json`, the account file (user servers and this project's local ones), `claude plugin list --json`, the
@@ -46,7 +46,7 @@ you offer nothing that writes there.
 ## 2. The table
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/table.js" <tmp>/inventory.json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/table.ts" <tmp>/inventory.json
 ```
 
 Paste the output verbatim in a fenced block. It is the whole catalog for this OS, numbered, with what is installed at
@@ -55,7 +55,7 @@ each scope as `name [route, pin]`.
 ## 3. Pick
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" --questions <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}" --connectors "<Name>,<Name>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --questions <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}" --connectors "<Name>,<Name>"
 ```
 
 `<Name>,<Name>`: the claude.ai connectors this session has loaded - each `<Name>` in your own tool names
@@ -89,7 +89,7 @@ then what it already has:
 Write `{"rows": [<picked ids>], "done": []}` to `<tmp>/picks.json` and run:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" --questions <tmp>/inventory.json <tmp>/picks.json --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --questions <tmp>/inventory.json <tmp>/picks.json --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 Its `next` is the one step to ask now: `next.id`, the `next.tool` it belongs to, `next.call` (the questions, as one
@@ -162,8 +162,8 @@ the exception: write it either way, since a key is the recommended way into ever
 ## 5. Prerequisites
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.js" <tmp>/answers.json --audit
-node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.js" <tmp>/answers.json --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" <tmp>/answers.json --audit
+node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" <tmp>/answers.json --json
 ```
 
 Paste the first output verbatim. It checks `uvx`, `npx`, Node 22.22.2 or newer, Docker or the github binary,
@@ -182,13 +182,13 @@ whether Docker is there. For each tool with a missing prerequisite, ask once, on
 ```
 
 'Skip': delete the tool from `answers.json`. 'Install it now': when the output gave an `install:` command, run it; when
-it gave only a page, give the user that page, wait for them to say it is done, and run `prereq.js` again. 'Register
+it gave only a page, give the user that page, wait for them to say it is done, and run `prereq.ts` again. 'Register
 anyway': keep it, and say in the confirmation that it will not start yet.
 
 ## 6. Plan, then one confirmation
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" <tmp>/inventory.json <tmp>/answers.json --out <tmp>/plan.json --data "${CLAUDE_PLUGIN_DATA}" --connectors "<Name>,<Name>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" <tmp>/inventory.json <tmp>/answers.json --out <tmp>/plan.json --data "${CLAUDE_PLUGIN_DATA}" --connectors "<Name>,<Name>"
 ```
 
 `--connectors` names the same connectors as step 3, so a recorded connector that is gone is dropped and a server also
@@ -236,13 +236,13 @@ An empty plan says 'Nothing to apply'; show that and stop without asking.
 ## 7. Apply
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/apply.js" <tmp>/plan.json --tmp <tmp> --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/apply.ts" <tmp>/plan.json --tmp <tmp> --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 Run it with the Bash tool's `timeout: 600000` (10 minutes, the most it allows by default). It writes the root's files
 first, then makes the CLI calls and their read-back - seconds a tool - then the records,
 and leaves every download to step 8, so it ends well inside the limit and its report comes back in this turn. Claude
-Code asks permission for this call itself - `apply.js` is deliberately not in `allowed-tools` - so a skipped ask still
+Code asks permission for this call itself - `apply.ts` is deliberately not in `allowed-tools` - so a skipped ask still
 cannot change anything. It runs the steps in order, reads each back, and stops at the first failure, leaving what was
 applied in place and naming it; a re-run reuses the files already written. Paste the output verbatim. A failure prints
 the line that puts a registration back (`RESTORE BY HAND`): give it to the user as written. A key in it shows as
@@ -271,7 +271,7 @@ status itself, so end with the restart line below. When the apply output has `Fe
 <file>`, run, with the Bash tool's `run_in_background`:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.js" "<file>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
 ```
 
 One server at a time, it downloads what the server launches into its runtime's cache (npm, uv or Docker), then starts

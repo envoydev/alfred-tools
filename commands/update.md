@@ -1,7 +1,7 @@
 ---
 description: "Update what is behind - installed plugins and pinned MCP servers - to releases at least 7 days old, and move servers an older preferred-tools set up to the way it passes data now, after one confirmation"
 disable-model-invocation: true
-allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --check), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --check *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --questions), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --questions *)
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --check), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --check *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --questions), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --questions *)
 ---
 
 Bring what is installed up to date: every plugin on this machine, the pinned MCP servers, the key helper (`mcp-headers.js`) and URL bridge (`mcp-bridge.js`) in each root folder, and
@@ -32,7 +32,7 @@ the work; you paste what it prints and ask.
 ## 1. What is behind
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --check --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --check --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 Paste the output verbatim in a fenced block. It refreshes each marketplace the installed plugins come from
@@ -60,7 +60,7 @@ A line under 'Could not check' is a registry that did not answer; it is never re
 ## 2. Which
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --questions --no-refresh --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --questions --no-refresh --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 It prints `{ "offer": <ask>, "pick": [<calls>] }`. Ask the `offer` as printed:
@@ -105,7 +105,7 @@ server, that its registration is removed and added again, so the server is brief
 ids picked (comma-separated), or `all` for 'All of them':
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/update.js" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--input retired-declined=<id>~<scope>,...] [--input cursor-offer:<root>=set|declined] [--input cursor-name:<name>@<file>=replace|keep]
+node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--input retired-declined=<id>~<scope>,...] [--input cursor-offer:<root>=set|declined] [--input cursor-name:<name>@<file>=replace|keep]
 ```
 
 Each pin moved, and each new way to pass data, is written to every app its list entry names in the same run: the
@@ -129,7 +129,7 @@ A new pin is not in the runtime's cache yet, so an MCP update prints `Fetch next
 with the Bash tool's `run_in_background`:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.js" "<file>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
 ```
 
 One server at a time, it downloads each new pin and starts the server once with no 30-second limit, then prints each

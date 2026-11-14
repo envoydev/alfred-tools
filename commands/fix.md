@@ -2,7 +2,7 @@
 description: "Detect known problems in the installed tools and apply the recorded fix for each"
 argument-hint: "[tool, registration name or fix id]"
 disable-model-invocation: true
-allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.js" --detect), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.js" --detect *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.js" --questions), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.js" --questions *)
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --detect), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --detect *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --questions), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --questions *)
 ---
 
 Find the known problems in what is installed and apply the recorded fix for each one the user picks. Every fix row is
@@ -14,7 +14,7 @@ argument, when given, narrows everything below to one fix id, tool or registrati
 Run, adding `--only "$ARGUMENTS"` when there is an argument:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.js" --detect --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --detect --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 Paste its output verbatim in a fenced block. It lists each problem found - the fix id, the tool by its registration
@@ -54,7 +54,7 @@ If it says 'No known problem found.', say so in one line and stop.
 
 ## 2. Ask
 
-Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.js" --questions --data "${CLAUDE_PLUGIN_DATA}"` (with the same `--only`). It prints the asks as data:
+Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --questions --data "${CLAUDE_PLUGIN_DATA}"` (with the same `--only`). It prints the asks as data:
 `choose` and, for 'Pick which', `pick` - a list of calls, each at most four questions of at most four options.
 
 When `choose` is null and `drift` is empty, nothing found can be applied: every line is NOT APPLICABLE, and its
@@ -107,7 +107,7 @@ guess a folder.
 ## 3. Apply
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.js" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--only "$ARGUMENTS"] [--input key=value] [--input drift:<app>:<name>~<scope>=<value>]
+node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--only "$ARGUMENTS"] [--input key=value] [--input drift:<app>:<name>~<scope>=<value>]
 ```
 
 A drift answer runs after the registration and file rows: 'Keep' writes the edited entry into the list and the other
@@ -130,7 +130,7 @@ A key in it shows as `${PREFERRED_TOOLS_KEPT}`, never its value: the user puts t
 
 A fix that changes what a server launches (a python request, a cut-off), or removes a broken npx cache folder
 (`npx-cache-entry`), prints `Fetch next, in the background (...):
-<file>`. Run, with the Bash tool's `run_in_background`, `node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.js" "<file>"`: it
+<file>`. Run, with the Bash tool's `run_in_background`, `node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"`: it
 downloads the new launch into the runtime's cache and starts the server once with no 30-second limit, one at a time, so
 the next session's start answers inside Claude Code's 30 seconds, then prints each repaired server's status (`claude mcp
 get`). Claude Code asks permission for it. Tell the user

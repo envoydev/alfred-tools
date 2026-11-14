@@ -2,7 +2,7 @@
 description: "Change or remove installed preferred tools - an MCP server's route, scope, name, data folder, key name or settings, a root folder, the apps it is set up for - one confirmed plan"
 argument-hint: "[registration name | tool id]"
 disable-model-invocation: true
-allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.js"), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/table.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.js" *)
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/table.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" *)
 ---
 
 Walk the user through changing or removing preferred tools that are already installed here. The scripts do the work and
@@ -15,7 +15,7 @@ updated pin is never downgraded. Adding a tool that is not installed is `/prefer
 ## Rules
 
 - **Nothing is applied before one confirmation** (step 7). Every earlier step reads and asks.
-- **The `claude` CLI is the only writer** of `.mcp.json` and the account file; `apply.js` calls it. Never edit those
+- **The `claude` CLI is the only writer** of `.mcp.json` and the account file; `apply.ts` calls it. Never edit those
   files by hand.
 - **A registration that matches no catalog row is the user's.** It is listed, never offered, never touched.
 - **A server inherited from a parent folder's `.mcp.json` is that folder's.** It is noted under the table, never
@@ -32,13 +32,13 @@ updated pin is never downgraded. Adding a tool that is not installed is `/prefer
   folder you name, a name you choose, a setting, a browser binary, a host), ask for that one value in a single line of
   text - no `AskUserQuestion` - and end the turn; the user's next message is the value. A value the user typed as the
   Other answer to that question is taken the same way.
-- Every file below lives in one temp folder. Make it once with `node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.js"` and call
+- Every file below lives in one temp folder. Make it once with `node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"` and call
   its path `<tmp>`.
 
 ## 1. Inventory
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.js" --json <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.ts" --json <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 It reads `.mcp.json`, the account file (user servers and this project's local ones), `claude plugin list --json`, the
@@ -49,7 +49,7 @@ you offer nothing that writes there.
 ## 2. The table
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/table.js" <tmp>/inventory.json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/table.ts" <tmp>/inventory.json
 ```
 
 Paste the output verbatim in a fenced block. It is the whole catalog for this OS, numbered, with what is installed at
@@ -58,7 +58,7 @@ each scope as `name [route, pin]`.
 ## 3. What to change
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" --questions <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --questions <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 Its `change.keys` maps each option to its key: an installed registration (`mcp:<name>~<scope>`), a server left on its own (`mcp:...`, `plugin-mcp:<plugin>/<server>`, `connector:<Name>`), and a
@@ -94,7 +94,7 @@ into its key through `change.keys`. 'None of these', or nothing picked: say so a
 Write `{"targets": [<picked keys>], "done": []}` to `<tmp>/picks.json` and run:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" --questions <tmp>/inventory.json <tmp>/picks.json --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --questions <tmp>/inventory.json <tmp>/picks.json --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 Its `targets.<key>` holds each pick's `row` and what it has now (`current`: name, scope, route); a target with an
@@ -178,8 +178,8 @@ moved to Local is gone from the other projects. To keep it there and add this pr
 Only when an entry in `answers.json` has a `route` (a route change):
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.js" <tmp>/answers.json --audit
-node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.js" <tmp>/answers.json --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" <tmp>/answers.json --audit
+node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" <tmp>/answers.json --json
 ```
 
 Paste the first output verbatim; its audit lines go into step 7's confirmation as they are, and an 'audit not run' line
@@ -194,13 +194,13 @@ with a missing prerequisite, ask once (up to four per call):
 ```
 
 'Skip': delete that key from `change`. 'Install it now': when the output gave an `install:` command, run it; when it gave
-only a page, give the user that page, wait for them to say it is done, and run `prereq.js` again. 'Register anyway': keep
+only a page, give the user that page, wait for them to say it is done, and run `prereq.ts` again. 'Register anyway': keep
 it, and say in the confirmation that it will not start yet.
 
 ## 7. Plan, then one confirmation
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.js" <tmp>/inventory.json <tmp>/answers.json --out <tmp>/plan.json --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" <tmp>/inventory.json <tmp>/answers.json --out <tmp>/plan.json --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 Paste the output verbatim in a fenced block: every CLI call, every file it writes (a root's `.gitignore`,
@@ -246,12 +246,12 @@ A plan that says 'Nothing to do' means every answer kept what is installed; show
 ## 8. Apply
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/apply.js" <tmp>/plan.json --tmp <tmp> --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/apply.ts" <tmp>/plan.json --tmp <tmp> --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 Run it with the Bash tool's `timeout: 600000` (10 minutes, the most it allows by default); every download is left to the
 fetch below, so the apply ends well inside the limit and its report comes back in this turn. Claude Code asks permission
-for this call itself - `apply.js` is deliberately not in `allowed-tools` - so a skipped ask still cannot change
+for this call itself - `apply.ts` is deliberately not in `allowed-tools` - so a skipped ask still cannot change
 anything. It runs the steps in order - the root's files, the CLI calls with their read-back, then the records - and
 stops at the first failure, leaving what was applied in place and naming it. Paste the output verbatim. A failure prints
 the line that puts a registration back (`RESTORE BY HAND`): give it to the user as written. A key in it shows as
@@ -269,7 +269,7 @@ fixes the value in the file and reconnects.
 background (...): <file>`. Run, with the Bash tool's `run_in_background`:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.js" "<file>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
 ```
 
 It is `/preferred-tools:install` step 8, word for word: one server at a time, it fills the runtime's cache and starts the
@@ -279,7 +279,7 @@ restart only once it reports, paste its output when it finishes, and say a `warn
 that fails at every start with `ENOENT` afterwards was started beside the download: `/preferred-tools:fix` repairs it.
 A rename, a scope move or a location change keeps the package: it prints no fetch line, and the apply printed each status
 itself. End with the restart line: a changed registration loads on the next session start, and a project-scope server
-also needs the trust prompt then. When background runs are turned off, run fetch.js in the foreground with
+also needs the trust prompt then. When background runs are turned off, run fetch.ts in the foreground with
 `timeout: 600000`, and again if the limit stops it.
 
 ## 9. Remove
