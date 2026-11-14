@@ -389,6 +389,8 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     const oh = new Harness040({ root: world });
     const hh = new Harness({ root: world });
     const p = oh.project('m6');
+    // 0.4.0 writes its root under the former name; update moves it first (spec D3)
+    const oldRoot = path.join(p, '.preferred-tools');
     const projRoot = path.join(p, '.alfred-tools');
 
     // 1. a 0.4.0 install: serena, github with the helper, context7 (left on its own next), the two retired plugins
@@ -398,10 +400,10 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     assert.strictEqual(first.report.failed, null, first.text);
     const left = oh.run(p, { existing: { 'mcp:context7~project': 'own' } });
     assert.strictEqual(left.report.failed, null, left.text);
-    assert.ok(fs.existsSync(path.join(projRoot, roots.FILES.record)), '0.4.0 wrote its record');
+    assert.ok(fs.existsSync(path.join(oldRoot, roots.FILES.record)), '0.4.0 wrote its record');
     const serena040 = readJson(path.join(p, '.mcp.json')).mcpServers.serena;
     assert.strictEqual(serena040.args[serena040.args.indexOf('--context') + 1], 'claude-code', '0.4.0\'s serena context');
-    assert.ok(fs.existsSync(path.join(projRoot, '.mcps-secrets')), 'github\'s key file in the project root');
+    assert.ok(fs.existsSync(path.join(oldRoot, '.mcps-secrets')), 'github\'s key file in the project root');
     // serena's first start under 0.4.0 (its own fetch.ts) writes serena_config.yml with Serena's default base modes
     const config = path.join(serena040.env.SERENA_HOME, 'serena_config.yml');
     let started: string | null = 'NOT RUN (the base modes only): uvx not on PATH';
@@ -425,6 +427,14 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
         const ctx = makeCtx({ inventory: inv, project: p, env: hh.env, refresh: false, data: hh.data });
         return { ctx, found: await checkUpdates(ctx) };
     };
+    // the move alone first: the rest waits for the folder (spec D3), and the command checks again on RECHECK
+    const first040 = await checkNow();
+    assert.deepStrictEqual([...new Set(first040.found.offers.map((o) => o.fix))], ['root-move'], 'only the move is offered');
+    const moveLines: string[] = [];
+    const moved = applyUpdates(first040.ctx, first040.found.offers.map((o) => o.id), first040.found, { tmp: path.join(world, 'tmp-move'), log: (...a) => moveLines.push(a.join(' ')) });
+    assert.deepStrictEqual(moved.failed, [], moveLines.join('\n'));
+    assert.match(moveLines.join('\n'), /RECHECK - the folders moved; checking again/);
+    assert.ok(!fs.existsSync(oldRoot) && fs.existsSync(projRoot), 'the root moved');
     const { ctx, found } = await checkNow();
     const retired = found.offers.filter((o) => o.fix === 'retired-plugin').map((o) => `${o.name}~${o.scope}`).sort();
     assert.deepStrictEqual(retired, [`${HUD}~user`, `${TSL}~project`], 'two uninstall offers');
@@ -464,7 +474,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
 
     // 4. serena's base modes, emptied by the serena-base-modes upgrade
     if (started) return t.skip(started);
-    assert.ok(/^base_modes: \[\]\r?$/m.test(fs.readFileSync(config, 'utf8')), `base_modes: [] (only that key is read, never printed)\n${text}`);
+    assert.ok(/^base_modes: \[\]\r?$/m.test(fs.readFileSync(path.join(projRoot, path.relative(oldRoot, config)), 'utf8')), `base_modes: [] (only that key is read, never printed)\n${text}`);
     assert.ok(hh.realUntouched().ok, 'the real home and account are untouched');
 });
 
