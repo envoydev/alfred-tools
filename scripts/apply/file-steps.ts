@@ -19,7 +19,7 @@ import type { ApplyCtx, ApplyPlan, ApplyReport, StepResult } from './types.ts';
 
 // A text file's line ending, and the text with each line appended in it; existing bytes are never rewritten.
 const eolOf = (text: string): string => (/\r\n/.test(text) ? '\r\n' : '\n');
-const appendLines = (text: string, lines: string[]): string => { const eol = eolOf(text); return `${text}${text && !/\r?\n$/.test(text) ? eol : ''}${lines.map((l) => `${l}${eol}`).join('')}`; };
+const appendLines = (text: string, lines: string[]): string => { const lineEnd = eolOf(text); return `${text}${text && !/\r?\n$/.test(text) ? lineEnd : ''}${lines.map((line) => `${line}${lineEnd}`).join('')}`; };
 
 // What the plugin itself writes in a root (R13): a folder holding anything else holds the user's files. package.json is the
 // one ensureCommonjs writes (0.4.0 Ruling 12).
@@ -37,13 +37,13 @@ export function rootIgnoreLines(root: string): { file: string; text: string | nu
 {
     let names: string[] = [];
     try { names = fs.readdirSync(root); } catch { /* a new root */ }
-    const mine = names.every((n) => pluginWritten(root, n));
+    const mine = names.every((name) => pluginWritten(root, name));
     const want = mine ? roots.GITIGNORE.trim().split('\n') : [roots.FILES.secrets, roots.FILES.record, roots.FILES.list, `${roots.FILES.signIns}/`];
     const file = path.join(root, '.gitignore');
     let text: string | null = null;
     try { text = fs.readFileSync(file, 'utf8'); } catch { /* absent */ }
-    const have = new Set((text || '').split(/\r?\n/).map((l) => l.trim()));
-    return { file, text, mine, want, lack: want.filter((l) => !have.has(l)) };
+    const have = new Set((text || '').split(/\r?\n/).map((line) => line.trim()));
+    return { file, text, mine, want, lack: want.filter((line) => !have.has(line)) };
 }
 
 // <root>/.gitignore: GITIGNORE when absent, else each of its lines the file lacks appended; in a folder holding the
@@ -96,8 +96,8 @@ export function writeShipped(kind: ShippedKind, root: string): StepResult
     const { state, number } = roots.shippedState(kind, file);
     const { word, version, plain } = SHIPPED[kind];
     if (plain) fs.mkdirSync(root, { recursive: true });
-    const pkg = plain ? { wrote: false, note: null } : ensureCommonjs(root);
-    const withPkg = (detail: string): StepResult => ({ ok: true, detail: [detail, pkg.wrote ? `wrote ${path.join(root, 'package.json')} (type commonjs)` : null, pkg.note].filter(Boolean).join('; ') });
+    const packageJsonResult = plain ? { wrote: false, note: null } : ensureCommonjs(root);
+    const withPkg = (detail: string): StepResult => ({ ok: true, detail: [detail, packageJsonResult.wrote ? `wrote ${path.join(root, 'package.json')} (type commonjs)` : null, packageJsonResult.note].filter(Boolean).join('; ') });
     if (state === 'same') return withPkg(`${file} is up to date - left as it is`);
     if (state === 'higher') return withPkg(`${roots.FILES[kind]} in ${root} is newer than this plugin - update preferred-tools`);
     if (state === 'edited') return withPkg(`${file} changed since preferred-tools wrote it - left; /preferred-tools:fix rewrites it`);
@@ -112,23 +112,23 @@ const KEY_HEAD = '# preferred-tools MCP keys - fill in each value; this file is 
 export function ensureKeyName(file: string, names: string[]): StepResult
 {
     if (roots.gitIgnores(file) === false) return { ok: false, detail: `git would commit ${file} - not written; /preferred-tools:fix (root-ignore) covers it` };
-    let buf: Buffer | null = null;
-    try { buf = fs.readFileSync(file); } catch { /* absent */ }
+    let buffer: Buffer | null = null;
+    try { buffer = fs.readFileSync(file); } catch { /* absent */ }
     // a UTF-16 file (Windows PowerShell 5.1's `>`) is read by both readers but never appended to in UTF-8: the user adds the
     // line, as the plan's Key: line says, and the apply goes on
-    if (buf && buf[0] === 0xff && buf[1] === 0xfe) return { ok: true, detail: `${file} is UTF-16 - add ${names.map((n) => `${n}=`).join(', ')} to it yourself; nothing written` };
-    const text = buf ? buf.toString('utf8') : null;
+    if (buffer && buffer[0] === 0xff && buffer[1] === 0xfe) return { ok: true, detail: `${file} is UTF-16 - add ${names.map((name) => `${name}=`).join(', ')} to it yourself; nothing written` };
+    const text = buffer ? buffer.toString('utf8') : null;
     const have = new Set(keys.namesIn(file));
-    const lack = [...new Set(names)].filter((n) => !have.has(n));
-    const list = lack.map((n) => `${n}=`).join(', ');
+    const lack = [...new Set(names)].filter((name) => !have.has(name));
+    const list = lack.map((name) => `${name}=`).join(', ');
     if (text === null)
     {
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, appendLines('', [KEY_HEAD, ...lack.map((n) => `${n}=`)]), process.platform === 'win32' ? {} : { mode: 0o600 });
+        fs.writeFileSync(file, appendLines('', [KEY_HEAD, ...lack.map((name) => `${name}=`)]), process.platform === 'win32' ? {} : { mode: 0o600 });
         return { ok: true, detail: `created ${file} with ${list || 'no name'} - names only, you fill in each value` };
     }
     if (!lack.length) return { ok: true, detail: `${file} has ${names.join(', ')} - left as it is` };
-    fs.writeFileSync(file, appendLines(text, lack.map((n) => `${n}=`)));
+    fs.writeFileSync(file, appendLines(text, lack.map((name) => `${name}=`)));
     return { ok: true, detail: `appended ${list} to ${file} - names only, you fill in each value` };
 }
 
@@ -146,21 +146,21 @@ function keepAsIs(read: { state?: string | undefined; note?: string | undefined 
 function writeJson(file: string, doc: unknown, read: { state?: string | undefined } | null): string | null
 {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    let bak: string | null = null;
-    if (read && read.state === 'bad' && fs.existsSync(file)) { bak = `${file}.bak`; fs.copyFileSync(file, bak); }
+    let backupPath: string | null = null;
+    if (read && read.state === 'bad' && fs.existsSync(file)) { backupPath = `${file}.bak`; fs.copyFileSync(file, backupPath); }
     const tmp = `${file}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, `${JSON.stringify(doc, null, 2)}\n`);
     fs.renameSync(tmp, file);
-    return bak;
+    return backupPath;
 }
-const readNote = (read: { note?: string | undefined } | null | undefined, bak: string | null): string => (read && read.note ? ` - ${read.note}${bak ? `; the old file kept as ${bak}` : ''}` : '');
+const readNote = (read: { note?: string | undefined } | null | undefined, backupPath: string | null): string => (read && read.note ? ` - ${read.note}${backupPath ? `; the old file kept as ${backupPath}` : ''}` : '');
 
 // <root>/mcps.json as the plan computed it (spec D1): each upsert whose registration step was applied (`after` in
 // report.appliedKeys, or none), its entry the registration as read back through kept.keep; each drop whose step was
 // applied; the own entries by the 0.4.x record's rules (mcpsList.ownOf), or the list's own as it is. A family with no list
 // yet carries its 0.4.x record's own entries. After a failure (`failure`), cursor comes off a server whose Cursor file
 // was not written. Never names a key value: a stdio key field holds kept.MARKER.
-export function listWrite(step: ListWriteStep, ctx: ApplyCtx, { failure = false }: { failure?: boolean } = {}): StepResult
+export function listWrite(step: ListWriteStep, context: ApplyCtx, { failure = false }: { failure?: boolean } = {}): StepResult
 {
     const read = lists.readList(step.file);
     let base: Omit<McpsList, 'version'> | null = read;
@@ -169,20 +169,20 @@ export function listWrite(step: ListWriteStep, ctx: ApplyCtx, { failure = false 
         const old = lists.readOldRecord(path.join(path.dirname(step.file), roots.FILES.record));
         base = old && !old.state ? { servers: [], own: roots.ownOnly(old.servers) } : null;
     }
-    const applied = (ctx.report && ctx.report.appliedKeys) || new Set<string>();
-    const cursorDone = (ctx.report && ctx.report.cursorFiles) || new Set<string>();
+    const applied = (context.report && context.report.appliedKeys) || new Set<string>();
+    const cursorDone = (context.report && context.report.cursorFiles) || new Set<string>();
     const upserts: ListServer[] = [];
-    for (const u of step.upserts || [])
+    for (const upsert of step.upserts || [])
     {
-        if (u.after && !applied.has(u.after)) continue;
-        let server = { ...u.server };
-        if (u.after)
+        if (upsert.after && !applied.has(upsert.after)) continue;
+        let server = { ...upsert.server };
+        if (upsert.after)
         {
-            const got = readRegistration(server.name, server.scope, ctx.project, ctx.env);
+            const got = readRegistration(server.name, server.scope, context.project, context.env);
             if (!got) continue;
-            server = { ...server, ...lists.fromRegistration({ name: server.name, scope: server.scope, route: server.route, entry: got }, rowOf(ctx, server), server.clients || ['claude'], u.keyFiles || []) };
+            server = { ...server, ...lists.fromRegistration({ name: server.name, scope: server.scope, route: server.route, entry: got }, rowOf(context, server), server.clients || ['claude'], upsert.keyFiles || []) };
         }
-        if (failure && u.cursorFile && !cursorDone.has(u.cursorFile)) server.clients = (server.clients || []).filter((c) => c !== 'cursor');
+        if (failure && upsert.cursorFile && !cursorDone.has(upsert.cursorFile)) server.clients = (server.clients || []).filter((client) => client !== 'cursor');
         // Cursor's copy of a two-form entry (D5): the bridge built from Claude's entry as read back, keeping the prior
         // copy's pin and the pairs it does not set; the form itself is the plan's, never stored
         const { form } = server;
@@ -190,15 +190,15 @@ export function listWrite(step: ListWriteStep, ctx: ApplyCtx, { failure = false 
         const forCursor = (server.clients || []).includes('cursor');
         if (form === 'two' && forCursor)
         {
-            const prior = server.cursorEntry || ((((base && base.servers) || []).find((x) => lists.serverKey(x) === lists.serverKey(server)) || {}) as Partial<ListServer>).cursorEntry || null;
-            const copy = cursorMcp.bridgeFormOf(server.entry, ctx.catalog || catalogLib.load(), prior);
+            const prior = server.cursorEntry || ((((base && base.servers) || []).find((listServer) => lists.serverKey(listServer) === lists.serverKey(server)) || {}) as Partial<ListServer>).cursorEntry || null;
+            const copy = cursorMcp.bridgeFormOf(server.entry, context.catalog || catalogLib.load(), prior);
             if (copy) server.cursorEntry = copy;
             else delete server.cursorEntry;
         }
         else if (form !== undefined || !forCursor) delete server.cursorEntry;
         upserts.push(server as ListServer);
     }
-    const drops = (step.drops || []).filter((d) => !d.after || applied.has(d.after)).map((d) => d.key);
+    const drops = (step.drops || []).filter((drop) => !drop.after || applied.has(drop.after)).map((drop) => drop.key);
     const doc = lists.mergeList(base, { upserts, drops, own: step.own ? lists.ownOf(step.own) : undefined, cursorOffer: step.cursorOffer });
     return lists.writeList(step.file, doc, read);
 }
@@ -214,12 +214,12 @@ export function denyRead(file: string, rules: string[]): StepResult
     if (text !== null)
     {
         try { doc = JSON.parse(stripBom(text)); } catch { doc = null; }
-        const isObject = (v: unknown): v is object => (v && typeof v === 'object' && !Array.isArray(v)) as boolean;
+        const isObject = (value: unknown): value is object => (value && typeof value === 'object' && !Array.isArray(value)) as boolean;
         if (!isObject(doc) || (doc.permissions !== undefined && !isObject(doc.permissions)) || (doc.permissions && doc.permissions.deny !== undefined && !Array.isArray(doc.permissions.deny)))
             return { ok: false, detail: `${file} is not a settings object preferred-tools can read - left as it is; add ${rules.join(' and ')} to permissions.deny yourself` };
     }
     const deny = (doc.permissions && doc.permissions.deny) || [];
-    const lack = rules.filter((r) => !deny.includes(r));
+    const lack = rules.filter((rule) => !deny.includes(rule));
     if (!lack.length) return { ok: true, unchanged: true, detail: `${file} already denies ${rules.join(' and ')} - left as it is` };
     const next = { ...doc, permissions: { ...(doc.permissions || {}), deny: [...deny, ...lack] } };
     writeJson(file, next, null);
@@ -231,8 +231,8 @@ export function denyRead(file: string, rules: string[]): StepResult
 // before any registration moves. A folder (mcp-remote-v1, whose files are sign-in tokens) is renamed whole, never opened.
 export function moveRootFile(from: string, to: string): StepResult
 {
-    let st: fs.Stats;
-    try { st = fs.lstatSync(from); } catch { return { ok: true, detail: `${from}: not there - nothing to move` }; }
+    let fromStats: fs.Stats;
+    try { fromStats = fs.lstatSync(from); } catch { return { ok: true, detail: `${from}: not there - nothing to move` }; }
     let there: fs.Stats | null = null;
     try { there = fs.lstatSync(to); } catch { /* absent */ }
     if (!there)
@@ -248,7 +248,7 @@ export function moveRootFile(from: string, to: string): StepResult
         }
         return { ok: true, detail: `moved ${from} to ${to}` };
     }
-    if (st.isFile() && there.isFile() && fs.readFileSync(from).equals(fs.readFileSync(to)))
+    if (fromStats.isFile() && there.isFile() && fs.readFileSync(from).equals(fs.readFileSync(to)))
     {
         fs.rmSync(from);
         return { ok: true, detail: `${to} holds the same as ${from} - removed ${from}` };
@@ -262,23 +262,23 @@ export function retireRecord(file: string): StepResult
 {
     if (!fs.existsSync(file)) return { ok: true, detail: `${file}: not there - nothing to move` };
     let to = `${file}.0.4.bak`;
-    for (let n = 2; fs.existsSync(to); n++) to = `${file}.0.4.bak.${n}`;
+    for (let suffix = 2; fs.existsSync(to); suffix++) to = `${file}.0.4.bak.${suffix}`;
     fs.renameSync(file, to);
     return { ok: true, detail: `moved ${file} to ${to} - its entries are in the list now` };
 }
 
 // After a stop: every list-write of the plan again, so each list holds what was applied before the stop and nothing
 // after it. A failure here is reported and never masks the stop's. -> [{ ok, detail }]
-export function failureLists(plan: ApplyPlan, report: ApplyReport, ctx: ApplyCtx, log: (line: string) => void = () => {}): StepResult[]
+export function failureLists(plan: ApplyPlan, report: ApplyReport, context: ApplyCtx, log: (line: string) => void = () => {}): StepResult[]
 {
     const out: StepResult[] = [];
-    for (const step of plan.steps.filter((s): s is ListWriteStep => s.op === 'list-write'))
+    for (const step of plan.steps.filter((planStep): planStep is ListWriteStep => planStep.op === 'list-write'))
     {
-        let r: StepResult;
-        try { r = listWrite(step, { ...ctx, report }, { failure: true }); }
-        catch (caught) { const err = caught as NodeJS.ErrnoException; r = { ok: false, detail: `${step.file}: ${err.message}` }; }
-        log(`   list: ${r.detail}`);
-        out.push(r);
+        let result: StepResult;
+        try { result = listWrite(step, { ...context, report }, { failure: true }); }
+        catch (caught) { const err = caught as NodeJS.ErrnoException; result = { ok: false, detail: `${step.file}: ${err.message}` }; }
+        log(`   list: ${result.detail}`);
+        out.push(result);
     }
     return out;
 }
@@ -293,7 +293,7 @@ export function recordRoot(step: RecordRootStep, data: string | null): StepResul
     const file = path.join(data, roots.FILES.map);
     const next = roots.withRoot(map, step.family, path.resolve(step.project), step.root);
     if (!map.state && fs.existsSync(file) && JSON.stringify(next) === JSON.stringify(map)) return { ok: true, detail: `${file} already names the ${step.family} root ${step.root} - left as it is` };
-    const bak = writeJson(file, next, map);
-    return { ok: true, detail: `recorded the ${step.family} root ${step.root} in ${file}${readNote(map, bak)}` };
+    const backupPath = writeJson(file, next, map);
+    return { ok: true, detail: `recorded the ${step.family} root ${step.root} in ${file}${readNote(map, backupPath)}` };
 }
 

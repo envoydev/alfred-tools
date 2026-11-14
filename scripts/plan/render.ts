@@ -6,7 +6,7 @@ import type { CursorWritePlanStep, KeyLine, Plan, PlanStep, Reconnect } from './
 
 // ---- printing -------------------------------------------------------------------------------------------------------
 
-const shq = (s: string): string => (/^[A-Za-z0-9_\-./:=@,+]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`);
+const shellQuote = (text: string): string => (/^[A-Za-z0-9_\-./:=@,+]+$/.test(text) ? text : `'${text.replace(/'/g, "'\\''")}'`);
 
 export function argvOf(step: PlanStep): string[] | null
 {
@@ -39,48 +39,48 @@ export function reconnectLine({ name, variable, file, filled, anonymous, hint = 
     return `${name}: fill ${variable} in ${file}${hint ? ` (${hint})` : ''}, then Reconnect it in /mcp - until then ${anonymous ? 'it runs without the key, at lower rate limits' : 'it connects without the key, and /mcp shows needs authentication'}`;
 }
 
-export function render(p: Plan): string
+export function renderPlan(plan: Plan): string
 {
     const lines: string[] = [];
-    const P = pathFor(p.os);
-    if ((p.outside || []).length) lines.push(...p.outside!, '');
-    if (p.errors.length) lines.push('Cannot plan:', ...p.errors.map((e) => `  ! ${e}`), '');
-    if (!p.steps.length && !p.errors.length) lines.push('Nothing to do: every answer already matches what is installed - no claude call, no file written.');
+    const pathApi = pathFor(plan.os);
+    if ((plan.outside || []).length) lines.push(...plan.outside!, '');
+    if (plan.errors.length) lines.push('Cannot plan:', ...plan.errors.map((error) => `  ! ${error}`), '');
+    if (!plan.steps.length && !plan.errors.length) lines.push('Nothing to do: every answer already matches what is installed - no claude call, no file written.');
     // which apps (spec D3): stated once, with the Cursor file each scope writes
-    if (p.apps)
+    if (plan.apps)
     {
-        lines.push(`Apps: ${p.apps.includes('cursor') ? 'Claude Code and Cursor' : 'Claude Code'}`);
-        for (const s of p.steps.filter((x): x is CursorWritePlanStep => x.op === 'cursor-write')) lines.push(`  ${s.family === 'global' ? 'Global scope' : 'Project and Local scope'} in Cursor: ${s.file}`);
+        lines.push(`Apps: ${plan.apps.includes('cursor') ? 'Claude Code and Cursor' : 'Claude Code'}`);
+        for (const step of plan.steps.filter((candidate): candidate is CursorWritePlanStep => candidate.op === 'cursor-write')) lines.push(`  ${step.family === 'global' ? 'Global scope' : 'Project and Local scope'} in Cursor: ${step.file}`);
         lines.push('');
     }
-    p.steps.forEach((s, i) =>
+    plan.steps.forEach((step, i) =>
     {
-        lines.push(`${i + 1}. ${s.why || s.op}`);
-        const argv = argvOf(s);
-        if (argv) lines.push(`   claude ${argv.map(shq).join(' ')}`);
-        else if (s.op === 'mcp-move') lines.push(`   claude mcp add-json ${shq(s.to.name)} ${shq(JSON.stringify(s.entry))} -s ${s.to.scope}`, '   (read back)', `   claude mcp remove ${shq(s.from.name)} -s ${s.from.scope}`);
-        else if (s.op === 'mcp-replace') lines.push(`   claude mcp remove ${shq(s.name)} -s ${s.scope}`, `   claude mcp add-json ${shq(s.name)} ${shq(JSON.stringify(s.entry))} -s ${s.scope}`, `   (the old entry is saved to rollback.json and re-added if the add fails)`);
-        else if (s.op === 'ensure-dir') lines.push(`   writes ${s.path}/.gitignore  (contents: *)`);
-        else if (s.op === 'root-ignore') lines.push(`   writes ${P.join(s.path, '.gitignore')}  (${roots.GITIGNORE.trim().split('\n').join(', ')} - or the lines it lacks, appended)`);
-        else if (s.op === 'write-helper') lines.push(`   writes ${P.join(s.path, roots.FILES.helper)}  (this plugin's header helper)`, `   (and package.json, type commonjs, when absent)`);
-        else if (s.op === 'write-bridge') lines.push(`   writes ${P.join(s.path, roots.FILES.bridge)}  (this plugin's URL bridge)`, `   (and package.json, type commonjs, when absent)`);
-        else if (s.op === 'move-root-file') lines.push(`   moves ${s.from} to ${s.to}  (the root's own file goes with it)`);
-        else if (s.op === 'write-serena-context') lines.push(`   writes ${P.join(s.path, roots.FILES.serenaContext)}  (serena's context: code navigation only)`);
-        else if (s.op === 'ensure-key-name') lines.push(`   writes ${s.file}  (names only: ${s.names.join(', ')} - you fill in each value)`);
-        else if (s.op === 'list-write' || s.op === 'retire-record' || s.op === 'cursor-write' || s.op === 'deny-read') lines.push(renderLine(s));
-        else if (s.op === 'order-mcp-json') lines.push(`   reorders ${s.file}  (no value changes)`);
-        else if (s.op === 'record-root') lines.push(`   writes ${roots.FILES.map} in the plugin's data folder  (the ${s.family} root: ${s.root})`);
-        else if (s.op === 'fetch') lines.push(`   ${s.argv.map(shq).join(' ')}`, '   (after the apply, in the background: fills the cache only; if it fails the registration stays and the first start tries again)');
+        lines.push(`${i + 1}. ${step.why || step.op}`);
+        const argv = argvOf(step);
+        if (argv) lines.push(`   claude ${argv.map(shellQuote).join(' ')}`);
+        else if (step.op === 'mcp-move') lines.push(`   claude mcp add-json ${shellQuote(step.to.name)} ${shellQuote(JSON.stringify(step.entry))} -s ${step.to.scope}`, '   (read back)', `   claude mcp remove ${shellQuote(step.from.name)} -s ${step.from.scope}`);
+        else if (step.op === 'mcp-replace') lines.push(`   claude mcp remove ${shellQuote(step.name)} -s ${step.scope}`, `   claude mcp add-json ${shellQuote(step.name)} ${shellQuote(JSON.stringify(step.entry))} -s ${step.scope}`, `   (the old entry is saved to rollback.json and re-added if the add fails)`);
+        else if (step.op === 'ensure-dir') lines.push(`   writes ${step.path}/.gitignore  (contents: *)`);
+        else if (step.op === 'root-ignore') lines.push(`   writes ${pathApi.join(step.path, '.gitignore')}  (${roots.GITIGNORE.trim().split('\n').join(', ')} - or the lines it lacks, appended)`);
+        else if (step.op === 'write-helper') lines.push(`   writes ${pathApi.join(step.path, roots.FILES.helper)}  (this plugin's header helper)`, `   (and package.json, type commonjs, when absent)`);
+        else if (step.op === 'write-bridge') lines.push(`   writes ${pathApi.join(step.path, roots.FILES.bridge)}  (this plugin's URL bridge)`, `   (and package.json, type commonjs, when absent)`);
+        else if (step.op === 'move-root-file') lines.push(`   moves ${step.from} to ${step.to}  (the root's own file goes with it)`);
+        else if (step.op === 'write-serena-context') lines.push(`   writes ${pathApi.join(step.path, roots.FILES.serenaContext)}  (serena's context: code navigation only)`);
+        else if (step.op === 'ensure-key-name') lines.push(`   writes ${step.file}  (names only: ${step.names.join(', ')} - you fill in each value)`);
+        else if (step.op === 'list-write' || step.op === 'retire-record' || step.op === 'cursor-write' || step.op === 'deny-read') lines.push(renderLine(step));
+        else if (step.op === 'order-mcp-json') lines.push(`   reorders ${step.file}  (no value changes)`);
+        else if (step.op === 'record-root') lines.push(`   writes ${roots.FILES.map} in the plugin's data folder  (the ${step.family} root: ${step.root})`);
+        else if (step.op === 'fetch') lines.push(`   ${step.argv.map(shellQuote).join(' ')}`, '   (after the apply, in the background: fills the cache only; if it fails the registration stays and the first start tries again)');
     });
-    if (p.keys.length) lines.push('', ...p.keys.map(keyLine));
-    if ((p.reconnect || []).length) lines.push('', ...p.reconnect.map(reconnectLine));
+    if (plan.keys.length) lines.push('', ...plan.keys.map(keyLine));
+    if ((plan.reconnect || []).length) lines.push('', ...plan.reconnect.map(reconnectLine));
     // the shared sign-in (D5) opens the browser at the first start in either app; the rest sign in through /mcp
-    for (const o of p.oauth.filter((x) => x.signin)) lines.push('', `OAuth: ${o.name}: your browser opens to sign in the first time it starts, in Claude Code or Cursor; the sign-in is kept in ${P.join(o.root!, roots.FILES.signIns)}/ and serves both.`);
-    const viaMcp = p.oauth.filter((x) => !x.signin);
-    if (viaMcp.length) lines.push('', `OAuth: run /mcp once in a session to log in to ${viaMcp.map((o) => o.name).join(', ')}.`);
-    if (p.dangerous.length) lines.push('', ...p.dangerous.map((d) => `Code-running tool on '${d.name}': ${d.tools.map((t) => `${t.tool} (${t.why})`).join('; ')}. This plugin adds no guard.`));
-    if (p.notes.length) lines.push('', ...p.notes.map((n) => `Note: ${n}`));
-    if (p.unchanged.length) lines.push('', ...p.unchanged.map((n) => `Unchanged: ${n}`));
+    for (const oauthEntry of plan.oauth.filter((candidate) => candidate.signin)) lines.push('', `OAuth: ${oauthEntry.name}: your browser opens to sign in the first time it starts, in Claude Code or Cursor; the sign-in is kept in ${pathApi.join(oauthEntry.root!, roots.FILES.signIns)}/ and serves both.`);
+    const viaMcp = plan.oauth.filter((candidate) => !candidate.signin);
+    if (viaMcp.length) lines.push('', `OAuth: run /mcp once in a session to log in to ${viaMcp.map((oauthEntry) => oauthEntry.name).join(', ')}.`);
+    if (plan.dangerous.length) lines.push('', ...plan.dangerous.map((dangerous) => `Code-running tool on '${dangerous.name}': ${dangerous.tools.map((tool) => `${tool.tool} (${tool.why})`).join('; ')}. This plugin adds no guard.`));
+    if (plan.notes.length) lines.push('', ...plan.notes.map((note) => `Note: ${note}`));
+    if (plan.unchanged.length) lines.push('', ...plan.unchanged.map((note) => `Unchanged: ${note}`));
     return globalWords(lines.join('\n'));
 }
 

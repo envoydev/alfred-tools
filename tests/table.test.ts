@@ -5,8 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import { buildEntry } from '../scripts/entries/entry.ts';
-import { render } from '../scripts/inventory/table.ts';
-import { main } from '../scripts/inventory/table-command.ts';
+import { renderTable } from '../scripts/inventory/table.ts';
+import { runTableCommand } from '../scripts/inventory/table-command.ts';
 import type { Inventory, InvRegistration } from '../scripts/inventory/types.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
 
@@ -23,7 +23,7 @@ const inv = (over: Partial<Inventory> = {}) => ({ version: 1, project: '/proj', 
 
 test('one numbered table of every row for this OS: nothing installed shows a dash in each scope', () =>
 {
-    const text = render(inv(), catalog);
+    const text = renderTable(inv(), catalog);
     const lines = text.split('\n');
     assert.match(lines[0]!, /^#\s+group\s+tool\s+kind\s+routes\s+local\s+project\s+user$/);
     const rows = lines.slice(2).filter((l) => /^\d+ /.test(l));
@@ -35,7 +35,7 @@ test('one numbered table of every row for this OS: nothing installed shows a das
     assert.match(rows.find((l) => /serena/.test(l))!, /serena\s+mcp\s+local\s+-\s+-\s+-$/);
     assert.match(rows.find((l) => /\bcontext7\b/.test(l))!, /context7\s+mcp\s+remote\/local/);
     assert.ok(!rows.some((l) => /\splugin\s/.test(l)), 'no plugin row since 0.5.0');
-    const win = render(inv({ os: 'win32' }), catalog);
+    const win = renderTable(inv({ os: 'win32' }), catalog);
     assert.ok(/windows-control\s+mcp/.test(win));
     assert.match(win, /Not offered on this OS \(win32\): macos-control\./);
 });
@@ -44,7 +44,7 @@ test('what is installed shows by scope as name [route, pin], a custom name inclu
 {
     const old = entryOf('serena');
     old.args = old.args!.map((a) => (a === 'serena-agent@2.1.0' ? 'serena-agent@2.0.0' : a));
-    const text = render(inv({
+    const text = renderTable(inv({
         registrations: [
             reg('serena', 'proj-serena', 'local', old),
             reg('serena', 'serena', 'user', entryOf('serena')),
@@ -65,13 +65,13 @@ test('what is installed shows by scope as name [route, pin], a custom name inclu
 test('four Playwright engines are four rows, each with its own registration', () =>
 {
     const regs = ['chrome', 'msedge', 'firefox', 'webkit'].map((e) => reg(`playwright-${e}`, `playwright-${e}`, 'local', entryOf(`playwright-${e}`)));
-    const text = render(inv({ registrations: regs }), catalog);
+    const text = renderTable(inv({ registrations: regs }), catalog);
     for (const e of ['chrome', 'msedge', 'firefox', 'webkit']) assert.match(text, new RegExp(`playwright-${e}\\s+mcp\\s+local\\s+playwright-${e} \\[local, 0\\.0\\.84\\]`));
 });
 
 test('the user\'s own servers, alfred-code leftovers and unreadable files are named under the table', () =>
 {
-    const text = render(inv({
+    const text = renderTable(inv({
         registrations: [
             { name: 'my-own-server', scope: 'user', entry: { command: 'node' }, rowId: null, route: null, own: true, alfredRetired: false },
             { name: 'alfred-navigation', scope: 'user', entry: { command: 'uvx' }, rowId: null, route: null, own: true, alfredRetired: true },
@@ -92,11 +92,11 @@ test('main reads the inventory file; a missing file exits 2', () =>
         fs.writeFileSync(file, JSON.stringify(inv()));
         let text = '';
         const out = (s: string) => { text += `${s}\n`; };
-        assert.strictEqual(main([file], { out }), 0);
+        assert.strictEqual(runTableCommand([file], { out }), 0);
         assert.match(text, /^#\s+group/);
         text = '';
-        assert.strictEqual(main([path.join(dir, 'none.json')], { out }), 2);
-        assert.strictEqual(main([], { out }), 2);
+        assert.strictEqual(runTableCommand([path.join(dir, 'none.json')], { out }), 2);
+        assert.strictEqual(runTableCommand([], { out }), 2);
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
@@ -105,7 +105,7 @@ test('inherited servers are noted by folder and approval, never in a scope colum
 {
     const c7: InvRegistration = { ...reg('context7', 'context7', 'inherited', { type: 'http', url: 'https://mcp.context7.com/mcp' }, 'remote'), from: '/', approval: 'pending', shadowed: null };
     const mine: InvRegistration = { name: 'tool', scope: 'inherited', entry: { command: 'node', args: ['x'] }, rowId: null, route: null, own: true, alfredRetired: false, from: '/', approval: 'approved', shadowed: { scope: 'local', from: null } };
-    const out = render(inv({ registrations: [c7, mine], unreadable: [{ scope: 'inherited', file: '/x/.mcp.json', state: 'malformed', error: 'bad' }] }), catalog);
+    const out = renderTable(inv({ registrations: [c7, mine], unreadable: [{ scope: 'inherited', file: '/x/.mcp.json', state: 'malformed', error: 'bad' }] }), catalog);
     const c7Line = out.split('\n').find((l) => / context7 /.test(l));
     assert.doesNotMatch(c7Line!, /context7 \[remote/, 'no scope cell holds it');
     assert.match(out, /Inherited from a parent folder's \.mcp\.json - change them there: context7 \(from \.\., pending\), tool \(from \.\., approved, not used here: the local one wins\)\./);

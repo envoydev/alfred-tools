@@ -34,9 +34,9 @@ export const VERSION = 1;
 const START_MS = 600000;
 const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'preferred-tools', version: '0' } } };
 // ${VAR} and ${VAR:-default}, as Claude Code expands them in an MCP entry (entries.js expandVars)
-export const expand = (s: unknown, env: Env): string => expandVars(s, env).value;
+export const expandedText = (text: unknown, env: Env): string => expandVars(text, env).value;
 // the first ${VAR} with no default that is not set: a start without it only fails
-export const unsetVar = (entry: ServerEntry, env: Env): string | null => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((m) => m[1]!).find((k) => env[k] === undefined) || null;
+export const unsetVar = (entry: ServerEntry, env: Env): string | null => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((match) => match[1]!).find((k) => env[k] === undefined) || null;
 
 // The runtime itself (npm, uvx, docker), never the claude CLI, and with no limit of Claude Code's. On Windows it goes
 // through the shell so npm.cmd resolves.
@@ -49,7 +49,7 @@ function stopTree(child: ChildProcessByStdio<Writable, Readable, Readable>): Pro
     {
         if (child.exitCode !== null || child.signalCode !== null) return resolve();
         if (process.platform === 'win32') { spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }); return resolve(); }
-        const kill = (sig: NodeJS.Signals) => { try { process.kill(-child.pid!, sig); } catch { /* already gone */ } };
+        const kill = (signal: NodeJS.Signals) => { try { process.kill(-child.pid!, signal); } catch { /* already gone */ } };
         const hard = setTimeout(() => { kill('SIGKILL'); resolve(); }, 5000);
         child.once('exit', () => { clearTimeout(hard); kill('SIGKILL'); resolve(); });
         kill('SIGTERM');
@@ -58,35 +58,35 @@ function stopTree(child: ChildProcessByStdio<Writable, Readable, Readable>): Pro
 
 // The server started exactly as written - command, args and env, ${VAR} expanded - and sent `initialize` over stdio,
 // as Claude Code's first start sends it. -> Promise<{ ok, ms, why? }>
-export function realStart(entry: ServerEntry, { cwd, env, ms = START_MS }: { cwd: string; env: Env; ms?: number }): Promise<StartResult>
+export function realStart(entry: ServerEntry, { cwd, env, ms: timeoutMilliseconds = START_MS }: { cwd: string; env: Env; ms?: number }): Promise<StartResult>
 {
     return new Promise((resolve) =>
     {
         const childEnv: Env = { ...env };
-        for (const [k, v] of Object.entries(entry.env || {})) childEnv[k] = expand(v, env);
-        const t0 = Date.now();
+        for (const [k, value] of Object.entries(entry.env || {})) childEnv[k] = expandedText(value, env);
+        const startedAt = Date.now();
         let child: ChildProcessByStdio<Writable, Readable, Readable>;
-        try { child = spawn(expand(entry.command, env), (entry.args || []).map((a) => expand(a, env)), { cwd, env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32', windowsHide: true }); }
-        catch (caught) { const e = caught as NodeJS.ErrnoException; resolve({ ok: false, ms: 0, why: e.message }); return; }
+        try { child = spawn(expandedText(entry.command, env), (entry.args || []).map((argument) => expandedText(argument, env)), { cwd, env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32', windowsHide: true }); }
+        catch (caught) { const error = caught as NodeJS.ErrnoException; resolve({ ok: false, ms: 0, why: error.message }); return; }
         let out = '';
         let err = '';
         let settled = false;
-        const done = (r: { ok: boolean; why?: string }) =>
+        const done = (result: { ok: boolean; why?: string }) =>
         {
             if (settled) return;
             settled = true;
             clearTimeout(timer);
-            const took = Date.now() - t0;
-            stopTree(child).then(() => resolve({ ...r, ms: took }));
+            const took = Date.now() - startedAt;
+            stopTree(child).then(() => resolve({ ...result, ms: took }));
         };
-        const timer = setTimeout(() => done({ ok: false, why: `no answer in ${ms / 1000}s` }), ms);
-        child.on('error', (e) => done({ ok: false, why: e.message }));
+        const timer = setTimeout(() => done({ ok: false, why: `no answer in ${timeoutMilliseconds / 1000}s` }), timeoutMilliseconds);
+        child.on('error', (error) => done({ ok: false, why: error.message }));
         child.on('exit', (code) => done({ ok: false, why: `exited ${code} before answering${err.trim() ? `: ${err.trim().split('\n').slice(-1)[0]}` : ''}` }));
         child.stdin.on('error', () => { /* it exited; 'exit' says so */ });
-        child.stderr.on('data', (d) => { err = `${err}${d}`.slice(-4000); });
-        child.stdout.on('data', (d) =>
+        child.stderr.on('data', (chunk) => { err = `${err}${chunk}`.slice(-4000); });
+        child.stdout.on('data', (chunk) =>
         {
-            const lines = `${out}${d}`.split('\n');
+            const lines = `${out}${chunk}`.split('\n');
             out = lines.pop()!;
             for (const line of lines)
             {
@@ -100,7 +100,7 @@ export function realStart(entry: ServerEntry, { cwd, env, ms = START_MS }: { cwd
 }
 
 // -> the job apply.js hands over: { version, project, fetch: [fetch steps, each with the scope it was written at], check: [server names] }
-export const job = (project: string, fetch: JobStep[], check: string[]): FetchJob => ({ version: VERSION, project, fetch, check: [...new Set(check)] });
+export const fetchJob = (project: string, fetch: JobStep[], check: string[]): FetchJob => ({ version: VERSION, project, fetch, check: [...new Set(check)] });
 
 // Each step's argv and env as kept.js keeps them, so the file a command line names holds no live credential: a download
 // needs none (a kept value expands to ''), and the first start reads the registration itself.
@@ -110,7 +110,7 @@ export function writeJob(file: string, j: FetchJob, { append = false }: { append
 {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const prior: FetchJob | null = append && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
-    const fetch = j.fetch.map((s) => { const k = kept.keep({ args: s.argv, env: s.env }, null); return { ...s, argv: k.args, env: k.env }; });
+    const fetch = j.fetch.map((step) => { const k = kept.keep({ args: step.argv, env: step.env }, null); return { ...step, argv: k.args, env: k.env }; });
     const out = prior ? { ...prior, fetch: [...prior.fetch, ...fetch], check: [...new Set([...prior.check, ...j.check])] } : { ...j, fetch };
     fs.writeFileSync(file, `${JSON.stringify(out, null, 2)}\n`);
     return file;
@@ -119,92 +119,92 @@ export function writeJob(file: string, j: FetchJob, { append = false }: { append
 // The lines apply.js prints for the command: the file, and what fetch.js will do with it.
 export const nextLines = (file: string, j: FetchJob): string[] => [
     `Fetch next, in the background (a first download can take minutes): ${file}`,
-    `  fetches ${j.fetch.map((s) => s.what).join(', ')} and starts each once, then reports the status of ${j.check.join(', ')} (claude mcp get)`,
+    `  fetches ${j.fetch.map((step) => step.what).join(', ')} and starts each once, then reports the status of ${j.check.join(', ')} (claude mcp get)`,
 ];
 
 // Each server's status line as `claude mcp get` prints it - a health check of up to 30 s each. -> [{ name, out }]
-export function status(names: string[], { cwd, env, runCli = cli.runClaude, log = console.log }: { cwd: string; env: Env; runCli?: RunCli; log?: Log }): Status[]
+export function serverStatus(names: string[], { cwd, env, runCli = cli.runClaude, log = console.log }: { cwd: string; env: Env; runCli?: RunCli; log?: Log }): Status[]
 {
     if (names.length) log('', 'Status, from the CLI:');
     return names.map((name) =>
     {
-        const g = runCli(['mcp', 'get', name], { cwd, env });
-        const lines = `${g.stdout || ''}${g.stderr || ''}`.trim().split('\n').map((l) => l.trim()).filter(Boolean);
-        const out = lines.find((l) => /^Status:/i.test(l)) || lines.slice(-1)[0] || '(no output)';
+        const result = runCli(['mcp', 'get', name], { cwd, env });
+        const lines = `${result.stdout || ''}${result.stderr || ''}`.trim().split('\n').map((line) => line.trim()).filter(Boolean);
+        const out = lines.find((line) => /^Status:/i.test(line)) || lines.slice(-1)[0] || '(no output)';
         log(`  ${name}: ${out}`);
         // the CLI's reason for a failed connection (2.1.322): matched by apply.js REFUSED, never printed - it may quote a body
-        return { name, out, issue: lines.find((l) => /^Issue:/i.test(l)) || null };
+        return { name, out, issue: lines.find((line) => /^Issue:/i.test(line)) || null };
     });
 }
 
 // -> Promise<{ fetched: [what], started: [name], skipped: [line], warnings: [detail], status: [{ name, out }] }>
-export async function run(j: FetchJob, { env = process.env, runFetch = realFetch, start = realStart, runCli = cli.runClaude, log = console.log }: FetchOptions = {}): Promise<FetchRun>
+export async function runFetchJob(j: FetchJob, { env = process.env, runFetch = realFetch, start = realStart, runCli = cli.runClaude, log = console.log }: FetchOptions = {}): Promise<FetchRun>
 {
-    const res: FetchRun = { fetched: [], started: [], skipped: [], warnings: [], status: [] };
+    const report: FetchRun = { fetched: [], started: [], skipped: [], warnings: [], status: [] };
     const cwd = j.project;
-    const warn = (n: number, detail: string) => { res.warnings.push(detail); log(`${n}. warn   ${detail}`); };
+    const warn = (stepNumber: number, detail: string) => { report.warnings.push(detail); log(`${stepNumber}. warn   ${detail}`); };
     for (const [i, step] of j.fetch.entries())
     {
-        const n = i + 1;
+        const stepNumber = i + 1;
         const stepEnv: Env = { ...env };
-        for (const [k, v] of Object.entries(step.env || {})) stepEnv[k] = expand(v, env);
-        log(`${n}. ...    fetching ${step.what} for '${step.name}'`);
-        const t0 = Date.now();
-        const r = runFetch(step.argv, { cwd, env: stepEnv });
-        if (r.error || r.status !== 0)
+        for (const [k, value] of Object.entries(step.env || {})) stepEnv[k] = expandedText(value, env);
+        log(`${stepNumber}. ...    fetching ${step.what} for '${step.name}'`);
+        const startedAt = Date.now();
+        const result = runFetch(step.argv, { cwd, env: stepEnv });
+        if (result.error || result.status !== 0)
         {
-            const why = r.error ? r.error.message : `exit ${r.status}: ${`${r.stderr || ''}${r.stdout || ''}`.trim().split('\n').slice(-2).join(' | ')}`;
-            warn(n, `could not fetch ${step.what} for '${step.name}' (${why}) - the registration stays; its first start fetches it and may time out once`);
+            const why = result.error ? result.error.message : `exit ${result.status}: ${`${result.stderr || ''}${result.stdout || ''}`.trim().split('\n').slice(-2).join(' | ')}`;
+            warn(stepNumber, `could not fetch ${step.what} for '${step.name}' (${why}) - the registration stays; its first start fetches it and may time out once`);
             continue;
         }
-        res.fetched.push(step.what);
-        log(`${n}. ok     ${step.what} is in the cache (${Math.round((Date.now() - t0) / 1000)}s)`);
+        report.fetched.push(step.what);
+        log(`${stepNumber}. ok     ${step.what} is in the cache (${Math.round((Date.now() - startedAt) / 1000)}s)`);
 
         // the first start, as written: whatever it downloads or builds on top of the package happens now. `from` names
         // the parent folder whose .mcp.json holds a server this folder inherits (fix's npx-cache-entry); it starts here.
         const entry = step.scope ? account.readRegistration(step.name, step.scope, step.from || cwd, env) : undefined;
-        if (!entry || !entry.command) { warn(n, `'${step.name}' is not at ${step.scope || 'a known'} scope any more - not started`); continue; }
+        if (!entry || !entry.command) { warn(stepNumber, `'${step.name}' is not at ${step.scope || 'a known'} scope any more - not started`); continue; }
         // a bridge's first start would only run the package just fetched - and reach the hosted server with the key
         if (bridgeParts(entry))
         {
             const line = `'${step.name}' not started: a bridge has no first-run work beyond its package`;
-            res.skipped.push(line);
-            log(`${n}. skip   ${line}`);
+            report.skipped.push(line);
+            log(`${stepNumber}. skip   ${line}`);
             continue;
         }
         // the shared sign-in form (D5): its first start opens a browser to sign in, which is the user's to do in an app
         if (signInParts(entry))
         {
             const line = `'${step.name}' not started: its first start opens the sign-in, which belongs to Claude Code or Cursor`;
-            res.skipped.push(line);
-            log(`${n}. skip   ${line}`);
+            report.skipped.push(line);
+            log(`${stepNumber}. skip   ${line}`);
             continue;
         }
         const missing = unsetVar(entry, env);
         if (missing)
         {
             const line = `'${step.name}' not started: \${${missing}} is not set - its first session start with it set does the first-run work`;
-            res.skipped.push(line);
-            log(`${n}. skip   ${line}`);
+            report.skipped.push(line);
+            log(`${stepNumber}. skip   ${line}`);
             continue;
         }
-        log(`${n}. ...    starting '${step.name}' once (a first start can download more, such as a model)`);
-        const s = await start(entry, { cwd, env });
-        if (s.ok)
+        log(`${stepNumber}. ...    starting '${step.name}' once (a first start can download more, such as a model)`);
+        const startResult = await start(entry, { cwd, env });
+        if (startResult.ok)
         {
-            res.started.push(step.name);
-            log(`${n}. ok     '${step.name}' answered its first start in ${(s.ms / 1000).toFixed(1)}s`);
+            report.started.push(step.name);
+            log(`${stepNumber}. ok     '${step.name}' answered its first start in ${(startResult.ms / 1000).toFixed(1)}s`);
             // serena wrote its settings at that start: base_modes: [] (D7), where the home is one the plugin may edit
             const home = step.row === 'serena' && entry.env && entry.env.SERENA_HOME;
             if (home && serenaConfig.editableHome(home, { platform: process.platform }).ok)
-                log(`${n}. ok     ${serenaConfig.emptyBaseModes(serenaConfig.configOf(home)).detail}`);
+                log(`${stepNumber}. ok     ${serenaConfig.emptyBaseModes(serenaConfig.configOf(home)).detail}`);
         }
-        else warn(n, `'${step.name}' did not answer its first start (${s.why}) - the registration stays; its first session start tries again`);
+        else warn(stepNumber, `'${step.name}' did not answer its first start (${startResult.why}) - the registration stays; its first session start tries again`);
     }
-    res.status = status(j.check, { cwd, env, runCli, log });
-    log('', res.warnings.length
-        ? `Done, with ${res.warnings.length} warning${res.warnings.length > 1 ? 's' : ''}. Restart Claude Code now so the registrations load.`
+    report.status = serverStatus(j.check, { cwd, env, runCli, log });
+    log('', report.warnings.length
+        ? `Done, with ${report.warnings.length} warning${report.warnings.length > 1 ? 's' : ''}. Restart Claude Code now so the registrations load.`
         : 'Done. Restart Claude Code now so the registrations load.');
-    return res;
+    return report;
 }
 

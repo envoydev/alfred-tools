@@ -1,6 +1,6 @@
 import { installedOf } from '../inventory/inventory.ts';
 import * as roots from '../roots/roots.ts';
-import { REC } from './asks-keys.ts';
+import { RECOMMENDED_SUFFIX } from './asks-keys.ts';
 import { scopeOrder } from './asks-tool.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { Family } from '../roots/types.ts';
@@ -25,7 +25,7 @@ export function needsRoot(row: CatalogRow, routeId: string): boolean
 }
 
 // The families the questions input needs a root for: each pick at its answered (else recommended) scope.
-export function rootFamilies(inv: Inventory, picks: Picks | null | undefined, catalog: Catalog, ctx: AskCtx): Family[]
+export function rootFamilies(inventory: Inventory, picks: Picks | null | undefined, catalog: Catalog, context: AskCtx): Family[]
 {
     const out = new Set<string>();
     const routes = (picks && picks.routes) || {};
@@ -36,30 +36,30 @@ export function rootFamilies(inv: Inventory, picks: Picks | null | undefined, ca
         if (!row) continue;
         const routeId = routes[id] || row.recommendedRoute;
         if (!needsRoot(row, routeId)) continue;
-        const scope = scopes[id] || scopeOrder(row, inv, { route: routeId, ctx, copyOf: installedOf(inv, id) })[0]!;
+        const scope = scopes[id] || scopeOrder(row, inventory, { route: routeId, ctx: context, copyOf: installedOf(inventory, id) })[0]!;
         out.add(roots.familyOf(scope));
     }
-    return (['project', 'global'] as Family[]).filter((f) => out.has(f));
+    return (['project', 'global'] as Family[]).filter((family) => out.has(family));
 }
 
 // -> { question, answers: { <label as shown>: { family, id, root } } }
-export function rootQuestion(inv: Inventory, family: Family, ctx: AskCtx): Asked<{ family: Family; id: string; root: string | null }>
+export function rootQuestion(inventory: Inventory, family: Family, context: AskCtx): Asked<{ family: Family; id: string; root: string | null }>
 {
-    const opts = roots.options(inv, family, ctx).map((o, i) => ({ ...o, label: `${o.label}${i === 0 ? REC : ''}` }));
+    const options = roots.options(inventory, family, context).map((option, i) => ({ ...option, label: `${option.label}${i === 0 ? RECOMMENDED_SUFFIX : ''}` }));
     return {
-        question: { id: `root-${family}`, header: ROOT_HEADER[family]!, multiSelect: false, question: ROOT_TEXT[family]!, options: opts.map((o) => ({ label: o.label, description: o.description! })) },
-        answers: Object.fromEntries(opts.map((o) => [o.label, { family, id: o.id, root: o.root }])),
+        question: { id: `root-${family}`, header: ROOT_HEADER[family]!, multiSelect: false, question: ROOT_TEXT[family]!, options: options.map((option) => ({ label: option.label, description: option.description! })) },
+        answers: Object.fromEntries(options.map((option) => [option.label, { family, id: option.id, root: option.root }])),
     };
 }
 
-export function rootsBlock(inv: Inventory, picks: Picks | null | undefined, catalog: Catalog, ctx: AskCtx): { questions: Question[]; answers: Record<string, Record<string, unknown>> }
+export function rootsBlock(inventory: Inventory, picks: Picks | null | undefined, catalog: Catalog, context: AskCtx): { questions: Question[]; answers: Record<string, Record<string, unknown>> }
 {
     const out: { questions: Question[]; answers: Record<string, Record<string, unknown>> } = { questions: [], answers: {} };
-    for (const family of rootFamilies(inv, picks, catalog, ctx))
+    for (const family of rootFamilies(inventory, picks, catalog, context))
     {
-        const r = rootQuestion(inv, family, { ...ctx, catalog });
-        out.questions.push(r.question);
-        out.answers[r.question.id] = r.answers;
+        const rootAsk = rootQuestion(inventory, family, { ...context, catalog });
+        out.questions.push(rootAsk.question);
+        out.answers[rootAsk.question.id] = rootAsk.answers;
     }
     return out;
 }

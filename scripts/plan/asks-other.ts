@@ -1,5 +1,5 @@
 // The other questions: a tool's own ask, remove, Cursor, drift, the apps, and the static ones.
-import { REC, keyStateOf } from './asks-keys.ts';
+import { RECOMMENDED_SUFFIX, keyStateOf } from './asks-keys.ts';
 import { installedItems, packed } from './asks-picks.ts';
 import { scopeQuestion, nameQuestion, scopeOrder, nameFor } from './asks-tool.ts';
 import { locationQuestion } from './asks-location.ts';
@@ -12,28 +12,28 @@ import type { Asked, DriftAsk, LocationAnswer, Question, QuestionOption, Taken, 
 // `scope` and `name`, else the recommended scope and the name it has now or the original) and one tool-specific extra,
 // and `answers` maps each location label to its entry; `only` is the location when one place is left and none is
 // asked. Any other row has `first` null and asks scope, name and its extra in one call, as before.
-export function toolAsk(row: CatalogRow, inv: Inventory, { route, scope = null, name = null, current = null, ctx = null, catalog: _catalog, copyOf = [] }: ToolOpts = {}): ToolAsk
+export function toolAsk(row: CatalogRow, inventory: Inventory, { route, scope = null, name = null, current = null, ctx: context = null, catalog: _catalog, copyOf = [] }: ToolOpts = {}): ToolAsk
 {
     const routeId = route || (current && current.route) || row.recommendedRoute;
-    const scopeQ = scopeQuestion(row, inv, { route: routeId, current, copyOf, ctx });
-    const nameQ = nameQuestion(row, inv, { current, copyOf, ctx });
-    const located = Boolean(row.locations && ctx);
-    const qs = located ? [] : [scopeQ, nameQ].filter(Boolean) as Question[];
+    const scopeQ = scopeQuestion(row, inventory, { route: routeId, current, copyOf, ctx: context });
+    const nameQ = nameQuestion(row, inventory, { current, copyOf, ctx: context });
+    const located = Boolean(row.locations && context);
+    const questions = located ? [] : [scopeQ, nameQ].filter(Boolean) as Question[];
     let answers: Record<string, LocationAnswer> = {};
     // one place left: no location question, and the walk writes this as the location (a move must not fall back to
     // 'keep' where the folder it uses now cannot stay)
     let only: LocationAnswer | null = null;
     // the scope the questions are built for: the one asked first, else the recommended one
-    const at = ctx ? scope || scopeOrder(row, inv, { route: routeId, current, copyOf, ctx })[0] || (current && current.scope) : scope;
+    const at = context ? scope || scopeOrder(row, inventory, { route: routeId, current, copyOf, ctx: context })[0] || (current && current.scope) : scope;
     if (located)
     {
-        const l = locationQuestion(row, inv, { scope: at!, name: nameFor(row, name, current, ctx), current, copyOf, ctx: ctx! });
-        if (l.question) qs.push(l.question);
-        else only = l.only;
-        answers = l.answers;
+        const locationAsk = locationQuestion(row, inventory, { scope: at!, name: nameFor(row, name, current, context), current, copyOf, ctx: context! });
+        if (locationAsk.question) questions.push(locationAsk.question);
+        else only = locationAsk.only;
+        answers = locationAsk.answers;
     }
     // what the registration has now goes first, so a configure walk recommends keeping it
-    const first = (opts: QuestionOption[], keepFirst?: boolean) => (keepFirst ? [opts[1]!, opts[0]!] : opts).map((o, i) => ({ ...o, label: `${o.label}${i === 0 ? REC : ''}` }));
+    const first = (options: QuestionOption[], keepFirst?: boolean) => (keepFirst ? [options[1]!, options[0]!] : options).map((option, i) => ({ ...option, label: `${option.label}${i === 0 ? RECOMMENDED_SUFFIX : ''}` }));
     const sameRoute = current && current.route === routeId;
     // every extra that applies, in the spec's order: the browser binary, the host, the API key (spec F1)
     if (row.routes[routeId]!.optionalArgs && row.routes[routeId]!.optionalArgs!.executablePath)
@@ -41,7 +41,7 @@ export function toolAsk(row: CatalogRow, inv: Inventory, { route, scope = null, 
         const has = Boolean(sameRoute && current!.executablePath);
         const named = { label: 'A browser binary I name', description: 'sets --executable-path to the binary you name, asked next' };
         const engine = { label: 'Default for this engine', description: has ? 'drops --executable-path' : row.id.endsWith('chrome') || row.id.endsWith('msedge') ? 'the branded browser installed on this machine' : "Playwright's own build" };
-        qs.push({
+        questions.push({
             id: `browser-${row.id}`, header: 'Browser', multiSelect: false, question: `${row.label}: which browser binary?`,
             options: has
                 ? first([{ label: `Keep \`${current!.executablePath}\``, description: 'the binary it uses now' }, engine])
@@ -51,7 +51,7 @@ export function toolAsk(row: CatalogRow, inv: Inventory, { route, scope = null, 
     if (row.params)
     {
         const host = current && current.host && current.host !== row.params[0]!.default ? current.host : null;
-        qs.push({
+        questions.push({
             id: `host-${row.id}`, header: 'Host', multiSelect: false, question: `${row.label}: which ${row.params[0]!.label}?`,
             options: host
                 ? first([{ label: `Keep ${host}`, description: 'the host it uses now' }, { label: row.params[0]!.default, description: 'the hosted service' }])
@@ -63,8 +63,8 @@ export function toolAsk(row: CatalogRow, inv: Inventory, { route, scope = null, 
     if (row.routes[routeId]!.authMode === 'optional-token' && !(routeId !== 'remote' && at === 'project'))
     {
         const route = row.routes[routeId]!;
-        const ks = keyStateOf(row, routeId, ctx, inv.alfredCodeEnabled, at || 'user');
-        const file = ks && ks.files[0];
+        const keyState = keyStateOf(row, routeId, context, inventory.alfredCodeEnabled, at || 'user');
+        const file = keyState && keyState.files[0];
         const hint = route.helper && route.helper.hint ? `; ${route.helper.hint}` : '';
         const useKey = route.helper
             ? { label: 'Use a key from .mcps-secrets', description: `mcp-headers.js reads it each time Claude Code connects${file ? `, from ${file} first` : ''} - never written into the registration${hint}` }
@@ -72,22 +72,22 @@ export function toolAsk(row: CatalogRow, inv: Inventory, { route, scope = null, 
         const noKey = route.keyless === 'oauth'
             ? { label: 'Sign in with OAuth', description: 'run /mcp once in a session to log in' }
             : { label: 'No key - lower rate limits', description: 'works anonymously' };
-        qs.push({
+        questions.push({
             id: `token-${row.id}`, header: 'API key', multiSelect: false, question: `${row.label}: send an API key?`,
             options: first([noKey, useKey], current ? Boolean(sameRoute && current.token) : true),
         });
     }
-    return { first: located ? [scopeQ, nameQ].filter(Boolean) as Question[] : null, questions: qs, answers, only };
+    return { first: located ? [scopeQ, nameQ].filter(Boolean) as Question[] : null, questions: questions, answers, only };
 }
 
 // The questions toolAsk gives after `first`: for a row without a data folder, its whole call.
-export const toolQuestions = (row: CatalogRow, inv: Inventory, opts: ToolOpts = {}): Question[] => toolAsk(row, inv, opts).questions;
+export const toolQuestions = (row: CatalogRow, inventory: Inventory, options: ToolOpts = {}): Question[] => toolAsk(row, inventory, options).questions;
 
 // Remove: one option per registration (a row at two scopes is two options), grouped; the description is the exact
 // command, which the walk reads the target from.
-export function removeQuestions(inv: Inventory, catalog: Catalog): Question[][]
+export function removeQuestions(inventory: Inventory, catalog: Catalog): Question[][]
 {
-    const items = installedItems(inv, catalog, (_row, h) => `claude mcp remove ${h.name} -s ${h.scope}`);
+    const items = installedItems(inventory, catalog, (_row, registration) => `claude mcp remove ${registration.name} -s ${registration.scope}`);
     return packed(items, { id: 'remove', question: 'which do you want to remove?', none: 'remove nothing' });
 }
 
@@ -99,10 +99,10 @@ export function cursorNameQuestion({ file, name, sameRow }: Taken): Asked<string
 {
     const replace = { label: "Replace it with the plugin's", description: 'Cursor gets the same entry as Claude Code; the old one is dropped, not saved', value: 'replace' };
     const keep = { label: "Keep Cursor's own", description: `${name} is set up for Claude Code only, and Cursor's entry stays as it is`, value: 'keep' };
-    const opts = (sameRow ? [replace, keep] : [keep, replace]).map((o, i) => ({ ...o, label: `${o.label}${i === 0 ? REC : ''}` }));
+    const options = (sameRow ? [replace, keep] : [keep, replace]).map((option, i) => ({ ...option, label: `${option.label}${i === 0 ? RECOMMENDED_SUFFIX : ''}` }));
     return {
-        question: { id: `cursor-name-${name}@${file}`, header: 'Cursor', multiSelect: false, question: `Cursor's ${file} already has a server named ${name} that preferred-tools did not write. What should happen?`, options: opts.map(({ label, description }) => ({ label, description })) },
-        answers: Object.fromEntries(opts.map((o) => [o.label, o.value])),
+        question: { id: `cursor-name-${name}@${file}`, header: 'Cursor', multiSelect: false, question: `Cursor's ${file} already has a server named ${name} that preferred-tools did not write. What should happen?`, options: options.map(({ label, description }) => ({ label, description })) },
+        answers: Object.fromEntries(options.map((option) => [option.label, option.value])),
     };
 }
 
@@ -110,43 +110,43 @@ export function cursorNameQuestion({ file, name, sameRow }: Taken): Asked<string
 // is recommended - a hand edit is deliberate - unless the copy holds a key-shaped string outside its key field: then
 // Restore or Leave. An inherited copy (a workspace member's, D4a) is the folder above's: Restore from it or Leave.
 // f: { name, scope, app, change, keyGuard, keyEmpty, rowGone, inherited } -> { question, answers: { <label>: value } }
-export function driftQuestion(f: DriftAsk): Asked<string>
+export function driftQuestion(driftAsk: DriftAsk): Asked<string>
 {
-    const app = f.appLabel || (f.app === 'cursor' ? 'Cursor' : 'Claude Code');
+    const app = driftAsk.appLabel || (driftAsk.app === 'cursor' ? 'Cursor' : 'Claude Code');
     const restore = { label: 'Restore from the list', description: `${app} gets the list's entry back`, value: 'restore' };
-    let text = `${f.name} in ${app} differs from the plugin's list. Which should stay?`;
-    let opts: (QuestionOption & { value: string })[];
-    if (f.inherited)
+    let text = `${driftAsk.name} in ${app} differs from the plugin's list. Which should stay?`;
+    let options: (QuestionOption & { value: string })[];
+    if (driftAsk.inherited)
     {
-        text = f.change === 'missing' ? `${f.name} from ${f.inherited} is no longer in Cursor's file here. What should happen?` : `${f.name} in Cursor differs from ${f.inherited}'s list. Which should stay?`;
-        opts = [{ label: `Restore from ${f.inherited}`, description: `Cursor gets ${f.inherited}'s entry back`, value: 'restore' }, { label: 'Leave it as it is', description: `nothing changes; configure in ${f.inherited} changes it there`, value: 'leave' }];
+        text = driftAsk.change === 'missing' ? `${driftAsk.name} from ${driftAsk.inherited} is no longer in Cursor's file here. What should happen?` : `${driftAsk.name} in Cursor differs from ${driftAsk.inherited}'s list. Which should stay?`;
+        options = [{ label: `Restore from ${driftAsk.inherited}`, description: `Cursor gets ${driftAsk.inherited}'s entry back`, value: 'restore' }, { label: 'Leave it as it is', description: `nothing changes; configure in ${driftAsk.inherited} changes it there`, value: 'leave' }];
     }
-    else if (f.change === 'missing')
+    else if (driftAsk.change === 'missing')
     {
-        text = `${f.name} is on the plugin's list for ${app} but ${app} no longer has it. What should happen?`;
-        opts = [{ label: `Take ${app} off its list entry`, description: 'the server stays in the other app; with no app left, the entry leaves the list', value: 'drop' }, restore];
+        text = `${driftAsk.name} is on the plugin's list for ${app} but ${app} no longer has it. What should happen?`;
+        options = [{ label: `Take ${app} off its list entry`, description: 'the server stays in the other app; with no app left, the entry leaves the list', value: 'drop' }, restore];
     }
-    else if (f.keyGuard) opts = [restore, { label: `Leave ${app}'s copy as it is`, description: 'the copy holds what looks like a key outside its key field, so it is copied nowhere; fix asks again next run', value: 'leave' }];
-    else if (f.keyEmpty) opts = [restore, { label: `Leave ${app}'s copy as it is`, description: 'its key field is empty - keeping it would blank the key in the other app; fix asks again next run', value: 'leave' }];
-    else opts = [{ label: `Keep the change in ${app}`, description: f.rowGone ? 'the list lets go of it - it is no longer the plugin\'s server' : 'the list and the other app take the edited entry', value: 'keep' }, restore];
-    const marked = opts.map((o, i) => ({ ...o, label: `${o.label}${i === 0 ? REC : ''}` }));
+    else if (driftAsk.keyGuard) options = [restore, { label: `Leave ${app}'s copy as it is`, description: 'the copy holds what looks like a key outside its key field, so it is copied nowhere; fix asks again next run', value: 'leave' }];
+    else if (driftAsk.keyEmpty) options = [restore, { label: `Leave ${app}'s copy as it is`, description: 'its key field is empty - keeping it would blank the key in the other app; fix asks again next run', value: 'leave' }];
+    else options = [{ label: `Keep the change in ${app}`, description: driftAsk.rowGone ? 'the list lets go of it - it is no longer the plugin\'s server' : 'the list and the other app take the edited entry', value: 'keep' }, restore];
+    const marked = options.map((option, i) => ({ ...option, label: `${option.label}${i === 0 ? RECOMMENDED_SUFFIX : ''}` }));
     return {
-        question: { id: `drift-${f.app}-${f.name}~${f.scope}`, header: 'Drift', multiSelect: false, question: text, options: marked.map(({ label, description }) => ({ label, description })) },
-        answers: Object.fromEntries(marked.map((o) => [o.label, o.value])),
+        question: { id: `drift-${driftAsk.app}-${driftAsk.name}~${driftAsk.scope}`, header: 'Drift', multiSelect: false, question: text, options: marked.map(({ label, description }) => ({ label, description })) },
+        answers: Object.fromEntries(marked.map((option) => [option.label, option.value])),
     };
 }
 
 // cursor-offer (spec D9): update's offer, once per root, to set up for Cursor the servers its list has for Claude Code
 // only. The id names the root, so the answer goes back as --input cursor-offer:<root>=set|declined.
-export function cursorOfferQuestion(root: string, n: number | string): Asked<string>
+export function cursorOfferQuestion(root: string, serverCount: number | string): Asked<string>
 {
-    const opts = [
-        { label: `Set them up for Cursor too${REC}`, description: "each server is written to Cursor's mcp.json, as configure's app change would do", value: 'set' },
+    const options = [
+        { label: `Set them up for Cursor too${RECOMMENDED_SUFFIX}`, description: "each server is written to Cursor's mcp.json, as configure's app change would do", value: 'set' },
         { label: 'Not now', description: 'nothing changes, and update does not ask again for this root', value: 'declined' },
     ];
     return {
-        question: { id: `cursor-offer:${root}`, header: 'Cursor', multiSelect: false, question: `Cursor is on this machine, and the ${n} servers in ${root} are set up for Claude Code only. Set them up for Cursor too?`, options: opts.map(({ label, description }) => ({ label, description })) },
-        answers: Object.fromEntries(opts.map((o) => [o.label, o.value])),
+        question: { id: `cursor-offer:${root}`, header: 'Cursor', multiSelect: false, question: `Cursor is on this machine, and the ${serverCount} servers in ${root} are set up for Claude Code only. Set them up for Cursor too?`, options: options.map(({ label, description }) => ({ label, description })) },
+        answers: Object.fromEntries(options.map((option) => [option.label, option.value])),
     };
 }
 
@@ -158,8 +158,8 @@ const CLIENTS = [
 ];
 function clientsOptions(firstIsCursor: boolean): { options: QuestionOption[]; answers: Record<string, string[]> }
 {
-    const opts = (firstIsCursor ? CLIENTS : [...CLIENTS].reverse()).map((o, i) => ({ ...o, label: `${o.label}${i === 0 ? REC : ''}` }));
-    return { options: opts.map(({ label, description }) => ({ label, description })), answers: Object.fromEntries(opts.map((o) => [o.label, o.value])) };
+    const options = (firstIsCursor ? CLIENTS : [...CLIENTS].reverse()).map((option, i) => ({ ...option, label: `${option.label}${i === 0 ? RECOMMENDED_SUFFIX : ''}` }));
+    return { options: options.map(({ label, description }) => ({ label, description })), answers: Object.fromEntries(options.map((option) => [option.label, option.value])) };
 }
 export function clientsQuestion(found: boolean): Asked<string[]>
 {
@@ -176,39 +176,39 @@ export function targetClientsQuestion(key: string, name: string, current: string
 // The fixed asks of the commands, here so a test holds them to the limits.
 export const STATIC = {
     menu: { id: 'menu', header: 'Action', multiSelect: false, question: 'What do you want to change?', options: [
-        { label: `Change tools${REC}`, description: 'pick installed tools, servers on their own or a root folder, then what to change' },
+        { label: `Change tools${RECOMMENDED_SUFFIX}`, description: 'pick installed tools, servers on their own or a root folder, then what to change' },
         { label: 'Remove tools', description: 'choose the servers to remove' },
         { label: 'Done', description: 'nothing changes' } ] },
     settings: { id: 'settings', header: 'Settings', multiSelect: false, question: 'How do you want to set the tools up?', options: [
-        { label: `Use the recommended settings for all${REC}`, description: 'route, scope, name and location as recommended' },
+        { label: `Use the recommended settings for all${RECOMMENDED_SUFFIX}`, description: 'route, scope, name and location as recommended' },
         { label: 'Set each tool', description: 'ask route, scope, name and location per tool' } ] },
     // one pick (spec F1): the same choice, about that tool alone
     settingsOne: (tool: string): Question => ({ id: 'settings', header: 'Settings', multiSelect: false, question: `How do you want to set ${tool} up?`, options: [
-        { label: `Use the recommended settings for ${tool}${REC}`, description: 'route, scope, name and location as recommended' },
+        { label: `Use the recommended settings for ${tool}${RECOMMENDED_SUFFIX}`, description: 'route, scope, name and location as recommended' },
         { label: `Set ${tool} up`, description: 'ask its route, scope, name and location' } ] }),
     apply: { id: 'apply', header: 'Apply', multiSelect: false, question: 'Apply this plan?', options: [
-        { label: `Apply${REC}`, description: 'runs the calls above in order, stops at the first failure' },
+        { label: `Apply${RECOMMENDED_SUFFIX}`, description: 'runs the calls above in order, stops at the first failure' },
         { label: 'Change something', description: 'go back to the answers' },
         { label: 'Cancel', description: 'nothing is applied' } ] },
     removeFirst: { id: 'remove-first', header: 'Remove', multiSelect: false, question: 'Remove what?', options: [
-        { label: `Pick which${REC}`, description: 'choose the servers to remove' },
+        { label: `Pick which${RECOMMENDED_SUFFIX}`, description: 'choose the servers to remove' },
         { label: 'Cancel', description: 'nothing is removed' } ] },
     fixOffer: { id: 'fix-offer', header: 'Fix', multiSelect: false, question: 'Apply the fixes found?', options: [
-        { label: `Apply all found${REC}`, description: 'apply every fix listed that can be applied' },
+        { label: `Apply all found${RECOMMENDED_SUFFIX}`, description: 'apply every fix listed that can be applied' },
         { label: 'Pick which', description: 'choose among them' },
         { label: 'Skip', description: 'nothing changes' } ] },
     updateOffer: { id: 'update-offer', header: 'Update', multiSelect: false, question: 'Update what is behind?', options: [
-        { label: `All of them${REC}`, description: 'update everything offered' },
+        { label: `All of them${RECOMMENDED_SUFFIX}`, description: 'update everything offered' },
         { label: 'Pick which', description: 'choose among them' },
         { label: 'Skip', description: 'nothing changes' } ] },
     prereqMissing: (tool: string, need: string): Question => ({ id: `prereq-${tool}`, header: 'Missing', multiSelect: false, question: `${tool} needs ${need}, which is missing. What now?`, options: [
-        { label: `Skip this tool${REC}`, description: 'leave it out of the plan' },
+        { label: `Skip this tool${RECOMMENDED_SUFFIX}`, description: 'leave it out of the plan' },
         { label: 'Install it now', description: 'run the install line shown, or install it yourself and re-check' },
         { label: 'Register anyway', description: 'register it; it will not start until the prerequisite is there' } ] }),
     clients: clientsQuestion(true).question,
     // a STATIC function whose labels hold placeholders names them, so tests/ask-blocks.ts fills the block's own
     'cursor-name-taken': Object.assign((file: string, name: string) => cursorNameQuestion({ file, name, sameRow: true }).question, { placeholders: ['<file>', '<name>'] }),
-    'cursor-offer': Object.assign((n: number | string, root: string) => cursorOfferQuestion(root, n).question, { placeholders: ['<n>', '<root>'] }),
+    'cursor-offer': Object.assign((serverCount: number | string, root: string) => cursorOfferQuestion(root, serverCount).question, { placeholders: ['<n>', '<root>'] }),
     drift: Object.assign((name: string, app: string) => driftQuestion({ name, scope: 'local', app: 'claude', appLabel: app, change: 'differs' }).question, { placeholders: ['<name>', '<app>'] }),
     'drift-missing': Object.assign((name: string, app: string) => driftQuestion({ name, scope: 'local', app: 'claude', appLabel: app, change: 'missing' }).question, { placeholders: ['<name>', '<app>'] }),
 };

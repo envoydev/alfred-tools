@@ -23,7 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as cli from '../core/claude-cli.ts';
 import * as inventory from '../inventory/inventory.ts';
-import { job, status, writeJob, nextLines } from './fetch.ts';
+import { fetchJob, serverStatus, writeJob, nextLines } from './fetch.ts';
 import { reconnectLine } from '../plan/render.ts';
 import * as kept from '../core/kept.ts';
 import * as catalogLib from '../catalog/catalog.ts';
@@ -37,9 +37,9 @@ import type { Endpoint, McpAddStep, McpMoveStep, McpReplaceStep, PlanStep, Recon
 import type { ApplyCtx, ApplyOptions, ApplyPlan, ApplyReport, StepResult, Status } from './types.ts';
 
 // One operation. { ok, detail, extra[] }
-export function runStep(step: PlanStep, ctx: ApplyCtx): StepResult
+export function runStep(step: PlanStep, context: ApplyCtx): StepResult
 {
-    const call = ctx.call!;
+    const call = context.call!;
     switch (step.op)
     {
         case 'ensure-dir': {
@@ -53,33 +53,33 @@ export function runStep(step: PlanStep, ctx: ApplyCtx): StepResult
         case 'write-bridge': return writeShipped('bridge', step.path);
         case 'write-serena-context': return writeShipped('serenaContext', step.path);
         case 'move-root-file': return moveRootFile(step.from, step.to);
-        case 'serena-base-modes': { const r = emptyBaseModes(step.file); return { ok: true, detail: r.detail }; }
+        case 'serena-base-modes': { const result = emptyBaseModes(step.file); return { ok: true, detail: result.detail }; }
         case 'ensure-key-name': return ensureKeyName(step.file, step.names);
-        case 'list-write': return listWrite(step, ctx);
+        case 'list-write': return listWrite(step, context);
         case 'retire-record': return retireRecord(step.file);
-        case 'cursor-write': return cursorMcp.cursorWrite(step, ctx);
+        case 'cursor-write': return cursorMcp.cursorWrite(step, context);
         case 'deny-read': return denyRead(step.file, step.rules || []);
         // never fails the apply: a warning, and the file as it was (spec F8)
-        case 'order-mcp-json': return mcpOrder.orderFile(step.file, ctx.catalog, new Set(step.own || []));
-        case 'record-root': return recordRoot(step, ctx.data);
-        case 'mcp-add': return addAndVerify(call, ctx, step.name, step.scope, step.entry, rowOf(ctx, step));
-        case 'mcp-remove': return removeAndVerify(call, ctx, step.name, step.scope);
+        case 'order-mcp-json': return mcpOrder.orderFile(step.file, context.catalog, new Set(step.own || []));
+        case 'record-root': return recordRoot(step, context.data);
+        case 'mcp-add': return addAndVerify(call, context, step.name, step.scope, step.entry, rowOf(context, step));
+        case 'mcp-remove': return removeAndVerify(call, context, step.name, step.scope);
         case 'mcp-replace': {
-            const file = path.join(ctx.tmp, 'rollback.json');
-            fs.mkdirSync(ctx.tmp, { recursive: true });
-            fs.writeFileSync(file, JSON.stringify({ name: step.name, scope: step.scope, entry: kept.keep(step.old, rowOf(ctx, step)), project: ctx.project }, null, 2));
-            const rm = removeAndVerify(call, ctx, step.name, step.scope);
-            if (!rm.ok) return { ok: false, detail: `${rm.detail} - the old entry is untouched or restored by hand: ${restoreBy(ctx, step, step.name, step.scope, step.old)}` };
-            const add = addAndVerify(call, ctx, step.name, step.scope, step.entry, rowOf(ctx, step));
+            const file = path.join(context.tmp, 'rollback.json');
+            fs.mkdirSync(context.tmp, { recursive: true });
+            fs.writeFileSync(file, JSON.stringify({ name: step.name, scope: step.scope, entry: kept.keep(step.old, rowOf(context, step)), project: context.project }, null, 2));
+            const removeResult = removeAndVerify(call, context, step.name, step.scope);
+            if (!removeResult.ok) return { ok: false, detail: `${removeResult.detail} - the old entry is untouched or restored by hand: ${restoreBy(context, step, step.name, step.scope, step.old)}` };
+            const add = addAndVerify(call, context, step.name, step.scope, step.entry, rowOf(context, step));
             if (add.ok) return { ok: true, detail: `rewrote '${step.name}' at ${step.scope} scope (old entry saved in ${file})` };
-            const back = addAndVerify(call, ctx, step.name, step.scope, step.old, rowOf(ctx, step));
-            return { ok: false, detail: `${add.detail}; ${back.ok ? 'the old entry was re-added' : `RESTORE BY HAND: ${restoreBy(ctx, step, step.name, step.scope, step.old)}`}` };
+            const back = addAndVerify(call, context, step.name, step.scope, step.old, rowOf(context, step));
+            return { ok: false, detail: `${add.detail}; ${back.ok ? 'the old entry was re-added' : `RESTORE BY HAND: ${restoreBy(context, step, step.name, step.scope, step.old)}`}` };
         }
         case 'mcp-move': {
-            const add = addAndVerify(call, ctx, step.to.name, step.to.scope, step.entry, rowOf(ctx, step));
+            const add = addAndVerify(call, context, step.to.name, step.to.scope, step.entry, rowOf(context, step));
             if (!add.ok) return { ok: false, detail: `${add.detail}; the old '${step.from.name}' at ${step.from.scope} scope is untouched` };
-            const rm = removeAndVerify(call, ctx, step.from.name, step.from.scope);
-            if (!rm.ok) return { ok: false, detail: `${rm.detail}; the new one is in place, the old one is still there - remove it by hand: claude mcp remove ${step.from.name} -s ${step.from.scope}` };
+            const removeResult = removeAndVerify(call, context, step.from.name, step.from.scope);
+            if (!removeResult.ok) return { ok: false, detail: `${removeResult.detail}; the new one is in place, the old one is still there - remove it by hand: claude mcp remove ${step.from.name} -s ${step.from.scope}` };
             return { ok: true, detail: `moved '${step.from.name}' (${step.from.scope}) to '${step.to.name}' (${step.to.scope}): added, read back, old removed` };
         }
         default: return { ok: false, detail: `unknown operation ${step.op}` };
@@ -100,72 +100,72 @@ export function apply(plan: ApplyPlan, { env = process.env, tmp, runCli = cli.ru
         log('Nothing to apply: every answer already matches what is installed. No claude call was made.');
         return report;
     }
-    const ctx: ApplyCtx = { project, env, tmp: tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-')), runCli, catalog: catalogLib.load(), alfredEnabled: Boolean(plan.alfredCodeEnabled), data };
-    ctx.call = makeRunner(ctx);
-    ctx.report = report;
-    report.tmp = ctx.tmp;
+    const context: ApplyCtx = { project, env, tmp: tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-')), runCli, catalog: catalogLib.load(), alfredEnabled: Boolean(plan.alfredCodeEnabled), data };
+    context.call = makeRunner(context);
+    context.report = report;
+    report.tmp = context.tmp;
     for (let i = 0; i < plan.steps.length; i++)
     {
         const step = plan.steps[i]!;
         if (step.op === 'fetch') { report.toFetch.push(step); log(`${i + 1}. later  ${step.why} (fetch.ts, after the read-back)`); continue; }
-        const ready = restoreStep(step, ctx);
-        const filled = ready.error ? null : fillStep(ready.step!, ctx);
+        const ready = restoreStep(step, context);
+        const filled = ready.error ? null : fillStep(ready.step!, context);
         // a step that throws (a .cursor that is a file, a read-only target) is a failed step, so the failure path below
         // still takes Cursor off the list entries it never reached (spec D1)
-        let r: StepResult;
-        try { r = ready.error ? { ok: false, detail: ready.error } : runStep(filled!.step, ctx); }
-        catch (caught) { const e = caught as NodeJS.ErrnoException; r = { ok: false, detail: `${step.op}: ${e.message}` }; }
-        log(`${i + 1}. ${r.ok ? 'ok    ' : 'FAILED'} ${r.detail}`);
+        let stepResult: StepResult;
+        try { stepResult = ready.error ? { ok: false, detail: ready.error } : runStep(filled!.step, context); }
+        catch (caught) { const error = caught as NodeJS.ErrnoException; stepResult = { ok: false, detail: `${step.op}: ${error.message}` }; }
+        log(`${i + 1}. ${stepResult.ok ? 'ok    ' : 'FAILED'} ${stepResult.detail}`);
         if (filled && filled.note) { report.keys.push(filled.note); log(`   key: ${filled.note}`); }
-        if (r.ok)
+        if (stepResult.ok)
         {
-            report.applied.push({ i: i + 1, op: step.op, detail: r.detail });
+            report.applied.push({ i: i + 1, op: step.op, detail: stepResult.detail });
             const key = lists.regKey(step);
             if (key) report.appliedKeys.add(key);
             if (step.op === 'cursor-write') report.cursorFiles.add(step.file);
             continue;
         }
-        report.failed = { i: i + 1, op: step.op, detail: r.detail };
-        report.notRun = plan.steps.slice(i + 1).map((s, k) => ({ i: i + 2 + k, op: s.op, why: s.why }));
+        report.failed = { i: i + 1, op: step.op, detail: stepResult.detail };
+        report.notRun = plan.steps.slice(i + 1).map((skippedStep, k) => ({ i: i + 2 + k, op: skippedStep.op, why: skippedStep.why }));
         break;
     }
     if (report.failed)
     {
-        log('', `Stopped at step ${report.failed.i}. Already applied and left in place: ${report.applied.length ? report.applied.map((a) => `${a.i} (${a.detail})`).join('; ') : 'nothing'}.`);
-        if (report.notRun.length) log(`Not run: ${report.notRun.map((n) => `${n.i} ${n.op}`).join(', ')}.`);
-        report.lists = failureLists(plan, report, ctx, log);
+        log('', `Stopped at step ${report.failed.i}. Already applied and left in place: ${report.applied.length ? report.applied.map((appliedStep) => `${appliedStep.i} (${appliedStep.detail})`).join('; ') : 'nothing'}.`);
+        if (report.notRun.length) log(`Not run: ${report.notRun.map((notRunStep) => `${notRunStep.i} ${notRunStep.op}`).join(', ')}.`);
+        report.lists = failureLists(plan, report, context, log);
     }
     // read it back: each picked tool as the files and the CLI now report it
-    const inv = inventory.buildInventory({ project, env });
-    for (const e of plan.expect || [])
+    const builtInventory = inventory.buildInventory({ project, env });
+    for (const expected of plan.expect || [])
     {
-        const got = inv.registrations.find((r) => r.name === e.name && r.scope === e.scope);
-        report.readback.push({ kind: 'mcp', name: e.name, scope: e.scope, expectedRoute: e.route, found: Boolean(got), route: got ? got.route : null, row: got ? got.rowId : null });
+        const got = builtInventory.registrations.find((registration) => registration.name === expected.name && registration.scope === expected.scope);
+        report.readback.push({ kind: 'mcp', name: expected.name, scope: expected.scope, expectedRoute: expected.route, found: Boolean(got), route: got ? got.route : null, row: got ? got.rowId : null });
     }
     log('', 'Read back:');
-    for (const r of report.readback)
-        log(`  ${r.found ? 'ok ' : 'MISSING'} ${r.name} - ${r.scope} scope, ${r.route || '?'} route${r.row ? ` (${r.row})` : ''}`);
+    for (const readbackEntry of report.readback)
+        log(`  ${readbackEntry.found ? 'ok ' : 'MISSING'} ${readbackEntry.name} - ${readbackEntry.scope} scope, ${readbackEntry.route || '?'} route${readbackEntry.row ? ` (${readbackEntry.row})` : ''}`);
     // what was written and read back: with a package to fetch, fetch.js fetches it and then asks the CLI for the status;
     // with none (a hosted URL, a rename, a move), the status is asked here
-    const done = new Set(report.applied.map((a) => a.i));
-    const written = plan.steps.filter((s, i) => done.has(i + 1) && ['mcp-add', 'mcp-replace', 'mcp-move'].includes(s.op)).map((s): Endpoint => (s as McpMoveStep).to || { name: (s as McpAddStep).name, scope: (s as McpAddStep).scope });
+    const done = new Set(report.applied.map((appliedStep) => appliedStep.i));
+    const written = plan.steps.filter((planStep, i) => done.has(i + 1) && ['mcp-add', 'mcp-replace', 'mcp-move'].includes(planStep.op)).map((planStep): Endpoint => (planStep as McpMoveStep).to || { name: (planStep as McpAddStep).name, scope: (planStep as McpAddStep).scope });
     // a bridge whose key or URL names are not filled yet exits at its start: its status would only say so (0.4.0 Ruling 11)
-    const unfilled = new Set(plan.steps.filter((s) => (s as McpReplaceStep).filled === false).map((s) => ((s as McpMoveStep).to ? (s as McpMoveStep).to.name : (s as McpReplaceStep).name)));
-    const fresh = written.map((w) => w.name).filter((n) => !unfilled.has(n));
-    const scopeOf = new Map(written.map((w) => [w.name, w.scope]));
+    const unfilled = new Set(plan.steps.filter((planStep) => (planStep as McpReplaceStep).filled === false).map((planStep) => ((planStep as McpMoveStep).to ? (planStep as McpMoveStep).to.name : (planStep as McpReplaceStep).name)));
+    const fresh = written.map((endpoint) => endpoint.name).filter((name) => !unfilled.has(name));
+    const scopeOf = new Map(written.map((endpoint) => [endpoint.name, endpoint.scope]));
     // a hosted keyed server fetches nothing: its status is asked now, so a refused key is named here (spec F3)
-    const reconnect = (plan.reconnect || []).filter((r) => scopeOf.has(r.name));
-    const now = new Set(reconnect.map((r) => r.name));
-    const toFetch = report.toFetch.filter((s) => scopeOf.has(s.name)).map((s) => ({ ...s, scope: scopeOf.get(s.name) }));
-    report.fetch = job(project, toFetch, toFetch.length ? fresh.filter((n) => !now.has(n)) : fresh);
+    const reconnect = (plan.reconnect || []).filter((reconnectEntry) => scopeOf.has(reconnectEntry.name));
+    const now = new Set(reconnect.map((reconnectEntry) => reconnectEntry.name));
+    const toFetch = report.toFetch.filter((fetchStep) => scopeOf.has(fetchStep.name)).map((fetchStep) => ({ ...fetchStep, scope: scopeOf.get(fetchStep.name) }));
+    report.fetch = fetchJob(project, toFetch, toFetch.length ? fresh.filter((name) => !now.has(name)) : fresh);
     let statuses: Status[] = [];
-    if (!report.fetch.fetch.length) statuses = status(fresh, { cwd: project, env, runCli, log });
+    if (!report.fetch.fetch.length) statuses = serverStatus(fresh, { cwd: project, env, runCli, log });
     else
     {
-        if (now.size) statuses = status([...now], { cwd: project, env, runCli, log });
+        if (now.size) statuses = serverStatus([...now], { cwd: project, env, runCli, log });
         if (fetchFile !== false)
         {
-            report.fetchFile = writeJob(fetchFile || path.join(ctx.tmp, 'fetch.json'), report.fetch);
+            report.fetchFile = writeJob(fetchFile || path.join(context.tmp, 'fetch.json'), report.fetch);
             log('', ...nextLines(report.fetchFile, report.fetch));
         }
     }
@@ -185,11 +185,11 @@ export const refusedLine = ({ name, variable, hint }: Pick<Reconnect, 'name' | '
 export function reconnectLines(reconnect: Reconnect[], statuses: Status[], project: string): string[]
 {
     const lines = reconnect.map(reconnectLine);
-    for (const r of reconnect.filter((x) => x.filled))
+    for (const reconnectEntry of reconnect.filter((entry) => entry.filled))
     {
-        const st = statuses.find((x) => x.name === r.name);
-        if (!st || !REFUSED.test(st.issue || '')) continue;
-        lines.push(r.untrusted ? `${r.name}: accept the trust dialog the next time Claude Code starts in ${project} - until then the server connects without its key` : refusedLine(r));
+        const reconnectStatus = statuses.find((statusEntry) => statusEntry.name === reconnectEntry.name);
+        if (!reconnectStatus || !REFUSED.test(reconnectStatus.issue || '')) continue;
+        lines.push(reconnectEntry.untrusted ? `${reconnectEntry.name}: accept the trust dialog the next time Claude Code starts in ${project} - until then the server connects without its key` : refusedLine(reconnectEntry));
     }
     return lines;
 }

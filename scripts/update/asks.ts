@@ -1,5 +1,5 @@
 // The update's asks, as data.
-import { REC } from '../plan/asks-keys.ts';
+import { RECOMMENDED_SUFFIX } from '../plan/asks-keys.ts';
 import { chunk } from '../plan/asks-picks.ts';
 import { cursorNameQuestion, STATIC, cursorOfferQuestion } from '../plan/asks-other.ts';
 import type { Question } from '../plan/types.ts';
@@ -27,7 +27,7 @@ export function questions(out: UpdateCheck)
         }));
     }
     const offer = { ...STATIC.updateOffer };
-    if (!out.offers.length) offer.options = offer.options.filter((o) => o.label !== `All of them${REC}`).map((o, i) => (i === 0 ? { ...o, label: `${o.label}${REC}` } : o));
+    if (!out.offers.length) offer.options = offer.options.filter((o) => o.label !== `All of them${RECOMMENDED_SUFFIX}`).map((o, i) => (i === 0 ? { ...o, label: `${o.label}${RECOMMENDED_SUFFIX}` } : o));
     return { offer, pick: chunk(qs, 4), ...cursor };
 }
 

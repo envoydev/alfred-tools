@@ -22,49 +22,49 @@ import type { CursorWritePlanStep, DenyReadStep, FileStep, ListCtx, ListWriteSte
 // and named. Only lists that exist are written: a family with none waits for list-import. `refresh`: [{ name, scope }]
 // whose Cursor copy is refilled from .mcps-secrets at apply with no list change (token-sync). Notes go to ctx.notes.
 // -> [step]
-export function repairTail(inv: Inventory, ctx: RepairCtx, regSteps: PlanStep[], { refresh = [] }: { refresh?: { name: string; scope: string }[] } = {}): PlanStep[]
+export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: PlanStep[], { refresh = [] }: { refresh?: { name: string; scope: string }[] } = {}): PlanStep[]
 {
-    const catalog = ctx.catalog || catalogLib.load();
-    const notes = ctx.notes || [];
-    const usable = (fam: string) => { const l = inv.lists && inv.lists[fam]; return l && !l.note && !l.old ? l : null; };
+    const catalog = context.catalog || catalogLib.load();
+    const notes = context.notes || [];
+    const usable = (family: string) => { const familyList = inventory.lists && inventory.lists[family]; return familyList && !familyList.note && !familyList.old ? familyList : null; };
     // a two-form entry keeps two forms: apply builds Cursor's bridge again from the entry as read, its pin kept
     const formFor = new Map<string, string | null>();
-    for (const s of regSteps.filter((x): x is RegistrationStep => REG_OPS.includes(x.op)))
+    for (const step of regSteps.filter((candidate): candidate is RegistrationStep => REG_OPS.includes(candidate.op)))
     {
-        const key = lists.regKey(s);
-        const l = usable(roots.familyOf(s.op === 'mcp-move' ? s.to.scope : s.scope));
-        const prior = l ? (l.servers || []).find((x) => lists.serverKey(x) === key) : null;
+        const key = lists.regKey(step);
+        const familyList = usable(roots.familyOf(step.op === 'mcp-move' ? step.to.scope : step.scope));
+        const prior = familyList ? (familyList.servers || []).find((server) => lists.serverKey(server) === key) : null;
         if (prior && prior.cursorEntry) formFor.set(key!, 'two');
     }
-    const tctx: ListCtx = { platform: ctx.platform, project: ctx.project || inv.project, home: ctx.home, env: ctx.env || {}, catalog, roots: null, uses: [], formFor, exists: ctx.exists };
+    const tctx: ListCtx = { platform: context.platform, project: context.project || inventory.project, home: context.home, env: context.env || {}, catalog, roots: null, uses: [], formFor, exists: context.exists };
     const out: PlanOut = { steps: [], notes, errors: [] };
-    const listW = listSteps(inv, tctx, out, regSteps);
+    const listW = listSteps(inventory, tctx, out, regSteps);
     // the key's name, from the key files of the roots in use
-    const r = { project: inv.roots && inv.roots.project ? inv.roots.project.path : null, global: inv.roots && inv.roots.global ? inv.roots.global.path : null };
-    for (const w of listW)
-        for (const u of (w as ListWriteStep).upserts || [])
-            if (!u.keyFiles)
+    const rootPaths = { project: inventory.roots && inventory.roots.project ? inventory.roots.project.path : null, global: inventory.roots && inventory.roots.global ? inventory.roots.global.path : null };
+    for (const listStep of listW)
+        for (const upsert of (listStep as ListWriteStep).upserts || [])
+            if (!upsert.keyFiles)
             {
-                const files = keys.stdioChain({ scope: u.server.scope, projectRoot: r.project, globalRoot: r.global });
-                if (files.length) u.keyFiles = files;
+                const files = keys.stdioChain({ scope: upsert.server.scope, projectRoot: rootPaths.project, globalRoot: rootPaths.global });
+                if (files.length) upsert.keyFiles = files;
             }
     out.steps = [...regSteps, ...listW];
-    const cursor = cursorSteps(inv, tctx, out, {});
-    for (const e of out.errors) notes.push(`${e} - Cursor's file is left; run /preferred-tools:configure`);
-    const blocked = new Set(out.errors.length ? cursor.map((x) => x.file) : []);
-    const written = cursor.filter((x) => !blocked.has(x.file));
+    const cursor = cursorSteps(inventory, tctx, out, {});
+    for (const error of out.errors) notes.push(`${error} - Cursor's file is left; run /preferred-tools:configure`);
+    const blocked = new Set(out.errors.length ? cursor.map((cursorStep) => cursorStep.file) : []);
+    const written = cursor.filter((cursorStep) => !blocked.has(cursorStep.file));
     // a Cursor copy refilled from .mcps-secrets with the list as it is
-    for (const fam of [...new Set(refresh.map((x) => roots.familyOf(x.scope)))])
+    for (const family of [...new Set(refresh.map((item) => roots.familyOf(item.scope)))])
     {
-        const l = usable(fam);
-        const file = cursorMcp.fileFor(fam, tctx);
-        if (!l || written.some((x) => x.file === file)) continue;
+        const familyList = usable(family);
+        const file = cursorMcp.fileFor(family, tctx);
+        if (!familyList || written.some((cursorStep) => cursorStep.file === file)) continue;
         const why = cursorMcp.refusal(cursorMcp.readCursor(file));
         if (why) { notes.push(`Cursor: ${file} ${why} - not written`); continue; }
-        const scopes = SCOPES[fam];
-        const before = cursorMcp.managedSet([{ file: l.file, scopes, servers: l.servers || [] }]);
+        const scopes = SCOPES[family];
+        const before = cursorMcp.managedSet([{ file: familyList.file, scopes, servers: familyList.servers || [] }]);
         const hold = heldCopies(file, before, before, tctx, out);
-        written.push({ op: 'cursor-write', file, family: fam, lists: [{ file: l.file, scopes }], before: [...before.keys()], skip: hold, replace: [], reapprove: refresh.filter((x) => roots.familyOf(x.scope) === fam && !hold.includes(x.name)).map((x) => x.name), why: `${file}: the key refilled from .mcps-secrets` });
+        written.push({ op: 'cursor-write', file, family: family, lists: [{ file: familyList.file, scopes }], before: [...before.keys()], skip: hold, replace: [], reapprove: refresh.filter((item) => roots.familyOf(item.scope) === family && !hold.includes(item.name)).map((item) => item.name), why: `${file}: the key refilled from .mcps-secrets` });
     }
     return [...listW, ...written];
 }
@@ -72,20 +72,20 @@ export function repairTail(inv: Inventory, ctx: RepairCtx, regSteps: PlanStep[],
 // What changed outside preferred-tools (spec D1): each list entry whose Claude registration differs after kept.keep,
 // then each the list names that Claude Code no longer has. Install, configure and update print these first; only fix
 // changes either. -> [line]
-export function changedOutside(inv: Inventory, catalog: Catalog = catalogLib.load()): string[]
+export function changedOutside(inventory: Inventory, catalog: Catalog = catalogLib.load()): string[]
 {
     const changed: string[] = [];
     const missing: string[] = [];
     for (const family of ['project', 'global'])
     {
-        const l = inv.lists && inv.lists[family];
-        if (!l || l.note || l.old) continue;
-        for (const s of l.servers || [])
+        const familyList = inventory.lists && inventory.lists[family];
+        if (!familyList || familyList.note || familyList.old) continue;
+        for (const server of familyList.servers || [])
         {
-            if (!(s.clients || ['claude']).includes('claude')) continue;
-            const reg = (inv.registrations || []).find((x) => x.name === s.name && x.scope === s.scope);
-            if (!reg) missing.push(`${s.name} is on the list but not in Claude Code - run /preferred-tools:fix`);
-            else if (!deepEqual(keepOf(catalog, reg.entry, s.row), s.entry)) changed.push(`${s.name} was changed outside preferred-tools`);
+            if (!(server.clients || ['claude']).includes('claude')) continue;
+            const registration = (inventory.registrations || []).find((candidate) => candidate.name === server.name && candidate.scope === server.scope);
+            if (!registration) missing.push(`${server.name} is on the list but not in Claude Code - run /preferred-tools:fix`);
+            else if (!deepEqual(keepOf(catalog, registration.entry, server.row), server.entry)) changed.push(`${server.name} was changed outside preferred-tools`);
         }
     }
     return [...changed, ...missing];
@@ -97,11 +97,11 @@ export function changedOutside(inv: Inventory, catalog: Catalog = catalogLib.loa
 // The settings file the deny rules go in, and which of `want` it lacks: { file, rules } | { file, bad: true }. Shared by
 // install and configure (denyReadSteps) and fix's read-guard row. Claude Code's own settings: CLAUDE_CONFIG_DIR, else
 // ~/.claude - from ctx.home, so a test never reads the real one.
-export function readGuardOf(ctx: { platform: string; home: string; env?: Env | undefined }, want: string[]): { file: string; bad: true; rules?: undefined } | { file: string; rules: string[]; bad?: undefined }
+export function readGuardOf(context: { platform: string; home: string; env?: Env | undefined }, want: string[]): { file: string; bad: true; rules?: undefined } | { file: string; rules: string[]; bad?: undefined }
 {
-    const P = pathFor(ctx.platform);
-    const env = ctx.env || {};
-    const file = env.CLAUDE_CONFIG_DIR ? P.resolve(env.CLAUDE_CONFIG_DIR, 'settings.json') : P.join(ctx.home, '.claude', 'settings.json');
+    const pathApi = pathFor(context.platform);
+    const env = context.env || {};
+    const file = env.CLAUDE_CONFIG_DIR ? pathApi.resolve(env.CLAUDE_CONFIG_DIR, 'settings.json') : pathApi.join(context.home, '.claude', 'settings.json');
     let text: string | null = null;
     try { text = fs.readFileSync(file, 'utf8'); } catch { /* absent: {} */ }
     let deny: string[] = [];
@@ -109,41 +109,41 @@ export function readGuardOf(ctx: { platform: string; home: string; env?: Env | u
     {
         let doc: { permissions?: { deny?: string[] } } | null = null;
         try { doc = JSON.parse(text.replace(/^\uFEFF/, '')); } catch { /* below */ }
-        const isObject = (v: unknown): v is object => (v && typeof v === 'object' && !Array.isArray(v)) as boolean;
+        const isObject = (value: unknown): value is object => (value && typeof value === 'object' && !Array.isArray(value)) as boolean;
         if (!isObject(doc) || (doc.permissions !== undefined && !isObject(doc.permissions)) || (doc.permissions && doc.permissions.deny !== undefined && !Array.isArray(doc.permissions.deny))) return { file, bad: true };
         deny = (doc.permissions && doc.permissions.deny) || [];
     }
-    return { file, rules: want.filter((r) => !deny.includes(r)) };
+    return { file, rules: want.filter((rule) => !deny.includes(rule)) };
 }
 
 // The deny-read step as one plan line - or none when the file has every rule.
 export function denyReadStep(file: string, rules: string[]): DenyReadStep
 {
-    return { op: 'deny-read', file, rules, why: `${file}: keeps an AI session's Read tool out of ${rules.map((r) => (r === roots.READ_GUARD.signIns ? 'the sign-in tokens' : 'the key file')).join(' and ')}` };
+    return { op: 'deny-read', file, rules, why: `${file}: keeps an AI session's Read tool out of ${rules.map((rule) => (rule === roots.READ_GUARD.signIns ? 'the sign-in tokens' : 'the key file')).join(' and ')}` };
 }
 
-export function denyReadSteps(steps: PlanStep[], ctx: { platform: string; home: string; env?: Env | undefined }, out: Pick<PlanOut, 'notes'>): DenyReadStep[]
+export function denyReadSteps(steps: PlanStep[], context: { platform: string; home: string; env?: Env | undefined }, out: Pick<PlanOut, 'notes'>): DenyReadStep[]
 {
     const want = [
-        steps.some((x) => ['mcp-add', 'mcp-replace', 'mcp-move'].includes(x.op) && signInParts((x as McpAddStep).entry)) && roots.READ_GUARD.signIns,
-        steps.some((x) => x.op === 'ensure-key-name') && roots.READ_GUARD.secrets,
+        steps.some((step) => ['mcp-add', 'mcp-replace', 'mcp-move'].includes(step.op) && signInParts((step as McpAddStep).entry)) && roots.READ_GUARD.signIns,
+        steps.some((step) => step.op === 'ensure-key-name') && roots.READ_GUARD.secrets,
     ].filter(Boolean) as string[];
     if (!want.length) return [];
-    const g = readGuardOf(ctx, want);
-    if (g.bad)
+    const readGuard = readGuardOf(context, want);
+    if (readGuard.bad)
     {
-        out.notes.push(`${g.file} is not a settings object preferred-tools can read - add ${want.join(' and ')} to permissions.deny yourself`);
+        out.notes.push(`${readGuard.file} is not a settings object preferred-tools can read - add ${want.join(' and ')} to permissions.deny yourself`);
         return [];
     }
-    return g.rules.length ? [denyReadStep(g.file, g.rules)] : [];
+    return readGuard.rules.length ? [denyReadStep(readGuard.file, readGuard.rules)] : [];
 }
 
 // The plan line of a list-write, retire-record, cursor-write or deny-read step.
-export function renderLine(s: ListWriteStep | FileStep | CursorWritePlanStep | DenyReadStep): string
+export function renderLine(step: ListWriteStep | FileStep | CursorWritePlanStep | DenyReadStep): string
 {
-    if (s.op === 'deny-read') return `   adds ${s.rules.join(' and ')} to permissions.deny in ${s.file}  (keeps AI sessions out of the sign-in tokens and the key file)`;
-    if (s.op === 'cursor-write') return [`   writes ${s.file}  (Cursor: the servers set up for it; your own entries kept)`, ...(s.replace || []).map((n) => `   replaces your own ${n} in ${s.file}`)].join('\n');
-    if (s.op === 'retire-record') return `   moves ${s.file} aside as ${roots.FILES.record}.0.4.bak  (its entries are in mcps.json now)`;
-    return s.empty ? `   removes ${s.file}  (no server is listed)` : `   writes ${s.file}  (the servers preferred-tools manages, and the ones left on their own)`;
+    if (step.op === 'deny-read') return `   adds ${step.rules.join(' and ')} to permissions.deny in ${step.file}  (keeps AI sessions out of the sign-in tokens and the key file)`;
+    if (step.op === 'cursor-write') return [`   writes ${step.file}  (Cursor: the servers set up for it; your own entries kept)`, ...(step.replace || []).map((name) => `   replaces your own ${name} in ${step.file}`)].join('\n');
+    if (step.op === 'retire-record') return `   moves ${step.file} aside as ${roots.FILES.record}.0.4.bak  (its entries are in mcps.json now)`;
+    return step.empty ? `   removes ${step.file}  (no server is listed)` : `   writes ${step.file}  (the servers preferred-tools manages, and the ones left on their own)`;
 }
 

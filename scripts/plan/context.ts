@@ -6,20 +6,20 @@ import type { Inventory } from '../inventory/types.ts';
 import type { MadeCtx, PlanOptions } from './types.ts';
 
 // 'A', 'A and B', 'A, B and C'
-export const andList = (xs: string[]): string => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+export const andList = (items: string[]): string => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 
 export const SCOPES = ['local', 'project', 'user'];
 
-export function makeCtx(inv: Inventory, opts: PlanOptions = {}): MadeCtx
+export function makeCtx(inventory: Inventory, options: PlanOptions = {}): MadeCtx
 {
-    const ctx = {
-        platform: inv.os, arch: inv.arch, project: inv.project, env: opts.env || process.env,
-        home: opts.home || account.homeDir(opts.env || process.env), exists: opts.exists, isDir: opts.isDir, machine: opts.machine || {},
+    const context = {
+        platform: inventory.os, arch: inventory.arch, project: inventory.project, env: options.env || process.env,
+        home: options.home || account.homeDir(options.env || process.env), exists: options.exists, isDir: options.isDir, machine: options.machine || {},
     } as MadeCtx;
     // alfred-code set up in this project (its .alfred/.gitignore): its folder is recommended for the data (D3)
-    ctx.alfredHere = alfredData(ctx, inv.alfredCodeEnabled);
+    context.alfredHere = alfredData(context, inventory.alfredCodeEnabled);
     // a live registration, read in this process for a key comparison (R1) - only from an account the caller's env names
-    ctx.readLive = opts.readLive || liveReader(inv.project, opts.env);
-    return ctx;
+    context.readLive = options.readLive || liveReader(inventory.project, options.env);
+    return context;
 }
 

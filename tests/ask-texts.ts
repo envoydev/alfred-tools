@@ -1,7 +1,7 @@
 // Every question the walk can put, for the 'no text sends the user to Other' rule (spec D8): tests/lint.ts checks the
 // texts, tests/plan.test.ts and tests/roots.test.ts use the same pattern. One home for the pattern and the fixtures.
 import * as catalogLib from '../scripts/catalog/catalog.ts';
-import { all } from '../scripts/plan/asks-all.ts';
+import { allQuestions } from '../scripts/plan/asks-all.ts';
 import { ownStep } from '../scripts/plan/walk.ts';
 import * as existing from '../scripts/inventory/existing.ts';
 import { plan } from '../scripts/plan/plan.ts';
@@ -44,11 +44,11 @@ export function walkQuestions(): { where: string; question: Question }[]
         }).filter(Boolean) as InvRegistration[];
         const pluginServers = [{ plugin: 'other-plugin@market', server: 'context7', rowId: 'context7', entry: { type: 'http', url: 'https://mcp.context7.com/mcp' } }] as PluginServer[];
         const i = inv(base, { alfredCodeEnabled: alfred, registrations: regs, pluginServers });
-        const q = all(i, { rows: catalog.tools.map((r) => r.id), targets: regs.map((r) => `mcp:${r.name}~${r.scope}`) }, catalog, { env: {}, home });
+        const q = allQuestions(i, { rows: catalog.tools.map((r) => r.id), targets: regs.map((r) => `mcp:${r.name}~${r.scope}`) }, catalog, { env: {}, home });
         const items = existing.items(i, CONNECTORS, catalog, { home, exists: () => false });
         // every bridge route (0.4.0): its tool questions and its URL-name questions
         const bridged = rows.filter((r) => Object.values(r.routes).some((x) => x.runtime === 'bridge'));
-        const qb = all(i, { rows: bridged.map((r) => r.id), routes: Object.fromEntries(bridged.map((r) => [r.id, Object.keys(r.routes).find((k) => r.routes[k]!.runtime === 'bridge')])) as Record<string, string> }, catalog, { env: {}, home });
+        const qb = allQuestions(i, { rows: bridged.map((r) => r.id), routes: Object.fromEntries(bridged.map((r) => [r.id, Object.keys(r.routes).find((k) => r.routes[k]!.runtime === 'bridge')])) as Record<string, string> }, catalog, { env: {}, home });
         const list = [
             ...(Object.values(q.static) as Question[]).filter((x) => x.options), ...callsOf(q.pick), ...callsOf(q.change), ...callsOf(q.remove), ...q.roots!.questions,
             ...Object.values(q.tools).flatMap((t) => [...(t.first || []), ...(t.questions || []), ...(t.route ? [t.route] : [])]),

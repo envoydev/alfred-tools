@@ -7,15 +7,15 @@ import assert from 'node:assert';
 import { scopeOfLabel, recommendedScope, PARENT_HELPER_IN_CHILD, settingsQuestion } from '../scripts/plan/asks-keys.ts';
 import { routeQuestion, scopesFor } from '../scripts/plan/asks-tool.ts';
 import { STATIC, clientsQuestion } from '../scripts/plan/asks-other.ts';
-import { all } from '../scripts/plan/asks-all.ts';
-import { next, ownStep } from '../scripts/plan/walk.ts';
+import { allQuestions } from '../scripts/plan/asks-all.ts';
+import { nextQuestion, ownStep } from '../scripts/plan/walk.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import { load } from '../scripts/catalog/catalog.ts';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
-import { render } from '../scripts/plan/render.ts';
+import { renderPlan } from '../scripts/plan/render.ts';
 import type { Inventory, InvRegistration } from '../scripts/inventory/types.ts';
 import type { ListServer } from '../scripts/mcps-list/types.ts';
 import type { CursorWritePlanStep, ListWriteStep, Picks, WalkStep } from '../scripts/plan/types.ts';
@@ -58,7 +58,7 @@ function walk(i: Inventory, picks: WalkPicks, { answer = record, max = 60 }: { a
     const steps: WalkStep[] = [];
     for (let n = 0; n < max; n++)
     {
-        const s = next(i, picks, catalog, OPTS(i));
+        const s = nextQuestion(i, picks, catalog, OPTS(i));
         if (s.id === 'done') return steps;
         steps.push(s);
         answer(picks, s);
@@ -88,7 +88,7 @@ test('three picks: each tool\'s steps are contiguous, and no call names two tool
 });
 
 test('one pick asks the one-tool settings question and nothing about any other tool', () => {
-    const s = next(inv(MAC), { rows: ['gitlab'], done: ['clients'] }, catalog, OPTS(MAC));
+    const s = nextQuestion(inv(MAC), { rows: ['gitlab'], done: ['clients'] }, catalog, OPTS(MAC));
     assert.strictEqual(s.id, 'settings');
     assert.deepStrictEqual(s.call, [STATIC.settingsOne('gitlab')]);
     assert.deepStrictEqual(STATIC.settingsOne('gitlab').options.map((o) => [o.label, o.description]), [
@@ -96,7 +96,7 @@ test('one pick asks the one-tool settings question and nothing about any other t
         ['Set gitlab up', 'ask its route, scope, name and location'],
     ]);
     assert.deepStrictEqual((s.answers as WalkAnswers).settings, { 'Use the recommended settings for gitlab (Recommended)': 'recommended', 'Set gitlab up': 'each' });
-    const many = next(inv(MAC), { rows: ['gitlab', 'serena'], done: ['clients'] }, catalog, OPTS(MAC));
+    const many = nextQuestion(inv(MAC), { rows: ['gitlab', 'serena'], done: ['clients'] }, catalog, OPTS(MAC));
     assert.deepStrictEqual(many.call, [STATIC.settings]);
     for (const step of walk(inv(MAC), { rows: ['gitlab'], walk: 'each', done: ['clients', 'settings'] })) assert.strictEqual(step.tool, 'gitlab', step.id);
 });
@@ -105,7 +105,7 @@ test("'Use the recommended settings' ends the walk", () => {
     const picks: Picks = { rows: ['gitlab', 'serena'] };
     assert.deepStrictEqual(walk(inv(MAC), picks).map((s) => s.id), ['clients', 'settings']);
     assert.strictEqual(picks.walk, 'recommended');
-    assert.deepStrictEqual(next(inv(MAC), picks, catalog, OPTS(MAC)), { id: 'done' });
+    assert.deepStrictEqual(nextQuestion(inv(MAC), picks, catalog, OPTS(MAC)), { id: 'done' });
 });
 
 test('a root is asked once, inside the first tool of its family', () => {
@@ -136,7 +136,7 @@ test("configure: a registration target starts with its own question; 'Leave it o
     const reg: InvRegistration = { name: 'gitlab', scope: 'project', entry: { type: 'http', url: 'https://gitlab.com/api/v4/mcp' }, rowId: 'gitlab', route: 'remote', own: false, alfredRetired: false, choice: null };
     const c7: InvRegistration = { name: 'context7', scope: 'local', entry: { type: 'http', url: 'https://mcp.context7.com/mcp' }, rowId: 'context7', route: 'remote', own: false, alfredRetired: false, choice: null };
     const i = inv(MAC, { registrations: [reg, c7] });
-    const first = next(i, { targets: ['mcp:gitlab~project', 'mcp:context7~local'] }, catalog, OPTS(MAC));
+    const first = nextQuestion(i, { targets: ['mcp:gitlab~project', 'mcp:context7~local'] }, catalog, OPTS(MAC));
     assert.strictEqual(first.id, 'mcp:gitlab~project:own');
     assert.strictEqual(first.tool, 'mcp:gitlab~project');
     const q = first.call![0];
@@ -150,7 +150,7 @@ test("configure: a registration target starts with its own question; 'Leave it o
     const local = ownStep({ key: 'mcp:context7~local', name: 'context7', scope: 'local' }, '/work/shop/.preferred-tools');
     assert.strictEqual(local.question.options[1]!.description, 'nothing in this plugin changes its entry again; saved in /work/shop/.preferred-tools/mcps.json');
     // 'Leave it on its own': the next step is the next target's
-    const left = next(i, { targets: ['mcp:gitlab~project', 'mcp:context7~local'], existing: { 'mcp:gitlab~project': 'own' }, done: ['mcp:gitlab~project:own'] }, catalog, OPTS(MAC));
+    const left = nextQuestion(i, { targets: ['mcp:gitlab~project', 'mcp:context7~local'], existing: { 'mcp:gitlab~project': 'own' }, done: ['mcp:gitlab~project:own'] }, catalog, OPTS(MAC));
     assert.strictEqual(left.id, 'mcp:context7~local:own');
     // 'preferred-tools': its own questions follow
     const managed = walk(i, { targets: ['mcp:gitlab~project'] });
@@ -162,7 +162,7 @@ test('the walk offers no plugin', () => {
     // an old plugin installed here is no row: install's pick, configure's pick and remove name none of them
     const plug = (id: string, scope: string) => ({ id, plugin: id.split('@')[0], marketplace: id.split('@')[1], scope, version: '1.0.0', enabled: true, enabledHere: true, rowId: null, alfredRetired: false });
     const i = inv(MAC, { plugins: [plug('claude-hud@claude-hud', 'user'), plug('typescript-lsp@claude-plugins-official', 'project')] });
-    const b = all(i, {}, catalog);
+    const b = allQuestions(i, {}, catalog);
     const text = JSON.stringify([b.pick, b.change, b.remove]);
     for (const name of ['claude-hud', 'typescript-lsp', 'csharp-lsp']) assert.ok(!text.includes(name), name);
     assert.ok(catalog.tools.every((r) => r.kind === 'mcp'));
@@ -207,16 +207,16 @@ test('every catalog row on every OS asks at most four questions per step', () =>
 test('the key is first and recommended at install for context7, sentry, gitlab and atlassian; configure keeps the current answer first', () => {
     for (const id of ['context7', 'sentry', 'gitlab', 'atlassian'])
     {
-        const t = all(inv(MAC), { rows: [id] }, catalog, OPTS(MAC)).tools[id];
+        const t = allQuestions(inv(MAC), { rows: [id] }, catalog, OPTS(MAC)).tools[id];
         const q = t!.questions!.find((x) => x.id === `token-${id}`);
         assert.strictEqual(q!.options[0]!.label, 'Use a key from .mcps-secrets (Recommended)', id);
     }
-    const hint = (id: string) => all(inv(MAC), { rows: [id] }, catalog, OPTS(MAC)).tools[id]!.questions!.find((x) => x.id === `token-${id}`)!.options[0]!.description;
+    const hint = (id: string) => allQuestions(inv(MAC), { rows: [id] }, catalog, OPTS(MAC)).tools[id]!.questions!.find((x) => x.id === `token-${id}`)!.options[0]!.description;
     assert.match(hint('gitlab'), /; a fine-grained personal access token with the MCP tool resource and the Execute permission - a legacy token is refused \(403\)$/);
     assert.match(hint('atlassian'), /; an org admin must turn API tokens on; the value is email:api_token; some tools are missing with a token - OAuth has them all$/);
     // configure: a registration with no key keeps 'Sign in with OAuth' first
     const reg: InvRegistration = { name: 'gitlab', scope: 'user', entry: { type: 'http', url: 'https://gitlab.com/api/v4/mcp' }, rowId: 'gitlab', route: 'remote', own: false, alfredRetired: false, choice: null };
-    const t = all(inv(MAC, { registrations: [reg] }), { targets: ['mcp:gitlab~user'] }, catalog, OPTS(MAC)).targets['mcp:gitlab~user'];
+    const t = allQuestions(inv(MAC, { registrations: [reg] }), { targets: ['mcp:gitlab~user'] }, catalog, OPTS(MAC)).targets['mcp:gitlab~user'];
     assert.strictEqual(t!.questions!.find((x) => x.id === 'token-gitlab')!.options[0]!.label, 'Sign in with OAuth (Recommended)');
 });
 
@@ -255,7 +255,7 @@ const bridgeWalk = (base: { os: string; arch: string; project: string }, { secre
     {
         for (let n = 0; n < 20; n++)
         {
-            const s = next(i, picks, catalog, { env: {}, home });
+            const s = nextQuestion(i, picks, catalog, { env: {}, home });
             if (s.id === 'done') break;
             steps.push(s);
             record(picks, s);
@@ -347,13 +347,13 @@ test('bare agent on PATH does not count as Cursor', () => {
 });
 
 test('the install walk asks clients before settings', () => {
-    const s = next(inv(MAC), { rows: ['gitlab'] }, catalog, OPTS(MAC));
+    const s = nextQuestion(inv(MAC), { rows: ['gitlab'] }, catalog, OPTS(MAC));
     assert.strictEqual(s.id, 'clients');
     assert.deepStrictEqual(s.call!.map((q) => q.id), ['clients']);
     assert.ok((s.answers as WalkAnswers).clients, 'next.answers.clients maps each label to its clients');
-    assert.strictEqual(next(inv(MAC), { rows: ['gitlab'], done: ['clients'] }, catalog, OPTS(MAC)).id, 'settings');
+    assert.strictEqual(nextQuestion(inv(MAC), { rows: ['gitlab'], done: ['clients'] }, catalog, OPTS(MAC)).id, 'settings');
     // nothing picked: no clients step
-    assert.deepStrictEqual(next(inv(MAC), { rows: [] }, catalog, OPTS(MAC)), { id: 'done' });
+    assert.deepStrictEqual(nextQuestion(inv(MAC), { rows: [] }, catalog, OPTS(MAC)), { id: 'done' });
 });
 
 test('install for both writes the list with both clients and one cursor-write per file', { skip: process.platform === 'win32' && 'NOT RUN: a darwin fixture on a win32 host' }, () => {
@@ -364,22 +364,22 @@ test('install for both writes the list with both clients and one cursor-write pe
     assert.deepStrictEqual(lw.flatMap((s) => s.upserts.map((u) => [u.server.name, u.server.clients])).sort(), [['context7', ['claude', 'cursor']], ['memory', ['claude', 'cursor']]]);
     const cw = (p.steps.filter((s) => s.op === 'cursor-write') as CursorWritePlanStep[]);
     assert.deepStrictEqual(cw.map((s) => s.file).sort(), ['/Users/me/.cursor/mcp.json', '/work/shop/.cursor/mcp.json']);
-    const text = render(p);
+    const text = renderPlan(p);
     assert.ok(text.includes('Apps: Claude Code and Cursor'), text);
     // Claude Code only: no cursor-write, and the plan says so
     const only = plan(inv(MAC), { ...answers, clients: ['claude'] }, { env: {}, home: '/Users/me' });
     assert.deepStrictEqual((only.steps.filter((s) => s.op === 'cursor-write') as CursorWritePlanStep[]), []);
-    assert.ok(render(only).includes('Apps: Claude Code\n'), render(only));
+    assert.ok(renderPlan(only).includes('Apps: Claude Code\n'), renderPlan(only));
     // no answer (an older answers file): Claude Code only, no Apps line
     const none = plan(inv(MAC), { picks: answers.picks }, { env: {}, home: '/Users/me' });
     assert.deepStrictEqual((none.steps.filter((s) => s.op === 'list-write') as ListWriteStep[]).flatMap((s) => s.upserts.map((u) => u.server.clients)), [['claude'], ['claude']]);
-    assert.ok(!render(none).includes('Apps:'));
+    assert.ok(!renderPlan(none).includes('Apps:'));
 });
 
 test('configure: a clients change alone plans no mcp step', { skip: process.platform === 'win32' && 'NOT RUN: a darwin fixture on a win32 host' }, () => {
     const i = inv(MAC, { registrations: [c7reg()], lists: { project: { file: LIST, servers: [c7listed('project', ['claude'])], own: [] }, global: null } });
     // the question: what the entry has now first and marked
-    const b = all(i, { targets: ['mcp:c7~project'] }, catalog, OPTS(MAC));
+    const b = allQuestions(i, { targets: ['mcp:c7~project'] }, catalog, OPTS(MAC));
     const q = b.targets['mcp:c7~project']!.clients!.question;
     assert.strictEqual(q.id, 'clients-mcp:c7~project');
     assert.strictEqual(q.question, 'Set up c7 for which apps?');
@@ -395,7 +395,7 @@ test('configure: a clients change alone plans no mcp step', { skip: process.plat
     assert.deepStrictEqual((p.steps.filter((s) => s.op === 'cursor-write') as CursorWritePlanStep[]).map((s) => [s.file, s.before]), [['/work/shop/.cursor/mcp.json', []]]);
     // and back to Claude Code only: the Cursor entry goes
     const both = inv(MAC, { registrations: [c7reg()], lists: { project: { file: LIST, servers: [c7listed('project', ['claude', 'cursor'])], own: [] }, global: null } });
-    assert.deepStrictEqual(all(both, { targets: ['mcp:c7~project'] }, catalog, OPTS(MAC)).targets['mcp:c7~project']!.clients!.question.options.map((o) => o.label), ['Claude Code and Cursor (Recommended)', 'Claude Code only']);
+    assert.deepStrictEqual(allQuestions(both, { targets: ['mcp:c7~project'] }, catalog, OPTS(MAC)).targets['mcp:c7~project']!.clients!.question.options.map((o) => o.label), ['Claude Code and Cursor (Recommended)', 'Claude Code only']);
     const back = plan(both, { change: { 'mcp:c7~project': { row: 'context7', clients: ['claude'] } } }, { env: {}, home: '/Users/me' });
     assert.deepStrictEqual(back.steps.filter((s) => s.op.startsWith('mcp-')), []);
     assert.deepStrictEqual((back.steps.filter((s) => s.op === 'cursor-write') as CursorWritePlanStep[]).map((s) => s.before), [['c7']]);

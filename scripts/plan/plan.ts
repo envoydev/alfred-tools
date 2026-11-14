@@ -36,67 +36,67 @@ import type { Answers, Plan, PlanCtx, PlanOptions, PlanStep } from './types.ts';
 
 // ---- the plan -------------------------------------------------------------------------------------------------------
 
-export function plan(inv: Inventory, answers: Answers, opts: PlanOptions = {}): Plan
+export function plan(inventory: Inventory, answers: Answers, options: PlanOptions = {}): Plan
 {
-    const catalog = opts.catalog || catalogLib.load();
+    const catalog = options.catalog || catalogLib.load();
     // answers.machine: what prereq.js found (docker: false picks github's binary fallback); an explicit option wins
-    const ctx: PlanCtx = { ...makeCtx(inv, { ...opts, machine: opts.machine || answers.machine }), changing: new Set(Object.keys(answers.change || {})), uses: [], rootMoves: [] };
-    const out: Plan = { version: 1, project: inv.project, os: inv.os, alfredCodeEnabled: Boolean(inv.alfredCodeEnabled), steps: [], notes: [], errors: [], unchanged: [], keys: [], reconnect: [], oauth: [], dangerous: [], expect: [] };
+    const context: PlanCtx = { ...makeCtx(inventory, { ...options, machine: options.machine || answers.machine }), changing: new Set(Object.keys(answers.change || {})), uses: [], rootMoves: [] };
+    const out: Plan = { version: 1, project: inventory.project, os: inventory.os, alfredCodeEnabled: Boolean(inventory.alfredCodeEnabled), steps: [], notes: [], errors: [], unchanged: [], keys: [], reconnect: [], oauth: [], dangerous: [], expect: [] };
     // the root folders (spec D2): every data folder, key file and helper of a family sits in its root
-    const resolved = roots.resolve(inv, answers.roots, { ...ctx, catalog });
+    const resolved = roots.resolve(inventory, answers.roots, { ...context, catalog });
     out.errors.push(...resolved.errors);
-    ctx.roots = resolved.roots;
-    out.roots = ctx.roots;
+    context.roots = resolved.roots;
+    out.roots = context.roots;
     // what changed outside preferred-tools since its last write (spec D1): named first, only fix changes it
-    out.outside = changedOutside(inv, catalog);
+    out.outside = changedOutside(inventory, catalog);
 
     // the key's name and the settings (spec D9, R4): top-level maps keyed by row id (install) or target key (configure)
     const keyNames = answers.keyNames || {};
     const settings = answers.settings || {};
     // a bridge's URL names (0.4.0): { <row id or target key>: { <VAR>: <NAME> } }
     const urlNamesOf = answers.urlNames || {};
-    const connectors = opts.connectors === undefined ? null : opts.connectors;
+    const connectors = options.connectors === undefined ? null : options.connectors;
     // which apps (spec D3): install's one answer for every pick, configure's per target. The registration steps a pick
     // plans carry it into the list (ctx.clientsFor); a configure change of the apps alone is a list entry, no CLI call.
     // planMcp decides each registration's clients and Cursor form (D5) and records them here
-    ctx.clientsFor = new Map();
-    ctx.formFor = new Map();
-    ctx.clientsOnly = [];
+    context.clientsFor = new Map();
+    context.formFor = new Map();
+    context.clientsOnly = [];
     if (answers.clients && Object.keys(answers.picks || {}).length) out.apps = answers.clients;
     for (const [rowId, pick] of Object.entries(answers.picks || {}))
     {
         const row = catalog.byId.get(rowId);
         if (!row) { out.errors.push(`unknown tool '${rowId}'`); continue; }
-        planMcp(row, { ...(pick || {}), clients: answers.clients, keyName: keyNames[rowId], settings: settings[rowId], urlNames: urlNamesOf[rowId] || (pick || {}).urlNames }, inv, ctx, catalog, out);
+        planMcp(row, { ...(pick || {}), clients: answers.clients, keyName: keyNames[rowId], settings: settings[rowId], urlNames: urlNamesOf[rowId] || (pick || {}).urlNames }, inventory, context, catalog, out);
         // a claude.ai connector or an enabled plugin's server provides it too (spec F4)
-        for (const a of alsoProvided(inv, rowId, connectors)) out.notes.push(existing.twoServers(row.label, a.owner));
+        for (const provider of alsoProvided(inventory, rowId, connectors)) out.notes.push(existing.twoServers(row.label, provider.owner));
     }
     // a target answered 'Leave it on its own' gets no change (Ruling 9)
     const leftNow = new Set(Object.entries(answers.existing || {}).filter(([, choice]) => choice === 'own').map(([key]) => key));
     for (const [key, pick] of Object.entries(answers.change || {}))
     {
         if (leftNow.has(key)) { out.unchanged.push(`${key}: left on its own`); continue; }
-        planChange(key, { ...(pick || {}), keyName: keyNames[key], settings: settings[key], urlNames: urlNamesOf[key] || (pick || {}).urlNames }, inv, ctx, catalog, out);
+        planChange(key, { ...(pick || {}), keyName: keyNames[key], settings: settings[key], urlNames: urlNamesOf[key] || (pick || {}).urlNames }, inventory, context, catalog, out);
     }
-    for (const r of answers.remove || []) planRemove(r, inv, catalog, out);
-    planExisting(answers, inv, ctx, catalog, out, connectors);
-    planRootChange(answers, inv, ctx, catalog, out);
+    for (const removeAnswer of answers.remove || []) planRemove(removeAnswer, inventory, catalog, out);
+    planExisting(answers, inventory, context, catalog, out, connectors);
+    planRootChange(answers, inventory, context, catalog, out);
     // the file steps first, the records last (D8): a failed add leaves files a re-run finds in place
     // a root change's moved list is the list from here on: its writes and Cursor's read it at its new path
-    const listInv = movedLists(inv, ctx.rootMoves);
-    const files = fileSteps(listInv, ctx, out, out.steps);
-    const moves = ctx.rootMoves.map((m): PlanStep => ({ op: 'move-root-file', from: m.from, to: m.to, why: `the ${m.family} root moves: ${m.name} goes with it` }));
-    const ignores = files.before.filter((x) => x.op === 'root-ignore');
-    out.steps = [...ignores, ...moves, ...files.before.filter((x) => x.op !== 'root-ignore'), ...out.steps, ...files.after];
+    const listInv = movedLists(inventory, context.rootMoves);
+    const files = fileSteps(listInv, context, out, out.steps);
+    const moves = context.rootMoves.map((move): PlanStep => ({ op: 'move-root-file', from: move.from, to: move.to, why: `the ${move.family} root moves: ${move.name} goes with it` }));
+    const ignores = files.before.filter((step) => step.op === 'root-ignore');
+    out.steps = [...ignores, ...moves, ...files.before.filter((step) => step.op !== 'root-ignore'), ...out.steps, ...files.after];
     // Cursor's files from the lists, after the list-write steps they read (spec D2)
-    const cursor = cursorSteps(listInv, { ...ctx, catalog }, out, answers);
+    const cursor = cursorSteps(listInv, { ...context, catalog }, out, answers);
     // the read guard (ruling 13): one deny-read, last before the list-write steps
-    const deny = denyReadSteps(out.steps, ctx, out);
-    if (deny.length) { const at = out.steps.findIndex((x) => x.op === 'list-write'); out.steps.splice(at < 0 ? out.steps.length : at, 0, ...deny); }
+    const deny = denyReadSteps(out.steps, context, out);
+    if (deny.length) { const at = out.steps.findIndex((step) => step.op === 'list-write'); out.steps.splice(at < 0 ? out.steps.length : at, 0, ...deny); }
     // each name Cursor's file holds that no answer settles: its question, which the command asks before planning again
-    if (out.taken) { out.cursorNames = out.taken.map((t) => cursorNameQuestion(t)); delete out.taken; }
+    if (out.taken) { out.cursorNames = out.taken.map((taken) => cursorNameQuestion(taken)); delete out.taken; }
     // .mcp.json in the catalog's order, last of all (spec F5, F8)
-    out.steps = mcpOrder.withOrderStep([...out.steps, ...cursor], inv.project, mcpOrder.ownProjectNames(inv, answers.existing));
+    out.steps = mcpOrder.withOrderStep([...out.steps, ...cursor], inventory.project, mcpOrder.ownProjectNames(inventory, answers.existing));
     out.noop = out.steps.length === 0 && out.errors.length === 0;
     return out;
 }

@@ -26,19 +26,19 @@ import type { AskCtx, AskOptions, Asked, Picks, Questions } from './types.ts';
 // scope, name and data folder are 'Keep'. `env` and `home`: what the key state reads (the shell's variables, the home
 // key file). plan.js --questions passes the real ones; a caller that passes none reads neither, so a test never depends
 // on the shell that runs it.
-export function all(inv: Inventory, picks: Picks | null | undefined, catalog: Catalog, { env = {}, home = null, connectors = null }: AskOptions = {}): Questions
+export function allQuestions(inventory: Inventory, picks: Picks | null | undefined, catalog: Catalog, { env = {}, home = null, connectors = null }: AskOptions = {}): Questions
 {
     const out: Questions = {
         static: { ...STATIC, prereqMissing: STATIC.prereqMissing('<tool>', '<prerequisite>'), settingsOne: STATIC.settingsOne('<tool>'), 'cursor-name-taken': STATIC['cursor-name-taken']('<file>', '<name>') },
-        pick: pickQuestions(inv, catalog, picks && picks.existing, connectors), change: null, remove: removeQuestions(inv, catalog), tools: {}, targets: {},
+        pick: pickQuestions(inventory, catalog, picks && picks.existing, connectors), change: null, remove: removeQuestions(inventory, catalog), tools: {}, targets: {},
     };
     // `exists` reads the disk: alfred-code's .alfred/.gitignore and its 2.x data decide which folders are offered
-    const ctx: AskCtx = { project: inv.project, platform: inv.os, arch: inv.arch, home: home || homeDir(process.env), env, keyHome: home, exists: (p: string) => fs.existsSync(p) };
+    const context: AskCtx = { project: inventory.project, platform: inventory.os, arch: inventory.arch, home: home || homeDir(process.env), env, keyHome: home, exists: (filePath: string) => fs.existsSync(filePath) };
     // the roots answered so far (the walk asks them before a tool's folder), else the recommended ones
-    ctx.roots = roots.resolve(inv, picks && picks.roots, { ...ctx, catalog }).roots;
-    out.change = changeQuestions(inv, catalog, ctx);
+    context.roots = roots.resolve(inventory, picks && picks.roots, { ...context, catalog }).roots;
+    out.change = changeQuestions(inventory, catalog, context);
     // which apps (spec D3): asked once an install run, when it picked something
-    out.clients = picks && (picks.rows || []).length ? clientsQuestion(cursorFound(ctx, inv)) : null;
+    out.clients = picks && (picks.rows || []).length ? clientsQuestion(cursorFound(context, inventory)) : null;
     const routes = (picks && picks.routes) || {};
     const scopes = (picks && picks.scopes) || {};
     const names = (picks && picks.names) || {};
@@ -47,17 +47,17 @@ export function all(inv: Inventory, picks: Picks | null | undefined, catalog: Ca
         const row = catalog.byId.get(id);
         if (!row) continue;
         // install only adds, so its questions never start from an installed registration
-        out.tools[id] = { route: row.kind === 'mcp' ? routeQuestion(row) : null, ...toolAsk(row, inv, { route: routes[id], scope: scopes[id], name: names[id], ctx, catalog, copyOf: installedOf(inv, id) }) };
+        out.tools[id] = { route: row.kind === 'mcp' ? routeQuestion(row) : null, ...toolAsk(row, inventory, { route: routes[id], scope: scopes[id], name: names[id], ctx: context, catalog, copyOf: installedOf(inventory, id) }) };
     }
-    const own = new Map(ownItems(inv, catalog).map((it) => [it.key, it]));
+    const own = new Map(ownItems(inventory, catalog).map((it) => [it.key, it]));
     for (const key of (picks && picks.targets) || [])
     {
         // a root folder: D2's question, the root in use recommended (spec D7)
-        const rm = /^root:(project|global)$/.exec(key);
-        if (rm)
+        const rootMatch = /^root:(project|global)$/.exec(key);
+        if (rootMatch)
         {
-            const used = rootInUse(inv, rm[1] as Family, { ...ctx, catalog });
-            out.targets[key] = used ? { kind: 'root', family: rm[1]!, current: { path: used.path }, root: rootQuestion(inv, rm[1] as Family, { ...ctx, catalog }) } : { error: `no ${rm[1]} root is in use here` };
+            const used = rootInUse(inventory, rootMatch[1] as Family, { ...context, catalog });
+            out.targets[key] = used ? { kind: 'root', family: rootMatch[1]!, current: { path: used.path }, root: rootQuestion(inventory, rootMatch[1] as Family, { ...context, catalog }) } : { error: `no ${rootMatch[1]} root is in use here` };
             continue;
         }
         // a server left on its own: one question, keep it so or hand it over (spec D6)
@@ -67,48 +67,48 @@ export function all(inv: Inventory, picks: Picks | null | undefined, catalog: Ca
             out.targets[key] = { row: it.rowId, kind: 'own', current: { name: it.name || it.server || it.connector, scope: it.scope || null, route: null }, own: ownQuestion(it) };
             continue;
         }
-        const t = targetOf(inv, key);
-        const row = t && t.item.rowId && !t.item.alfredRetired ? catalog.byId.get(t.item.rowId) : null;
+        const target = targetOf(inventory, key);
+        const row = target && target.item.rowId && !target.item.alfredRetired ? catalog.byId.get(target.item.rowId) : null;
         if (!row) { out.targets[key] = { error: `'${key}' is not a catalog tool installed here` }; continue; }
         // required here, not at the top: plan.js requires this file
-        const current = t!.kind === 'mcp' ? currentOf(row, t!.item as Registration) : { scope: t!.item.scope } as Partial<Current>;
-        const listed = t!.kind === 'mcp' ? listedOf(inv, t!.item as InvRegistration) : null;
+        const current = target!.kind === 'mcp' ? currentOf(row, target!.item as Registration) : { scope: target!.item.scope } as Partial<Current>;
+        const listed = target!.kind === 'mcp' ? listedOf(inventory, target!.item as InvRegistration) : null;
         out.targets[key] = {
-            row: row.id, kind: t!.kind, current: { name: (t!.item as InvRegistration).name || (t!.item as { id?: string }).id, scope: t!.item.scope, route: current.route || null, ...(t!.kind === 'mcp' ? { clients: listed ? listed.clients : ['claude'] } : {}) },
-            route: t!.kind === 'mcp' ? routeQuestion(row, current.route) : null,
-            ...(t!.kind === 'mcp' ? { clients: targetClientsQuestion(key, (t!.item as InvRegistration).name, listed ? listed.clients : ['claude']) } : {}),
-            ...toolAsk(row, inv, { route: routes[key], scope: scopes[key], name: names[key], current, ctx, catalog }),
+            row: row.id, kind: target!.kind, current: { name: (target!.item as InvRegistration).name || (target!.item as { id?: string }).id, scope: target!.item.scope, route: current.route || null, ...(target!.kind === 'mcp' ? { clients: listed ? listed.clients : ['claude'] } : {}) },
+            route: target!.kind === 'mcp' ? routeQuestion(row, current.route) : null,
+            ...(target!.kind === 'mcp' ? { clients: targetClientsQuestion(key, (target!.item as InvRegistration).name, listed ? listed.clients : ['claude']) } : {}),
+            ...toolAsk(row, inventory, { route: routes[key], scope: scopes[key], name: names[key], current, ctx: context, catalog }),
         };
     }
-    out.roots = rootsBlock(inv, picks, catalog, ctx);
+    out.roots = rootsBlock(inventory, picks, catalog, context);
     // D9, asked after the tool's questions: the key's name for each route that can use one, the settings of each stdio one
     out.keyNames = {};
     out.settings = {};
     // a bridge's URL names (0.4.0): { <row id or target key>: { <VAR>: { question, answers } } }
     out.urlNames = {};
-    const urlBlock = (list: (Asked<string> & { var: string })[]) => Object.fromEntries(list.map((u) => [u.var, { question: u.question, answers: u.answers }]));
-    const live = liveReader(inv.project, env);
+    const urlBlock = (list: (Asked<string> & { var: string })[]) => Object.fromEntries(list.map((urlQuestion) => [urlQuestion.var, { question: urlQuestion.question, answers: urlQuestion.answers }]));
+    const live = liveReader(inventory.project, env);
     for (const id of (picks && picks.rows) || [])
     {
         const row = catalog.byId.get(id);
         if (!row || row.kind !== 'mcp') continue;
         const routeId = routes[id] || row.recommendedRoute;
         if (!row.routes[routeId]) continue;
-        const scope = scopes[id] || scopeOrder(row, inv, { route: routeId, ctx, copyOf: installedOf(inv, id) })[0]!;
-        const k = keyNameQuestion(row, routeId, scope, ctx);
+        const scope = scopes[id] || scopeOrder(row, inventory, { route: routeId, ctx: context, copyOf: installedOf(inventory, id) })[0]!;
+        const k = keyNameQuestion(row, routeId, scope, context);
         if (k) out.keyNames[id] = k;
-        const u = urlNameQuestions(row, routeId, scope, ctx);
-        if (u.length) out.urlNames[id] = urlBlock(u);
-        const st = settingsQuestion(row, routeId);
-        if (st) out.settings[id] = st;
+        const urlQuestions = urlNameQuestions(row, routeId, scope, context);
+        if (urlQuestions.length) out.urlNames[id] = urlBlock(urlQuestions);
+        const settings = settingsQuestion(row, routeId);
+        if (settings) out.settings[id] = settings;
     }
     for (const key of (picks && picks.targets) || [])
     {
         if (own.has(key)) continue;
-        const t = targetOf(inv, key);
-        const row = t && t.kind === 'mcp' && t.item.rowId && !t.item.alfredRetired ? catalog.byId.get(t.item.rowId) : null;
+        const target = targetOf(inventory, key);
+        const row = target && target.kind === 'mcp' && target.item.rowId && !target.item.alfredRetired ? catalog.byId.get(target.item.rowId) : null;
         if (!row) continue;
-        const current = currentOf(row, t!.item as Registration);
+        const current = currentOf(row, target!.item as Registration);
         const routeId = (routes[key] || current.route)!;
         const route = row.routes[routeId];
         if (!route) continue;
@@ -119,24 +119,24 @@ export function all(inv: Inventory, picks: Picks | null | undefined, catalog: Ca
         let name: string | null = same && route.helper ? current.keyName : null;
         if (same && !route.helper && route.tokenVar)
         {
-            const held = heldKey(live((t!.item as InvRegistration).name, t!.item.scope) || {}, route);
-            const ks = keyStateOf(row, routeId, ctx, null, scope);
-            name = held && ks ? keys.nameOfValue(ks.files, held) : null;
+            const held = heldKey(live((target!.item as InvRegistration).name, target!.item.scope) || {}, route);
+            const keyState = keyStateOf(row, routeId, context, null, scope);
+            name = held && keyState ? keys.nameOfValue(keyState.files, held) : null;
         }
-        const k = keyNameQuestion(row, routeId, scope, ctx, { current: name });
+        const k = keyNameQuestion(row, routeId, scope, context, { current: name });
         if (k) out.keyNames[key] = k;
-        const u = urlNameQuestions(row, routeId, scope, ctx, { current: same ? current.urlNames : null, keyName: name });
-        if (u.length) out.urlNames[key] = urlBlock(u);
-        const st = settingsQuestion(row, routeId, { entry: same ? (t!.item as InvRegistration).entry : null });
-        if (st) out.settings[key] = st;
+        const urlQuestions = urlNameQuestions(row, routeId, scope, context, { current: same ? current.urlNames : null, keyName: name });
+        if (urlQuestions.length) out.urlNames[key] = urlBlock(urlQuestions);
+        const settings = settingsQuestion(row, routeId, { entry: same ? (target!.item as InvRegistration).entry : null });
+        if (settings) out.settings[key] = settings;
     }
     return out;
 }
 
 // The family list's entry for a registration, or null.
-function listedOf(inv: Inventory, item: InvRegistration)
+function listedOf(inventory: Inventory, item: InvRegistration)
 {
-    const l = inv.lists && inv.lists[roots.familyOf(item.scope)];
-    return l && !l.note ? (l.servers || []).find((x) => x.name === item.name && x.scope === item.scope) || null : null;
+    const familyList = inventory.lists && inventory.lists[roots.familyOf(item.scope)];
+    return familyList && !familyList.note ? (familyList.servers || []).find((server) => server.name === item.name && server.scope === item.scope) || null : null;
 }
 

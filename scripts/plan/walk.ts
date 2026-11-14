@@ -1,12 +1,12 @@
 import path from 'node:path';
 import { installedOf } from '../inventory/inventory.ts';
 import * as roots from '../roots/roots.ts';
-import { REC } from './asks-keys.ts';
+import { RECOMMENDED_SUFFIX } from './asks-keys.ts';
 import { rootInUse } from './asks-picks.ts';
 import { scopeOrder } from './asks-tool.ts';
 import { STATIC } from './asks-other.ts';
 import { needsRoot } from './asks-roots.ts';
-import { all } from './asks-all.ts';
+import { allQuestions } from './asks-all.ts';
 import { homeDir } from '../core/account.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
@@ -18,16 +18,16 @@ import type { AskOptions, Asked, Picks, Question, Questions, ToolBlock, WalkStep
 // would sit in. -> { question, answers: { <label as shown>: { key, choice } } }
 export function ownStep(item: { key: string; name?: string | undefined; scope?: string | null | undefined }, root: string): Asked<{ key: string; choice: string }>
 {
-    const P = /^(?:[A-Za-z]:[\\/]|\\\\)/.test(String(root)) ? path.win32 : path.posix;
-    const file = P.join(root, roots.FILES.list);
+    const pathApi = /^(?:[A-Za-z]:[\\/]|\\\\)/.test(String(root)) ? path.win32 : path.posix;
+    const file = pathApi.join(root, roots.FILES.list);
     const where = item.scope === 'project' ? '; in .mcp.json it sits with your own servers, after the managed ones' : '';
-    const opts = [
-        { label: `preferred-tools${REC}`, description: 'configure, update and fix look after it', choice: 'manage' },
+    const options = [
+        { label: `preferred-tools${RECOMMENDED_SUFFIX}`, description: 'configure, update and fix look after it', choice: 'manage' },
         { label: 'Leave it on its own', description: `nothing in this plugin changes its entry again${where}; saved in ${file}`, choice: 'own' },
     ];
     return {
-        question: { id: `own-${item.key}`, header: 'Looked after', multiSelect: false, question: `Who looks after ${item.name}?`, options: opts.map(({ label, description }) => ({ label, description })) },
-        answers: Object.fromEntries(opts.map((o) => [o.label, { key: item.key, choice: o.choice }])),
+        question: { id: `own-${item.key}`, header: 'Looked after', multiSelect: false, question: `Who looks after ${item.name}?`, options: options.map(({ label, description }) => ({ label, description })) },
+        answers: Object.fromEntries(options.map((option) => [option.label, { key: item.key, choice: option.choice }])),
     };
 }
 
@@ -35,8 +35,8 @@ export function ownStep(item: { key: string; name?: string | undefined; scope?: 
 function pickOrder(catalog: Catalog, ids: string[]): string[]
 {
     const rank = new Map<string, number>();
-    for (const g of catalog.groups) for (const r of catalog.tools.filter((x) => x.group === g.id)) rank.set(r.id, rank.size);
-    return ids.filter((id) => rank.has(id)).sort((a, b) => rank.get(a)! - rank.get(b)!);
+    for (const group of catalog.groups) for (const row of catalog.tools.filter((candidate) => candidate.group === group.id)) rank.set(row.id, rank.size);
+    return ids.filter((id) => rank.has(id)).sort((leftId, rightId) => rank.get(leftId)! - rank.get(rightId)!);
 }
 
 // One step of the walk: the questions about one tool to ask now, or { id: 'done' } (spec F1). Install: `settings`, then
@@ -47,37 +47,37 @@ function pickOrder(catalog: Catalog, ids: string[]): string[]
 // install.md's and configure.md's picks.json - `done` the step ids answered, `walk` the settings answer, `tokens` the
 // API key answers. `built`: the all() output, when the caller has it.
 // -> { id, tool, call, answers, set? } | { id: 'done' }
-export function next(inv: Inventory, picks: Picks | null | undefined, catalog: Catalog, opts: AskOptions = {}, built: Questions | null = null): WalkStep
+export function nextQuestion(inventory: Inventory, picks: Picks | null | undefined, catalog: Catalog, options: AskOptions = {}, built: Questions | null = null): WalkStep
 {
     picks = picks || {};
-    const b = built || all(inv, picks, catalog, opts);
+    const builtQuestions = built || allQuestions(inventory, picks, catalog, options);
     const done = new Set(picks.done || []);
     const tokens = picks.tokens || {};
     const steps: WalkStep[] = [];
     const add = (id: string, tool: string | null, questions: (Question | null | undefined | false)[], answers: Record<string, unknown> = {}, set: { location: LocationAnswer } | null = null) =>
     {
         const call = questions.filter(Boolean) as Question[];
-        const kept = Object.fromEntries(Object.entries(answers).filter(([qid]) => call.some((q) => q.id === qid)));
+        const kept = Object.fromEntries(Object.entries(answers).filter(([questionId]) => call.some((question) => question.id === questionId)));
         if (call.length || set) steps.push({ id, tool, call, answers: kept, ...(set ? { set } : {}) });
     };
-    const keyStep = (t: string) =>
+    const keyStep = (toolId: string) =>
     {
-        const k = tokens[t] === false ? null : b.keyNames![t];
-        const st = b.settings![t];
-        const us = Object.values((b.urlNames || {})[t] || {});
-        add(`${t}:keys`, t, [k && k.question, ...us.map((u) => u.question), st && st.question], { ...(k ? { [k.question.id]: k.answers } : {}), ...Object.fromEntries(us.map((u) => [u.question.id, u.answers])), ...(st ? { [st.question.id]: st.answers } : {}) });
+        const k = tokens[toolId] === false ? null : builtQuestions.keyNames![toolId];
+        const settingsAsk = builtQuestions.settings![toolId];
+        const urlAsks = Object.values((builtQuestions.urlNames || {})[toolId] || {});
+        add(`${toolId}:keys`, toolId, [k && k.question, ...urlAsks.map((urlAsk) => urlAsk.question), settingsAsk && settingsAsk.question], { ...(k ? { [k.question.id]: k.answers } : {}), ...Object.fromEntries(urlAsks.map((urlAsk) => [urlAsk.question.id, urlAsk.answers])), ...(settingsAsk ? { [settingsAsk.question.id]: settingsAsk.answers } : {}) });
     };
-    const located = (t: ToolBlock) => (t.first !== null && t.first !== undefined);
-    const toolSteps = (t: ToolBlock, id: string, rootStep: (() => void) | null) =>
+    const located = (toolBlock: ToolBlock) => (toolBlock.first !== null && toolBlock.first !== undefined);
+    const toolSteps = (toolBlock: ToolBlock, id: string, rootStep: (() => void) | null) =>
     {
-        add(`${id}:route`, id, [t.route]);
-        if (located(t)) add(`${id}:first`, id, t.first!);
-        else add(`${id}:questions`, id, t.questions || []);
+        add(`${id}:route`, id, [toolBlock.route]);
+        if (located(toolBlock)) add(`${id}:first`, id, toolBlock.first!);
+        else add(`${id}:questions`, id, toolBlock.questions || []);
         if (rootStep) rootStep();
-        if (located(t))
+        if (located(toolBlock))
         {
-            const loc = (t.questions || []).find((q) => q.id.startsWith('location-'));
-            add(`${id}:questions`, id, t.questions || [], loc ? { [loc.id]: t.answers } : {}, t.only ? { location: t.only } : null);
+            const locationAsk = (toolBlock.questions || []).find((question) => question.id.startsWith('location-'));
+            add(`${id}:questions`, id, toolBlock.questions || [], locationAsk ? { [locationAsk.id]: toolBlock.answers } : {}, toolBlock.only ? { location: toolBlock.only } : null);
         }
         keyStep(id);
     };
@@ -88,49 +88,49 @@ export function next(inv: Inventory, picks: Picks | null | undefined, catalog: C
         if (rows.length)
         {
             // which apps, first after the picks (spec D3)
-            if (b.clients) add('clients', null, [b.clients.question], { clients: b.clients.answers });
+            if (builtQuestions.clients) add('clients', null, [builtQuestions.clients.question], { clients: builtQuestions.clients.answers });
             const one = rows.length === 1 ? STATIC.settingsOne(catalog.byId.get(rows[0]!)!.label) : STATIC.settings;
             add('settings', null, [one], { settings: { [one.options[0]!.label]: 'recommended', [one.options[1]!.label]: 'each' } });
-            if (picks.walk === 'recommended') return steps.find((s) => !done.has(s.id)) || { id: 'done' };
+            if (picks.walk === 'recommended') return steps.find((step) => !done.has(step.id)) || { id: 'done' };
         }
         const asked = new Set(Object.keys(picks.roots || {}));
         for (const id of rows)
         {
             const row = catalog.byId.get(id)!;
-            const t = b.tools[id];
-            if (!t) continue;
+            const toolBlock = builtQuestions.tools[id];
+            if (!toolBlock) continue;
             const routeId = (picks.routes || {})[id] || row.recommendedRoute;
             const rootStep = () =>
             {
                 if (!needsRoot(row, routeId)) return;
-                const scope = (picks.scopes || {})[id] || scopeOrder(row, inv, { route: routeId, ctx: null, copyOf: installedOf(inv, id) })[0]!;
+                const scope = (picks.scopes || {})[id] || scopeOrder(row, inventory, { route: routeId, ctx: null, copyOf: installedOf(inventory, id) })[0]!;
                 const family = roots.familyOf(scope);
                 if (asked.has(family)) return;
                 asked.add(family);
-                const q = b.roots!.questions.find((x) => x.id === `root-${family}`);
-                if (q) add(`root:${family}`, id, [q], { [q.id]: b.roots!.answers[q.id] });
+                const rootAsk = builtQuestions.roots!.questions.find((candidate) => candidate.id === `root-${family}`);
+                if (rootAsk) add(`root:${family}`, id, [rootAsk], { [rootAsk.id]: builtQuestions.roots!.answers[rootAsk.id] });
             };
-            toolSteps(t, id, rootStep);
+            toolSteps(toolBlock, id, rootStep);
         }
     }
     for (const key of picks.targets || [])
     {
-        const t = b.targets[key];
-        if (!t || t.error) continue;
-        if (t.kind === 'root') { add(key, key, [t.root!.question], { [t.root!.question.id]: t.root!.answers }); continue; }
-        if (t.kind === 'own') { add(`${key}:own`, key, [t.own!.question], { [t.own!.question.id]: t.own!.answers }); continue; }
-        if (t.kind === 'mcp')
+        const toolBlock = builtQuestions.targets[key];
+        if (!toolBlock || toolBlock.error) continue;
+        if (toolBlock.kind === 'root') { add(key, key, [toolBlock.root!.question], { [toolBlock.root!.question.id]: toolBlock.root!.answers }); continue; }
+        if (toolBlock.kind === 'own') { add(`${key}:own`, key, [toolBlock.own!.question], { [toolBlock.own!.question.id]: toolBlock.own!.answers }); continue; }
+        if (toolBlock.kind === 'mcp')
         {
-            const family = roots.familyOf(t.current!.scope!);
-            const root = rootInUse(inv, family, { home: opts.home!, catalog });
-            const fallback = roots.resolve(inv, picks.roots, { project: inv.project, platform: inv.os, home: opts.home || homeDir(process.env), catalog }).roots[family];
-            const o = ownStep({ key, name: t.current!.name, scope: t.current!.scope }, root ? root.path : fallback!);
-            add(`${key}:own`, key, [o.question], { [o.question.id]: o.answers });
+            const family = roots.familyOf(toolBlock.current!.scope!);
+            const root = rootInUse(inventory, family, { home: options.home!, catalog });
+            const fallback = roots.resolve(inventory, picks.roots, { project: inventory.project, platform: inventory.os, home: options.home || homeDir(process.env), catalog }).roots[family];
+            const ownAsk = ownStep({ key, name: toolBlock.current!.name, scope: toolBlock.current!.scope }, root ? root.path : fallback!);
+            add(`${key}:own`, key, [ownAsk.question], { [ownAsk.question.id]: ownAsk.answers });
             if ((picks.existing || {})[key] === 'own') continue;
         }
-        toolSteps(t, key, null);
-        if (t.clients) add(`${key}:clients`, key, [t.clients.question], { [t.clients.question.id]: t.clients.answers });
+        toolSteps(toolBlock, key, null);
+        if (toolBlock.clients) add(`${key}:clients`, key, [toolBlock.clients.question], { [toolBlock.clients.question.id]: toolBlock.clients.answers });
     }
-    return steps.find((s) => !done.has(s.id)) || { id: 'done' };
+    return steps.find((step) => !done.has(step.id)) || { id: 'done' };
 }
 

@@ -25,7 +25,7 @@ import * as cli from '../../scripts/core/claude-cli.ts';
 import * as account from '../../scripts/core/account.ts';
 import { pickQuestions } from '../../scripts/plan/asks-picks.ts';
 import { changeQuestions } from '../../scripts/plan/asks-tool.ts';
-import { all } from '../../scripts/plan/asks-all.ts';
+import { allQuestions } from '../../scripts/plan/asks-all.ts';
 import * as catalogLib from '../../scripts/catalog/catalog.ts';
 import { makeCtx, detectAll, applyFixes } from '../../scripts/fix/fix.ts';
 import * as roots from '../../scripts/roots/roots.ts';
@@ -302,7 +302,7 @@ test('W4 - keys with alfred-code: the root is .alfred, a key left in a 0.1.x sto
     const catalog = fake.stubCatalog(s.port);
     try
     {
-        const q = all(h.inventory(b.root!, { catalog }), { rows: ['github'], routes: { github: 'remote' }, scopes: { github: 'local' } }, catalog, { env: h.env, home: h.home });
+        const q = allQuestions(h.inventory(b.root!, { catalog }), { rows: ['github'], routes: { github: 'remote' }, scopes: { github: 'local' } }, catalog, { env: h.env, home: h.home });
         const opts = (q.keyNames as Record<string, Asked<string>> & { github: Asked<string> }).github.question.options;
         assert.ok(opts.some((o) => o.label === 'ACME_GITHUB_ACCESS_TOKEN' && o.description === `in ${store} - move it to .mcps-secrets under this name`), JSON.stringify(opts));
         const gh = h.run(b.root!, { picks: { github: { route: 'remote', scope: 'local' } } }, { catalog });

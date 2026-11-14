@@ -203,7 +203,7 @@ export function applyUpdates(ctx: UpdateCtx, ids: string[], out: UpdateCheck, { 
     // twice in this run is fetched once at its scope, as it was written last
     const last = new Map<string, JobStep>();
     for (const s of ctx.fetches.flatMap((f) => f.fetch)) { last.delete(`${s.name}~${s.scope}`); last.set(`${s.name}~${s.scope}`, s); }
-    const job = fetchLib.job(ctx.project, [...last.values()], [...new Set(ctx.fetches.flatMap((f) => f.check))]);
+    const job = fetchLib.fetchJob(ctx.project, [...last.values()], [...new Set(ctx.fetches.flatMap((f) => f.check))]);
     if (job.fetch.length)
     {
         res.fetchFile = fetchLib.writeJob(path.join(dir, 'fetch.json'), job);

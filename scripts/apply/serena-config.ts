@@ -16,12 +16,12 @@ export const configOf = (home: string): string => (/^[A-Za-z]:[\\/]|\\\\/.test(h
 function linesOf(text: string): [string, string][]
 {
     const out: [string, string][] = [];
-    const re = /([^\n]*?)(\r?\n|$)/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(text)) !== null)
+    const linePattern = /([^\n]*?)(\r?\n|$)/g;
+    let match: RegExpExecArray | null;
+    while ((match = linePattern.exec(text)) !== null)
     {
-        if (m[0] === '') break;
-        out.push([m[1]!, m[2]!]);
+        if (match[0] === '') break;
+        out.push([match[1]!, match[2]!]);
     }
     return out;
 }
@@ -52,10 +52,10 @@ export function baseModesState(file: string): 'absent' | 'empty' | 'set'
     const text = readText(file);
     if (text === null) return 'absent';
     const lines = linesOf(text);
-    const loc = locate(lines);
-    if (!loc) return 'absent';
-    if (loc.inline === '[]') return 'empty';
-    if (loc.inline === '' && loc.end === loc.at + 1) return 'empty';
+    const location = locate(lines);
+    if (!location) return 'absent';
+    if (location.inline === '[]') return 'empty';
+    if (location.inline === '' && location.end === location.at + 1) return 'empty';
     return 'set';
 }
 
@@ -65,16 +65,16 @@ export function emptyBaseModes(file: string): { changed: boolean; detail: string
     const text = readText(file);
     if (text === null) return { changed: false, detail: `${file} is not there yet - serena writes it at its first start` };
     const lines = linesOf(text);
-    const loc = locate(lines);
-    const eol = text.includes('\r\n') ? '\r\n' : '\n';
+    const location = locate(lines);
+    const lineEnd = text.includes('\r\n') ? '\r\n' : '\n';
     let next: string;
-    if (!loc) next = `${text}${text === '' || /\n$/.test(text) ? '' : eol}base_modes: []${eol}`;
+    if (!location) next = `${text}${text === '' || /\n$/.test(text) ? '' : lineEnd}base_modes: []${lineEnd}`;
     else
     {
-        if (loc.inline === '[]') return { changed: false, detail: `${file}: base_modes is [] already` };
-        const keyEol = lines[loc.end - 1]![1] || lines[loc.at]![1] || '';
-        const head = lines.slice(0, loc.at).map(([b, e]) => b + e).join('');
-        const tail = lines.slice(loc.end).map(([b, e]) => b + e).join('');
+        if (location.inline === '[]') return { changed: false, detail: `${file}: base_modes is [] already` };
+        const keyEol = lines[location.end - 1]![1] || lines[location.at]![1] || '';
+        const head = lines.slice(0, location.at).map(([body, ending]) => body + ending).join('');
+        const tail = lines.slice(location.end).map(([body, ending]) => body + ending).join('');
         next = `${head}base_modes: []${keyEol}${tail}`;
     }
     if (next === text) return { changed: false, detail: `${file}: base_modes is [] already` };
@@ -89,24 +89,24 @@ export function emptyBaseModes(file: string): { changed: boolean; detail: string
 // Which homes the edit may touch (D7): never an alfred-code 2.x home (.alfred/serena/home), shared with its old setup;
 // on Windows the home is Serena's own default (<profile>\.serena) or a typed space-free folder, which every other Serena
 // on the machine reads too. -> { ok, shared?, reason? }
-export function editableHome(home: string, ctx: { platform?: string; home?: string } = {}): { ok: false; reason: string; shared?: undefined } | { ok: true; shared: boolean; reason?: undefined }
+export function editableHome(home: string, context: { platform?: string; home?: string } = {}): { ok: false; reason: string; shared?: undefined } | { ok: true; shared: boolean; reason?: undefined }
 {
-    const p = String(home || '').replace(/\\/g, '/').replace(/\/+$/, '');
-    if (/(^|\/)\.alfred\/serena\/home$/.test(p))
+    const posixHome = String(home || '').replace(/\\/g, '/').replace(/\/+$/, '');
+    if (/(^|\/)\.alfred\/serena\/home$/.test(posixHome))
         return { ok: false, reason: `serena's settings at ${configOf(home)} are alfred-code's - base_modes is left; its manual still names edit tools serena does not have` };
-    return { ok: true, shared: ctx.platform === 'win32' };
+    return { ok: true, shared: context.platform === 'win32' };
 }
 
 // The plan line for a serena add, replace or move: what the edit will do to its home, before the user confirms.
 // -> string | null
-export function planNote(entry: ServerEntry | null | undefined, ctx: { platform?: string; home?: string } = {}): string | null
+export function planNote(entry: ServerEntry | null | undefined, context: { platform?: string; home?: string } = {}): string | null
 {
     const home = entry && entry.env && entry.env.SERENA_HOME;
     if (!home) return null;
     const file = configOf(home);
-    const e = editableHome(home, ctx);
-    if (!e.ok) return e.reason;
-    if (e.shared) return `serena's settings at ${file} are shared with any other Serena on this machine; base_modes: [] applies to all of them`;
+    const editable = editableHome(home, context);
+    if (!editable.ok) return editable.reason;
+    if (editable.shared) return `serena's settings at ${file} are shared with any other Serena on this machine; base_modes: [] applies to all of them`;
     return `serena's settings at ${file}: base_modes: [] after its first start, so its manual names only the tools it has`;
 }
 

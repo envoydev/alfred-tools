@@ -23,7 +23,7 @@ import * as inventory from '../inventory/inventory.ts';
 import * as account from '../core/account.ts';
 import { apply } from '../apply/run.ts';
 import * as cli from '../core/claude-cli.ts';
-import { writeJob, job, nextLines } from '../apply/fetch.ts';
+import { writeJob, fetchJob, nextLines } from '../apply/fetch.ts';
 import * as F from './fix-functions.ts';
 import { realMachine, clone } from './common.ts';
 import { deepEqual } from '../plan/plan.ts';
@@ -317,7 +317,7 @@ export function applyFixes(ctx: FixCtx, ids: string[], { only, name, scope, inpu
     {
         // beside a fetch file a registration fix already wrote, or in a new one
         res.tmp = res.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
-        res.fetchFile = writeJob(res.fetchFile || path.join(res.tmp, 'fetch.json'), job(ctx.inv.project, refetch, refetch.map((s) => s.name)), { append: true });
+        res.fetchFile = writeJob(res.fetchFile || path.join(res.tmp, 'fetch.json'), fetchJob(ctx.inv.project, refetch, refetch.map((s) => s.name)), { append: true });
         log('', ...nextLines(res.fetchFile, JSON.parse(fs.readFileSync(res.fetchFile, 'utf8'))));
     }
 

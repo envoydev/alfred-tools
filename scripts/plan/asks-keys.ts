@@ -8,7 +8,7 @@ import type { Env, ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
 import type { AskCtx, Asked, KeyState, NameAt } from './types.ts';
 
-export const REC = ' (Recommended)';
+export const RECOMMENDED_SUFFIX = ' (Recommended)';
 // The `remote` route is worded 'hosted' in every ask: alfred-code's stop guard reads a bare 'remote' in an ask as git
 // state and sends Claude to fetch and re-ask (docs/sources.md, 'alfred-code hooks over the commands').
 export const ROUTE_WORD: Record<string, string> = { remote: 'hosted', local: 'local', bridge: 'bridge' };
@@ -20,8 +20,8 @@ export const SCOPE_TEXT: Record<string, string> = {
 };
 // Only words change (spec D1): the value stays user, project or local in picks, answers, the plan and on the CLI.
 export const SCOPE_LABEL: Record<string, string> = { user: 'Global', project: 'Project', local: 'Local' };
-export const scopeOfLabel = (label: unknown): string | null => Object.keys(SCOPE_LABEL).find((s) => SCOPE_LABEL[s] === String(label).replace(/ \(Recommended\)$/, '')) || null;
-export const scopeText = (s: string): string | undefined => SCOPE_TEXT[s];
+export const scopeOfLabel = (label: unknown): string | null => Object.keys(SCOPE_LABEL).find((scope) => SCOPE_LABEL[scope] === String(label).replace(/ \(Recommended\)$/, '')) || null;
+export const scopeText = (scope: string): string | undefined => SCOPE_TEXT[scope];
 // every scope question lists the recommended scope first, then the others in this order (the user's ruling, 2026-11-10)
 export const SCOPE_ORDER = ['user', 'project', 'local'];
 
@@ -36,31 +36,31 @@ export const PARENT_HELPER_IN_CHILD = false;
 // order; `found` the default name's entry when it is filled, else the first other, else null. `old` the same for the
 // files 0.1.x read (names only). `ctx.keyHome`, when the ctx has one, decides whether files outside the project are
 // read (null: none); else they are.
-export function keyStateOf(row: CatalogRow, routeId: string, ctx: AskCtx | null | undefined, _alfredEnabled: unknown, scope: string = 'user'): KeyState | null
+export function keyStateOf(row: CatalogRow, routeId: string, context: AskCtx | null | undefined, _alfredEnabled: unknown, scope: string = 'user'): KeyState | null
 {
     const route = row.routes && row.routes[routeId];
-    if (!route || !ctx) return null;
+    if (!route || !context) return null;
     const variable = route.helper ? route.helper.var : route.tokenVar;
     if (!variable) return null;
     const kind: KeyState['kind'] = route.helper ? 'helper' : 'stdio';
-    const projectRoot = rootOf('project', ctx);
-    const globalRoot = rootOf('global', ctx);
+    const projectRoot = rootOf('project', context);
+    const globalRoot = rootOf('global', context);
     const files = kind === 'helper'
-        ? keys.hostedChain({ scope, projectRoot, globalRoot, globalNamed: Boolean(ctx.roots && ctx.roots.globalNamed), home: ctx.home })
+        ? keys.hostedChain({ scope, projectRoot, globalRoot, globalNamed: Boolean(context.roots && context.roots.globalNamed), home: context.home })
         : keys.stdioChain({ scope, projectRoot, globalRoot });
-    const readHome = Object.hasOwn(ctx, 'keyHome') ? Boolean(ctx.keyHome) : true;
-    const inProject = (f: string) => { const rel = path.relative(ctx.project, f); return Boolean(rel) && !rel.startsWith('..') && !path.isAbsolute(rel); };
+    const readHome = Object.hasOwn(context, 'keyHome') ? Boolean(context.keyHome) : true;
+    const inProject = (filePath: string) => { const rel = path.relative(context.project, filePath); return Boolean(rel) && !rel.startsWith('..') && !path.isAbsolute(rel); };
     const word = row.id.toUpperCase().replace(/-/g, '_');
     const offered = (list: string[]) =>
     {
         const out: NameAt[] = [];
         for (const { file, names } of keys.filledNames(readHome ? list : list.filter(inProject)))
-            for (const name of names) if (keys.offeredName(name, variable, word) && !out.some((n) => n.name === name)) out.push({ name, file });
+            for (const name of names) if (keys.offeredName(name, variable, word) && !out.some((nameAt) => nameAt.name === name)) out.push({ name, file });
         return out;
     };
     const names = offered(files);
-    const found = names.find((n) => n.name === variable) || names[0] || null;
-    const old = offered(keys.oldFiles(ctx.project, ctx.home)).filter((n) => !names.some((c) => c.name === n.name));
+    const found = names.find((nameAt) => nameAt.name === variable) || names[0] || null;
+    const old = offered(keys.oldFiles(context.project, context.home)).filter((nameAt) => !names.some((filled) => filled.name === nameAt.name));
     return { variable, kind, scope, files, names, found, old };
 }
 
@@ -68,22 +68,22 @@ export function keyStateOf(row: CatalogRow, routeId: string, ctx: AskCtx | null 
 // the row id (in the chain, then in a file 0.1.x read), and 'A name you choose', asked next. Recommended: `current` (the
 // name the registration uses, for configure), else a name filled in the chain - the default first when both are -
 // else the default. -> { question, answers: { <label as shown>: NAME | 'named' } } | null for a route with no key here.
-export function keyNameQuestion(row: CatalogRow, routeId: string, scope: string, ctx: AskCtx | null | undefined, { current = null }: { current?: string | null | undefined } = {}): Asked<string> | null
+export function keyNameQuestion(row: CatalogRow, routeId: string, scope: string, context: AskCtx | null | undefined, { current = null }: { current?: string | null | undefined } = {}): Asked<string> | null
 {
-    const ks = keyStateOf(row, routeId, ctx, null, scope);
-    if (!ks || (ks.kind === 'stdio' && scope === 'project')) return null;
+    const keyState = keyStateOf(row, routeId, context, null, scope);
+    if (!keyState || (keyState.kind === 'stdio' && scope === 'project')) return null;
     const desc = new Map<string, string>();
-    for (const n of ks.names) desc.set(n.name, `filled in ${n.file}`);
-    for (const n of ks.old) desc.set(n.name, `in ${n.file} - move it to .mcps-secrets under this name`);
-    if (!desc.has(ks.variable)) desc.set(ks.variable, `the catalog's name - add it to ${ks.files[0]}`);
-    const rec = current || (ks.found ? ks.found.name : ks.variable);
-    if (!desc.has(rec)) desc.set(rec, 'the name it uses now');
-    const others = [...ks.names, ...ks.old].map((n) => n.name).filter((n) => n !== ks.variable && n !== rec).slice(0, 2);
-    const order = [rec, ...[ks.variable, ...others].filter((n) => n !== rec)].slice(0, 3);
-    const opts = [...order.map((n, i) => ({ label: `${n}${i === 0 ? REC : ''}`, description: desc.get(n)!, value: n })), { label: 'A name you choose', description: 'a name of yours, asked next - its value goes in .mcps-secrets, never in the chat', value: 'named' }];
+    for (const nameAt of keyState.names) desc.set(nameAt.name, `filled in ${nameAt.file}`);
+    for (const nameAt of keyState.old) desc.set(nameAt.name, `in ${nameAt.file} - move it to .mcps-secrets under this name`);
+    if (!desc.has(keyState.variable)) desc.set(keyState.variable, `the catalog's name - add it to ${keyState.files[0]}`);
+    const recommended = current || (keyState.found ? keyState.found.name : keyState.variable);
+    if (!desc.has(recommended)) desc.set(recommended, 'the name it uses now');
+    const others = [...keyState.names, ...keyState.old].map((nameAt) => nameAt.name).filter((name) => name !== keyState.variable && name !== recommended).slice(0, 2);
+    const order = [recommended, ...[keyState.variable, ...others].filter((name) => name !== recommended)].slice(0, 3);
+    const options = [...order.map((name, i) => ({ label: `${name}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: desc.get(name)!, value: name })), { label: 'A name you choose', description: 'a name of yours, asked next - its value goes in .mcps-secrets, never in the chat', value: 'named' }];
     return {
-        question: { id: `keyname-${row.id}`, header: 'Key name', multiSelect: false, question: `Which name holds ${row.label}'s key in .mcps-secrets?`, options: opts.map(({ label, description }) => ({ label, description })) },
-        answers: Object.fromEntries(opts.map((o) => [o.label, o.value])),
+        question: { id: `keyname-${row.id}`, header: 'Key name', multiSelect: false, question: `Which name holds ${row.label}'s key in .mcps-secrets?`, options: options.map(({ label, description }) => ({ label, description })) },
+        answers: Object.fromEntries(options.map((option) => [option.label, option.value])),
     };
 }
 
@@ -93,36 +93,36 @@ export function keyNameQuestion(row: CatalogRow, routeId: string, scope: string,
 // the wrong URL with no warning, while an unfilled catalog name stops the bridge with its name (review I2). A name found
 // is filled in the hosted chain, holds the row word (SENTRY for sentry), and is not a credential, the key's name, or a
 // name an earlier question recommends. -> [{ var, question, answers }] ([] for another route)
-export function urlNameQuestions(row: CatalogRow, routeId: string, scope: string, ctx: AskCtx | null | undefined, { current = null, keyName = null }: { current?: Record<string, string> | null | undefined; keyName?: string | null | undefined } = {}): (Asked<string> & { var: string })[]
+export function urlNameQuestions(row: CatalogRow, routeId: string, scope: string, context: AskCtx | null | undefined, { current = null, keyName = null }: { current?: Record<string, string> | null | undefined; keyName?: string | null | undefined } = {}): (Asked<string> & { var: string })[]
 {
     const route = row.routes && row.routes[routeId];
-    if (!route || route.runtime !== 'bridge' || !ctx) return [];
-    const ks = keyStateOf(row, routeId, ctx, null, scope);
+    if (!route || route.runtime !== 'bridge' || !context) return [];
+    const keyState = keyStateOf(row, routeId, context, null, scope);
     const word = row.id.toUpperCase().replace(/-/g, '_');
     const key = keyName || route.helper!.var;
-    const catalogNames = new Set((route.urlVars || []).map((v) => v.var));
+    const catalogNames = new Set((route.urlVars || []).map((urlVar) => urlVar.var));
     const found: NameAt[] = [];
-    for (const { file, names } of keys.filledNames(ks ? ks.files : []))
+    for (const { file, names } of keys.filledNames(keyState ? keyState.files : []))
         for (const name of names)
-            if (name.includes(word) && !keys.credentialName(name) && name !== key && !catalogNames.has(name) && !found.some((n) => n.name === name)) found.push({ name, file });
+            if (name.includes(word) && !keys.credentialName(name) && name !== key && !catalogNames.has(name) && !found.some((nameAt) => nameAt.name === name)) found.push({ name, file });
     const taken = new Set<string>();
-    return (route.urlVars || []).map((v) =>
+    return (route.urlVars || []).map((urlVar) =>
     {
         const desc = new Map<string, string>();
-        const free = found.filter((n) => !taken.has(n.name));
-        for (const n of free) desc.set(n.name, `filled in ${n.file}`);
-        const filledHere = ks ? keys.filledNames(ks.files).find((f) => f.names.includes(v.var)) : null;
-        desc.set(v.var, filledHere ? `the catalog's name - filled in ${filledHere.file}` : `the catalog's name - add it to ${ks ? ks.files[0] : '.mcps-secrets'}`);
-        const rec = (current && current[v.var]) || v.var;
-        if (!desc.has(rec)) desc.set(rec, 'the name it uses now');
-        taken.add(rec);
-        const other = free.map((n) => n.name).find((n) => n !== rec && n !== v.var);
-        const order = [rec, ...[v.var, other].filter((n) => n && n !== rec)].slice(0, 3) as string[];
-        const opts = [...order.map((n, i) => ({ label: `${n}${i === 0 ? REC : ''}`, description: desc.get(n)!, value: n })), { label: 'A name you choose', description: 'a name of yours, asked next - its value goes in .mcps-secrets', value: 'named' }];
+        const free = found.filter((nameAt) => !taken.has(nameAt.name));
+        for (const nameAt of free) desc.set(nameAt.name, `filled in ${nameAt.file}`);
+        const filledHere = keyState ? keys.filledNames(keyState.files).find((filledFile) => filledFile.names.includes(urlVar.var)) : null;
+        desc.set(urlVar.var, filledHere ? `the catalog's name - filled in ${filledHere.file}` : `the catalog's name - add it to ${keyState ? keyState.files[0] : '.mcps-secrets'}`);
+        const recommended = (current && current[urlVar.var]) || urlVar.var;
+        if (!desc.has(recommended)) desc.set(recommended, 'the name it uses now');
+        taken.add(recommended);
+        const other = free.map((nameAt) => nameAt.name).find((name) => name !== recommended && name !== urlVar.var);
+        const order = [recommended, ...[urlVar.var, other].filter((name) => name && name !== recommended)].slice(0, 3) as string[];
+        const options = [...order.map((name, i) => ({ label: `${name}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: desc.get(name)!, value: name })), { label: 'A name you choose', description: 'a name of yours, asked next - its value goes in .mcps-secrets', value: 'named' }];
         return {
-            var: v.var,
-            question: { id: `urlname-${row.id}-${v.var}`, header: 'URL name', multiSelect: false, question: `Which name holds ${row.label}'s ${v.label} in .mcps-secrets?`, options: opts.map(({ label, description }) => ({ label, description })) },
-            answers: Object.fromEntries(opts.map((o) => [o.label, o.value])),
+            var: urlVar.var,
+            question: { id: `urlname-${row.id}-${urlVar.var}`, header: 'URL name', multiSelect: false, question: `Which name holds ${row.label}'s ${urlVar.label} in .mcps-secrets?`, options: options.map(({ label, description }) => ({ label, description })) },
+            answers: Object.fromEntries(options.map((option) => [option.label, option.value])),
         };
     });
 }
@@ -135,7 +135,7 @@ export function settingsQuestion(row: CatalogRow, routeId: string, { entry = nul
     // a hosted route, and a bridge (0.4.0), take no settings
     if (routeId === 'remote' || !row.routes[routeId] || row.routes[routeId].runtime === 'bridge') return null;
     const pairs = settingsOf(row, routeId, entry);
-    const keep = pairs.length ? { label: `Keep these settings${REC}`, description: pairs.map(([k, v]) => `${k}=${v}`).join(', ') } : { label: `No settings${REC}`, description: "the server's own defaults" };
+    const keep = pairs.length ? { label: `Keep these settings${RECOMMENDED_SUFFIX}`, description: pairs.map(([k, value]) => `${k}=${value}`).join(', ') } : { label: `No settings${RECOMMENDED_SUFFIX}`, description: "the server's own defaults" };
     const change = { label: 'Change or add a setting', description: 'NAME=value pairs, asked next - a key goes in .mcps-secrets, never here' };
     return {
         question: { id: `settings-${row.id}`, header: 'Settings', multiSelect: false, question: `${row.label}'s settings`, options: [keep, change] },
@@ -150,9 +150,9 @@ export const liveReader = (project: string, env: Env | null | undefined): ((name
 // The key a stdio registration holds, from its first token field: a value, or null for none (empty, ${VAR} only).
 export function heldKey(entry: ServerEntry, route: CatalogRoute | null | undefined): string | null
 {
-    const f = keys.tokenFields(entry, route)[0];
-    const v = f ? f.at.reduce<unknown>((o, k) => (o == null ? undefined : (o as Record<string | number, unknown>)[k]), entry) : undefined;
-    return typeof v === 'string' && v !== '' && !keys.PLACEHOLDER.test(v) ? v : null;
+    const field = keys.tokenFields(entry, route)[0];
+    const value = field ? field.at.reduce<unknown>((current, k) => (current == null ? undefined : (current as Record<string | number, unknown>)[k]), entry) : undefined;
+    return typeof value === 'string' && value !== '' && !keys.PLACEHOLDER.test(value) ? value : null;
 }
 
 // local for a local route (its paths and Python are this machine's); for a hosted route that can send a key, the scope M1

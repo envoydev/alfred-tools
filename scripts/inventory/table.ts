@@ -18,49 +18,49 @@ const SCOPES = ['local', 'project', 'user'];
 // The pin a registration carries: the package version, the image tag, or null (a hosted URL, a binary).
 export function pinOf(row: CatalogRow, routeId: string | null, entry: ServerEntry): string | null | undefined
 {
-    const def = (row.routes || {})[routeId!];
-    if (!def) return null;
-    if (def.runtime === 'docker')
+    const routeDefinition = (row.routes || {})[routeId!];
+    if (!routeDefinition) return null;
+    if (routeDefinition.runtime === 'docker')
     {
-        const image = launchArgs(entry).find((a) => a.startsWith(def.image!.name));
+        const image = launchArgs(entry).find((argument) => argument.startsWith(routeDefinition.image!.name));
         return image && image.includes(':') ? image.slice(image.lastIndexOf(':') + 1) : null;
     }
-    return def.package ? pinnedVersion(entry, def.package.name) : null;
+    return routeDefinition.package ? pinnedVersion(entry, routeDefinition.package.name) : null;
 }
 
 const cellOf = (items: string[]): string => (items.length ? items.join('; ') : '-');
 
-export function render(inv: Inventory, catalog: Catalog = catalogLib.load()): string
+export function renderTable(inventory: Inventory, catalog: Catalog = catalogLib.load()): string
 {
-    const rows = catalog.tools.filter((r) => r.os.includes(inv.os));
+    const rows = catalog.tools.filter((row) => row.os.includes(inventory.os));
     const body = rows.map((row, i) =>
     {
-        const cells: Record<string, string[]> = Object.fromEntries(SCOPES.map((s) => [s, []]));
-        for (const r of inv.registrations.filter((x) => x.rowId === row.id && !x.alfredRetired && x.scope !== 'inherited'))
+        const cells: Record<string, string[]> = Object.fromEntries(SCOPES.map((scope) => [scope, []]));
+        for (const registration of inventory.registrations.filter((candidate) => candidate.rowId === row.id && !candidate.alfredRetired && candidate.scope !== 'inherited'))
         {
-            const pin = pinOf(row, r.route, r.entry);
-            cells[r.scope]!.push(`${r.name} [${r.route}${pin ? `, ${pin}` : ''}]`);
+            const pin = pinOf(row, registration.route, registration.entry);
+            cells[registration.scope]!.push(`${registration.name} [${registration.route}${pin ? `, ${pin}` : ''}]`);
         }
-        const group = catalog.groups.find((g) => g.id === row.group);
-        return [String(i + 1), group!.label, row.label, row.kind, Object.keys(row.routes).join('/'), ...SCOPES.map((s) => cellOf(cells[s]!))];
+        const group = catalog.groups.find((catalogGroup) => catalogGroup.id === row.group);
+        return [String(i + 1), group!.label, row.label, row.kind, Object.keys(row.routes).join('/'), ...SCOPES.map((scope) => cellOf(cells[scope]!))];
     });
     const head = ['#', 'group', 'tool', 'kind', 'routes', ...SCOPES];
-    const widths = head.map((h, c) => Math.max(h.length, ...body.map((r) => r[c]!.length)));
-    const line = (cols: string[]) => cols.map((v, c) => v.padEnd(widths[c]!)).join('  ').trimEnd();
-    const out = [line(head), line(widths.map((w) => '-'.repeat(w))), ...body.map(line)];
+    const widths = head.map((heading, column) => Math.max(heading.length, ...body.map((bodyRow) => bodyRow[column]!.length)));
+    const line = (cols: string[]) => cols.map((value, column) => value.padEnd(widths[column]!)).join('  ').trimEnd();
+    const out = [line(head), line(widths.map((width) => '-'.repeat(width))), ...body.map(line)];
 
     const notes: string[] = [];
-    const own = inv.registrations.filter((r) => r.own && !r.alfredRetired && r.scope !== 'inherited');
-    if (own.length) notes.push(`Your own, not in this catalog and never touched: ${own.map((r) => `${r.name} (${r.scope})`).join(', ')}.`);
-    const inherited = inv.registrations.filter((r) => r.scope === 'inherited');
-    const usedBy = (s: Shadow) => (s.scope === 'inherited' ? `the one in ${fromHere(inv, s.from!)} wins` : `the ${s.scope} one wins`);
-    if (inherited.length) notes.push(`Inherited from a parent folder's .mcp.json - change them there: ${inherited.map((r) => `${r.name} (from ${fromHere(inv, r.from!)}, ${r.approval}${r.shadowed ? `, not used here: ${usedBy(r.shadowed)}` : ''})`).join(', ')}.`);
-    const retired = inv.registrations.filter((r) => r.alfredRetired && r.scope !== 'inherited');
-    if (retired.length) notes.push(`Under names alfred-code once registered, left alone: ${retired.map((r) => `${r.name} (${r.scope})`).join(', ')}.`);
-    const other = catalog.tools.filter((r) => !r.os.includes(inv.os));
-    if (other.length) notes.push(`Not offered on this OS (${inv.os}): ${other.map((r) => r.label).join(', ')}.`);
-    for (const u of inv.unreadable || [])
-        notes.push(`${u.file} is ${u.state}${u.error ? ` (${u.error})` : ''}: ${u.scope === 'inherited' ? "Claude Code skips that parent folder's servers; nothing here writes to it." : `the ${u.scope} scope is unreadable here, and nothing will be written to it.`}`);
+    const own = inventory.registrations.filter((registration) => registration.own && !registration.alfredRetired && registration.scope !== 'inherited');
+    if (own.length) notes.push(`Your own, not in this catalog and never touched: ${own.map((registration) => `${registration.name} (${registration.scope})`).join(', ')}.`);
+    const inherited = inventory.registrations.filter((registration) => registration.scope === 'inherited');
+    const usedBy = (shadow: Shadow) => (shadow.scope === 'inherited' ? `the one in ${fromHere(inventory, shadow.from!)} wins` : `the ${shadow.scope} one wins`);
+    if (inherited.length) notes.push(`Inherited from a parent folder's .mcp.json - change them there: ${inherited.map((registration) => `${registration.name} (from ${fromHere(inventory, registration.from!)}, ${registration.approval}${registration.shadowed ? `, not used here: ${usedBy(registration.shadowed)}` : ''})`).join(', ')}.`);
+    const retired = inventory.registrations.filter((registration) => registration.alfredRetired && registration.scope !== 'inherited');
+    if (retired.length) notes.push(`Under names alfred-code once registered, left alone: ${retired.map((registration) => `${registration.name} (${registration.scope})`).join(', ')}.`);
+    const other = catalog.tools.filter((row) => !row.os.includes(inventory.os));
+    if (other.length) notes.push(`Not offered on this OS (${inventory.os}): ${other.map((row) => row.label).join(', ')}.`);
+    for (const unreadable of inventory.unreadable || [])
+        notes.push(`${unreadable.file} is ${unreadable.state}${unreadable.error ? ` (${unreadable.error})` : ''}: ${unreadable.scope === 'inherited' ? "Claude Code skips that parent folder's servers; nothing here writes to it." : `the ${unreadable.scope} scope is unreadable here, and nothing will be written to it.`}`);
     return [...out, ...(notes.length ? ['', ...notes] : [])].join('\n');
 }
 

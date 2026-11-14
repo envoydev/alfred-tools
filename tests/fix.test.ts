@@ -27,7 +27,7 @@ import { spawnSync, spawnSync as spawnx } from 'node:child_process';
 import { fill, SHAPES } from '../scripts/hud/hud-statusline.ts';
 import * as rootsLib from '../scripts/roots/roots.ts';
 import { HELPER_VERSION as HV } from '../scripts/copied/mcp-headers.js';
-import { expand } from '../scripts/apply/fetch.ts';
+import { expandedText } from '../scripts/apply/fetch.ts';
 import { PARENT_HELPER_IN_CHILD } from '../scripts/plan/asks-keys.ts';
 import * as existingLib from '../scripts/inventory/existing.ts';
 import * as X from '../scripts/inventory/existing.ts';
@@ -1289,8 +1289,8 @@ test('one ${VAR} expander, Claude Code\'s rule (2.1.322): a variable set to empt
     assert.strictEqual(C.expandVars('${B:-C:\\b}', { B: '' }), '', 'set to empty: no fallback');
     assert.strictEqual(C.expandVars('${A}', { A: '' }), '', 'set to empty: set');
     assert.strictEqual(C.firstUnset('${A}', { A: '' }), null);
-    assert.strictEqual(expand('${B:-x}', { B: '' }), C.expandVars('${B:-x}', { B: '' }));
-    assert.strictEqual(expand('${B:-x}', {}), 'x');
+    assert.strictEqual(expandedText('${B:-x}', { B: '' }), C.expandVars('${B:-x}', { B: '' }));
+    assert.strictEqual(expandedText('${B:-x}', {}), 'x');
 });
 
 // ---- a registration left on its own (spec D6) --------------------------------------------------------------------------

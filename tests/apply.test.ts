@@ -13,7 +13,7 @@ import * as cli from '../scripts/core/claude-cli.ts';
 import { MARKER } from '../scripts/core/kept.ts';
 import * as roots from '../scripts/roots/roots.ts';
 import { GITIGNORE, mapKey, READ_GUARD } from '../scripts/roots/roots.ts';
-import { all } from '../scripts/plan/asks-all.ts';
+import { allQuestions } from '../scripts/plan/asks-all.ts';
 import { load } from '../scripts/catalog/catalog.ts';
 import { HELPER_VERSION as HV } from '../scripts/copied/mcp-headers.js';
 import { fetchStep } from '../scripts/entries/names.ts';
@@ -668,7 +668,7 @@ test('configure recommends the name the registration uses', () => {
         // the questions read the inventory file the command passes - masked - and the live registration in-process
         const inv = inventory.keptOf(inventory.buildInventory({ project: w.project, env: w.env }));
         assert.ok(!JSON.stringify(inv).includes(live), 'the inventory is masked');
-        const q = all(inv, { targets: ['mcp:github~local', 'mcp:gh-docker~local'] }, load(), { env: w.env, home: w.home });
+        const q = allQuestions(inv, { targets: ['mcp:github~local', 'mcp:gh-docker~local'] }, load(), { env: w.env, home: w.home });
         assert.strictEqual(q.keyNames!['mcp:github~local']!.question.options[0]!.label, 'ACME_GITHUB_TOKEN (Recommended)', 'the helper\'s argument');
         assert.strictEqual(q.keyNames!['mcp:gh-docker~local']!.question.options[0]!.label, 'MY_GITHUB_TOKEN (Recommended)', 'the name whose value equals the written-in key');
         assert.ok(!JSON.stringify(q).includes(live));

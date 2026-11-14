@@ -16,9 +16,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as inventory from '../scripts/inventory/inventory.ts';
 import { plan } from '../scripts/plan/plan.ts';
-import { render } from '../scripts/plan/render.ts';
+import { renderPlan } from '../scripts/plan/render.ts';
 import { apply } from '../scripts/apply/run.ts';
-import { run } from '../scripts/apply/fetch.ts';
+import { runFetchJob } from '../scripts/apply/fetch.ts';
 import * as account from '../scripts/core/account.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
 import type { Answers, Plan, PlanOptions } from '../scripts/plan/types.ts';
@@ -110,7 +110,7 @@ export class Harness
     async fetch(file: string): Promise<FetchRun & { text: string }>
     {
         const lines: string[] = [];
-        const res = await run(JSON.parse(fs.readFileSync(file, 'utf8')), { env: this.env, log: (...a) => lines.push(a.join(' ')) });
+        const res = await runFetchJob(JSON.parse(fs.readFileSync(file, 'utf8')), { env: this.env, log: (...a) => lines.push(a.join(' ')) });
         return { ...res, text: lines.join('\n') };
     }
 
@@ -139,7 +139,7 @@ export class Harness
         const report: RunReport = p.errors.length
             ? { applied: [], failed: null, notRun: [], readback: [], noop: false, skipped: true } as unknown as RunReport
             : apply(p, { env: this.env, tmp: tmp || path.join(this.root, 'tmp'), data: this.data, log: (...a) => lines.push(a.join(' ')) });
-        return { inv, plan: p, report, text: lines.join('\n'), rendered: render(p) };
+        return { inv, plan: p, report, text: lines.join('\n'), rendered: renderPlan(p) };
     }
 
     realUntouched()

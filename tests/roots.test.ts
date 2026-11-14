@@ -175,7 +175,7 @@ test('no option text mentions Other', () => {
     const on = [ALFRED_SET_UP, '/Users/me/.alfred', '/work/shop/tools/keys'];
     const map = { version: 1, global: null, projects: { '/work/shop': '/work/shop/tools/keys' } };
     const all = (['project', 'global'] as Family[]).flatMap((f) => [...roots.options(inv({ alfredCodeEnabled: true }), f, ctxOf(on)), ...roots.options(inv({ alfredCodeEnabled: true, roots: { map } }), f, ctxOf(on))]);
-    const q = asks.all(inv({ alfredCodeEnabled: true }), { rows: ['playwright-chrome', 'github'], scopes: { github: 'user' } }, catalog, { home: '/Users/me' });
+    const q = asks.allQuestions(inv({ alfredCodeEnabled: true }), { rows: ['playwright-chrome', 'github'], scopes: { github: 'user' } }, catalog, { home: '/Users/me' });
     assert.deepStrictEqual(q.roots!.questions.map((x) => x.id), ['root-project', 'root-global']);
     for (const text of [...all.flatMap((o) => [o.label, o.description]), ...q.roots!.questions.flatMap((x) => [x.question, x.header, ...x.options.flatMap((o) => [o.label, o.description])])])
     {
@@ -185,7 +185,7 @@ test('no option text mentions Other', () => {
 });
 
 test('a root is asked for a family only a pick records into', () => {
-    const qs = (picks: Picks | null) => asks.all(inv(), picks, catalog, { home: '/Users/me' }).roots;
+    const qs = (picks: Picks | null) => asks.allQuestions(inv(), picks, catalog, { home: '/Users/me' }).roots;
     // an answer about a server already set up asks no root: a server left on its own goes to the root in use (Ruling 3)
     assert.deepStrictEqual(qs({ existing: { 'mcp:atlassian~user': 'own', 'connector:Atlassian': 'own', 'plugin-mcp:x@m/srv': 'add' } })!.questions, []);
     assert.deepStrictEqual(qs({ rows: ['playwright-chrome'] })!.questions.map((x) => x.id), ['root-project'], 'a local route: local scope, the project family');

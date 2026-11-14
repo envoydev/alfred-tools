@@ -13,7 +13,7 @@ import { listWrite } from '../scripts/apply/file-steps.ts';
 import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
 import { load } from '../scripts/catalog/catalog.ts';
 import { plan } from '../scripts/plan/plan.ts';
-import { render } from '../scripts/plan/render.ts';
+import { renderPlan } from '../scripts/plan/render.ts';
 import { signInParts, signInFormOf } from '../scripts/entries/sign-in.ts';
 import { READ_GUARD } from '../scripts/roots/roots.ts';
 import * as wsLib from '../scripts/roots/workspace.ts';
@@ -323,14 +323,14 @@ for (const [id, url] of [['gitlab', 'https://gitlab.com/api/v4/mcp'], ['atlassia
         assert.deepStrictEqual([u!.server.clients, u!.server.form, u!.server.cursorEntry], [['claude', 'cursor'], 'signin', undefined]);
         assert.deepStrictEqual((p.steps.filter((s) => s.op === 'cursor-write') as CursorWritePlanStep[]).map((s) => s.file), ['/Users/me/.cursor/mcp.json']);
         assert.deepStrictEqual(p.oauth.map((o) => [o.name, o.signin]), [[id, true]]);
-        assert.ok(render(p).includes(`OAuth: ${id}: your browser opens to sign in the first time it starts, in Claude Code or Cursor; the sign-in is kept in ${GROOT}/mcp-remote-v1/ and serves both.`), render(p));
+        assert.ok(renderPlan(p).includes(`OAuth: ${id}: your browser opens to sign in the first time it starts, in Claude Code or Cursor; the sign-in is kept in ${GROOT}/mcp-remote-v1/ and serves both.`), renderPlan(p));
     });
 }
 
 test('a keyless OAuth entry for Claude Code only is the http form', { skip: POSIX_FIXTURE }, () => {
     const p = plan(hinv(), { clients: ['claude'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } }, HOPTS);
     assert.deepStrictEqual((p.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry, { type: 'http', url: ATL_URL });
-    assert.match(render(p), /OAuth: run \/mcp once in a session to log in to atlassian\./);
+    assert.match(renderPlan(p), /OAuth: run \/mcp once in a session to log in to atlassian\./);
     assert.ok(!ops(p).includes('deny-read'), 'no sign-in form, no key name: no rule');
 });
 
@@ -417,7 +417,7 @@ test('a plan writing a shared sign-in entry adds the sign-in rule; one with ensu
     const d = (p.steps.find((s) => s.op === 'deny-read') as DenyReadStep);
     assert.deepStrictEqual([d.file, d.rules], ['/Users/me/.claude/settings.json', [READ_GUARD.signIns]]);
     assert.strictEqual(ops(p).indexOf('deny-read'), ops(p).indexOf('list-write') - 1, 'last before list-write');
-    assert.ok(render(p).includes(`   adds ${READ_GUARD.signIns} to permissions.deny in /Users/me/.claude/settings.json  (keeps AI sessions out of the sign-in tokens and the key file)`), render(p));
+    assert.ok(renderPlan(p).includes(`   adds ${READ_GUARD.signIns} to permissions.deny in /Users/me/.claude/settings.json  (keeps AI sessions out of the sign-in tokens and the key file)`), renderPlan(p));
     const k = plan(hinv(), { picks: { context7: { route: 'remote', scope: 'user', token: true } } }, HOPTS);
     assert.ok(ops(k).includes('ensure-key-name'), ops(k).join());
     assert.deepStrictEqual((k.steps.find((s) => s.op === 'deny-read') as DenyReadStep).rules, [READ_GUARD.secrets]);
@@ -676,7 +676,7 @@ test('install names a listed server missing from Claude Code and re-adds nothing
         assert.deepStrictEqual(p.errors, []);
         assert.deepStrictEqual(p.outside, changedOutside(inv));
         assert.ok(!p.steps.some((x) => (x as McpAddStep).name === 'memory' || (x as McpAddStep).name === 'serena'), 'neither is written');
-        assert.ok(render(p).startsWith('serena was changed outside preferred-tools\nmemory is on the list but not in Claude Code - run /preferred-tools:fix\n'), render(p));
+        assert.ok(renderPlan(p).startsWith('serena was changed outside preferred-tools\nmemory is on the list but not in Claude Code - run /preferred-tools:fix\n'), renderPlan(p));
     }
     finally { w.clean(); }
 });

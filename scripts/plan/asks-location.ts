@@ -1,6 +1,6 @@
 import { formatRoot, validWindowsSerenaHome, recommendedSide, otherPlace, serenaWindowsHome, serenaSpaceFree, alfredRoot, logicalRoot } from '../entries/locations.ts';
 import * as roots from '../roots/roots.ts';
-import { REC } from './asks-keys.ts';
+import { RECOMMENDED_SUFFIX } from './asks-keys.ts';
 import type { CatalogRow } from '../catalog/types.ts';
 import type { Root } from '../entries/types.ts';
 import type { Inventory } from '../inventory/types.ts';
@@ -31,73 +31,73 @@ const MEMORY_TAIL: Record<string, string> = { project: "this project's own memor
 const SERENA_PER_PROJECT = 'its language servers (about 327MB) download once per project';
 
 // The folder a root lands in, as the description says it: absolute at every scope (F7).
-function placeText(root: Root, ctx: AskCtx): string
+function placeText(root: Root, context: AskCtx): string
 {
-    return formatRoot(root, 'local', ctx).value;
+    return formatRoot(root, 'local', context).value;
 }
 
 // The location question for a row with a data folder, at a known scope and registration name (the folder is named
 // after it). `ctx.roots` holds the roots answered so far (roots.resolve); none - the recommended ones. -> { question (or
 // null when one place is left), answers: { <label as shown>: <location entry> }, only: the one location left when no
 // question is asked }.
-export function locationQuestion(row: CatalogRow, inv: Inventory, { scope, name = null, current = null, copyOf: _copyOf = [], ctx }: ToolOpts & { scope: string; ctx: AskCtx }): { question: Question | null; answers: Record<string, LocationAnswer>; only: LocationAnswer | null }
+export function locationQuestion(row: CatalogRow, inventory: Inventory, { scope, name = null, current = null, copyOf: _copyOf = [], ctx: context }: ToolOpts & { scope: string; ctx: AskCtx }): { question: Question | null; answers: Record<string, LocationAnswer>; only: LocationAnswer | null }
 {
-    if (!ctx.roots) ctx = { ...ctx, roots: roots.resolve(inv, null, ctx).roots };
-    const loc = row.locations!;
+    if (!context.roots) context = { ...context, roots: roots.resolve(inventory, null, context).roots };
+    const locations = row.locations!;
     const folder = name || (current ? current.name! : row.name);
-    const serenaWin = Boolean(loc.windowsAbsolute && ctx.platform === 'win32');
-    const winValid = (root: Root) => !serenaWin || validWindowsSerenaHome(formatRoot(root, 'local', ctx).value);
-    const natural = recommendedSide(row, scope, ctx);
+    const serenaWin = Boolean(locations.windowsAbsolute && context.platform === 'win32');
+    const winValid = (root: Root) => !serenaWin || validWindowsSerenaHome(formatRoot(root, 'local', context).value);
+    const natural = recommendedSide(row, scope, context);
 
     const places: Place[] = [];
-    const own: Place | null = scope === 'user' ? null : { side: 'project', root: otherPlace(row, folder, 'project', ctx) };
-    const shared: Place = { side: 'account', root: otherPlace(row, folder, 'account', ctx) };
+    const own: Place | null = scope === 'user' ? null : { side: 'project', root: otherPlace(row, folder, 'project', context) };
+    const shared: Place = { side: 'account', root: otherPlace(row, folder, 'account', context) };
     // global scope: the global root; memory, or a pick whose recommended place is the global root: both roots
     if (scope === 'user') places.push(shared);
     else
     {
         places.push(own!);
-        if (loc.defaultSide === 'account' || natural === 'account') places.push(shared);
+        if (locations.defaultSide === 'account' || natural === 'account') places.push(shared);
     }
-    const usable = places.filter((p) => winValid(p.root!));
+    const usable = places.filter((place) => winValid(place.root!));
     if (serenaWin && usable.length < places.length)
     {
         // a root with a space: the profile's .serena when it is space-free, else a space-free folder, or one typed next
-        const profile = serenaWindowsHome(ctx);
+        const profile = serenaWindowsHome(context);
         if (!profile.needsInput) usable.push({ side: 'default', root: profile.root, label: "Your profile's .serena", description: `${(profile.root as { path: string }).path} - the root's path has a space, which serena's home cannot hold; one folder for every project on this machine` });
         else
         {
-            const free = serenaSpaceFree(ctx);
-            usable.push({ side: 'default', root: free, label: 'A space-free folder', answer: { side: 'path', path: (free as { path: string }).path }, description: `${(free as { path: string }).path} - the root's path and your profile path ${ctx.home} have a space, which serena's home cannot hold; one folder for every project on this machine` });
+            const free = serenaSpaceFree(context);
+            usable.push({ side: 'default', root: free, label: 'A space-free folder', answer: { side: 'path', path: (free as { path: string }).path }, description: `${(free as { path: string }).path} - the root's path and your profile path ${context.home} have a space, which serena's home cannot hold; one folder for every project on this machine` });
         }
     }
-    const old = !current && !serenaWin ? alfredRoot(row, ctx) : null;
+    const old = !current && !serenaWin ? alfredRoot(row, context) : null;
     if (old) usable.push({ side: 'alfred', root: old });
 
     // configure: the folder it uses now, when it can stay at this scope; a place that is the same folder is not repeated
     let keep: Place | null = null;
     if (current && current.rootStr)
     {
-        keep = { side: 'keep', root: logicalRoot(current.rootStr, ctx) };
+        keep = { side: 'keep', root: logicalRoot(current.rootStr, context) };
     }
-    const at = (p: Place) => formatRoot(p.root!, scope, ctx).value;
-    const listed = keep ? [keep, ...usable.filter((p) => at(p) !== at(keep!))] : usable;
-    if (serenaWin && listed.some((p) => p.side === 'default')) listed.push({ side: 'path', label: 'Another space-free folder', description: 'an absolute folder without spaces, asked next' });
+    const at = (place: Place) => formatRoot(place.root!, scope, context).value;
+    const listed = keep ? [keep, ...usable.filter((place) => at(place) !== at(keep!))] : usable;
+    if (serenaWin && listed.some((place) => place.side === 'default')) listed.push({ side: 'path', label: 'Another space-free folder', description: 'an absolute folder without spaces, asked next' });
 
-    const rec = keep ? 'keep' : natural;
-    const first = listed.find((p) => p.side === rec) || listed[0];
-    const order = ([first, ...listed.filter((p) => p !== first)].filter(Boolean) as Place[]).slice(0, 4);
-    const describe = (p: Place) =>
+    const recommendedPlace = keep ? 'keep' : natural;
+    const first = listed.find((place) => place.side === recommendedPlace) || listed[0];
+    const order = ([first, ...listed.filter((place) => place !== first)].filter(Boolean) as Place[]).slice(0, 4);
+    const describe = (place: Place) =>
     {
-        if (p.description) return p.description;
-        const text = placeText(p.root!, ctx);
-        if (p.side === 'keep') return text;
-        const base = row.id === 'memory' && MEMORY_TAIL[p.side] ? MEMORY_TAIL[p.side] : SIDE_TAIL[p.side];
-        const tail = row.id === 'serena' && p.side === 'project' ? `${base}; ${SERENA_PER_PROJECT}` : base;
+        if (place.description) return place.description;
+        const text = placeText(place.root!, context);
+        if (place.side === 'keep') return text;
+        const base = row.id === 'memory' && MEMORY_TAIL[place.side] ? MEMORY_TAIL[place.side] : SIDE_TAIL[place.side];
+        const tail = row.id === 'serena' && place.side === 'project' ? `${base}; ${SERENA_PER_PROJECT}` : base;
         return `${text} - ${tail}`;
     };
-    const options = order.map((p, i) => ({ label: `${p.label || SIDE_LABEL[p.side]}${i === 0 ? REC : ''}`, description: describe(p)! }));
-    const answers = Object.fromEntries(order.map((p, i): [string, Place] => [options[i]!.label, p]).filter(([, p]) => p.side !== 'path').map(([l, p]) => [l, p.answer || { side: p.side }]));
+    const options = order.map((place, i) => ({ label: `${place.label || SIDE_LABEL[place.side]}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: describe(place)! }));
+    const answers = Object.fromEntries(order.map((place, i): [string, Place] => [options[i]!.label, place]).filter(([, place]) => place.side !== 'path').map(([label, place]) => [label, place.answer || { side: place.side }]));
     // one place left: nothing to ask
     if (order.length < 2 && first && first.side !== 'path') return { question: null, answers: {}, only: first.answer || { side: first.side } };
     if (!order.length) return { question: null, answers: {}, only: null };

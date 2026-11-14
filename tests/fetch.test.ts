@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { world, writeJson, tempOf } from './helpers.ts';
 import { fetchStep } from '../scripts/entries/names.ts';
-import { writeJob, job, run, realStart } from '../scripts/apply/fetch.ts';
+import { writeJob, fetchJob, runFetchJob, realStart } from '../scripts/apply/fetch.ts';
 import type { CliResult } from '../scripts/core/types.ts';
 
 const SCRIPT = path.join(import.meta.dirname, '..', 'scripts', 'fetch.ts');
@@ -45,11 +45,11 @@ test('fetch.js fetches and then starts each server in turn, from its registratio
             { ...fetchStep('serena', UVX, 'serena')!, env: { UV_CACHE_DIR: '${PT_TEST_CACHE:-/fallback}' }, scope: 'project' },
             { ...fetchStep('sentry', TOKEN, 'sentry')!, scope: 'project' },
         ];
-        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), job(w.project, steps, ['pw', 'serena', 'sentry', 'c7', 'pw']));
+        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), fetchJob(w.project, steps, ['pw', 'serena', 'sentry', 'c7', 'pw']));
         const order: unknown[][] = [];
         const env: NodeJS.ProcessEnv = { ...w.env, PT_TEST_CACHE: '/set' };
         delete env.PT_UNSET_TOKEN;
-        const res = await run(JSON.parse(fs.readFileSync(file, 'utf8')), {
+        const res = await runFetchJob(JSON.parse(fs.readFileSync(file, 'utf8')), {
             env,
             runFetch: (argv: string[], o: { cwd: string; env: NodeJS.ProcessEnv }) => { order.push(['fetch', argv[0], o.env.UV_CACHE_DIR, o.cwd]); return { status: 0 }; },
             start: async (entry, o) => { order.push(['start', entry.command, o.cwd]); return { ok: true, ms: 1200 }; },
@@ -77,10 +77,10 @@ test('a step with `from` reads its registration from that folder\'s .mcp.json an
         const parent = path.dirname(w.project);
         writeJson(path.join(parent, '.mcp.json'), { mcpServers: { pw: NPX } });
         const step = { ...fetchStep('pw', NPX, 'playwright-chrome')!, scope: 'project', from: parent };
-        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), job(w.project, [step], ['pw']));
+        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), fetchJob(w.project, [step], ['pw']));
         assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).fetch[0].from, parent, 'kept in the file');
         const started: unknown[][] = [];
-        const res = await run(JSON.parse(fs.readFileSync(file, 'utf8')), {
+        const res = await runFetchJob(JSON.parse(fs.readFileSync(file, 'utf8')), {
             env: w.env,
             runFetch: () => ({ status: 0 }),
             start: async (entry, o) => { started.push([entry.args![1], o.cwd]); return { ok: true, ms: 900 }; },
@@ -101,14 +101,14 @@ test('the CLI form: a real first start is answered and stopped; a failed fetch o
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { pw: server('answer'), bad: server('exit') } });
         const pw = { ...fetchStep('pw', NPX, 'playwright-chrome')!, scope: 'project' };
         const bad = { ...fetchStep('bad', UVX, 'serena')!, name: 'bad', scope: 'project' };
-        const okFile = writeJob(path.join(w.dir, 'ok.json'), job(w.project, [pw], ['pw']));
+        const okFile = writeJob(path.join(w.dir, 'ok.json'), fetchJob(w.project, [pw], ['pw']));
         const ok = spawnSync(process.execPath, [SCRIPT, okFile], { encoding: 'utf8', env: w.env, timeout: 60000 });
         assert.strictEqual(ok.status, 0, `${ok.stdout}${ok.stderr}`);
         assert.deepStrictEqual(w.fetches().map((f) => f.runtime), ['npm'], 'the runtime on PATH, the fake one here');
         assert.match(ok.stdout, /1\. ok {5}@playwright\/mcp@0\.0\.83 is in the cache/);
         assert.match(ok.stdout, /1\. ok {5}'pw' answered its first start in \d+\.\ds/);
         assert.match(ok.stdout, /Done\. Restart Claude Code now/);
-        const badFile = writeJob(path.join(w.dir, 'bad.json'), job(w.project, [pw, bad], ['pw', 'bad']));
+        const badFile = writeJob(path.join(w.dir, 'bad.json'), fetchJob(w.project, [pw, bad], ['pw', 'bad']));
         const r = spawnSync(process.execPath, [SCRIPT, badFile], { encoding: 'utf8', env: { ...w.env, FAKE_RUNTIME_FAIL: 'npm' }, timeout: 60000 });
         assert.strictEqual(r.status, 1);
         assert.match(r.stdout, /1\. warn {3}could not fetch @playwright\/mcp@0\.0\.83 for 'pw' \(exit 1: npm: fake failure\) - the registration stays/);
@@ -148,12 +148,12 @@ test('fetch removes <tmp> when it ends', () => {
     {
         const t = tempOf(w);
         const dir = t.made();
-        const file = writeJob(path.join(dir, 'fetch.json'), job(w.project, [], []));
+        const file = writeJob(path.join(dir, 'fetch.json'), fetchJob(w.project, [], []));
         const r = spawnSync(process.execPath, [SCRIPT, file], { encoding: 'utf8', env: t.env, timeout: 60000 });
         assert.strictEqual(r.status, 0, r.stdout + r.stderr);
         assert.ok(!fs.existsSync(dir), 'the folder the command shared is gone');
         // a fetch file in a folder this plugin did not make: left, and said
-        const mine = writeJob(path.join(w.dir, 'mine', 'fetch.json'), job(w.project, [], []));
+        const mine = writeJob(path.join(w.dir, 'mine', 'fetch.json'), fetchJob(w.project, [], []));
         const k = spawnSync(process.execPath, [SCRIPT, mine], { encoding: 'utf8', env: t.env, timeout: 60000 });
         assert.strictEqual(k.status, 0, k.stdout + k.stderr);
         assert.ok(fs.existsSync(mine));
@@ -185,17 +185,17 @@ test('writeJob with append adds to a fetch file already there: its steps stay as
     {
         const file = path.join(w.dir, 'tmp', 'fetch.json');
         const serena = { ...fetchStep('serena', UVX, 'serena')!, scope: 'user' };
-        writeJob(file, job(w.project, [serena], ['serena']));
+        writeJob(file, fetchJob(w.project, [serena], ['serena']));
         const first = JSON.parse(fs.readFileSync(file, 'utf8'));
         const pw = { ...fetchStep('pw', NPX, 'playwright-chrome')!, scope: 'project' };
-        assert.strictEqual(writeJob(file, job(w.project, [pw], ['pw', 'serena']), { append: true }), file);
+        assert.strictEqual(writeJob(file, fetchJob(w.project, [pw], ['pw', 'serena']), { append: true }), file);
         const both = JSON.parse(fs.readFileSync(file, 'utf8'));
         assert.deepStrictEqual(both.fetch[0], first.fetch[0], 'the step already there is not rewritten');
         assert.deepStrictEqual(both.fetch.map((s: { name: string; scope: string; what: string }) => [s.name, s.scope, s.what]), [['serena', 'user', 'serena-agent@2.1.0'], ['pw', 'project', '@playwright/mcp@0.0.83']]);
         assert.deepStrictEqual(both.check, ['serena', 'pw']);
         // with no file there yet, append writes a new one
         const fresh = path.join(w.dir, 'tmp2', 'fetch.json');
-        writeJob(fresh, job(w.project, [pw], ['pw']), { append: true });
+        writeJob(fresh, fetchJob(w.project, [pw], ['pw']), { append: true });
         assert.deepStrictEqual(JSON.parse(fs.readFileSync(fresh, 'utf8')).check, ['pw']);
     }
     finally { w.clean(); }
@@ -218,10 +218,10 @@ test('the fetch job fetches a bridge\'s mcp-remote but never starts the bridge',
     {
         const BRIDGE = { command: 'node', args: [path.join(w.project, '.preferred-tools', 'mcp-bridge.js'), 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}', 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'], env: { npm_config_before: '2026-11-11T23:59:59Z' } };
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { sentry: BRIDGE } });
-        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), job(w.project, [{ ...fetchStep('sentry', BRIDGE, 'sentry')!, scope: 'project' }], []));
+        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), fetchJob(w.project, [{ ...fetchStep('sentry', BRIDGE, 'sentry')!, scope: 'project' }], []));
         const started: unknown[] = [];
         const lines: string[] = [];
-        const res = await run(JSON.parse(fs.readFileSync(file, 'utf8')), {
+        const res = await runFetchJob(JSON.parse(fs.readFileSync(file, 'utf8')), {
             env: w.env,
             runFetch: () => ({ status: 0 }),
             start: async (entry) => { started.push(entry); return { ok: true, ms: 1 }; },
@@ -242,9 +242,9 @@ test('fetch fetches mcp-remote for a shared sign-in entry and does not start it'
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { atlassian: SIGNIN } });
         const step = fetchStep('atlassian', SIGNIN, 'atlassian')!;
         assert.strictEqual(step.what, 'mcp-remote@0.16.0');
-        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), job(w.project, [{ ...step, scope: 'project' }], []));
+        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), fetchJob(w.project, [{ ...step, scope: 'project' }], []));
         const started: unknown[] = [];
-        const res = await run(JSON.parse(fs.readFileSync(file, 'utf8')), {
+        const res = await runFetchJob(JSON.parse(fs.readFileSync(file, 'utf8')), {
             env: w.env,
             runFetch: () => ({ status: 0 }),
             start: async (entry) => { started.push(entry); return { ok: true, ms: 1 }; },
@@ -264,9 +264,9 @@ test('fetch empties base_modes after serena\'s first start', async () => {
         const home = path.join(w.project, '.preferred-tools', 'serena');
         const S = { command: 'uvx', args: [...UVX.args], env: { SERENA_HOME: home } };
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { serena: S } });
-        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), job(w.project, [{ ...fetchStep('serena', S, 'serena')!, scope: 'project' }], []));
+        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), fetchJob(w.project, [{ ...fetchStep('serena', S, 'serena')!, scope: 'project' }], []));
         const lines: string[] = [];
-        const res = await run(JSON.parse(fs.readFileSync(file, 'utf8')), {
+        const res = await runFetchJob(JSON.parse(fs.readFileSync(file, 'utf8')), {
             env: w.env,
             runFetch: () => ({ status: 0 }),
             // serena writes its config at its first start
