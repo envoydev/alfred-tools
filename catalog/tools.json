@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "note": "The 14 rows of preferred-tools. A plugin row is added only when it works in Claude Code and Cursor (spec D8, 0.5.0). Facts are checked against the vendor docs in docs/sources.md (read 2026-10-27; pins refreshed 2026-11-10). Placeholders: {root} location root, {name} registration name, {host}, {value}, {contextFile} serena's context file. No secret in this file: a hosted key is named by its helper block, which mcp-headers.js reads from .mcps-secrets; a stdio key is only ever a ${VAR} reference.",
+  "note": "The 14 rows of alfred-tools. A plugin row is added only when it works in Claude Code and Cursor (spec D8, 0.5.0). Facts are checked against the vendor docs in docs/sources.md (read 2026-10-27; pins refreshed 2026-11-10). Placeholders: {root} location root, {name} registration name, {host}, {value}, {contextFile} serena's context file. No secret in this file: a hosted key is named by its helper block, which mcp-headers.js reads from .mcps-secrets; a stdio key is only ever a ${VAR} reference.",
   "rules": {
     "ageGateDays": 7,
     "cutoff": "2026-10-20T23:59:59Z",

@@ -24,7 +24,7 @@ const node = (file: string, args: string[] = [], opts = {}) => spawnSync(process
 const writeJson = (file: string, v: unknown) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `${JSON.stringify(v, null, 2)}\n`); };
 const readJson = (file: string) => JSON.parse(fs.readFileSync(file, 'utf8'));
 const normOut = (r: SpawnSyncReturns<string>) => golden.normalise(`${r.stdout || ''}${r.stderr || ''}`, { tree: TREE })
-    .replace(/[^\s]*preferred-tools-validate-XXXXXX/g, '<VALIDATE>');
+    .replace(/[^\s]*alfred-tools-validate-XXXXXX/g, '<VALIDATE>');
 
 // A check's result as the record keeps it: its exit code and normalised output.
 const check = (r: SpawnSyncReturns<string>) => ({ code: r.status, out: normOut(r) });
@@ -105,11 +105,11 @@ function filesBelow(dir: string)
 // the main tree.
 function alfredEnv()
 {
-    if (process.env.PREFERRED_TOOLS_ALFRED || fs.existsSync(path.join(TREE, '..', 'alfred-code'))) return {};
+    if (process.env.ALFRED_TOOLS_ALFRED || fs.existsSync(path.join(TREE, '..', 'alfred-code'))) return {};
     const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: TREE, encoding: 'utf8' });
     const main = common.status === 0 ? path.dirname(common.stdout.trim()) : null;
     const alfred = main ? path.join(main, '..', 'alfred-code') : null;
-    return alfred && fs.existsSync(alfred) ? { PREFERRED_TOOLS_ALFRED: alfred } : {};
+    return alfred && fs.existsSync(alfred) ? { ALFRED_TOOLS_ALFRED: alfred } : {};
 }
 
 function matrixOnly(dir: string)

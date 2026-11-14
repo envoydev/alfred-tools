@@ -1,5 +1,5 @@
 // client-drift and cursor-file (spec D9, 0.5.0): a list entry whose copy in Claude Code or Cursor was edited or removed
-// by hand, asked per entry - never in 'Apply all found' - and a Cursor file preferred-tools cannot read, as advice.
+// by hand, asked per entry - never in 'Apply all found' - and a Cursor file alfred-tools cannot read, as advice.
 // Every case runs against the fake claude in a throwaway world.
 import test from 'node:test';
 import assert from 'node:assert';
@@ -36,8 +36,8 @@ function run(w: World, ids: string[], input: Record<string, string> = {}, projec
     const res = applyFixes(ctxOf(w, project), ids, { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')), input });
     return { res, text: lines.join('\n') };
 }
-const listFile = (w: World) => path.join(w.project, '.preferred-tools', 'mcps.json');
-const globalList = (w: World) => path.join(w.home, '.preferred-tools', 'mcps.json');
+const listFile = (w: World) => path.join(w.project, '.alfred-tools', 'mcps.json');
+const globalList = (w: World) => path.join(w.home, '.alfred-tools', 'mcps.json');
 const cursorFile = (w: World, dir = w.project) => path.join(dir, '.cursor', 'mcp.json');
 const globalCursor = (w: World) => path.join(w.home, '.cursor', 'mcp.json');
 const entryOf = (file: string, name: string) => readJson(file).servers.find((x: { name: string }) => x.name === name);
@@ -119,7 +119,7 @@ test('a stdio keyed route at global scope picked for Cursor is not drift', () =>
     const w = world();
     try
     {
-        const root = path.join(w.home, '.preferred-tools');
+        const root = path.join(w.home, '.alfred-tools');
         fs.mkdirSync(root, { recursive: true });
         fs.writeFileSync(path.join(root, '.mcps-secrets'), `SENTRY_ACCESS_TOKEN=sntryu_${'0a'.repeat(16)}\n`);
         install(w, { picks: { sentry: { route: 'local', scope: 'user', token: true } } });
@@ -133,7 +133,7 @@ test('a stdio keyed route at global scope picked for Cursor is not drift', () =>
 // the name (the old key files are read for names only). Cursor's copy is filled from the registration as read.
 function keyInRegistrationOnly(w: World)
 {
-    const root = path.join(w.home, '.preferred-tools');
+    const root = path.join(w.home, '.alfred-tools');
     fs.mkdirSync(root, { recursive: true });
     const value = `sntryu_${'0b'.repeat(16)}`;
     fs.writeFileSync(path.join(root, '.mcps-secrets'), `SENTRY_ACCESS_TOKEN=${value}\n`);
@@ -257,7 +257,7 @@ test('Apply all found applies list-import and serena-base-modes and leaves every
     {
         install(w, { picks: { serena: { scope: 'local' } } });
         // a managed server not on the list yet, serena's base modes set, and serena edited in Cursor
-        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'memory', JSON.stringify({ command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: path.join(w.project, '.preferred-tools', 'memory', 'memory.db') } }), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'memory', JSON.stringify({ command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: path.join(w.project, '.alfred-tools', 'memory', 'memory.db') } }), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         const home = localReg(w, 'serena').entry.env!.SERENA_HOME!;
         fs.mkdirSync(home, { recursive: true });
         fs.writeFileSync(path.join(home, 'serena_config.yml'), 'base_modes:\n  - interactive\n  - editing\n');
@@ -404,7 +404,7 @@ test('cursor-file names a symlinked or non-JSON .cursor/mcp.json as advice only'
         const found = () => detectAll(ctxOf(w), { only: 'cursor-file' }).found;
         const [f] = found() as [Finding];
         assert.strictEqual(f.name, cursorFile(w));
-        assert.match(f.found, /is not JSON \(Cursor reads comments and trailing commas, preferred-tools does not\) - remove them/);
+        assert.match(f.found, /is not JSON \(Cursor reads comments and trailing commas, alfred-tools does not\) - remove them/);
         assert.strictEqual(f.blocked, 'advice only - nothing here is applied');
         assert.strictEqual(questions(detectAll(ctxOf(w), { only: 'cursor-file' })).choose, null, 'never offered');
         if (process.platform !== 'win32')

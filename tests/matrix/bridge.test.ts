@@ -42,7 +42,7 @@ test('B1 - the bridge starts for real, follows a changed slug after a restart, a
         const r = h.run(dir, { picks: { sentry: { route: 'bridge', scope: 'project' } } }, { catalog });
         assert.deepStrictEqual(r.plan.errors, [], r.rendered);
         assert.strictEqual(r.report.failed, null, `${r.rendered}\n${r.text}`);
-        const root = path.join(dir, '.preferred-tools');
+        const root = path.join(dir, '.alfred-tools');
         const e = JSON.parse(fs.readFileSync(path.join(dir, '.mcp.json'), 'utf8')).mcpServers.sentry;
         assert.deepStrictEqual(e.args.slice(0, 4), [path.join(root, 'mcp-bridge.js'), `http://127.0.0.1:${s.port}/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}`, 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer']);
         assert.ok(fs.existsSync(path.join(root, 'mcp-bridge.js')) && fs.existsSync(path.join(root, 'mcp-headers.js')), 'both files in the root');

@@ -100,7 +100,7 @@ export function apply(plan: ApplyPlan, { env = process.env, tmp, runCli = cli.ru
         log('Nothing to apply: every answer already matches what is installed. No claude call was made.');
         return report;
     }
-    const context: ApplyCtx = { project, env, tmp: tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-')), runCli, catalog: catalogLib.load(), alfredEnabled: Boolean(plan.alfredCodeEnabled), data };
+    const context: ApplyCtx = { project, env, tmp: tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'alfred-tools-')), runCli, catalog: catalogLib.load(), alfredEnabled: Boolean(plan.alfredCodeEnabled), data };
     context.call = makeRunner(context);
     context.report = report;
     report.tmp = context.tmp;

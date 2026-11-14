@@ -93,7 +93,7 @@ const same = deepEqual;
 export function writeList(file: string, doc: { version?: number | undefined; servers?: ListServer[] | undefined; own?: OwnEntry[] | undefined; cursorOffer?: string | undefined }, read: ListRead | null | undefined): Outcome
 {
     if (read && (read.state === 'newer' || read.state === 'unreadable'))
-        return { ok: true, detail: `${read.note!.replace(/ - read as empty$/, '')} - left as it is; ${read.state === 'newer' ? 'update preferred-tools' : 'check its permissions'}, then run the command again` };
+        return { ok: true, detail: `${read.note!.replace(/ - read as empty$/, '')} - left as it is; ${read.state === 'newer' ? 'update alfred-tools' : 'check its permissions'}, then run the command again` };
     const servers = doc.servers || [];
     const own = doc.own || [];
     if (!servers.length && !own.length)
@@ -143,7 +143,7 @@ export function fromRegistration(registration: Registration, row: CatalogRow | n
     return { name: registration.name, scope: registration.scope, row: row ? row.id : null, route: registration.route, clients: clients.slice(), entry: kept.maskCredentials(registration.entry, row), key };
 }
 
-// ---- the 0.4.x record, <root>/preferred-tools.json -------------------------------------------------------------------
+// ---- the 0.4.x record, <root>/<roots.FILES.record> ----------------------------------------------------------------
 // Read only: the servers the user left on their own until list-import moves them into a list's `own` (0.5.0). Moved here
 // from roots.ts unchanged, under the names the list's code reads them by.
 

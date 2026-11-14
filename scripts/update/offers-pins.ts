@@ -31,7 +31,7 @@ export async function mcpOffers(context: UpdateCtx, out: UpdateCheck): Promise<v
         // the shared sign-in form (0.5.0, D5) runs mcp-remote at a pin, the bridge route's package
         const signIn = registration.route === 'remote' && signInParts(registration.entry);
         if (registration.route === 'remote' && !signIn) { out.skipped.push(`${at}: a hosted URL has no pin`); continue; }
-        if (routeDefinition.runtime === 'docker') { out.skipped.push(`${at}: the Docker image tag is not checked - change it with /preferred-tools:configure`); continue; }
+        if (routeDefinition.runtime === 'docker') { out.skipped.push(`${at}: the Docker image tag is not checked - change it with /alfred-tools:configure`); continue; }
         const packageSpec = signIn ? context.catalog.byId.get('sentry')!.routes.bridge!.package : routeDefinition.package;
         if (!packageSpec) continue;
         const from = pinnedVersion(registration.entry, packageSpec.name);
@@ -43,7 +43,7 @@ export async function mcpOffers(context: UpdateCtx, out: UpdateCheck): Promise<v
         if (pick.held.length) out.held.push(`${at}: ${registryLib.heldLine(packageSpec.name, pick.held)}`);
         if (!pick.offer) continue;
         const entry = bumpEntry(registration.entry, packageSpec.name, pick.offer.version, registryLib.cutoffOf(context.now));
-        if (!entry) { out.errors.push(`${at}: could not move the pin of ${packageSpec.name} in the registration as it is written - change it with /preferred-tools:configure`); continue; }
+        if (!entry) { out.errors.push(`${at}: could not move the pin of ${packageSpec.name} in the registration as it is written - change it with /alfred-tools:configure`); continue; }
         out.offers.push({ kind: 'mcp', id: `mcp:${registration.name}~${registration.scope}`, name: registration.name, scope: registration.scope, row: registration.rowId, route: registration.route, package: packageSpec.name, from, to: pick.offer.version, ageDays: pick.offer.ageDays, cutoff: registryLib.cutoffOf(context.now), old: registration.entry, entry, group: 'mcp', label: `${registration.name} (${registration.scope})` });
     }
 }
@@ -65,9 +65,9 @@ export async function cursorPinOffers(context: UpdateCtx, out: UpdateCheck): Pro
             if (!server.cursorEntry || !(server.clients || []).includes('cursor')) continue;
             const at = `${server.name} (${server.scope})`;
             const copy = seen.entries[server.name];
-            if (!copy) { out.skipped.push(`${at}: Cursor's copy is not in ${seen.file} - not checked; /preferred-tools:fix settles it`); continue; }
+            if (!copy) { out.skipped.push(`${at}: Cursor's copy is not in ${seen.file} - not checked; /alfred-tools:fix settles it`); continue; }
             const row = context.catalog.byId.get(server.row!);
-            if (JSON.stringify(copy) !== JSON.stringify(kept.maskCredentials(server.cursorEntry, row))) { out.skipped.push(`${at}: Cursor's copy in ${seen.file} differs from the list - not checked; /preferred-tools:fix settles it`); continue; }
+            if (JSON.stringify(copy) !== JSON.stringify(kept.maskCredentials(server.cursorEntry, row))) { out.skipped.push(`${at}: Cursor's copy in ${seen.file} differs from the list - not checked; /alfred-tools:fix settles it`); continue; }
             const from = pinnedVersion(server.cursorEntry, packageSpec.name);
             if (!from) continue;
             if (!versions)

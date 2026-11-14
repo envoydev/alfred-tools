@@ -144,7 +144,7 @@ function applyCursorOffer(context: UpdateCtx, cursorOffer: CursorOffer, answer: 
     {
         const given = input[`cursor-name:${takenEntry.name}@${takenEntry.file}`];
         cursorNames[`${takenEntry.name}@${takenEntry.file}`] = given === 'replace' ? 'replace' : 'keep';
-        if (given !== 'replace' && given !== 'keep') log(`${takenEntry.name}: Cursor's ${takenEntry.file} already has its own ${takenEntry.name} - left; run /preferred-tools:configure to choose`);
+        if (given !== 'replace' && given !== 'keep') log(`${takenEntry.name}: Cursor's ${takenEntry.file} already has its own ${takenEntry.name} - left; run /alfred-tools:configure to choose`);
     }
     const builtPlan = plan(projectInventory, { change, cursorNames }, { home: account.homeDir(context.env), env: context.env, catalog: context.catalog });
     if (builtPlan.errors.length) { log(`FAILED ${cursorOffer.id}: ${builtPlan.errors.join('; ')}`); return false; }
@@ -176,7 +176,7 @@ export function applyUpdates(context: UpdateCtx, ids: string[], out: UpdateCheck
     // the new ways to pass data first - list-import, a registration's, then a file's or folder's - and the pins after
     // them (updateUpgrade)
     const chosen = ordered(picked, context.catalog);
-    const dir = tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-'));
+    const dir = tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'alfred-tools-'));
     result.dir = dir;
     context.fetches = [];
     context.restart = false;
@@ -193,7 +193,7 @@ export function applyUpdates(context: UpdateCtx, ids: string[], out: UpdateCheck
     {
         const answer = input[cursorOffer.id];
         if (answer === undefined) continue;
-        if (cursorOffer.needs && !result.applied.includes(cursorOffer.needs)) { log(`NOT OFFERED ${cursorOffer.id}: its servers join the list through ${cursorOffer.needs}, which was not picked - run /preferred-tools:update again`); continue; }
+        if (cursorOffer.needs && !result.applied.includes(cursorOffer.needs)) { log(`NOT OFFERED ${cursorOffer.id}: its servers join the list through ${cursorOffer.needs}, which was not picked - run /alfred-tools:update again`); continue; }
         const ok = answer === 'set' || answer === 'declined' ? applyCursorOffer(context, cursorOffer, answer, input, dir, log) : (log(`FAILED ${cursorOffer.id}: '${answer}' is not set or declined`), false);
         (ok ? result.applied : result.failed).push(cursorOffer.id);
     }

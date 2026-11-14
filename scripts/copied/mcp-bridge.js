@@ -1,4 +1,4 @@
-// preferred-tools mcp-bridge 1
+// alfred-tools mcp-bridge 2
 'use strict';
 // The bridge a hosted route of runtime 'bridge' registers (0.4.0): `node <root>/mcp-bridge.js <url template> <KEY_NAME>
 // <SCHEME> <package@version> [<global root>]`. A hosted server whose URL holds a per-project value - Sentry's
@@ -23,7 +23,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
-const BRIDGE_VERSION = 1;
+const BRIDGE_VERSION = 2;
 const NEEDS_HELPER = 4;
 // a copy of keys.js credentialName's test (tests/lint.js checks the two are equal)
 const CREDENTIAL = /TOKEN|SECRET|PASSWORD|KEY|AUTH/i;
@@ -167,7 +167,7 @@ function main()
     catch { helper = null; }
     const number = helper && Number.isInteger(helper.HELPER_VERSION) ? helper.HELPER_VERSION : 'missing';
     if (!helper || !(helper.HELPER_VERSION >= NEEDS_HELPER) || typeof helper.valueIn !== 'function' || typeof helper.readDotenv !== 'function' || typeof helper.authValue !== 'function')
-        fail(`mcp-headers.js beside it is helper ${number} - the bridge needs ${NEEDS_HELPER}; run /preferred-tools:fix`);
+        fail(`mcp-headers.js beside it is helper ${number} - the bridge needs ${NEEDS_HELPER}; run /alfred-tools:fix`);
     let r;
     try { r = launch(process.argv.slice(2), process.env, { dir: __dirname, platform: process.platform, helper }); }
     catch { r = { error: 'could not read the key files' }; }

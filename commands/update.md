@@ -1,11 +1,11 @@
 ---
-description: "Update what is behind - installed plugins and pinned MCP servers - to releases at least 7 days old, and move servers an older preferred-tools set up to the way it passes data now, after one confirmation"
+description: "Update what is behind - installed plugins and pinned MCP servers - to releases at least 7 days old, and move servers an older alfred-tools set up to the way it passes data now, after one confirmation"
 disable-model-invocation: true
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --check), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --check *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --questions), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --questions *)
 ---
 
 Bring what is installed up to date: every plugin on this machine, the pinned MCP servers, the key helper (`mcp-headers.js`) and URL bridge (`mcp-bridge.js`) in each root folder, and
-the way this plugin passes data to the servers an older preferred-tools set up. The script finds what is behind and does
+the way this plugin passes data to the servers an older alfred-tools set up. The script finds what is behind and does
 the work; you paste what it prints and ask.
 
 ## Rules
@@ -21,16 +21,16 @@ the work; you paste what it prints and ask.
   at install is listed as 'on its own - not checked' and never offered.
 - **Every ask is data.** Ask exactly the options printed, in the order printed; `AskUserQuestion` adds 'Other' itself.
 - This command never changes `catalog/tools.json`. Its pins move only through the repo script `npm run refresh-pins`.
-- A rename, a move or a route change is not an update; that is `/preferred-tools:configure`. A change in how this plugin
-  passes data to a server it set up is one (the user's ruling, 2026-11-12): the check runs `/preferred-tools:fix`'s rows
+- A rename, a move or a route change is not an update; that is `/alfred-tools:configure`. A change in how this plugin
+  passes data to a server it set up is one (the user's ruling, 2026-11-12): the check runs `/alfred-tools:fix`'s rows
   marked `upgrade` in `catalog/fixes.json` - `key-to-helper` (a key in an Authorization header, read through
   `mcp-headers.js` once the user has put it in `.mcps-secrets`), `root-ignore`, `project-relative-path` (absolute
   project paths; on Windows serena's home under the root) and `mcp-order` - offers what they find, and applies it with
   fix's own code. A finding that needs the user - a key not filled yet, a folder to name - is a note naming
-  `/preferred-tools:fix`, never an offer.
+  `/alfred-tools:fix`, never an offer.
 
 If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
-preferred-tools needs Node 22.18 or newer - `node --version` shows yours.
+alfred-tools needs Node 22.18 or newer - `node --version` shows yours.
 
 ## 1. What is behind
 
@@ -48,15 +48,15 @@ pin; a Docker image tag is not checked; a server on its own), and what could not
 `retired-plugin` offers to uninstall a plugin the catalog no longer lists (typescript-lsp, csharp-lsp, claude-hud - they
 work in Claude Code alone), one offer per plugin and scope; one the user turned down before is not offered.
 
-Above the tables, a line per server changed since preferred-tools last wrote it: '<name> was changed outside
-preferred-tools' (an update starts from the registration as it is, and carries it into the list and Cursor), or
-'<name> is on the list but not in Claude Code - run /preferred-tools:fix' (update never adds it back). Last, under
+Above the tables, a line per server changed since alfred-tools last wrote it: '<name> was changed outside
+alfred-tools' (an update starts from the registration as it is, and carries it into the list and Cursor), or
+'<name> is on the list but not in Claude Code - run /alfred-tools:fix' (update never adds it back). Last, under
 'Cursor (asked after the updates)', each root whose servers are set up for Claude Code only while Cursor is on this
 machine.
 
 Exit 3 with one line means the `claude` CLI is missing: say so and stop. When the last line is
-`preferred-tools: everything current`, say that and stop. When it is `preferred-tools: nothing to update - Cursor can be
-set up (asked next)`, go to step 2 and ask only the Cursor offer. When it is `preferred-tools: nothing to update - N wait(s) on
+`alfred-tools: everything current`, say that and stop. When it is `alfred-tools: nothing to update - Cursor can be
+set up (asked next)`, go to step 2 and ask only the Cursor offer. When it is `alfred-tools: nothing to update - N wait(s) on
 you first`, nothing can be offered yet: tell the user each note (a key to fill, a key file git would commit) and stop.
 A line under 'Could not check' is a registry that did not answer; it is never read as current - say so.
 
@@ -113,7 +113,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --apply <id,id | all | none> --da
 
 Each pin moved, and each new way to pass data, is written to every app its list entry names in the same run: the
 list takes the registration as read back, and Cursor's `mcp.json` takes the list. A copy Cursor lacks, or one edited
-there by hand, is left as it is and named ('<name>: Cursor's copy was changed by hand - left; run /preferred-tools:fix').
+there by hand, is left as it is and named ('<name>: Cursor's copy was changed by hand - left; run /alfred-tools:fix').
 When Cursor's copy of a server changes, the report ends with 'Cursor asks you to approve <names> again - it re-asks
 whenever an entry changes': tell the user Cursor will ask.
 
@@ -126,7 +126,7 @@ health check never starts a pin not fetched yet; their lines are fix's own, and 
 `already done by an earlier step in this run`. A failed MCP
 rewrite puts the old registration back and prints the line that does it by hand if that fails too (`RESTORE BY HAND`):
 give it to the user as written.
-A key in it shows as `${PREFERRED_TOOLS_KEPT}`, never its value: the user puts their key back there. Paste the output verbatim, then report each result as read back.
+A key in it shows as `${ALFRED_TOOLS_KEPT}`, never its value: the user puts their key back there. Paste the output verbatim, then report each result as read back.
 
 A new pin is not in the runtime's cache yet, so an MCP update prints `Fetch next, in the background (...): <file>`. Run,
 with the Bash tool's `run_in_background`:
@@ -140,16 +140,16 @@ server's status (`claude mcp get`): without it the first session start does that
 the new version, inside Claude Code's 30-second limit, and a first download can take minutes. Claude Code asks
 permission for it - it downloads and runs a package's install and starts the server. Tell the user to restart only once
 it reports, so a session start does not download the same package beside it (an npx server then fails at every start
-with `ENOENT` until `/preferred-tools:fix` repairs it); paste its output when it finishes. A
+with `ENOENT` until `/alfred-tools:fix` repairs it); paste its output when it finishes. A
 `warn` line changes nothing: the registration is updated, and its first start downloads the pin and may time out once. When background runs
 are turned off, run it in the foreground with `timeout: 600000`, and again if the limit stops it. End with the restart line when the script prints one (new
 servers load on the next session start; `/reload-plugins` for plugins): a key helper runs at each connect, so a run
 that only rewrote helpers needs no restart.
 
 A key helper that was edited by hand, or is newer than this plugin, is never rewritten here: the check names it, and
-`/preferred-tools:fix` (`helper-stale`) handles it.
+`/alfred-tools:fix` (`helper-stale`) handles it.
 
 ## Windows and serena
 
 A serena bump on Windows needs nothing extra here: this plugin does not patch serena's TypeScript launcher (the user's
-ruling, recorded in `docs/sources.md`). If symbol tools fail afterwards, `/preferred-tools:fix` lists what it can detect.
+ruling, recorded in `docs/sources.md`). If symbol tools fail afterwards, `/alfred-tools:fix` lists what it can detect.

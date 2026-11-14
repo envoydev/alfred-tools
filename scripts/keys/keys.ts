@@ -6,7 +6,7 @@
 //   .mcps-secrets      one per root folder (the project root, the global root), in the dotenv grammar below. A hosted
 //                      route's key is read by mcp-headers.js when Claude Code connects (hostedChain), a stdio route's by
 //                      the apply (stdioChain); project scope takes no stdio key.
-//   the 0.1.x files    alfred-code's two stores and preferred-tools' own key files: read for a name only (oldHolding),
+//   the 0.1.x files    alfred-code's two stores and alfred-tools' own key files: read for a name only (oldHolding),
 //                      so a blocked fix can say where a key still sits.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,7 +14,7 @@ import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
 import type { FileNames, KeyChain, KeyHit, TokenField } from './types.ts';
 
-const KEY_FILE = path.join('.preferred-tools', '.secrets');
+const KEY_FILE = path.join('.alfred-tools', '.secrets');
 const projectFile = (project: string): string => path.join(project, KEY_FILE);
 const alfredStores = (project: string): string[] => ['.secrets', '.sensitive-data'].map((storeName) => path.join(project, '.alfred', storeName));
 
@@ -102,12 +102,12 @@ const uniq = <Item>(list: Item[]): Item[] => [...new Set(list)];
 
 // hostedChain({ scope, projectRoot, globalRoot, globalNamed, home }) -> the files the helper reads, in order: the root
 // beside it (the project root at project and local scope, the global root at user scope); at local scope the global root
-// when it is a named folder (the helper's third argument); then ~/.preferred-tools, then ~/.alfred.
+// when it is a named folder (the helper's third argument); then ~/.alfred-tools, then ~/.alfred.
 export function hostedChain({ scope, projectRoot, globalRoot, globalNamed = false, home }: KeyChain): string[]
 {
     const beside = scope === 'user' ? globalRoot : projectRoot;
     const named = scope === 'local' && globalNamed ? globalRoot : null;
-    return uniq(([beside, named, path.join(home, '.preferred-tools'), path.join(home, '.alfred')].filter(Boolean) as string[]).map(secretsIn));
+    return uniq(([beside, named, path.join(home, '.alfred-tools'), path.join(home, '.alfred')].filter(Boolean) as string[]).map(secretsIn));
 }
 
 // stdioChain({ scope, projectRoot, globalRoot }) -> the files the apply reads a stdio key from: local scope the project
@@ -137,7 +137,7 @@ export const filledNames = (files: string[]): FileNames[] => files.map((file) =>
 
 // The key files 0.1.x read, which 0.2.0 reads for names only: alfred-code's store in the project and in each parent folder
 // (its chain walks the parents, so a workspace root's store served its child repos), the project's
-// .preferred-tools/.secrets, then the home one.
+// .alfred-tools/.secrets, then the home one.
 export function oldFiles(project: string, home: string): string[]
 {
     const stores: string[] = [];

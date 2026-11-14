@@ -5,11 +5,11 @@ disable-model-invocation: true
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/table.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" *)
 ---
 
-Walk the user through installing preferred tools that are not installed here yet. The scripts do the work and print what
+Walk the user through installing tools from alfred-tools that are not installed here yet. The scripts do the work and print what
 you paste; you ask the questions. Argument: `$ARGUMENTS`.
 
 Install only adds; it never changes, moves or removes a registration. A tool already installed in this project is
-changed or removed with `/preferred-tools:configure`; say so whenever the user asks for that here.
+changed or removed with `/alfred-tools:configure`; say so whenever the user asks for that here.
 
 ## Rules
 
@@ -30,7 +30,7 @@ changed or removed with `/preferred-tools:configure`; say so whenever the user a
   text - no `AskUserQuestion` - and end the turn; the user's next message is the value. A value the user typed as the
   Other answer to that question is taken the same way.
 - If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
-  preferred-tools needs Node 22.18 or newer - `node --version` shows yours.
+  alfred-tools needs Node 22.18 or newer - `node --version` shows yours.
 - Every file below lives in one temp folder. Make it once with `node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"` and call
   its path `<tmp>`.
 
@@ -65,11 +65,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --questions <tmp>/inventory.json --
 none. The call reads the registrations and starts no server; it asks nothing about servers already set up.
 
 Its `pick` holds only the tools not installed here, without a server left on its own. When it is empty, say every
-catalog tool for this OS is installed or left on its own, point to `/preferred-tools:configure` to change or remove one,
+catalog tool for this OS is installed or left on its own, point to `/alfred-tools:configure` to change or remove one,
 and stop.
 
 If the argument is a tool id from the table: installed, say where (from the table) and point to
-`/preferred-tools:configure <id>`, then stop; not installed, take it as the only pick and go to step 4.
+`/alfred-tools:configure <id>`, then stop; not installed, take it as the only pick and go to step 4.
 
 Otherwise ask each `pick` call as printed - one `AskUserQuestion` of up to four multi-select questions of 2 to 4
 options, grouped Code, Docs and forges, Browsers, Machine - and collect the labels picked; each label is the tool id,
@@ -200,7 +200,7 @@ line of each route that uses a key (the name, the files it is read from, filled 
 under it that says how the server connects once the key is there, the sign-in a remote route will ask for, and the tools
 that can run code. Two kinds of step may read new:
 
-- `writes` or `removes <root>/mcps.json` - the list: each server preferred-tools manages, as written and read back, and
+- `writes` or `removes <root>/mcps.json` - the list: each server alfred-tools manages, as written and read back, and
   the servers left on their own; the file is removed once it lists none.
 - `reorders <project>/.mcp.json (no value changes)` - after a change at Project scope, the catalog servers in the user's
   order, the user's own servers after them; no entry is changed.
@@ -211,12 +211,12 @@ Exit 1 means the plan has errors; show them and go back to the ask that causes t
 and 'register anyway' lines from step 5.
 
 A `cursor: <file> already has <name> - answer cursor-name-<name>@<file>` error is not a wrong answer: Cursor's file
-already holds a server under a name this plan writes for Cursor, one preferred-tools did not write. `<tmp>/plan.json`
+already holds a server under a name this plan writes for Cursor, one alfred-tools did not write. `<tmp>/plan.json`
 `cursorNames` holds one question per such name, id `cursor-name-<name>@<file>`; ask them, four per call, as written -
 the recommended option follows whether the entry there is the same server:
 
 ```ask cursor-name-taken
-Cursor's <file> already has a server named <name> that preferred-tools did not write. What should happen?
+Cursor's <file> already has a server named <name> that alfred-tools did not write. What should happen?
 - 'Replace it with the plugin's (Recommended)' - Cursor gets the same entry as Claude Code; the old one is dropped, not saved
 - 'Keep Cursor's own' - <name> is set up for Claude Code only, and Cursor's entry stays as it is
 ```
@@ -248,7 +248,7 @@ Code asks permission for this call itself - `apply.ts` is deliberately not in `a
 cannot change anything. It runs the steps in order, reads each back, and stops at the first failure, leaving what was
 applied in place and naming it; a re-run reuses the files already written. Paste the output verbatim. A failure prints
 the line that puts a registration back (`RESTORE BY HAND`): give it to the user as written. A key in it shows as
-`${PREFERRED_TOOLS_KEPT}`, never its value: the user puts their key back there.
+`${ALFRED_TOOLS_KEPT}`, never its value: the user puts their key back there.
 
 Then report each picked tool as the read-back printed it (name, scope, route). Start step 8. Keys: relay each `key:` line as printed (the name and its file, never a
 value). After the read-back the apply prints one line per hosted server that takes a key - relay each as printed:
@@ -264,7 +264,7 @@ value). After the read-back the apply prints one line per hosted server that tak
 A Project- or Local-scope server with a key helper connects with its key only once the trust prompt is accepted - say
 so. A bridge reads its key and URL names each time the server starts: repeat the plan's 'fill ... in ...' note, and say
 that after a change to them the user restarts Claude Code or reconnects the server in `/mcp`. Close with one line: a later rename, move, route, location, key name, settings or root folder change, or a remove,
-is `/preferred-tools:configure`.
+is `/alfred-tools:configure`.
 
 ## 8. Fetch
 
@@ -287,7 +287,7 @@ starts the server - so it is not in `allowed-tools`.
 
 Tell the user it is running, and to restart Claude Code only once it reports: a session started now begins the same
 download beside it, and two at once is the one case measured to break a start - an npx server then fails at every start
-with `ENOENT` until `/preferred-tools:fix` (`npx-cache-entry`) repairs it. When it finishes, paste its output
+with `ENOENT` until `/alfred-tools:fix` (`npx-cache-entry`) repairs it. When it finishes, paste its output
 verbatim and end with the restart line: the new registrations load on the next session start, and a project-scope
 server also needs the trust prompt then. A `warn` line changes nothing: the registration stays, and its first session
 start does the download or first-run work and may time out once - say so. When background runs are turned off, run it

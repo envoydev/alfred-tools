@@ -88,7 +88,7 @@ test('serena, fresh, per OS: python request, cut-off, telemetry off, home by the
     assert.strictEqual(s.scope, 'local');
     assert.deepStrictEqual(s.entry.args!.slice(0, 6), ['--python', '3.13', '--exclude-newer', '2026-10-20T23:59:59Z', '--from', 'serena-agent@2.1.0']);
     assert.strictEqual(s.entry.env!.SERENA_USAGE_REPORTING, 'false');
-    assert.strictEqual(s.entry.env!.SERENA_HOME, '/work/shop/.preferred-tools/serena');
+    assert.strictEqual(s.entry.env!.SERENA_HOME, '/work/shop/.alfred-tools/serena');
     assert.strictEqual(plan(inv(LINUX), pickOne('serena'), opts('/home/me')).steps.find((x) => x.op === 'mcp-add')!.entry.args![1], '3.13');
 });
 
@@ -96,7 +96,7 @@ test('serena on Windows: SERENA_HOME is absolute, in backslashes and space-free;
     const x64 = plan(inv(WIN), pickOne('serena'), opts('C:\\Users\\me'));
     assert.deepStrictEqual(x64.errors, []);
     const e = addStep(x64).entry;
-    assert.strictEqual(e.env!.SERENA_HOME, 'C:\\work\\shop\\.preferred-tools\\serena', 'a space-free root: <root>\\<name>');
+    assert.strictEqual(e.env!.SERENA_HOME, 'C:\\work\\shop\\.alfred-tools\\serena', 'a space-free root: <root>\\<name>');
     assert.match(e.env!.SERENA_HOME, /^[A-Za-z]:\\[^/\s]*$/);
     assert.strictEqual(e.args![1], '3.13');
     const arm = addStep(plan(inv(WINARM), pickOne('serena'), opts('C:\\Users\\me'))).entry;
@@ -123,7 +123,7 @@ test('serena on Windows: a root and a profile path with a space take the space-f
     assert.match(spacedProject.errors.join(' '), /space-free/);
     // the Windows rule wins over alfred-code data already on disk
     const alfred = plan(inv(WIN), pickOne('serena'), opts('C:\\Users\\me', { exists: (p) => p === 'C:\\work\\shop\\.alfred\\serena\\home' }));
-    assert.strictEqual(addStep(alfred).entry.env!.SERENA_HOME, 'C:\\work\\shop\\.preferred-tools\\serena');
+    assert.strictEqual(addStep(alfred).entry.env!.SERENA_HOME, 'C:\\work\\shop\\.alfred-tools\\serena');
 });
 
 test('uvx rows get their own python: windows-control 3.14 (x64 build on ARM64), memory 3.13', () => {
@@ -136,7 +136,7 @@ test('uvx rows get their own python: windows-control 3.14 (x64 build on ARM64), 
     const mem = addStep(plan(inv(MAC), pickOne('memory'), opts('/Users/me'))).entry;
     assert.ok(mem.args!.includes('mcp-memory-service[sqlite]==12.5.0'));
     assert.ok(!mem.args!.includes('--with'), 'numpy is a core dependency of the pin');
-    assert.strictEqual((mem.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/work/shop/.preferred-tools/memory/memory.db');
+    assert.strictEqual((mem.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/work/shop/.alfred-tools/memory/memory.db');
 });
 
 test('desktop control is offered only on its own OS', () => {
@@ -158,8 +158,8 @@ test('npx rows: pinned, with the cut-off in npm_config_before; native Windows ge
     assert.strictEqual(win.env!.npm_config_before, '2026-11-10T23:59:59Z');
     const ap = addStep(plan(inv(MAC), pickOne('appium'), opts('/Users/me'))).entry;
     assert.deepStrictEqual(ap.args, ['-y', 'appium-mcp@1.99.3']);
-    assert.strictEqual((ap.env as EntryEnv).SCREENSHOTS_DIR, '/work/shop/.preferred-tools/appium-mcp/screenshots');
-    assert.strictEqual((ap.env as EntryEnv).PAGE_SOURCES_DIR, '/work/shop/.preferred-tools/appium-mcp/page-sources');
+    assert.strictEqual((ap.env as EntryEnv).SCREENSHOTS_DIR, '/work/shop/.alfred-tools/appium-mcp/screenshots');
+    assert.strictEqual((ap.env as EntryEnv).PAGE_SOURCES_DIR, '/work/shop/.alfred-tools/appium-mcp/page-sources');
     assert.strictEqual((ap.env as EntryEnv).ALLOW_REMOTE_APP_URLS, 'false');
 });
 
@@ -168,7 +168,7 @@ test('routes: context7, github and sentry each build both ways; the others have 
     assert.deepStrictEqual(c7r, { type: 'http', url: 'https://mcp.context7.com/mcp' });
     // no key answer: the key is sent, from the global root (spec F2)
     const c7k = addStep(plan(inv(MAC), pickOne('context7', { route: 'remote' }), opts('/h'))).entry;
-    assert.deepStrictEqual(c7k, { type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: 'node /h/.preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' });
+    assert.deepStrictEqual(c7k, { type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: 'node /h/.alfred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' });
     // a stdio key whose name is filled nowhere: no key argument, never an empty one (spec F2)
     const c7l = addStep(plan(inv(MAC), pickOne('context7', { route: 'local', token: true }), opts('/h'))).entry;
     assert.deepStrictEqual(c7l.args, ['-y', '@upstash/context7-mcp@4.5.0']);
@@ -178,9 +178,9 @@ test('routes: context7, github and sentry each build both ways; the others have 
     const ghb = addStep(plan(inv(MAC), pickOne('github', { route: 'local' }), opts('/h', { machine: { docker: false } }))).entry;
     assert.deepStrictEqual([ghb.command, ghb.args], ['github-mcp-server', ['stdio']]);
     const ghr = addStep(plan(inv(MAC), pickOne('github', { route: 'remote' }), opts('/h'))).entry;
-    assert.deepStrictEqual(ghr, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: 'node /h/.preferred-tools/mcp-headers.js GITHUB_PERSONAL_ACCESS_TOKEN Bearer' });
+    assert.deepStrictEqual(ghr, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: 'node /h/.alfred-tools/mcp-headers.js GITHUB_PERSONAL_ACCESS_TOKEN Bearer' });
     const sr = addStep(plan(inv(MAC), pickOne('sentry', { route: 'remote' }), opts('/h'))).entry;
-    assert.deepStrictEqual(sr, { type: 'http', url: 'https://mcp.sentry.dev/mcp', headersHelper: 'node /h/.preferred-tools/mcp-headers.js SENTRY_ACCESS_TOKEN Sentry-Bearer' });
+    assert.deepStrictEqual(sr, { type: 'http', url: 'https://mcp.sentry.dev/mcp', headersHelper: 'node /h/.alfred-tools/mcp-headers.js SENTRY_ACCESS_TOKEN Sentry-Bearer' });
     assert.deepStrictEqual(addStep(plan(inv(MAC), pickOne('sentry', { route: 'remote', token: false }), opts('/h'))).entry, { type: 'http', url: 'https://mcp.sentry.dev/mcp' });
     const sl = addStep(plan(inv(MAC), pickOne('sentry', { route: 'local' }), opts('/h'))).entry;
     assert.strictEqual((sl.env as EntryEnv).SENTRY_ACCESS_TOKEN, '${SENTRY_ACCESS_TOKEN}');
@@ -196,7 +196,7 @@ test('a keyed route\'s plan line names the files its reader takes and whether th
     // the shell's variable plays no part (spec D5): the helper reads .mcps-secrets, so a value set here moves no scope
     const p = plan(inv(MAC), pickOne('github', { route: 'remote' }), opts('/h', { env: { GITHUB_PERSONAL_ACCESS_TOKEN: fake } }));
     assert.strictEqual(addStep(p).scope, 'user');
-    const files = [path.join('/h', '.preferred-tools', '.mcps-secrets'), path.join('/h', '.alfred', '.mcps-secrets')];
+    const files = [path.join('/h', '.alfred-tools', '.mcps-secrets'), path.join('/h', '.alfred', '.mcps-secrets')];
     assert.deepStrictEqual(p.keys, [{ row: 'github', name: 'github', scope: 'user', variable: 'GITHUB_PERSONAL_ACCESS_TOKEN', kind: 'helper', files, filled: false, old: null }]);
     assert.ok(!JSON.stringify(p).includes(fake));
     assert.ok(!renderPlan(p).includes(fake));
@@ -228,7 +228,7 @@ test('the key line names an old file holding the name, never a near name\'s file
         putKeys(w.project, ALFRED_STORE, [`${G}=${fakeValue}`]);
         const found = at();
         assert.strictEqual(found.keys[0]!.old, store);
-        assert.ok(renderPlan(found).includes(`${G} is in ${store}, which preferred-tools no longer reads: move it to ${file}`), renderPlan(found));
+        assert.ok(renderPlan(found).includes(`${G} is in ${store}, which alfred-tools no longer reads: move it to ${file}`), renderPlan(found));
         for (const p of [missing, found]) assert.ok(!renderPlan(p).includes(fakeValue) && !JSON.stringify(p).includes(fakeValue));
     }
     finally { w.clean(); }
@@ -244,7 +244,7 @@ test('the key line names the chain its reader takes; a workspace child finds an 
         const parentStore = putKeys(w.project, ALFRED_STORE, [`${G}=v-not-printed`]);
         const local = plan(inv({ ...MAC, os: process.platform, project: child }, { alfredCodeEnabled: true }), pickOne('github', { route: 'remote', scope: 'local' }), { home: w.home, env: {} });
         const k = local.keys[0];
-        assert.deepStrictEqual(k!.files, [P(child, '.preferred-tools', '.mcps-secrets'), P(w.home, '.preferred-tools', '.mcps-secrets'), P(w.home, '.alfred', '.mcps-secrets')]);
+        assert.deepStrictEqual(k!.files, [P(child, '.alfred-tools', '.mcps-secrets'), P(w.home, '.alfred-tools', '.mcps-secrets'), P(w.home, '.alfred', '.mcps-secrets')]);
         assert.deepStrictEqual([k!.filled, k!.old], [false, parentStore]);
         assert.ok(renderPlan(local).includes(`from ${k!.files.join(', then ')}`), renderPlan(local));
         assert.ok(!renderPlan(local).includes('v-not-printed'));
@@ -255,22 +255,22 @@ test('the key line names the chain its reader takes; a workspace child finds an 
 test('at local and global scope the key line names the files its reader takes, in order, and never a value', () => {
     const P = (...a: string[]) => path.join(...a);
     const local = plan(inv(MAC), pickOne('github', { route: 'remote', scope: 'local' }), opts('/h'));
-    assert.deepStrictEqual(local.keys[0]!.files, [P('/work/shop', '.preferred-tools', '.mcps-secrets'), P('/h', '.preferred-tools', '.mcps-secrets'), P('/h', '.alfred', '.mcps-secrets')]);
+    assert.deepStrictEqual(local.keys[0]!.files, [P('/work/shop', '.alfred-tools', '.mcps-secrets'), P('/h', '.alfred-tools', '.mcps-secrets'), P('/h', '.alfred', '.mcps-secrets')]);
     assert.ok(renderPlan(local).includes(`Key: github (local scope) - ${G}; mcp-headers.js reads it each time Claude Code connects, from ${local.keys[0]!.files.join(', then ')}. The key is never printed.`), renderPlan(local));
     assert.ok(!local.steps.some((s) => (s.op as string) === 'ensure-ignore'), 'the root\'s own .gitignore keeps .mcps-secrets out of git');
     assert.strictEqual(addStep(local).route, 'remote', 'the route id, never the route object');
     assert.ok(!JSON.stringify(local.steps).includes('"auth"'));
     const user = plan(inv(MAC), pickOne('github', { route: 'remote', scope: 'user' }), opts('/h'));
-    assert.deepStrictEqual(user.keys[0]!.files, [P('/h', '.preferred-tools', '.mcps-secrets'), P('/h', '.alfred', '.mcps-secrets')]);
+    assert.deepStrictEqual(user.keys[0]!.files, [P('/h', '.alfred-tools', '.mcps-secrets'), P('/h', '.alfred', '.mcps-secrets')]);
     // a stdio route: the apply writes the key in from the stdio chain - the project root's file, then the global root's
     const docker = plan(inv(MAC), pickOne('github', { route: 'local', scope: 'local' }), opts('/h'));
-    assert.deepStrictEqual([docker.keys[0]!.kind, docker.keys[0]!.files], ['stdio', [P('/work/shop', '.preferred-tools', '.mcps-secrets'), P('/h', '.preferred-tools', '.mcps-secrets')]]);
+    assert.deepStrictEqual([docker.keys[0]!.kind, docker.keys[0]!.files], ['stdio', [P('/work/shop', '.alfred-tools', '.mcps-secrets'), P('/h', '.alfred-tools', '.mcps-secrets')]]);
     assert.match(renderPlan(docker), /the apply writes it into the registration, from /);
 });
 
 test('scopes: every scope writes absolute paths with ~ expanded; project scope too, proven relative or not', () => {
     const user = addStep(plan(inv(MAC), pickOne('memory', { scope: 'user' }), opts('/Users/me'))).entry;
-    assert.strictEqual((user.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/Users/me/.preferred-tools/memory/memory.db');
+    assert.strictEqual((user.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/Users/me/.alfred-tools/memory/memory.db');
     assert.ok(!(user.env as EntryEnv).MCP_MEMORY_SQLITE_PATH!.includes('~'));
     const typed = addStep(plan(inv(MAC), pickOne('playwright-chrome', { scope: 'local', location: { side: 'path', path: '~/pw/chrome' } }), opts('/Users/me'))).entry;
     assert.strictEqual(typed.args![typed.args!.indexOf('--user-data-dir') + 1], '/Users/me/pw/chrome');
@@ -279,8 +279,8 @@ test('scopes: every scope writes absolute paths with ~ expanded; project scope t
     assert.strictEqual(rel.args![rel.args!.indexOf('--user-data-dir') + 1], '/work/shop/tools/pw');
     const p = plan(inv(MAC), pickOne('serena', { scope: 'project' }), opts('/Users/me', { catalog: withoutRelative('serena') }));
     assert.deepStrictEqual(p.errors, []);
-    assert.strictEqual(addStep(p).entry.env!.SERENA_HOME, '/work/shop/.preferred-tools/serena');
-    assert.strictEqual(addStep(plan(inv(MAC), pickOne('serena', { scope: 'project' }), opts('/Users/me'))).entry.env!.SERENA_HOME, '/work/shop/.preferred-tools/serena');
+    assert.strictEqual(addStep(p).entry.env!.SERENA_HOME, '/work/shop/.alfred-tools/serena');
+    assert.strictEqual(addStep(plan(inv(MAC), pickOne('serena', { scope: 'project' }), opts('/Users/me'))).entry.env!.SERENA_HOME, '/work/shop/.alfred-tools/serena');
 });
 
 test('every MCP route offers user, project and local: recommended first, then user, project, local', () => {
@@ -297,7 +297,7 @@ test('project scope for a local route: the project root, absolute, whether the r
     {
         const plain = plan(inv(MAC), pickOne('playwright-chrome', { scope: 'project' }), opts('/Users/me', { catalog: cat }));
         assert.deepStrictEqual(plain.errors, []);
-        assert.strictEqual(flag(addStep(plain).entry, '--user-data-dir'), '/work/shop/.preferred-tools/playwright-chrome');
+        assert.strictEqual(flag(addStep(plain).entry, '--user-data-dir'), '/work/shop/.alfred-tools/playwright-chrome');
         const typed = plan(inv(MAC), pickOne('playwright-chrome', { scope: 'project', location: { side: 'project' } }), opts('/Users/me', { catalog: cat }));
         assert.deepStrictEqual(typed.errors, []);
     }
@@ -308,9 +308,9 @@ test('project scope takes an absolute folder of the user\'s and the global root\
     assert.deepStrictEqual(abs.errors, []);
     assert.strictEqual(flag(addStep(abs).entry, '--user-data-dir'), '/abs/pw');
     const home = addStep(plan(inv(MAC), pickOne('playwright-chrome', { scope: 'project', location: { side: 'account' } }), opts('/Users/me'))).entry;
-    assert.strictEqual(flag(home, '--user-data-dir'), '/Users/me/.preferred-tools/playwright-chrome');
+    assert.strictEqual(flag(home, '--user-data-dir'), '/Users/me/.alfred-tools/playwright-chrome');
     const memWin = addStep(plan(inv(WIN), pickOne('memory', { scope: 'project' }), opts('C:\\Users\\me'))).entry;
-    assert.strictEqual((memWin.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, 'C:\\work\\shop\\.preferred-tools\\memory\\memory.db');
+    assert.strictEqual((memWin.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, 'C:\\work\\shop\\.alfred-tools\\memory\\memory.db');
     for (const e of [home, memWin]) assert.ok(!JSON.stringify(e).includes('${'), JSON.stringify(e));
 });
 
@@ -336,11 +336,11 @@ test('locations: the plugin\'s own folder by default, even with alfred-code data
     const has = (p: string) => p === '/work/shop/.alfred/chrome-control' || p === '/Users/me/.alfred-memory' || p === '/work/shop/.alfred/serena/home';
     const o = opts('/Users/me', { exists: has });
     const chrome = addStep(plan(inv(MAC), pickOne('playwright-chrome'), o)).entry;
-    assert.strictEqual(chrome.args![chrome.args!.indexOf('--user-data-dir') + 1], '/work/shop/.preferred-tools/playwright-chrome');
+    assert.strictEqual(chrome.args![chrome.args!.indexOf('--user-data-dir') + 1], '/work/shop/.alfred-tools/playwright-chrome');
     const mem = addStep(plan(inv(MAC), pickOne('memory'), o)).entry;
-    assert.strictEqual((mem.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/work/shop/.preferred-tools/memory/memory.db');
+    assert.strictEqual((mem.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/work/shop/.alfred-tools/memory/memory.db');
     const serena = addStep(plan(inv(MAC), pickOne('serena'), o)).entry;
-    assert.strictEqual(serena.env!.SERENA_HOME, '/work/shop/.preferred-tools/serena');
+    assert.strictEqual(serena.env!.SERENA_HOME, '/work/shop/.alfred-tools/serena');
     // alfred-code's folder only on the user's pick, and only when it is on disk
     const reuse = addStep(plan(inv(MAC), pickOne('playwright-chrome', { location: { side: 'alfred' } }), o)).entry;
     assert.strictEqual(reuse.args![reuse.args!.indexOf('--user-data-dir') + 1], '/work/shop/.alfred/chrome-control');
@@ -348,18 +348,18 @@ test('locations: the plugin\'s own folder by default, even with alfred-code data
     assert.strictEqual((reuseMem.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/Users/me/.alfred-memory/memory.db');
     assert.match(plan(inv(MAC), pickOne('playwright-firefox', { location: { side: 'alfred' } }), o).errors[0]!, /no alfred-code data folder/);
     const firefox = addStep(plan(inv(MAC), pickOne('playwright-firefox'), o)).entry;
-    assert.strictEqual(firefox.args![firefox.args!.indexOf('--user-data-dir') + 1], '/work/shop/.preferred-tools/playwright-firefox');
+    assert.strictEqual(firefox.args![firefox.args!.indexOf('--user-data-dir') + 1], '/work/shop/.alfred-tools/playwright-firefox');
     // the other place is always offered
     const acct = addStep(plan(inv(MAC), pickOne('playwright-firefox', { location: { side: 'account' } }), o)).entry;
-    assert.strictEqual(acct.args![acct.args!.indexOf('--user-data-dir') + 1], '/Users/me/.preferred-tools/playwright-firefox');
+    assert.strictEqual(acct.args![acct.args!.indexOf('--user-data-dir') + 1], '/Users/me/.alfred-tools/playwright-firefox');
     const proj = addStep(plan(inv(MAC), pickOne('memory', { location: { side: 'project' } }), o)).entry;
-    assert.strictEqual((proj.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/work/shop/.preferred-tools/memory/memory.db');
+    assert.strictEqual((proj.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/work/shop/.alfred-tools/memory/memory.db');
 });
 
 test('a data folder the plugin creates gets a .gitignore step; one that exists does not', () => {
     const p = plan(inv(MAC), pickOne('playwright-chrome'), opts('/Users/me'));
     assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'ensure-dir', 'mcp-add', 'fetch', 'list-write', 'record-root']);
-    assert.strictEqual((p.steps[1] as PathStep).path, '/work/shop/.preferred-tools/playwright-chrome');
+    assert.strictEqual((p.steps[1] as PathStep).path, '/work/shop/.alfred-tools/playwright-chrome');
     assert.match(renderPlan(p), /\.gitignore {2}\(contents: \*\)/);
     // alfred-code's folder, picked, is the user's data as it is: no step creates or marks it
     const old = plan(inv(MAC), pickOne('playwright-chrome', { location: { side: 'alfred' } }), opts('/Users/me', { exists: () => true }));
@@ -456,13 +456,13 @@ test('a location change edits only the paths and keeps the pin; the old data is 
     r.entry.args = r.entry.args!.map((a) => a.replace(/^@playwright\/mcp@.+$/, '@playwright/mcp@0.0.90'));
     const p = plan(inv(MAC, { registrations: [r] }), changeOf(r, { location: { side: 'account' } }), opts('/Users/me'));
     // the data folder goes to the global root; the server stays at local scope, so it is listed in the project root
-    assert.deepStrictEqual(p.steps.map((s) => [s.op, (s as PathStep).path || (s as RecordRootStep).root || (s as McpAddStep).name || (s as ListWriteStep).file]), [['root-ignore', '/work/shop/.preferred-tools'], ['root-ignore', '/Users/me/.preferred-tools'], ['ensure-dir', '/Users/me/.preferred-tools/playwright-chrome'], ['mcp-replace', 'playwright-chrome'], ['list-write', '/work/shop/.preferred-tools/mcps.json'], ['record-root', '/work/shop/.preferred-tools'], ['record-root', '/Users/me/.preferred-tools']]);
+    assert.deepStrictEqual(p.steps.map((s) => [s.op, (s as PathStep).path || (s as RecordRootStep).root || (s as McpAddStep).name || (s as ListWriteStep).file]), [['root-ignore', '/work/shop/.alfred-tools'], ['root-ignore', '/Users/me/.alfred-tools'], ['ensure-dir', '/Users/me/.alfred-tools/playwright-chrome'], ['mcp-replace', 'playwright-chrome'], ['list-write', '/work/shop/.alfred-tools/mcps.json'], ['record-root', '/work/shop/.alfred-tools'], ['record-root', '/Users/me/.alfred-tools']]);
     const replace = (p.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep);
     const e = replace.entry;
     assert.ok(e.args!.includes('@playwright/mcp@0.0.90'));
-    assert.strictEqual(e.args![e.args!.indexOf('--user-data-dir') + 1], '/Users/me/.preferred-tools/playwright-chrome');
-    assert.strictEqual(e.args![e.args!.indexOf('--output-dir') + 1], '/Users/me/.preferred-tools/playwright-chrome/output');
-    assert.match(p.notes.join('\n'), /old data stays at \/work\/shop\/\.preferred-tools\/playwright-chrome/);
+    assert.strictEqual(e.args![e.args!.indexOf('--user-data-dir') + 1], '/Users/me/.alfred-tools/playwright-chrome');
+    assert.strictEqual(e.args![e.args!.indexOf('--output-dir') + 1], '/Users/me/.alfred-tools/playwright-chrome/output');
+    assert.match(p.notes.join('\n'), /old data stays at \/work\/shop\/\.alfred-tools\/playwright-chrome/);
     assert.deepStrictEqual(replace.old, r.entry, 'the old entry is kept for the rollback');
 });
 
@@ -477,14 +477,14 @@ test('a scope change moves the registration and rewrites its paths for the new s
     const toProject = plan(inv(MAC, { registrations: [local] }), changeOf(local, { scope: 'project' }), opts('/Users/me', { catalog: cat }));
     assert.deepStrictEqual(toProject.errors, []);
     const e = (toProject.steps.find((s) => s.op === 'mcp-move') as McpMoveStep).entry;
-    assert.strictEqual(e.args![e.args!.indexOf('--user-data-dir') + 1], '/work/shop/.preferred-tools/playwright-chrome', 'absolute in the project root, as at local scope');
+    assert.strictEqual(e.args![e.args!.indexOf('--user-data-dir') + 1], '/work/shop/.alfred-tools/playwright-chrome', 'absolute in the project root, as at local scope');
 });
 
 test('changing the route rebuilds from the catalog; changing only the key adds the helper to the entry as read', { skip: POSIX_FIXTURE }, () => {
     const r = installed('context7', { route: 'remote', scope: 'project', token: false });
     const key = plan(inv(MAC, { registrations: [r] }), changeOf(r, { token: true }), opts('/h'));
     assert.deepStrictEqual(key.steps.map((s) => s.op), ['root-ignore', 'write-helper', 'ensure-key-name', 'mcp-replace', 'deny-read', 'list-write', 'record-root', 'order-mcp-json']);
-    assert.deepStrictEqual((key.steps[3] as McpAddStep).entry, { type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: 'node /work/shop/.preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' });
+    assert.deepStrictEqual((key.steps[3] as McpAddStep).entry, { type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: 'node /work/shop/.alfred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' });
     // remote at project scope becomes local there: the local launch replaces it in the committed file
     const toLocal = plan(inv(MAC, { registrations: [r] }), changeOf(r, { route: 'local' }), opts('/h'));
     assert.deepStrictEqual(toLocal.errors, []);
@@ -651,22 +651,22 @@ test('install only adds: a tool installed for every project gets this project\'s
     const p = plan(i, pickOne('memory'), opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
     assert.deepStrictEqual(regSteps(p).map((s) => [s.op, (s as McpAddStep).name, (s as McpAddStep).scope]), [['ensure-dir', undefined, undefined], ['mcp-add', 'memory', 'local'], ['fetch', 'memory', undefined]]);
-    assert.strictEqual((addStep(p).entry.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/work/shop/.preferred-tools/memory/memory.db', 'its own data, in the project folder');
+    assert.strictEqual((addStep(p).entry.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/work/shop/.alfred-tools/memory/memory.db', 'its own data, in the project folder');
     assert.ok(!p.steps.some((s) => /remove|move|replace|uninstall/.test(s.op)), 'nothing happens to the copy for every project');
     assert.match(p.notes.join(' '), /also installed as 'memory' at user scope - left as it is/);
     assert.match(p.notes.join(' '), /nearer one wins/);
     // an answer that names the copy for every project is not a change of it
     const again = plan(i, pickOne('memory', { scope: 'user', name: 'keep' }), opts('/Users/me'));
     assert.strictEqual(again.noop, true);
-    assert.match(again.unchanged.join(' '), /already installed at user scope - a change to it is \/preferred-tools:configure/);
+    assert.match(again.unchanged.join(' '), /already installed at user scope - a change to it is \/alfred-tools:configure/);
     const renamed = plan(i, pickOne('memory', { scope: 'user', name: 'mem2' }), opts('/Users/me'));
     assert.deepStrictEqual(regSteps(renamed).map((s) => s.op).filter((o) => o !== 'ensure-dir' && o !== 'fetch'), ['mcp-add'], 'a second name at the same scope is a second copy, never a rename');
 });
 
 test('a copy and a configure change on Windows and Linux: each OS\'s paths, the Windows cmd /c, the user-scope one untouched', () => {
     const cases = [
-        [WIN, 'C:\\Users\\me', 'C:\\work\\shop\\.preferred-tools\\memory\\memory.db', 'C:\\Users\\me\\.preferred-tools\\pw2', 'cmd'],
-        [LINUX, '/home/me', '/work/shop/.preferred-tools/memory/memory.db', '/home/me/.preferred-tools/pw2', 'npx'],
+        [WIN, 'C:\\Users\\me', 'C:\\work\\shop\\.alfred-tools\\memory\\memory.db', 'C:\\Users\\me\\.alfred-tools\\pw2', 'cmd'],
+        [LINUX, '/home/me', '/work/shop/.alfred-tools/memory/memory.db', '/home/me/.alfred-tools/pw2', 'npx'],
     ] as [typeof WIN, string, string, string, string][];
     for (const [base, home, memDb, pwDir, command] of cases)
     {
@@ -710,12 +710,12 @@ test('install questions for a copy: the taken scope is not offered, and an accou
     assert.match((q.tools as ToolsKeyed).memory!.first!.find((x) => x.id === 'name-memory')!.options[0]!.description, /used instead of the copy for every project/);
     const loc = (q.tools as ToolsKeyed).memory!.questions!.find((x) => x.id === 'location-memory');
     assert.strictEqual(loc!.options[0]!.label, "The project root's folder (Recommended)", 'a copy gets this project\'s own memory');
-    assert.match(loc!.options[0]!.description, /^\/work\/shop\/\.preferred-tools\/memory /);
+    assert.match(loc!.options[0]!.description, /^\/work\/shop\/\.alfred-tools\/memory /);
     for (const t of Object.values(q.tools)) [...(t.first || []), ...t.questions!].forEach(checkQuestion);
 });
 
 test('configure: one of two registrations of a row is changed by its key, the other is left and not noted', () => {
-    const e = (name: string) => ({ command: 'uvx', args: ['--python', '3.13', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'], env: { SERENA_HOME: `/work/shop/.preferred-tools/${name}` } });
+    const e = (name: string) => ({ command: 'uvx', args: ['--python', '3.13', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'], env: { SERENA_HOME: `/work/shop/.alfred-tools/${name}` } });
     const i = inv(MAC, { registrations: [reg('serena', 'local', e('serena'), 'serena', 'local'), reg('serena', 'user', e('serena'), 'serena', 'local')] });
     const p = plan(i, { change: { 'mcp:serena~user': { row: 'serena', name: 'nav' } } }, opts('/h'));
     assert.deepStrictEqual(p.errors, []);
@@ -742,7 +742,7 @@ test('configure: a plugin is not changed here, and an unknown key or a user\'s o
 });
 
 test('configure questions start from what is installed: its route, scope, name, data folder, binary, key and host are Keep', () => {
-    const play = { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '/work/shop/.preferred-tools/pw/profile', '--executable-path', '/opt/chrome'] };
+    const play = { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '/work/shop/.alfred-tools/pw/profile', '--executable-path', '/opt/chrome'] };
     const c7 = { type: 'http', url: 'https://mcp.context7.com/mcp' };
     const i = inv(MAC, { registrations: [reg('pw', 'local', play, 'playwright-chrome', 'local'), reg('c7', 'project', c7, 'context7', 'remote')] });
     const q = asks.allQuestions(i, { targets: ['mcp:pw~local', 'mcp:c7~project', 'mcp:none~user'] }, catalog);
@@ -751,7 +751,7 @@ test('configure questions start from what is installed: its route, scope, name, 
     assert.strictEqual(first('mcp:pw~local', 'scope'), 'Local (Recommended)');
     assert.strictEqual(first('mcp:pw~local', 'name'), 'Keep `pw` (Recommended)');
     assert.strictEqual(first('mcp:pw~local', 'location'), 'The folder it uses now (Recommended)');
-    assert.strictEqual(q.targets['mcp:pw~local']!.questions!.find((x) => x.id.startsWith('location'))!.options[0]!.description, '/work/shop/.preferred-tools/pw/profile', 'the folder as registered');
+    assert.strictEqual(q.targets['mcp:pw~local']!.questions!.find((x) => x.id.startsWith('location'))!.options[0]!.description, '/work/shop/.alfred-tools/pw/profile', 'the folder as registered');
     assert.strictEqual(first('mcp:pw~local', 'browser'), 'Keep `/opt/chrome` (Recommended)');
     assert.strictEqual(q.targets['mcp:c7~project']!.route!.options[0]!.label, 'Hosted (Recommended)');
     assert.strictEqual(first('mcp:c7~project', 'scope'), 'Project (Recommended)');
@@ -845,7 +845,7 @@ test('location: alfred-code data on disk is a second answer, not the recommended
 test('plan.js from a kept inventory file leaves location keys as they are', () => {
     // memory at user scope, renamed by configure from the inventory as inventory.ts writes it
     const live = `sk-live-${randomBytes(16).toString('hex')}`;
-    const db = '/h/.preferred-tools/memory/memory.db';
+    const db = '/h/.alfred-tools/memory/memory.db';
     const r = reg('memory', 'user', { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20T23:59:59Z', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_STORAGE_BACKEND: 'sqlite_vec', MCP_MEMORY_SQLITE_PATH: db, MEMORY_API_TOKEN: live } }, 'memory', 'local');
     const kept = inventoryLib.keptOf(inv(MAC, { registrations: [r] }), catalog);
     assert.strictEqual((kept.registrations[0]!.entry.env as EntryEnv).MEMORY_API_TOKEN, MARKER);
@@ -867,7 +867,7 @@ test('configure plan.js from a kept inventory prints no live value', () => {
         fs.writeFileSync(path.join(d, 'ans.json'), JSON.stringify(changeOf(r, { name: 'sentry-moved' })));
         const out = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'plan.ts'), path.join(d, 'inv.json'), path.join(d, 'ans.json'), '--out', path.join(d, 'plan.json')], { encoding: 'utf8' });
         assert.strictEqual(out.status, 0, out.stderr);
-        assert.match(out.stdout, /claude mcp add-json sentry-moved .*\$\{PREFERRED_TOOLS_KEPT\}/);
+        assert.match(out.stdout, /claude mcp add-json sentry-moved .*\$\{ALFRED_TOOLS_KEPT\}/);
         for (const where of [out.stdout, out.stderr, fs.readFileSync(path.join(d, 'plan.json'), 'utf8')]) assert.ok(!where.includes(token));
     }
     finally { fs.rmSync(d, { recursive: true, force: true }); }
@@ -960,7 +960,7 @@ test('with alfred-code installed: .alfred/<name> at project and local, the accou
     assert.strictEqual(flag(at('playwright-chrome', 'local'), '--user-data-dir'), '/work/shop/.alfred/playwright-chrome');
     assert.strictEqual(flag(at('playwright-chrome', 'project', withRelative('playwright-chrome')), '--user-data-dir'), '/work/shop/.alfred/playwright-chrome');
     assert.strictEqual(flag(at('playwright-chrome', 'project', withoutRelative('playwright-chrome')), '--user-data-dir'), '/work/shop/.alfred/playwright-chrome', 'proven or not: the project root, absolute');
-    assert.strictEqual(flag(at('playwright-chrome', 'user'), '--user-data-dir'), '/Users/me/.preferred-tools/playwright-chrome');
+    assert.strictEqual(flag(at('playwright-chrome', 'user'), '--user-data-dir'), '/Users/me/.alfred-tools/playwright-chrome');
     assert.strictEqual((at('memory', 'local').env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/work/shop/.alfred/memory/memory.db');
     assert.strictEqual(at('serena', 'local').env!.SERENA_HOME, '/work/shop/.alfred/serena');
     // 'Use the recommended settings for all': no scope, no location - local scope, then the D3 table
@@ -978,8 +978,8 @@ test('without .alfred/.gitignore there is no alfred-data: today\'s folders, and 
     {
         const p = plan(inv(MAC, { alfredCodeEnabled: enabled }), pickOne('playwright-chrome'), opts('/Users/me', { exists }));
         assert.deepStrictEqual(p.errors, []);
-        assert.strictEqual(flag(addStep(p).entry, '--user-data-dir'), '/work/shop/.preferred-tools/playwright-chrome', `enabled ${enabled}`);
-        assert.strictEqual(flag(addStep(plan(inv(MAC, { alfredCodeEnabled: enabled }), pickOne('playwright-chrome', { scope: 'user' }), opts('/Users/me', { exists }))).entry, '--user-data-dir'), '/Users/me/.preferred-tools/playwright-chrome', 'global scope: the global root');
+        assert.strictEqual(flag(addStep(p).entry, '--user-data-dir'), '/work/shop/.alfred-tools/playwright-chrome', `enabled ${enabled}`);
+        assert.strictEqual(flag(addStep(plan(inv(MAC, { alfredCodeEnabled: enabled }), pickOne('playwright-chrome', { scope: 'user' }), opts('/Users/me', { exists }))).entry, '--user-data-dir'), '/Users/me/.alfred-tools/playwright-chrome', 'global scope: the global root');
         const picked = plan(inv(MAC, { alfredCodeEnabled: enabled }), pickOne('playwright-chrome', { location: { side: 'alfred-data' } }), opts('/Users/me', { exists }));
         assert.match(picked.errors.join(' '), /alfred-code is not set up here \(no \.alfred\/\.gitignore\) - pick another folder/);
         assert.strictEqual(picked.steps.length, 0);
@@ -996,9 +996,9 @@ test('the name guard: docs, state, statistics, workspace, flow and an .alfred/<n
         // root takes it
         const recommended = plan(inv(MAC, { alfredCodeEnabled: true }), pickOne('playwright-chrome', { name }), opts('/Users/me', { exists: ALFRED }));
         assert.match(recommended.errors.join(' '), /alfred-code's own entries/, name);
-        const own = plan(inv(MAC, { alfredCodeEnabled: true }), { ...pickOne('playwright-chrome', { name }), roots: { project: { id: 'preferred-tools' } } }, opts('/Users/me', { exists: ALFRED }));
+        const own = plan(inv(MAC, { alfredCodeEnabled: true }), { ...pickOne('playwright-chrome', { name }), roots: { project: { id: 'alfred-tools' } } }, opts('/Users/me', { exists: ALFRED }));
         assert.deepStrictEqual(own.errors, [], name);
-        assert.strictEqual(flag(addStep(own).entry, '--user-data-dir'), `/work/shop/.preferred-tools/${name}`, name);
+        assert.strictEqual(flag(addStep(own).entry, '--user-data-dir'), `/work/shop/.alfred-tools/${name}`, name);
     }
     const file = (p: string) => ALFRED(p) || p === '/work/shop/.alfred/shop-pw';
     const asFile = plan(inv(MAC, { alfredCodeEnabled: true }), pickOne('playwright-chrome', { name: 'shop-pw', location: { side: 'alfred-data' } }), opts('/Users/me', { exists: file, isDir: () => false }));
@@ -1015,9 +1015,9 @@ test('serena on Windows with alfred-code: local takes <project>\\.alfred\\serena
         return addStep(p).entry.env!.SERENA_HOME;
     };
     assert.strictEqual(home(WIN, {}, ALFRED_WIN), 'C:\\work\\shop\\.alfred\\serena');
-    assert.strictEqual(home(WIN, { scope: 'user' }, ALFRED_WIN), 'C:\\Users\\me\\.preferred-tools\\serena');
+    assert.strictEqual(home(WIN, { scope: 'user' }, ALFRED_WIN), 'C:\\Users\\me\\.alfred-tools\\serena');
     assert.strictEqual(home(WIN, { scope: 'project' }, ALFRED_WIN), 'C:\\work\\shop\\.alfred\\serena');
-    assert.strictEqual(home(WIN, { location: { side: 'account' } }, ALFRED_WIN), 'C:\\Users\\me\\.preferred-tools\\serena', "serena's account folder on Windows is the global root's");
+    assert.strictEqual(home(WIN, { location: { side: 'account' } }, ALFRED_WIN), 'C:\\Users\\me\\.alfred-tools\\serena', "serena's account folder on Windows is the global root's");
     assert.strictEqual(home(WIN, { location: { side: 'default' } }, ALFRED_WIN), 'C:\\Users\\me\\.serena', "'default' is the profile's .serena");
     const spaced = { ...WIN, project: 'C:\\my work\\shop' };
     assert.strictEqual(home(spaced, {}, (p: string) => p === 'C:\\my work\\shop\\.alfred\\.gitignore'), 'C:\\Users\\me\\.serena');
@@ -1074,10 +1074,10 @@ test('--questions: a location row asks scope and name first; the location follow
         const first = at({});
         assert.deepStrictEqual(first!.first!.map((q) => q.id), ['scope-playwright-chrome', 'name-playwright-chrome']);
         assert.ok(!first!.questions!.some((q) => /^(scope|name)-/.test(q.id)));
-        assert.ok(loc(first!)!.options[0]!.description.startsWith(`${project}/.preferred-tools/playwright-chrome`), loc(first!)!.options[0]!.description); // Review Focus 1
+        assert.ok(loc(first!)!.options[0]!.description.startsWith(`${project}/.alfred-tools/playwright-chrome`), loc(first!)!.options[0]!.description); // Review Focus 1
         assert.deepStrictEqual(Object.values(first!.answers!), [{ side: 'project' }, { side: 'alfred' }]);
-        assert.match(loc(at({ scopes: { 'playwright-chrome': 'local' }, names: { 'playwright-chrome': 'shop-pw' } })!)!.options[0]!.description, /\.preferred-tools[\\/]shop-pw/);
-        assert.match(loc(at({ names: { 'playwright-chrome': 'keep' } })!)!.options[0]!.description, /\.preferred-tools\/playwright-chrome /);
+        assert.match(loc(at({ scopes: { 'playwright-chrome': 'local' }, names: { 'playwright-chrome': 'shop-pw' } })!)!.options[0]!.description, /\.alfred-tools[\\/]shop-pw/);
+        assert.match(loc(at({ names: { 'playwright-chrome': 'keep' } })!)!.options[0]!.description, /\.alfred-tools\/playwright-chrome /);
         // the roots answered so far place the folder
         assert.ok(loc(at({ roots: { project: { id: 'named', path: 'tools/keys' } } })!)!.options[0]!.description.startsWith(`${project}/tools/keys/playwright-chrome `));
     }
@@ -1092,7 +1092,7 @@ test('--questions: a location row asks scope and name first; the location follow
     assert.deepStrictEqual(c7!.answers, {});
     assert.ok(c7!.questions!.some((q) => q.id === 'scope-context7'), 'a row without a folder keeps scope in its one call');
     // configure: the same order for a target
-    const play = { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '/work/shop/.preferred-tools/pw'] };
+    const play = { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '/work/shop/.alfred-tools/pw'] };
     const t = asks.allQuestions(inv(MAC, { registrations: [reg('pw', 'local', play, 'playwright-chrome', 'local')] }), { targets: ['mcp:pw~local'], scopes: { 'mcp:pw~local': 'user' } }, catalog).targets['mcp:pw~local'];
     assert.deepStrictEqual(t!.first!.map((q) => q.id), ['scope-playwright-chrome', 'name-playwright-chrome']);
     const loc = t!.questions!.find((q) => q.id === 'location-playwright-chrome');
@@ -1271,7 +1271,7 @@ test('answers.roots: a named project folder outside the project is a plan error 
     assert.match(bad.errors.join(), /root.*\.\./);
     const none = plan(inv(MAC), pick, opts('/Users/me'));
     assert.deepStrictEqual(none.errors, []);
-    assert.deepStrictEqual(none.roots, { project: '/work/shop/.preferred-tools', global: '/Users/me/.preferred-tools', globalNamed: false });
+    assert.deepStrictEqual(none.roots, { project: '/work/shop/.alfred-tools', global: '/Users/me/.alfred-tools', globalNamed: false });
     const named = plan(inv(MAC), { ...pick, roots: { project: { id: 'named', path: 'tools/keys' }, global: { id: 'named', path: '~/keys' } } }, opts('/Users/me'));
     assert.deepStrictEqual(named.roots, { project: '/work/shop/tools/keys', global: '/Users/me/keys', globalNamed: true });
     assert.match(plan(inv(MAC), { ...pick, roots: { global: { id: 'nowhere' } } }, opts('/Users/me')).errors.join(), /nowhere/);
@@ -1322,29 +1322,29 @@ test('a pick\'s data folder is <root>/<name>, absolute at every scope', () => {
     const at = (scope: string, extra: PickAnswer = {}) => flag(addStep(plan(inv(MAC, { alfredCodeEnabled: true }), { picks: { 'playwright-chrome': { scope, ...extra } }, roots: ALFRED_ROOT }, o)).entry, '--user-data-dir');
     assert.strictEqual(at('project'), '/work/shop/.alfred/playwright-chrome');
     assert.strictEqual(at('local'), '/work/shop/.alfred/playwright-chrome');
-    assert.strictEqual(at('user'), '/Users/me/.preferred-tools/playwright-chrome', 'global scope: the global root');
+    assert.strictEqual(at('user'), '/Users/me/.alfred-tools/playwright-chrome', 'global scope: the global root');
     assert.strictEqual(at('local', { name: 'shop-pw' }), '/work/shop/.alfred/shop-pw', 'named after the registration');
     const named = (scope: string) => flag(addStep(plan(inv(MAC), { picks: { 'playwright-chrome': { scope } }, roots: { project: { id: 'named', path: 'tools/keys' }, global: { id: 'named', path: '/srv/keys' } } }, opts('/Users/me'))).entry, '--user-data-dir');
     assert.strictEqual(named('project'), '/work/shop/tools/keys/playwright-chrome');
     assert.strictEqual(named('local'), '/work/shop/tools/keys/playwright-chrome');
     assert.strictEqual(named('user'), '/srv/keys/playwright-chrome');
     // no roots answer: the recommended root, as the walk's 'recommended for all' takes it
-    assert.strictEqual(flag(addStep(plan(inv(MAC), pickOne('playwright-chrome'), opts('/Users/me'))).entry, '--user-data-dir'), '/work/shop/.preferred-tools/playwright-chrome');
+    assert.strictEqual(flag(addStep(plan(inv(MAC), pickOne('playwright-chrome'), opts('/Users/me'))).entry, '--user-data-dir'), '/work/shop/.alfred-tools/playwright-chrome');
     assert.strictEqual(flag(addStep(plan(inv(MAC, { alfredCodeEnabled: true }), pickOne('playwright-chrome'), o)).entry, '--user-data-dir'), '/work/shop/.alfred/playwright-chrome');
 });
 
 test('memory: its data in the root of its scope - the project root at project and local scope, the global root at user scope, nothing asked', () => {
     const q = (scope: string, rootAnswers: Roots | null = null) => locationQuestion(catalog.byId.get('memory')!, inv(MAC), { scope, context: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false, roots: rootAnswers } });
     for (const scope of ['local', 'project']) assert.deepStrictEqual([q(scope).question, q(scope).only], [null, { side: 'project' }], scope);
-    const far = q('project', { project: '/work/shop/.preferred-tools', global: '/srv/keys', globalNamed: true });
+    const far = q('project', { project: '/work/shop/.alfred-tools', global: '/srv/keys', globalNamed: true });
     assert.deepStrictEqual([far.question, far.only], [null, { side: 'project' }]);
     assert.deepStrictEqual([q('user').question, q('user').only], [null, { side: 'account' }], 'global scope: one place');
     const db = (scope: string, roots?: Answers['roots']) => (addStep(plan(inv(MAC), { picks: { memory: { scope } }, roots } as Answers, opts('/Users/me'))).entry.env as EntryEnv).MCP_MEMORY_SQLITE_PATH;
-    assert.strictEqual(db('local'), '/work/shop/.preferred-tools/memory/memory.db');
-    assert.strictEqual(db('user'), '/Users/me/.preferred-tools/memory/memory.db');
-    assert.strictEqual(db('project'), '/work/shop/.preferred-tools/memory/memory.db');
-    assert.strictEqual(db('project', { global: { id: 'named', path: '/srv/keys' } }), '/work/shop/.preferred-tools/memory/memory.db');
-    assert.strictEqual((addStep(plan(inv(MAC), { picks: { memory: { location: { side: 'project' } } } }, opts('/Users/me'))).entry.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/work/shop/.preferred-tools/memory/memory.db');
+    assert.strictEqual(db('local'), '/work/shop/.alfred-tools/memory/memory.db');
+    assert.strictEqual(db('user'), '/Users/me/.alfred-tools/memory/memory.db');
+    assert.strictEqual(db('project'), '/work/shop/.alfred-tools/memory/memory.db');
+    assert.strictEqual(db('project', { global: { id: 'named', path: '/srv/keys' } }), '/work/shop/.alfred-tools/memory/memory.db');
+    assert.strictEqual((addStep(plan(inv(MAC), { picks: { memory: { location: { side: 'project' } } } }, opts('/Users/me'))).entry.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/work/shop/.alfred-tools/memory/memory.db');
 });
 
 test('serena on Windows: a spaced root gets the space-free folder recommended; project scope as local scope', () => {
@@ -1358,11 +1358,11 @@ test('serena on Windows: a spaced root gets the space-free folder recommended; p
     const clean = locationQuestion(serena!, inv(WIN), { scope: 'local', context: ctxOf('C:\\work\\shop', 'C:\\Users\\Jo Doe') });
     assert.deepStrictEqual([clean.question, clean.only], [null, { side: 'project' }], 'a space-free root: <root>\\<name>, nothing to ask');
     const home = (base: { os: string; arch: string; project: string }, home: string, pick: PickAnswer = {}) => addStep(plan(inv(base), pickOne('serena', pick), opts(home))).entry.env!.SERENA_HOME;
-    assert.strictEqual(home(WIN, 'C:\\Users\\Jo Doe'), 'C:\\work\\shop\\.preferred-tools\\serena');
+    assert.strictEqual(home(WIN, 'C:\\Users\\Jo Doe'), 'C:\\work\\shop\\.alfred-tools\\serena');
     assert.strictEqual(home({ ...WIN, project: 'C:\\my work\\shop' }, 'C:\\Users\\me'), 'C:\\Users\\me\\.serena');
     assert.strictEqual(home(WIN, 'C:\\Users\\Jo Doe', { scope: 'user' }), 'C:\\serena-home');
-    assert.strictEqual(home(WIN, 'C:\\Users\\me', { scope: 'project' }), 'C:\\work\\shop\\.preferred-tools\\serena');
-    assert.strictEqual(home(WIN, 'C:\\Users\\Jo Doe', { scope: 'project' }), 'C:\\work\\shop\\.preferred-tools\\serena', 'a spaced profile no longer matters at project scope');
+    assert.strictEqual(home(WIN, 'C:\\Users\\me', { scope: 'project' }), 'C:\\work\\shop\\.alfred-tools\\serena');
+    assert.strictEqual(home(WIN, 'C:\\Users\\Jo Doe', { scope: 'project' }), 'C:\\work\\shop\\.alfred-tools\\serena', 'a spaced profile no longer matters at project scope');
 });
 
 test('alfred-code 2.x data on disk adds \'Carry over alfred-code 2.x data\' beside <root>/<name>', () => {
@@ -1414,7 +1414,7 @@ test('an .alfred project root refuses a registration named after one of alfred-c
     assert.strictEqual((p.steps.filter((s) => s.op === 'mcp-add') as McpAddStep[]).length, 0);
     const fileThere = plan(inv(MAC, { alfredCodeEnabled: true }), { picks: { 'playwright-chrome': { name: 'shop-pw' } }, roots: ALFRED_ROOT }, opts('/Users/me', { exists: (x) => ALFRED(x) || x === '/work/shop/.alfred/shop-pw', isDir: () => false }));
     assert.match(fileThere.errors.join(), /\.alfred\/shop-pw exists and is not a folder/);
-    const elsewhere = plan(inv(MAC, { alfredCodeEnabled: true }), { picks: { memory: { name: 'state', scope: 'local' } }, roots: { project: { id: 'preferred-tools' } } }, o);
+    const elsewhere = plan(inv(MAC, { alfredCodeEnabled: true }), { picks: { memory: { name: 'state', scope: 'local' } }, roots: { project: { id: 'alfred-tools' } } }, o);
     assert.deepStrictEqual(elsewhere.errors, [], 'another project root takes the name');
 });
 
@@ -1473,12 +1473,12 @@ test('D5: each keyed route at each scope', () => {
 test('the helper command per scope', () => {
     assert.strictEqual(helperCommand({ helperPath: '.alfred/mcp-headers.js', name: G, scheme: 'Bearer', style: 'portable' }), `node .alfred/mcp-headers.js ${G} Bearer`);
     assert.strictEqual(helperCommand({ helperPath: 'my keys/mcp-headers.js', name: G, scheme: 'Bearer', style: 'portable' }), `node "my keys/mcp-headers.js" ${G} Bearer`, 'the committed file: double quotes, which every shell reads');
-    assert.strictEqual(helperCommand({ helperPath: '/work/my shop/.preferred-tools/mcp-headers.js', name: G, scheme: 'Bearer', style: 'posix' }), `node '/work/my shop/.preferred-tools/mcp-headers.js' ${G} Bearer`);
-    assert.strictEqual(helperCommand({ helperPath: '/w/.preferred-tools/mcp-headers.js', name: G, scheme: 'Bearer', globalRoot: '/my keys', style: 'posix' }), `node /w/.preferred-tools/mcp-headers.js ${G} Bearer '/my keys'`);
+    assert.strictEqual(helperCommand({ helperPath: '/work/my shop/.alfred-tools/mcp-headers.js', name: G, scheme: 'Bearer', style: 'posix' }), `node '/work/my shop/.alfred-tools/mcp-headers.js' ${G} Bearer`);
+    assert.strictEqual(helperCommand({ helperPath: '/w/.alfred-tools/mcp-headers.js', name: G, scheme: 'Bearer', globalRoot: '/my keys', style: 'posix' }), `node /w/.alfred-tools/mcp-headers.js ${G} Bearer '/my keys'`);
     const gh = (base: { os: string; arch: string; project: string }, scope: string, roots?: Answers['roots'], home = '/Users/me') => helperOf(plan(inv(base, { alfredCodeEnabled: true }), { picks: { github: { route: 'remote', scope } }, roots } as Answers, opts(home, { exists: ALFRED })), 'github');
     assert.strictEqual(gh(MAC, 'project'), `node /work/shop/.alfred/mcp-headers.js ${G} Bearer`);
-    assert.strictEqual(gh({ ...MAC, project: '/work/my shop' }, 'local', { project: { id: 'preferred-tools' } }), `node '/work/my shop/.preferred-tools/mcp-headers.js' ${G} Bearer`);
-    assert.strictEqual(gh(MAC, 'user'), `node /Users/me/.preferred-tools/mcp-headers.js ${G} Bearer`);
+    assert.strictEqual(gh({ ...MAC, project: '/work/my shop' }, 'local', { project: { id: 'alfred-tools' } }), `node '/work/my shop/.alfred-tools/mcp-headers.js' ${G} Bearer`);
+    assert.strictEqual(gh(MAC, 'user'), `node /Users/me/.alfred-tools/mcp-headers.js ${G} Bearer`);
     // the third argument: at local scope only, only for a named global root
     const named = { global: { id: 'named', path: '/srv/keys' } };
     assert.strictEqual(gh(MAC, 'local', named), `node /work/shop/.alfred/mcp-headers.js ${G} Bearer /srv/keys`);
@@ -1487,17 +1487,17 @@ test('the helper command per scope', () => {
     assert.strictEqual(gh(MAC, 'user', named), `node /srv/keys/mcp-headers.js ${G} Bearer`);
     // Windows: forward slashes, which cmd, PowerShell and Git Bash all pass whole; quoted for a space (Review Focus 1)
     const win = helperOf(plan(inv({ ...WIN, project: 'C:\\work\\my shop' }), pickOne('github', { route: 'remote', scope: 'local' }), opts('C:\\Users\\me')), 'github');
-    assert.strictEqual(win, `node "C:/work/my shop/.preferred-tools/mcp-headers.js" ${G} Bearer`);
-    assert.strictEqual(helperOf(plan(inv(WIN), pickOne('github', { route: 'remote', scope: 'user' }), opts('C:\\Users\\me')), 'github'), `node C:/Users/me/.preferred-tools/mcp-headers.js ${G} Bearer`);
+    assert.strictEqual(win, `node "C:/work/my shop/.alfred-tools/mcp-headers.js" ${G} Bearer`);
+    assert.strictEqual(helperOf(plan(inv(WIN), pickOne('github', { route: 'remote', scope: 'user' }), opts('C:\\Users\\me')), 'github'), `node C:/Users/me/.alfred-tools/mcp-headers.js ${G} Bearer`);
 });
 
 test('a helper path holding shell characters reaches node whole, and the command reads back to its path and key name', () => {
     const cases = [
-        ['posix', '/work/R&D/.preferred-tools/mcp-headers.js', `node '/work/R&D/.preferred-tools/mcp-headers.js' ${G} Bearer`],
-        ['posix', "/Users/bob's-app/.preferred-tools/mcp-headers.js", `node '/Users/bob'\\''s-app/.preferred-tools/mcp-headers.js' ${G} Bearer`],
-        ['posix', '/work/a $b (c)/.preferred-tools/mcp-headers.js', `node '/work/a $b (c)/.preferred-tools/mcp-headers.js' ${G} Bearer`],
-        ['win32', 'C:\\Users\\mac\\.preferred-tools\\mcp-headers.js', `node C:/Users/mac/.preferred-tools/mcp-headers.js ${G} Bearer`],
-        ['win32', 'C:\\Users\\Jo Doe\\.preferred-tools\\mcp-headers.js', `node "C:/Users/Jo Doe/.preferred-tools/mcp-headers.js" ${G} Bearer`],
+        ['posix', '/work/R&D/.alfred-tools/mcp-headers.js', `node '/work/R&D/.alfred-tools/mcp-headers.js' ${G} Bearer`],
+        ['posix', "/Users/bob's-app/.alfred-tools/mcp-headers.js", `node '/Users/bob'\\''s-app/.alfred-tools/mcp-headers.js' ${G} Bearer`],
+        ['posix', '/work/a $b (c)/.alfred-tools/mcp-headers.js', `node '/work/a $b (c)/.alfred-tools/mcp-headers.js' ${G} Bearer`],
+        ['win32', 'C:\\Users\\mac\\.alfred-tools\\mcp-headers.js', `node C:/Users/mac/.alfred-tools/mcp-headers.js ${G} Bearer`],
+        ['win32', 'C:\\Users\\Jo Doe\\.alfred-tools\\mcp-headers.js', `node "C:/Users/Jo Doe/.alfred-tools/mcp-headers.js" ${G} Bearer`],
     ] as [string, string, string][];
     for (const [style, helperPath, want] of cases)
     {
@@ -1547,8 +1547,8 @@ test('context7 hosted: global recommended and the key first, filled or not (spec
         assert.strictEqual(addStep(p0).scope, 'user');
         assert.match(addStep(p0).entry.headersHelper!, /CONTEXT7_API_KEY Bearer$/);
         // filled in the global chain: the same, and the value stays in the key file
-        fs.mkdirSync(path.join(w.home, '.preferred-tools'), { recursive: true });
-        fs.writeFileSync(path.join(w.home, '.preferred-tools', SECRETS_FILE), 'CONTEXT7_API_KEY=ctx7-fake\n');
+        fs.mkdirSync(path.join(w.home, '.alfred-tools'), { recursive: true });
+        fs.writeFileSync(path.join(w.home, '.alfred-tools', SECRETS_FILE), 'CONTEXT7_API_KEY=ctx7-fake\n');
         assert.strictEqual(scopeOf(), 'Global (Recommended)');
         assert.strictEqual(keyQ('user')!.options[0]!.label, 'Use a key from .mcps-secrets (Recommended)');
         const p1 = plan(i, pickOne('context7', { route: 'remote' }), { home: w.home, env: {} });
@@ -1566,7 +1566,7 @@ test('sentry: a key recommended, with Sentry-Bearer; OAuth when picked', () => {
     const p = plan(inv(MAC), pickOne('sentry', { route: 'remote', token: false }), opts('/Users/me'));
     assert.deepStrictEqual([addStep(p).scope, addStep(p).entry.headersHelper, p.oauth.map((x) => x.row)], ['user', undefined, ['sentry']]);
     const keyed = plan(inv(MAC), pickOne('sentry', { route: 'remote', scope: 'user', token: true }), opts('/Users/me'));
-    assert.strictEqual(addStep(keyed).entry.headersHelper, 'node /Users/me/.preferred-tools/mcp-headers.js SENTRY_ACCESS_TOKEN Sentry-Bearer');
+    assert.strictEqual(addStep(keyed).entry.headersHelper, 'node /Users/me/.alfred-tools/mcp-headers.js SENTRY_ACCESS_TOKEN Sentry-Bearer');
     assert.deepStrictEqual(keyed.oauth, []);
 });
 
@@ -1591,9 +1591,9 @@ test('the old-file line names the project root\'s .mcps-secrets at local scope a
         const local = plan(i, pickOne('github', { route: 'remote', scope: 'local' }), { home: w.home, env: {} });
         const old = path.join(w.project, ...ALFRED_STORE);
         assert.strictEqual(local.keys[0]!.old, old);
-        assert.ok(renderPlan(local).includes(`${G} is in ${old}, which preferred-tools no longer reads: move it to ${path.join(w.project, '.preferred-tools', SECRETS_FILE)}`), renderPlan(local));
+        assert.ok(renderPlan(local).includes(`${G} is in ${old}, which alfred-tools no longer reads: move it to ${path.join(w.project, '.alfred-tools', SECRETS_FILE)}`), renderPlan(local));
         const user = plan(i, pickOne('github', { route: 'remote', scope: 'user' }), { home: w.home, env: {} });
-        assert.ok(renderPlan(user).includes(`move it to ${path.join(w.home, '.preferred-tools', SECRETS_FILE)}`), renderPlan(user));
+        assert.ok(renderPlan(user).includes(`move it to ${path.join(w.home, '.alfred-tools', SECRETS_FILE)}`), renderPlan(user));
         assert.ok(!renderPlan(local).includes('old-fake') && !JSON.stringify(local).includes('old-fake'));
     }
     finally { w.clean(); }
@@ -1618,15 +1618,15 @@ test('key name options: the default, names found holding the row id, \'A name yo
         // a row-id name in a file 0.1.x read, another in the global root's .mcps-secrets: both offered, the filled one
         // in the chain recommended; a name without the row id, or not key-shaped, is not
         const store = putKeys(w.project, ALFRED_STORE, [`ACME_GITHUB_ACCESS_TOKEN=${fake(1)}`, `OTHER_TOKEN=${fake(2)}`]);
-        mcpsAt(path.join(w.home, '.preferred-tools'), [`WORK_GITHUB_TOKEN=${fake(3)}`, `GITHUB_ORG=${fake(4)}`]);
+        mcpsAt(path.join(w.home, '.alfred-tools'), [`WORK_GITHUB_TOKEN=${fake(3)}`, `GITHUB_ORG=${fake(4)}`]);
         k = q();
         assert.deepStrictEqual(labels(k!), ['WORK_GITHUB_TOKEN (Recommended)', G, 'ACME_GITHUB_ACCESS_TOKEN', 'A name you choose']);
         const desc = Object.fromEntries(k!.question.options.map((o) => [o.label, o.description]));
-        assert.strictEqual(desc['WORK_GITHUB_TOKEN (Recommended)'], `filled in ${path.join(w.home, '.preferred-tools', '.mcps-secrets')}`);
+        assert.strictEqual(desc['WORK_GITHUB_TOKEN (Recommended)'], `filled in ${path.join(w.home, '.alfred-tools', '.mcps-secrets')}`);
         assert.strictEqual((desc as Record<string, string> & { ACME_GITHUB_ACCESS_TOKEN: string }).ACME_GITHUB_ACCESS_TOKEN, `in ${store} - move it to .mcps-secrets under this name`);
         assert.match(desc[G]!, /the catalog's name - add it to /);
         // the default filled too: the default first
-        mcpsAt(path.join(w.home, '.preferred-tools'), [`${G}=${fake(5)}`]);
+        mcpsAt(path.join(w.home, '.alfred-tools'), [`${G}=${fake(5)}`]);
         k = q();
         assert.deepStrictEqual(labels(k!).slice(0, 2), [`${G} (Recommended)`, 'WORK_GITHUB_TOKEN']);
         assert.ok(!/not-printed/.test(JSON.stringify(k)), 'names only, never a value');
@@ -1644,11 +1644,11 @@ test('a key name outside ^[A-Za-z_][A-Za-z0-9_]*$ is a plan error that states th
     assert.deepStrictEqual(bad.steps, []);
     // a good name: the helper passes it, the key line names it
     const ok = plan(inv(MAC), { picks: { github: { route: 'remote', scope: 'user' } }, keyNames: { github: 'ACME_GITHUB_TOKEN' } }, opts('/Users/me'));
-    assert.strictEqual(helperOf(ok, 'github'), 'node /Users/me/.preferred-tools/mcp-headers.js ACME_GITHUB_TOKEN Bearer');
+    assert.strictEqual(helperOf(ok, 'github'), 'node /Users/me/.alfred-tools/mcp-headers.js ACME_GITHUB_TOKEN Bearer');
     assert.strictEqual(ok.keys[0]!.variable, 'ACME_GITHUB_TOKEN');
     // a stdio route: the step carries the name and the stdio chain; the server's own variable keeps its name
     const d = plan(inv(MAC), { picks: { github: { route: 'local', scope: 'local' } }, keyNames: { github: 'ACME_GITHUB_TOKEN' } }, opts('/Users/me'));
-    assert.deepStrictEqual(addStep(d).key, { name: 'ACME_GITHUB_TOKEN', files: [path.join('/work/shop', '.preferred-tools', '.mcps-secrets'), path.join('/Users/me', '.preferred-tools', '.mcps-secrets')] });
+    assert.deepStrictEqual(addStep(d).key, { name: 'ACME_GITHUB_TOKEN', files: [path.join('/work/shop', '.alfred-tools', '.mcps-secrets'), path.join('/Users/me', '.alfred-tools', '.mcps-secrets')] });
     assert.ok(Object.hasOwn(addStep(d).entry.env!, G));
     assert.strictEqual(addStep(plan(inv(MAC), pickOne('github', { route: 'local', scope: 'local' }), opts('/Users/me'))).key!.name, G, 'no answer: the catalog\'s name');
     assert.strictEqual(addStep(plan(inv(MAC), pickOne('context7', { route: 'local', scope: 'local' }), opts('/Users/me'))).key, undefined, 'no key picked: no key step');
@@ -1665,7 +1665,7 @@ test('settings: \'Keep these settings\' lists NAME=value; \'No settings\' for an
         assert.deepStrictEqual(s(id, route)!.question.options[0], { label: 'No settings (Recommended)', description: "the server's own defaults" }, id);
     assert.strictEqual(s('github', 'remote'), null, 'a hosted route takes no environment');
     // configure starts from the registration as read, the user's own additions included; resolved values are not listed
-    const serena = { command: 'uvx', args: [], env: { SERENA_USAGE_REPORTING: 'false', SERENA_HOME: '/w/.preferred-tools/serena', MY_FLAG: '1' } };
+    const serena = { command: 'uvx', args: [], env: { SERENA_USAGE_REPORTING: 'false', SERENA_HOME: '/w/.alfred-tools/serena', MY_FLAG: '1' } };
     assert.strictEqual(s('serena', 'local', serena)!.question.options[0]!.description, 'SERENA_USAGE_REPORTING=false, MY_FLAG=1');
     const appium = { command: 'npx', args: [], env: { NO_UI: 'true', ANDROID_HOME: '/sdk', SCREENSHOTS_DIR: '/w/s', npm_config_before: '2026-11-10T23:59:59Z' } };
     assert.strictEqual(s('appium', 'local', appium)!.question.options[0]!.description, 'NO_UI=true');
@@ -1707,13 +1707,13 @@ test('an existing root without a .gitignore gets no key file step and the plan n
     try
     {
         assert.strictEqual(spawnSync('git', ['-C', w.project, 'init', '-q']).status, 0);
-        const root = path.join(w.project, '.preferred-tools');
+        const root = path.join(w.project, '.alfred-tools');
         fs.mkdirSync(root, { recursive: true });
         const i = inv({ ...MAC, os: process.platform, project: w.project });
         const at = (scope: string) => plan(i, pickOne('github', { route: 'remote', scope }), { home: w.home, env: {} });
         let p = at('local');
         assert.ok(!p.steps.some((s) => s.op === 'ensure-key-name' || s.op === 'root-ignore'), JSON.stringify(p.steps.map((s) => s.op)));
-        assert.ok(p.notes.includes(`${root}: git would commit ${path.join(root, '.mcps-secrets')} - no key file is written there; /preferred-tools:fix (root-ignore) covers it`), p.notes.join('\n'));
+        assert.ok(p.notes.includes(`${root}: git would commit ${path.join(root, '.mcps-secrets')} - no key file is written there; /alfred-tools:fix (root-ignore) covers it`), p.notes.join('\n'));
         // a 0.1.x .gitignore holding *: the key file is ignored, so its name is written; the helper a committed server
         // needs is ignored too, which matters at project scope only
         fs.writeFileSync(path.join(root, '.gitignore'), '*\n');
@@ -1724,10 +1724,10 @@ test('an existing root without a .gitignore gets no key file step and the plan n
         assert.ok(!p.notes.some((n) => n.startsWith(helperGap)), p.notes.join('\n'));
         p = at('project');
         assert.deepStrictEqual((p.steps.filter((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep[]).map((s) => s.file), [keyFile]);
-        assert.ok(p.notes.includes(`${helperGap} - /preferred-tools:fix (root-ignore) covers it`), p.notes.join('\n'));
+        assert.ok(p.notes.includes(`${helperGap} - /alfred-tools:fix (root-ignore) covers it`), p.notes.join('\n'));
         // a .gitignore above excludes the root: no appended line can bring the helper back
         fs.writeFileSync(path.join(root, '.gitignore'), '*\n!.gitignore\n!mcp-headers.js\n');
-        fs.writeFileSync(path.join(w.project, '.gitignore'), '.preferred-tools/\n');
+        fs.writeFileSync(path.join(w.project, '.gitignore'), '.alfred-tools/\n');
         p = at('project');
         assert.deepStrictEqual((p.steps.filter((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep[]).map((s) => s.file), [keyFile]);
         assert.ok(p.notes.includes(`${helperGap} - a .gitignore above excludes ${root}: remove that line (git check-ignore -v ${root} names it)`), p.notes.join('\n'));
@@ -1737,7 +1737,7 @@ test('an existing root without a .gitignore gets no key file step and the plan n
         fs.rmSync(path.join(w.project, '.gitignore'));
         // a global root outside any work tree gets its key file step
         p = at('user');
-        assert.deepStrictEqual((p.steps.filter((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep[]).map((s) => [s.file, s.names]), [[path.join(w.home, '.preferred-tools', '.mcps-secrets'), [G]]]);
+        assert.deepStrictEqual((p.steps.filter((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep[]).map((s) => [s.file, s.names]), [[path.join(w.home, '.alfred-tools', '.mcps-secrets'), [G]]]);
     }
     finally { w.clean(); }
 });
@@ -1752,14 +1752,14 @@ test('the file steps come before the registration steps and the records last', {
     assert.ok(lastFile < firstReg, ops.join(', '));
     assert.deepStrictEqual(ops.slice(-2), ['record-root', 'record-root']);
     const of = (op: string) => p.steps.filter((s) => s.op === op);
-    assert.deepStrictEqual(of('root-ignore').map((s) => (s as PathStep).path), ['/work/shop/.preferred-tools', '/Users/me/.preferred-tools']);
-    assert.deepStrictEqual(of('write-helper').map((s) => (s as PathStep).path), ['/Users/me/.preferred-tools']);
-    assert.deepStrictEqual(of('ensure-key-name').map((s) => [(s as ListWriteStep).file, (s as EnsureKeyNameStep).names]), [['/work/shop/.preferred-tools/.mcps-secrets', [S_VAR]], ['/Users/me/.preferred-tools/.mcps-secrets', [G]]]);
-    assert.deepStrictEqual(of('record-root').map((s) => [(s as ListWriteStep).family, (s as RecordRootStep).root]), [['project', '/work/shop/.preferred-tools'], ['global', '/Users/me/.preferred-tools']]);
+    assert.deepStrictEqual(of('root-ignore').map((s) => (s as PathStep).path), ['/work/shop/.alfred-tools', '/Users/me/.alfred-tools']);
+    assert.deepStrictEqual(of('write-helper').map((s) => (s as PathStep).path), ['/Users/me/.alfred-tools']);
+    assert.deepStrictEqual(of('ensure-key-name').map((s) => [(s as ListWriteStep).file, (s as EnsureKeyNameStep).names]), [['/work/shop/.alfred-tools/.mcps-secrets', [S_VAR]], ['/Users/me/.alfred-tools/.mcps-secrets', [G]]]);
+    assert.deepStrictEqual(of('record-root').map((s) => [(s as ListWriteStep).family, (s as RecordRootStep).root]), [['project', '/work/shop/.alfred-tools'], ['global', '/Users/me/.alfred-tools']]);
     const text = renderPlan(p);
-    assert.ok(text.includes('writes /Users/me/.preferred-tools/.mcps-secrets  (names only: GITHUB_PERSONAL_ACCESS_TOKEN - you fill in each value)'), text);
-    assert.ok(text.includes('writes /Users/me/.preferred-tools/mcp-headers.js'), text);
-    assert.ok(text.includes('writes /work/shop/.preferred-tools/.gitignore'), text);
+    assert.ok(text.includes('writes /Users/me/.alfred-tools/.mcps-secrets  (names only: GITHUB_PERSONAL_ACCESS_TOKEN - you fill in each value)'), text);
+    assert.ok(text.includes('writes /Users/me/.alfred-tools/mcp-headers.js'), text);
+    assert.ok(text.includes('writes /work/shop/.alfred-tools/.gitignore'), text);
     // under .alfred: no root-ignore
     const a = plan(inv(MAC, { alfredCodeEnabled: true }), pickOne('playwright-chrome'), opts('/Users/me', { exists: ALFRED }));
     assert.ok(!a.steps.some((s) => s.op === 'root-ignore'), a.steps.map((s) => s.op).join());
@@ -1778,7 +1778,7 @@ test("a tool answered 'own' is not offered; 'add' is offered with the two-server
     for (const id of ['sentry', 'context7', 'atlassian']) assert.ok(!has(own, id), id);
     assert.ok(has(own, 'github'), 'a tool not answered is still offered');
     // recorded on their own: the same
-    const recorded = inv(MAC, { registrations: [{ ...sentry, choice: 'own' }], pluginServers: [{ ...c7, choice: 'own' }], lists: { project: null, global: { file: '/Users/me/.preferred-tools/mcps.json', servers: [], own: [{ connector: 'Atlassian', choice: 'own' }] } } });
+    const recorded = inv(MAC, { registrations: [{ ...sentry, choice: 'own' }], pluginServers: [{ ...c7, choice: 'own' }], lists: { project: null, global: { file: '/Users/me/.alfred-tools/mcps.json', servers: [], own: [{ connector: 'Atlassian', choice: 'own' }] } } });
     for (const id of ['sentry', 'context7', 'atlassian']) assert.ok(!has(pickQuestions(recorded, catalog), id), id);
     // 'add' and 'manage': offered; 'add' says two servers then run
     const add = pickQuestions(i, catalog, { 'plugin-mcp:docs@m/c7': 'add', 'connector:Atlassian': 'add', 'mcp:sentry~user': 'manage' });
@@ -1819,11 +1819,11 @@ test('plan.js --questions with --connectors prints no existing block, reads no l
     finally { w.clean(); }
 });
 
-test("configure: the 'On their own' group, and 'Let preferred-tools manage it' plans only a list-write step", () => {
+test("configure: the 'On their own' group, and 'Let alfred-tools manage it' plans only a list-write step", () => {
     const gh = reg('github', 'user', { type: 'http', url: 'https://api.githubcopilot.com/mcp/' }, 'github', 'remote', { choice: 'own' });
     const c7 = reg('context7', 'local', { type: 'http', url: 'https://mcp.context7.com/mcp' }, 'context7', 'remote', { choice: null });
     const ghOwn = { name: 'github', scope: 'user', fingerprint: 'url:api.githubcopilot.com/mcp', choice: 'own' };
-    const i = inv(MAC, { registrations: [gh, c7], pluginServers: [], lists: { project: null, global: { file: '/Users/me/.preferred-tools/mcps.json', servers: [], own: [ghOwn] } } });
+    const i = inv(MAC, { registrations: [gh, c7], pluginServers: [], lists: { project: null, global: { file: '/Users/me/.alfred-tools/mcps.json', servers: [], own: [ghOwn] } } });
     const ch = changeQuestions(i, catalog);
     assert.strictEqual(ch.keys['github (github, user) - on its own'], 'mcp:github~user');
     assert.strictEqual(ch.keys['context7 (context7, local)'], 'mcp:context7~local');
@@ -1833,7 +1833,7 @@ test("configure: the 'On their own' group, and 'Let preferred-tools manage it' p
     // its pick asks one question: keep it, or hand it over
     const t = asks.allQuestions(i, { targets: ['mcp:github~user'] }, catalog).targets['mcp:github~user'];
     assert.strictEqual(t!.kind, 'own');
-    assert.deepStrictEqual(t!.own!.question.options.map((o) => o.label), ['Keep it on its own (Recommended)', 'Let preferred-tools manage it']);
+    assert.deepStrictEqual(t!.own!.question.options.map((o) => o.label), ['Keep it on its own (Recommended)', 'Let alfred-tools manage it']);
     assert.deepStrictEqual(Object.values(t!.own!.answers).map((a) => (a as { choice: string }).choice), ['own', 'manage']);
     assert.ok(!t!.questions && !t!.route, 'no route, scope or name to change');
     const all = asks.allQuestions(i, { targets: ['mcp:github~user'] }, catalog);
@@ -1842,13 +1842,13 @@ test("configure: the 'On their own' group, and 'Let preferred-tools manage it' p
     const p = plan(i, { existing: { 'mcp:github~user': 'manage' } }, opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
     assert.deepStrictEqual(regSteps(p), []);
-    assert.deepStrictEqual((p.steps.filter((s) => s.op === 'list-write') as ListWriteStep[]).map((s) => [s.file, s.own!.entries, s.own!.keep]), [['/Users/me/.preferred-tools/mcps.json', [], []]]);
-    assert.ok(renderPlan(p).includes('removes /Users/me/.preferred-tools/mcps.json  (no server is listed)'), renderPlan(p));
+    assert.deepStrictEqual((p.steps.filter((s) => s.op === 'list-write') as ListWriteStep[]).map((s) => [s.file, s.own!.entries, s.own!.keep]), [['/Users/me/.alfred-tools/mcps.json', [], []]]);
+    assert.ok(renderPlan(p).includes('removes /Users/me/.alfred-tools/mcps.json  (no server is listed)'), renderPlan(p));
 });
 
 // ---- 0.3.0: the servers left on their own (spec F4), in the list's own since 0.5.0 -------------------------------------
-const PFILE = '/work/shop/.preferred-tools/mcps.json';
-const GFILE = '/Users/me/.preferred-tools/mcps.json';
+const PFILE = '/work/shop/.alfred-tools/mcps.json';
+const GFILE = '/Users/me/.alfred-tools/mcps.json';
 const GH_URL = { type: 'http', url: 'https://api.githubcopilot.com/mcp/' };
 const cleans = (p: Plan) => (p.steps.filter((s) => s.op === 'list-write' && s.own) as ListWriteStep[]).map((s) => [s.file, s.own!.entries, s.own!.keep]);
 
@@ -1869,9 +1869,9 @@ test('install with no key answer: gitlab gets the helper, an empty name line and
     assert.deepStrictEqual(p.errors, []);
     const add = (p.steps.find((s) => s.op === 'mcp-add') as McpAddStep);
     assert.strictEqual(add.scope, 'user');
-    assert.strictEqual(add.entry.headersHelper, 'node /Users/me/.preferred-tools/mcp-headers.js GITLAB_TOKEN Bearer');
-    assert.deepStrictEqual((p.steps.filter((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep[]).map((s) => [s.file, s.names]), [['/Users/me/.preferred-tools/.mcps-secrets', ['GITLAB_TOKEN']]]);
-    assert.match(renderPlan(p), /Not filled yet: add GITLAB_TOKEN=<your key> to \/Users\/me\/\.preferred-tools\/\.mcps-secrets/);
+    assert.strictEqual(add.entry.headersHelper, 'node /Users/me/.alfred-tools/mcp-headers.js GITLAB_TOKEN Bearer');
+    assert.deepStrictEqual((p.steps.filter((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep[]).map((s) => [s.file, s.names]), [['/Users/me/.alfred-tools/.mcps-secrets', ['GITLAB_TOKEN']]]);
+    assert.match(renderPlan(p), /Not filled yet: add GITLAB_TOKEN=<your key> to \/Users\/me\/\.alfred-tools\/\.mcps-secrets/);
     assert.deepStrictEqual(p.oauth, []);
     const oauth = plan(inv(MAC), pickOne('gitlab', { token: false }), opts('/Users/me'));
     const e = (oauth.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry;
@@ -1888,14 +1888,14 @@ test("context7's local route: keyless at project scope; at local scope an unfill
     try
     {
         const base = { ...MAC, project: dir };
-        const file = path.join(dir, '.preferred-tools', '.mcps-secrets');
+        const file = path.join(dir, '.alfred-tools', '.mcps-secrets');
         const local = plan(inv(base), pickOne('context7', { route: 'local', scope: 'local' }), opts('/Users/me'));
         assert.deepStrictEqual(local.errors, []);
         const add = (local.steps.find((s) => s.op === 'mcp-add') as McpAddStep);
         assert.ok(!add.entry.args!.includes('--api-key'), JSON.stringify(add.entry));
         assert.strictEqual(add.key, undefined);
         assert.deepStrictEqual((local.steps.filter((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep[]).map((s) => [s.file, s.names]), [[file, ['CONTEXT7_API_KEY']]]);
-        assert.ok(local.notes.includes(`context7: fill CONTEXT7_API_KEY in ${file}, then /preferred-tools:configure -> Use a key from .mcps-secrets writes it in`), local.notes.join('\n'));
+        assert.ok(local.notes.includes(`context7: fill CONTEXT7_API_KEY in ${file}, then /alfred-tools:configure -> Use a key from .mcps-secrets writes it in`), local.notes.join('\n'));
         // filled: the key goes in
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, 'CONTEXT7_API_KEY=v-not-printed\n');
@@ -1915,18 +1915,18 @@ test("install plans no own entry when nothing is left on its own; a 0.2.0 record
     assert.deepStrictEqual(cleans(fresh), []);
     const manage = { name: 'gh', scope: 'local', fingerprint: 'url:api.githubcopilot.com/mcp', choice: 'manage' };
     const add = { plugin: 'docs@m', server: 'c7', fingerprint: 'url:mcp.context7.com/mcp', choice: 'add' };
-    const i = inv(MAC, { registrations: [reg('gh', 'local', GH_URL, 'github', 'remote')], lists: { project: { file: PFILE, servers: [], own: [manage, add], old: '/work/shop/.preferred-tools/preferred-tools.json' }, global: null } });
+    const i = inv(MAC, { registrations: [reg('gh', 'local', GH_URL, 'github', 'remote')], lists: { project: { file: PFILE, servers: [], own: [manage, add], old: '/work/shop/.alfred-tools/preferred-tools.json' }, global: null } });
     const p = plan(i, pickOne('playwright-chrome'), opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
     assert.deepStrictEqual(cleans(p), [[PFILE, [], []]]);
     const step = (p.steps.find((s) => s.op === 'list-write') as ListWriteStep);
-    assert.strictEqual(step.why, `${PFILE}: the servers preferred-tools manages, and the ones you left on their own - configure, update and fix skip those. Remove an entry from its own list, or the file, to hand them back.`);
+    assert.strictEqual(step.why, `${PFILE}: the servers alfred-tools manages, and the ones you left on their own - configure, update and fix skip those. Remove an entry from its own list, or the file, to hand them back.`);
     // the first touch of a family with no list: its managed registrations join it, the record is moved aside
     assert.deepStrictEqual(step.upserts.map((u) => [u.server.name, u.after]), [['playwright-chrome', 'mcp:playwright-chrome~local'], ['gh', null]]);
-    assert.deepStrictEqual((p.steps.filter((s) => s.op === 'retire-record') as FileStep[]).map((s) => s.file), ['/work/shop/.preferred-tools/preferred-tools.json']);
-    assert.ok(renderPlan(p).includes('moves /work/shop/.preferred-tools/preferred-tools.json aside as preferred-tools.json.0.4.bak  (its entries are in mcps.json now)'), renderPlan(p));
+    assert.deepStrictEqual((p.steps.filter((s) => s.op === 'retire-record') as FileStep[]).map((s) => s.file), ['/work/shop/.alfred-tools/preferred-tools.json']);
+    assert.ok(renderPlan(p).includes('moves /work/shop/.alfred-tools/preferred-tools.json aside as preferred-tools.json.0.4.bak  (its entries are in mcps.json now)'), renderPlan(p));
     // fix's own call to fileSteps has no own part
-    const ctx = { ...makeCtx(inv(MAC), opts('/Users/me')), uses: [], roots: { project: '/work/shop/.preferred-tools', global: null } };
+    const ctx = { ...makeCtx(inv(MAC), opts('/Users/me')), uses: [], roots: { project: '/work/shop/.alfred-tools', global: null } };
     assert.deepStrictEqual(fileSteps(i, ctx, { notes: [] }).after.filter((s) => s.op === 'list-write'), []);
 });
 
@@ -1937,9 +1937,9 @@ test("a global-family own entry in this project's list moves to the global root'
     assert.deepStrictEqual(p.errors, []);
     assert.deepStrictEqual(cleans(p), [[PFILE, [], []], [GFILE, [g], []]]);
     // the global root is not there yet: its .gitignore and its roots-map entry come with it
-    assert.ok(p.steps.some((s) => s.op === 'root-ignore' && s.path === '/Users/me/.preferred-tools'), p.steps.map((s) => s.op).join());
-    assert.ok(p.steps.some((s) => s.op === 'record-root' && s.family === 'global' && s.root === '/Users/me/.preferred-tools'));
-    assert.ok(renderPlan(p).includes(`writes ${GFILE}  (the servers preferred-tools manages, and the ones left on their own)`), renderPlan(p));
+    assert.ok(p.steps.some((s) => s.op === 'root-ignore' && s.path === '/Users/me/.alfred-tools'), p.steps.map((s) => s.op).join());
+    assert.ok(p.steps.some((s) => s.op === 'record-root' && s.family === 'global' && s.root === '/Users/me/.alfred-tools'));
+    assert.ok(renderPlan(p).includes(`writes ${GFILE}  (the servers alfred-tools manages, and the ones left on their own)`), renderPlan(p));
     // a root change: the old root's list is emptied, the new one holds the entry
     const c = { name: 'c7', scope: 'local', fingerprint: 'url:mcp.context7.com/mcp', choice: 'own' };
     const moved = inv(MAC, { registrations: [reg('c7', 'local', { type: 'http', url: 'https://mcp.context7.com/mcp' }, 'context7', 'remote', { choice: 'own' })], roots: usedRoots(OLD_ROOT), lists: { project: { file: PFILE, servers: [], own: [c] }, global: null } });
@@ -1948,7 +1948,7 @@ test("a global-family own entry in this project's list moves to the global root'
     assert.deepStrictEqual(cleans(r), [['/work/shop/tools/mcps.json', [c], []], [PFILE, [], []]]);
 });
 
-test("configure: 'Leave it on its own' writes one own entry in the family root's list, 'preferred-tools' writes none, and a change for an own target is not planned", () => {
+test("configure: 'Leave it on its own' writes one own entry in the family root's list, 'alfred-tools' writes none, and a change for an own target is not planned", () => {
     const entry = { type: 'http', url: 'https://gitlab.com/api/v4/mcp' };
     const i = inv(MAC, { registrations: [reg('gitlab', 'project', entry, 'gitlab', 'remote')], lists: { project: null, global: null } });
     const p = plan(i, { existing: { 'mcp:gitlab~project': 'own' }, change: { 'mcp:gitlab~project': { scope: 'local' } } }, opts('/Users/me'));
@@ -1985,11 +1985,11 @@ test("a project entry in the global root's list stays there and is named; its ma
     assert.deepStrictEqual(p.errors, []);
     assert.deepStrictEqual(cleans(p), [[GFILE, [], [x]]]);
     assert.ok(p.notes.includes(`${GFILE} holds x (project), left on its own in another project - it stays there; remove it there to hand it back`), p.notes.join('\n'));
-    assert.ok(renderPlan(p).includes(`writes ${GFILE}  (the servers preferred-tools manages, and the ones left on their own)`), renderPlan(p));
+    assert.ok(renderPlan(p).includes(`writes ${GFILE}  (the servers alfred-tools manages, and the ones left on their own)`), renderPlan(p));
 });
 
 // ---- 0.2.0: configure changes a root folder, a key's name and the settings (spec D7, D9; plan R3) ----------------------
-const OLD_ROOT = '/work/shop/.preferred-tools';
+const OLD_ROOT = '/work/shop/.alfred-tools';
 const ghHelper = (root: string, name = G) => ({ type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${root}/mcp-headers.js ${name} Bearer` });
 const usedRoots = (project: string | null, global: string | null = null) => ({ map: null, project: project && { path: project, from: 'registration' }, global: global && { path: global, from: 'registration' } });
 
@@ -2008,7 +2008,7 @@ test('change the root: each managed registration of the family is re-added with 
     // its pick asks D2's root question, the root in use recommended
     const t = asks.allQuestions(i, { targets: ['root:project'] }, catalog).targets['root:project'];
     assert.deepStrictEqual([t!.kind, t!.family], ['root', 'project']);
-    assert.strictEqual(t!.root!.question.options[0]!.label, '.preferred-tools in this project (Recommended)');
+    assert.strictEqual(t!.root!.question.options[0]!.label, '.alfred-tools in this project (Recommended)');
     checkQuestion(t!.root!.question);
     const p = plan(i, { rootChange: ['project'], roots: { project: { id: 'named', path: 'tools' } } }, opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
@@ -2021,12 +2021,12 @@ test('change the root: each managed registration of the family is re-added with 
     assert.ok(e.args!.includes('@playwright/mcp@0.0.90'), 'the entry as read: its pin stays');
     assert.strictEqual(e.args![e.args!.indexOf('--user-data-dir') + 1], '/work/shop/tools/playwright-chrome');
     assert.strictEqual((p.steps[5] as McpAddStep).entry.headersHelper, `node /work/shop/tools/mcp-headers.js ${G} Bearer`);
-    assert.match(p.notes.join('\n'), /the old data stays at \/work\/shop\/\.preferred-tools\/playwright-chrome; moving a location moves no data/);
+    assert.match(p.notes.join('\n'), /the old data stays at \/work\/shop\/\.alfred-tools\/playwright-chrome; moving a location moves no data/);
     assert.ok(p.notes.includes(`copy the values from ${OLD_ROOT}/.mcps-secrets to /work/shop/tools/.mcps-secrets yourself - until then those servers connect without their keys`));
     // the same root again: nothing to do
     const same = plan(i, { rootChange: ['project'] }, opts('/Users/me'));
     assert.deepStrictEqual([same.errors, same.steps], [[], []]);
-    assert.match(same.unchanged.join('\n'), /the project root is already .*\.preferred-tools/);
+    assert.match(same.unchanged.join('\n'), /the project root is already .*\.alfred-tools/);
 });
 
 test('change the root: the old data and the old key file stay, the new key file holds the names with empty values, the list\'s entries move', () => {
@@ -2034,7 +2034,7 @@ test('change the root: the old data and the old key file stay, the new key file 
     try
     {
         const data = path.join(w.dir, 'data');
-        const old = path.join(w.project, '.preferred-tools');
+        const old = path.join(w.project, '.alfred-tools');
         const fresh = path.join(w.project, 'tools');
         const v = `v-${Date.now()}-not-printed`;
         const install = plan(inventoryLib.buildInventory({ project: w.project, env: w.env, data }), pickOne('playwright-chrome', { scope: 'local' }), { home: w.home, env: w.env });
@@ -2080,8 +2080,8 @@ test('change the root: the old data and the old key file stay, the new key file 
 
 test('change the root: the other family\'s registrations are untouched', () => {
     const pw = installed('playwright-chrome', { scope: 'local' });
-    const sentry = reg('sentry', 'user', { type: 'http', url: 'https://mcp.sentry.dev/mcp', headersHelper: 'node /Users/me/.preferred-tools/mcp-headers.js SENTRY_ACCESS_TOKEN Sentry-Bearer' }, 'sentry', 'remote');
-    const i = inv(MAC, { registrations: [pw, sentry], roots: usedRoots(OLD_ROOT, '/Users/me/.preferred-tools') });
+    const sentry = reg('sentry', 'user', { type: 'http', url: 'https://mcp.sentry.dev/mcp', headersHelper: 'node /Users/me/.alfred-tools/mcp-headers.js SENTRY_ACCESS_TOKEN Sentry-Bearer' }, 'sentry', 'remote');
+    const i = inv(MAC, { registrations: [pw, sentry], roots: usedRoots(OLD_ROOT, '/Users/me/.alfred-tools') });
     const ch = changeQuestions(i, catalog);
     assert.deepStrictEqual(['Project root folder', 'Global root folder'].map((l) => ch.keys[l]), ['root:project', 'root:global']);
     const project = plan(i, { rootChange: ['project'], roots: { project: { id: 'named', path: 'tools' } } }, opts('/Users/me'));
@@ -2098,21 +2098,21 @@ test('change the root: the other family\'s registrations are untouched', () => {
 test('change the global root: a local helper that names the old global root is re-pointed here, and the plan names those elsewhere', () => {
     const OLD = '/Users/me/keys';
     const sentry = reg('sentry', 'user', { type: 'http', url: 'https://mcp.sentry.dev/mcp', headersHelper: `node ${OLD}/mcp-headers.js SENTRY_ACCESS_TOKEN Sentry-Bearer` }, 'sentry', 'remote');
-    const gh = reg('github', 'local', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node /work/shop/.preferred-tools/mcp-headers.js ${G} Bearer ${OLD}` }, 'github', 'remote');
-    const i = inv(MAC, { registrations: [sentry, gh], roots: usedRoots('/work/shop/.preferred-tools', OLD) });
+    const gh = reg('github', 'local', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node /work/shop/.alfred-tools/mcp-headers.js ${G} Bearer ${OLD}` }, 'github', 'remote');
+    const i = inv(MAC, { registrations: [sentry, gh], roots: usedRoots('/work/shop/.alfred-tools', OLD) });
     const named = plan(i, { rootChange: ['global'], roots: { global: { id: 'named', path: '/Users/me/vault' } } }, opts('/Users/me'));
     assert.deepStrictEqual(named.errors, []);
     assert.deepStrictEqual(regSteps(named).map((s) => [s.op, (s as McpAddStep).name, (s as McpAddStep).scope]), [['mcp-replace', 'sentry', 'user'], ['mcp-replace', 'github', 'local']]);
-    assert.strictEqual((regSteps(named)[1] as McpAddStep).entry.headersHelper, `node /work/shop/.preferred-tools/mcp-headers.js ${G} Bearer /Users/me/vault`);
-    assert.ok(named.notes.includes(`a local server in another project whose helper names ${OLD} keeps reading its .mcps-secrets until /preferred-tools:configure runs there`), named.notes.join('\n'));
+    assert.strictEqual((regSteps(named)[1] as McpAddStep).entry.headersHelper, `node /work/shop/.alfred-tools/mcp-headers.js ${G} Bearer /Users/me/vault`);
+    assert.ok(named.notes.includes(`a local server in another project whose helper names ${OLD} keeps reading its .mcps-secrets until /alfred-tools:configure runs there`), named.notes.join('\n'));
     // the standard global root: the helper reads it itself, so the third argument goes
-    const standard = plan(i, { rootChange: ['global'], roots: { global: { id: 'preferred-tools' } } }, opts('/Users/me'));
+    const standard = plan(i, { rootChange: ['global'], roots: { global: { id: 'alfred-tools' } } }, opts('/Users/me'));
     assert.deepStrictEqual(standard.errors, []);
-    assert.strictEqual((regSteps(standard).find((s) => (s as McpAddStep).name === 'github') as McpAddStep).entry.headersHelper, `node /work/shop/.preferred-tools/mcp-headers.js ${G} Bearer`);
+    assert.strictEqual((regSteps(standard).find((s) => (s as McpAddStep).name === 'github') as McpAddStep).entry.headersHelper, `node /work/shop/.alfred-tools/mcp-headers.js ${G} Bearer`);
 });
 
 test('configure: the key name and the settings start from the registration as read', () => {
-    const gh = reg('gh', 'user', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headers: { 'X-Team': 'core' }, headersHelper: 'node /Users/me/.preferred-tools/mcp-headers.js ACME_GH Bearer' }, 'github', 'remote');
+    const gh = reg('gh', 'user', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headers: { 'X-Team': 'core' }, headersHelper: 'node /Users/me/.alfred-tools/mcp-headers.js ACME_GH Bearer' }, 'github', 'remote');
     const serena = installed('serena', { scope: 'local' });
     serena.entry.env = { ...serena.entry.env, MY_FLAG: '1' };
     const i = inv(MAC, { registrations: [gh, serena] });
@@ -2121,7 +2121,7 @@ test('configure: the key name and the settings start from the registration as re
     assert.match(q.settings!['mcp:serena~local']!.question.options[0]!.description, /MY_FLAG=1/);
     const p = plan(i, { change: { 'mcp:gh~user': {} }, keyNames: { 'mcp:gh~user': 'WORK_GH' } }, opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
-    assert.deepStrictEqual((regSteps(p)[0] as McpAddStep).entry, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headers: { 'X-Team': 'core' }, headersHelper: 'node /Users/me/.preferred-tools/mcp-headers.js WORK_GH Bearer' });
+    assert.deepStrictEqual((regSteps(p)[0] as McpAddStep).entry, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headers: { 'X-Team': 'core' }, headersHelper: 'node /Users/me/.alfred-tools/mcp-headers.js WORK_GH Bearer' });
     const st = plan(i, { change: { 'mcp:serena~local': {} }, settings: { 'mcp:serena~local': { SERENA_LOG_LEVEL: 'debug' } } }, opts('/Users/me'));
     assert.deepStrictEqual(st.errors, []);
     const e = regSteps(st).find((s) => s.op === 'mcp-replace')!.entry;
@@ -2138,7 +2138,7 @@ test('the 0.1.x key files are read for names only: a held key is never matched a
         entry.env = { ...entry.env, SENTRY_ACCESS_TOKEN: v };
         assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'sentry', JSON.stringify(entry), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         // the project's 0.1.x key file holds the same value under a name of the user's own
-        const old = keys.oldFiles(w.project, w.home).find((f) => f.startsWith(path.join(w.project, '.preferred-tools')));
+        const old = keys.oldFiles(w.project, w.home).find((f) => f.startsWith(path.join(w.project, '.alfred-tools')));
         fs.mkdirSync(path.dirname(old!), { recursive: true });
         fs.writeFileSync(old!, `ACME_SENTRY_TOKEN=${v}\n`);
         const i = inventoryLib.buildInventory({ project: w.project, env: w.env });
@@ -2167,7 +2167,7 @@ test('configure: a 0.1.x project-scope github Docker registration keeps Project 
         {
             const v = `v-${Date.now()}-not-printed`;
             assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'github', JSON.stringify(docker), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
-            mcpsAt(path.join(w.project, '.preferred-tools'), [filled ? `${G}=${v}` : `${G}=`]);
+            mcpsAt(path.join(w.project, '.alfred-tools'), [filled ? `${G}=${v}` : `${G}=`]);
             const i = inventoryLib.buildInventory({ project: w.project, env: w.env });
             const ctx = fix.makeCtx({ inventory: i, env: w.env, machine: { exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1 }) } as unknown as MachineProbe });
             assert.deepStrictEqual(fix.detectAll(ctx).found.filter((f) => f.name === 'github'), [], 'fix leaves it as it is');
@@ -2190,22 +2190,22 @@ test('project scope writes absolute paths on darwin, linux and win32', () => {
     {
         const P = base.os === 'win32' ? path.win32 : path.posix;
         const ctx = { project: base.project, platform: base.os, home, env: {} };
-        const rel = { kind: 'project', rel: '.preferred-tools/playwright-chrome' } as Root;
+        const rel = { kind: 'project', rel: '.alfred-tools/playwright-chrome' } as Root;
         assert.deepStrictEqual(formatRoot(rel, 'project', ctx), formatRoot(rel, 'local', ctx), base.os);
         assert.deepStrictEqual(formatRoot({ kind: 'home', rel: '.serena' }, 'project', ctx), { value: P.join(home, '.serena') }, base.os);
         assert.ok(!(formatRoot({ kind: 'abs', path: base.os === 'win32' ? 'D:\\data' : '/data' }, 'project', ctx) as { value: string; error?: string }).error, base.os);
         const pw = addStep(plan(inv(base), pickOne('playwright-chrome', { scope: 'project' }), opts(home))).entry;
-        assert.strictEqual(flag(pw, '--user-data-dir'), P.join(base.project, '.preferred-tools', 'playwright-chrome'), base.os);
-        assert.strictEqual(flag(pw, '--output-dir'), P.join(base.project, '.preferred-tools', 'playwright-chrome', 'output'), base.os);
+        assert.strictEqual(flag(pw, '--user-data-dir'), P.join(base.project, '.alfred-tools', 'playwright-chrome'), base.os);
+        assert.strictEqual(flag(pw, '--output-dir'), P.join(base.project, '.alfred-tools', 'playwright-chrome', 'output'), base.os);
     }
 });
 
 test('the helper at project scope is absolute and quoted for its OS', () => {
     const h = (base: { os: string; arch: string; project: string }, home: string) => addStep(plan(inv(base), pickOne('context7', { route: 'remote', scope: 'project', token: true }), opts(home))).entry.headersHelper;
     const cases = [
-        [MAC, '/Users/me', 'node /work/shop/.preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer', '/work/shop/.preferred-tools/mcp-headers.js'],
-        [{ ...MAC, project: "/work/it's shop" }, '/Users/me', "node '/work/it'\\''s shop/.preferred-tools/mcp-headers.js' CONTEXT7_API_KEY Bearer", "/work/it's shop/.preferred-tools/mcp-headers.js"],
-        [{ ...WIN, project: 'C:\\work\\my shop' }, 'C:\\Users\\me', 'node "C:/work/my shop/.preferred-tools/mcp-headers.js" CONTEXT7_API_KEY Bearer', 'C:/work/my shop/.preferred-tools/mcp-headers.js'],
+        [MAC, '/Users/me', 'node /work/shop/.alfred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer', '/work/shop/.alfred-tools/mcp-headers.js'],
+        [{ ...MAC, project: "/work/it's shop" }, '/Users/me', "node '/work/it'\\''s shop/.alfred-tools/mcp-headers.js' CONTEXT7_API_KEY Bearer", "/work/it's shop/.alfred-tools/mcp-headers.js"],
+        [{ ...WIN, project: 'C:\\work\\my shop' }, 'C:\\Users\\me', 'node "C:/work/my shop/.alfred-tools/mcp-headers.js" CONTEXT7_API_KEY Bearer', 'C:/work/my shop/.alfred-tools/mcp-headers.js'],
     ] as [{ os: string; arch: string; project: string }, string, string, string][];
     for (const [base, home, want, file] of cases)
     {
@@ -2219,7 +2219,7 @@ test('serena on Windows at project scope: <project root>\\serena, or the fallbac
     const at = (base: { os: string; arch: string; project: string }, home: string) => plan(inv(base), pickOne('serena', { scope: 'project' }), opts(home));
     const clean = at(WIN, 'C:\\Users\\me');
     assert.deepStrictEqual(clean.errors, []);
-    assert.strictEqual(addStep(clean).entry.env!.SERENA_HOME, 'C:\\work\\shop\\.preferred-tools\\serena');
+    assert.strictEqual(addStep(clean).entry.env!.SERENA_HOME, 'C:\\work\\shop\\.alfred-tools\\serena');
     const spaced = at({ ...WIN, project: 'C:\\work\\my shop' }, 'C:\\Users\\dev');
     assert.deepStrictEqual(spaced.errors, []);
     assert.strictEqual(addStep(spaced).entry.env!.SERENA_HOME, 'C:\\Users\\dev\\.serena');
@@ -2229,15 +2229,15 @@ test('serena on Windows at project scope: <project root>\\serena, or the fallbac
 
 test('memory follows the root: the project root at project and local scope, the global root at user scope', () => {
     const db = (scope: string) => (addStep(plan(inv(MAC), pickOne('memory', { scope }), opts('/Users/me'))).entry.env as EntryEnv).MCP_MEMORY_SQLITE_PATH;
-    assert.strictEqual(db('local'), '/work/shop/.preferred-tools/memory/memory.db');
-    assert.strictEqual(db('project'), '/work/shop/.preferred-tools/memory/memory.db');
-    assert.strictEqual(db('user'), '/Users/me/.preferred-tools/memory/memory.db');
+    assert.strictEqual(db('local'), '/work/shop/.alfred-tools/memory/memory.db');
+    assert.strictEqual(db('project'), '/work/shop/.alfred-tools/memory/memory.db');
+    assert.strictEqual(db('user'), '/Users/me/.alfred-tools/memory/memory.db');
     const q = locationQuestion(catalog.byId.get('memory')!, inv(MAC), { scope: 'local', context: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
     assert.ok(!(q.question ? q.question.options : []).some((o) => o.label.startsWith("The global root's folder")));
 });
 
 test('a configure move of serena or memory from Local to Project plans the absolute path', () => {
-    for (const [id, key, value] of [['serena', 'SERENA_HOME', '/work/shop/.preferred-tools/serena'], ['memory', 'MCP_MEMORY_SQLITE_PATH', '/work/shop/.preferred-tools/memory/memory.db']] as [string, string, string][])
+    for (const [id, key, value] of [['serena', 'SERENA_HOME', '/work/shop/.alfred-tools/serena'], ['memory', 'MCP_MEMORY_SQLITE_PATH', '/work/shop/.alfred-tools/memory/memory.db']] as [string, string, string][])
     {
         const built = addStep(plan(inv(MAC), pickOne(id, { scope: 'local' }), opts('/Users/me'))).entry;
         assert.strictEqual(built.env![key], value, id);
@@ -2296,7 +2296,7 @@ test('a hosted keyed registration gets its reconnect line in the plan: filled, u
     const w = world();
     try
     {
-        const file = putKeys(w.home, ['.preferred-tools', '.mcps-secrets'], ['ATLASSIAN_API_TOKEN=a@b.example:not-printed']);
+        const file = putKeys(w.home, ['.alfred-tools', '.mcps-secrets'], ['ATLASSIAN_API_TOKEN=a@b.example:not-printed']);
         const at = (picks: Answers['picks'], extra: Record<string, unknown> = {}) => plan(inv({ ...MAC, os: process.platform, project: w.project }, extra), { picks } as Answers, { home: w.home, env: {} });
         const p = at({ atlassian: { scope: 'user', token: true }, sentry: { route: 'remote', scope: 'user', token: true }, github: { route: 'remote', scope: 'user' }, context7: { route: 'remote', scope: 'user', token: true } });
         assert.deepStrictEqual(p.errors, []);
@@ -2334,18 +2334,18 @@ test('buildEntry for the sentry bridge at local, project and user scope', () => 
     const tail = (t: string) => [t, 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'];
     const mac = { platform: 'darwin', home: '/Users/me', project: '/work/shop' };
     const local = buildEntry(row!, 'bridge', { scope: 'local', urlNames: { SENTRY_ORG: 'SENTRY_SLUG' } }, mac, catalog.rules);
-    assert.deepStrictEqual(local, { command: 'node', args: ['/work/shop/.preferred-tools/mcp-bridge.js', ...tail('https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}')], env: { npm_config_before: '2026-11-11T23:59:59Z' } });
+    assert.deepStrictEqual(local, { command: 'node', args: ['/work/shop/.alfred-tools/mcp-bridge.js', ...tail('https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}')], env: { npm_config_before: '2026-11-11T23:59:59Z' } });
     const project = buildEntry(row!, 'bridge', { scope: 'project' }, mac, catalog.rules);
-    assert.strictEqual(project.args![0], '/work/shop/.preferred-tools/mcp-bridge.js', 'absolute at project scope too');
+    assert.strictEqual(project.args![0], '/work/shop/.alfred-tools/mcp-bridge.js', 'absolute at project scope too');
     assert.strictEqual(project.args![1], 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}');
     const user = buildEntry(row!, 'bridge', { scope: 'user', keyName: 'MY_SENTRY' }, mac, catalog.rules);
-    assert.strictEqual(user.args![0], '/Users/me/.preferred-tools/mcp-bridge.js');
+    assert.strictEqual(user.args![0], '/Users/me/.alfred-tools/mcp-bridge.js');
     assert.strictEqual(user.args![2], 'MY_SENTRY');
     const named = buildEntry(row!, 'bridge', { scope: 'local' }, { ...mac, roots: { global: '/keys', globalNamed: true } }, catalog.rules);
     assert.strictEqual(named.args![5], '/keys', 'a named global root is the last argument at local scope');
     const win = buildEntry(row!, 'bridge', { scope: 'project' }, { platform: 'win32', home: 'C:\\Users\\me', project: 'C:\\work\\my shop' }, catalog.rules);
     assert.strictEqual(win.command, 'node');
-    assert.strictEqual(win.args![0], 'C:\\work\\my shop\\.preferred-tools\\mcp-bridge.js', 'unquoted: no shell reads it');
+    assert.strictEqual(win.args![0], 'C:\\work\\my shop\\.alfred-tools\\mcp-bridge.js', 'unquoted: no shell reads it');
     for (const [e, scope, keyName, urlNames] of [[local, 'local', 'SENTRY_ACCESS_TOKEN', { SENTRY_ORG: 'SENTRY_SLUG', SENTRY_PROJECT: 'SENTRY_PROJECT' }], [project, 'project', 'SENTRY_ACCESS_TOKEN', { SENTRY_ORG: 'SENTRY_ORG', SENTRY_PROJECT: 'SENTRY_PROJECT' }], [user, 'user', 'MY_SENTRY', { SENTRY_ORG: 'SENTRY_ORG', SENTRY_PROJECT: 'SENTRY_PROJECT' }]] as [ServerEntry, string, string, Record<string, string>][])
     {
         const cur = currentOf(row!, { name: 'sentry', scope, route: 'bridge', entry: e });
@@ -2354,7 +2354,7 @@ test('buildEntry for the sentry bridge at local, project and user scope', () => 
         assert.deepStrictEqual(cur.urlNames, urlNames, scope);
     }
     assert.deepStrictEqual(settingsOf(row!, 'bridge', local), [], 'the bridge passes no setting of the user\'s');
-    assert.deepStrictEqual(bridgeParts(local), { path: '/work/shop/.preferred-tools/mcp-bridge.js', template: 'https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}', keyName: 'SENTRY_ACCESS_TOKEN', scheme: 'Sentry-Bearer', packageSpec: 'mcp-remote@0.16.0', globalRoot: null });
+    assert.deepStrictEqual(bridgeParts(local), { path: '/work/shop/.alfred-tools/mcp-bridge.js', template: 'https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}', keyName: 'SENTRY_ACCESS_TOKEN', scheme: 'Sentry-Bearer', packageSpec: 'mcp-remote@0.16.0', globalRoot: null });
     assert.strictEqual(bridgeParts({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0'] }), null);
     assert.strictEqual(renameTemplate('https://h/mcp/{A}/{B?}', { A: 'X', B: 'Y' }), 'https://h/mcp/{X}/{Y?}');
 });
@@ -2368,7 +2368,7 @@ const bridgeWorld = () =>
     const home = path.join(d, 'home');
     fs.mkdirSync(project, { recursive: true });
     fs.mkdirSync(home, { recursive: true });
-    return { d, project, home, proot: path.join(project, '.preferred-tools'), groot: path.join(home, '.preferred-tools'), clean: () => fs.rmSync(d, { recursive: true, force: true }) };
+    return { d, project, home, proot: path.join(project, '.alfred-tools'), groot: path.join(home, '.alfred-tools'), clean: () => fs.rmSync(d, { recursive: true, force: true }) };
 };
 // the folders are real, so the plan runs as this machine does - a MAC fixture on a Windows host would join a real
 // C:\ path with '/'
@@ -2424,13 +2424,13 @@ test('a root with helper 3 and no bridge gets both rewritten for a bridge; a new
     try
     {
         fs.mkdirSync(b.proot, { recursive: true });
-        fs.writeFileSync(path.join(b.proot, 'mcp-headers.js'), roots.helperSource().replace(/^\/\/ preferred-tools mcp-headers \d+/, '// preferred-tools mcp-headers 3'));
+        fs.writeFileSync(path.join(b.proot, 'mcp-headers.js'), roots.helperSource().replace(/^\/\/ alfred-tools mcp-headers \d+/, '// alfred-tools mcp-headers 3'));
         const ops = (p: Plan) => p.steps.map((s) => s.op);
         assert.deepStrictEqual(ops(bridgePlan(b, { route: 'bridge', scope: 'project' })).filter((o) => o.startsWith('write-')), ['write-helper', 'write-bridge']);
-        fs.writeFileSync(path.join(b.proot, 'mcp-bridge.js'), roots.shippedSource('bridge').replace(/^\/\/ preferred-tools mcp-bridge \d+/, `// preferred-tools mcp-bridge ${BRIDGE_VERSION + 1}`));
+        fs.writeFileSync(path.join(b.proot, 'mcp-bridge.js'), roots.shippedSource('bridge').replace(/^\/\/ alfred-tools mcp-bridge \d+/, `// alfred-tools mcp-bridge ${BRIDGE_VERSION + 1}`));
         const p = bridgePlan(b, { route: 'bridge', scope: 'project' });
         assert.ok(!ops(p).includes('write-bridge'));
-        assert.ok(p.notes.includes(`mcp-bridge.js in ${b.proot} is newer than this plugin - update preferred-tools`), p.notes.join('\n'));
+        assert.ok(p.notes.includes(`mcp-bridge.js in ${b.proot} is newer than this plugin - update alfred-tools`), p.notes.join('\n'));
     }
     finally { b.clean(); }
 });
@@ -2595,7 +2595,7 @@ test('a plan writes list-write after the registration steps and before order-mcp
     const lw = (p.steps.find((s) => s.op === 'list-write') as ListWriteStep);
     assert.strictEqual(lw.file, PFILE);
     assert.deepStrictEqual(lw.upserts.map((u) => [u.server.name, u.server.scope, u.server.clients, u.server.entry, u.after]), [['context7', 'project', ['claude'], null, 'mcp:context7~project']]);
-    assert.ok(renderPlan(p).includes(`   writes ${PFILE}  (the servers preferred-tools manages, and the ones left on their own)`), renderPlan(p));
+    assert.ok(renderPlan(p).includes(`   writes ${PFILE}  (the servers alfred-tools manages, and the ones left on their own)`), renderPlan(p));
 });
 
 test('a remove of a server set up for Cursor plans a cursor-write after the list-write, last of the plan', { skip: POSIX_FIXTURE }, () => {
@@ -2625,7 +2625,7 @@ test('remove drops the entry from the list', { skip: POSIX_FIXTURE }, () => {
 
 // ---- serena: navigation only (spec D7) ---------------------------------------------------------------------------------
 test('serena args at project, local and global scope: --context absolute, --project-from-cwd kept', () => {
-    for (const [scope, root] of [['project', '/work/shop/.preferred-tools'], ['local', '/work/shop/.preferred-tools'], ['user', '/h/.preferred-tools']])
+    for (const [scope, root] of [['project', '/work/shop/.alfred-tools'], ['local', '/work/shop/.alfred-tools'], ['user', '/h/.alfred-tools']])
     {
         const p = plan(inv(MAC), pickOne('serena', { scope }), opts('/h'));
         assert.deepStrictEqual(p.errors, [], scope);
@@ -2645,7 +2645,7 @@ function rootMoveWorld(t: TestContext, pick: Answers['picks'])
     const w = world();
     t.after(() => w.clean());
     const data = path.join(w.dir, 'data');
-    const old = path.join(w.project, '.preferred-tools');
+    const old = path.join(w.project, '.alfred-tools');
     const fresh = path.join(w.project, 'tools');
     const inv = () => inventoryLib.buildInventory({ project: w.project, env: w.env, data });
     const install = plan(inv(), { clients: ['claude', 'cursor'], picks: pick } as Answers, { home: w.home, env: w.env });

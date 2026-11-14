@@ -24,8 +24,8 @@ function keyLine(planKey: KeyLine): string
     const reader = planKey.kind === 'helper' ? 'mcp-headers.js reads it each time Claude Code connects' : planKey.kind === 'bridge' ? 'mcp-bridge.js reads it each time the server starts' : 'the apply writes it into the registration';
     const parts = [`Key: ${planKey.name} (${planKey.scope} scope) - ${planKey.variable}; ${reader}, from ${planKey.files.join(', then ')}. The key is never printed.`];
     if (planKey.filled) parts.push('Filled.');
-    else if (planKey.old) parts.push(`${planKey.variable} is in ${planKey.old}, which preferred-tools no longer reads: move it to ${planKey.files[0]}`);
-    else parts.push(`Not filled yet: add ${planKey.variable}=<your key> to ${planKey.files[0]}${planKey.kind === 'helper' ? ' - until then the server connects without its key' : planKey.kind === 'bridge' ? ' - until then the server does not start' : ' before the apply, or after it run /preferred-tools:configure and keep the name - it writes the key in'}.`);
+    else if (planKey.old) parts.push(`${planKey.variable} is in ${planKey.old}, which alfred-tools no longer reads: move it to ${planKey.files[0]}`);
+    else parts.push(`Not filled yet: add ${planKey.variable}=<your key> to ${planKey.files[0]}${planKey.kind === 'helper' ? ' - until then the server connects without its key' : planKey.kind === 'bridge' ? ' - until then the server does not start' : ' before the apply, or after it run /alfred-tools:configure and keep the name - it writes the key in'}.`);
     return parts.join(' ');
 }
 

@@ -215,7 +215,7 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
         const own = listPlan.next || (foundEntry && foundEntry.own) || [];
         const empty = !listPlan.upserts.length && !left.length && !own.length;
         if (target && !empty) context.uses.push({ family: listPlan.family, root: context.roots![listPlan.family as Family]! });
-        steps.push({ op: 'list-write', file, family: listPlan.family, upserts: listPlan.upserts, drops: listPlan.drops, own: listPlan.own, ...(empty ? { empty: true } : {}), why: `${file}: the servers preferred-tools manages, and the ones you left on their own - configure, update and fix skip those. Remove an entry from its own list, or the file, to hand them back.` });
+        steps.push({ op: 'list-write', file, family: listPlan.family, upserts: listPlan.upserts, drops: listPlan.drops, own: listPlan.own, ...(empty ? { empty: true } : {}), why: `${file}: the servers alfred-tools manages, and the ones you left on their own - configure, update and fix skip those. Remove an entry from its own list, or the file, to hand them back.` });
     }
     return [...steps, ...retire];
 }

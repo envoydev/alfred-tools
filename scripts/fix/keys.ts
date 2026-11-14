@@ -57,14 +57,14 @@ export function keyToHelperDetect(context: FixCtx): Finding[]
             const at = keys.valueIn(chain, name);
             if (at) { out.push(C.finding('key-to-helper', registration, `the Authorization header holds \${${name}} - the key moves to mcp-headers.js, which reads ${name} from ${at.file}`, { ...extra, keyName: name })); continue; }
             const old = keys.oldHolding(context.inventory.project, context.home, name);
-            out.push(C.finding('key-to-helper', registration, `the Authorization header holds \${${name}}`, { ...extra, blocked: `put ${name}'s value in ${chain[0]}, then run /preferred-tools:fix${old ? `; ${name} is in ${old}, which preferred-tools no longer reads` : ''}` }));
+            out.push(C.finding('key-to-helper', registration, `the Authorization header holds \${${name}}`, { ...extra, blocked: `put ${name}'s value in ${chain[0]}, then run /alfred-tools:fix${old ? `; ${name} is in ${old}, which alfred-tools no longer reads` : ''}` }));
             continue;
         }
-        if (token.includes('${')) { out.push(C.finding('key-to-helper', registration, 'the Authorization header mixes ${VAR} and text', { ...extra, blocked: 'make it one ${VAR} or the key by hand, then run /preferred-tools:fix' })); continue; }
+        if (token.includes('${')) { out.push(C.finding('key-to-helper', registration, 'the Authorization header mixes ${VAR} and text', { ...extra, blocked: 'make it one ${VAR} or the key by hand, then run /alfred-tools:fix' })); continue; }
         const name = keys.nameOfValue(chain, token);
         out.push(name
             ? C.finding('key-to-helper', registration, `the Authorization header holds a key - it moves to mcp-headers.js, which reads it as ${name}`, { ...extra, keyName: name })
-            : C.finding('key-to-helper', registration, 'the Authorization header holds a key', { ...extra, blocked: `the key in this registration matches no name in ${chain.join(', ')}: put the working key there under a name, then run /preferred-tools:fix` }));
+            : C.finding('key-to-helper', registration, 'the Authorization header holds a key', { ...extra, blocked: `the key in this registration matches no name in ${chain.join(', ')}: put the working key there under a name, then run /alfred-tools:fix` }));
     }
     return out;
 }
@@ -151,9 +151,9 @@ export function helperStaleDetect(context: FixCtx): Finding[]
         const name = nameOf(shippedFile);
         const { word, version } = SHIPPED[shippedFile.kind];
         if (state === 'lower') out.push(helperFinding('helper-stale', shippedFile, `${name} is ${word} ${number} - this plugin's is ${version}`, { from: number }));
-        else if (state === 'edited' && number === null) out.push(helperFinding('helper-stale', shippedFile, `${name} has no preferred-tools number line`, { blocked: `${shippedFile.file} has no preferred-tools number line - it is not this plugin's ${word}, and fix never overwrites it: rename yours, or delete it and run /preferred-tools:fix` }));
-        else if (state === 'edited') out.push(helperFinding('helper-stale', shippedFile, `${name} changed since preferred-tools wrote it - the fix puts this plugin's copy back`));
-        else if (state === 'higher') out.push(helperFinding('helper-stale', shippedFile, `${name} is ${word} ${number} - newer than this plugin's ${version}`, { blocked: `${name} in ${shippedFile.root} is newer than this plugin - update preferred-tools` }));
+        else if (state === 'edited' && number === null) out.push(helperFinding('helper-stale', shippedFile, `${name} has no alfred-tools number line`, { blocked: `${shippedFile.file} has no alfred-tools number line - it is not this plugin's ${word}, and fix never overwrites it: rename yours, or delete it and run /alfred-tools:fix` }));
+        else if (state === 'edited') out.push(helperFinding('helper-stale', shippedFile, `${name} changed since alfred-tools wrote it - the fix puts this plugin's copy back`));
+        else if (state === 'higher') out.push(helperFinding('helper-stale', shippedFile, `${name} is ${word} ${number} - newer than this plugin's ${version}`, { blocked: `${name} in ${shippedFile.root} is newer than this plugin - update alfred-tools` }));
     }
     return out;
 }
@@ -162,7 +162,7 @@ export function helperStaleFix(finding: Finding): MachineFixResult
 {
     const kind = kindOf(finding);
     const { word, version } = SHIPPED[kind];
-    if (roots.shippedState(kind, finding.path!).state === 'higher') return { ok: false, detail: `${finding.path!} is newer than this plugin - left; update preferred-tools`, restart: false };
+    if (roots.shippedState(kind, finding.path!).state === 'higher') return { ok: false, detail: `${finding.path!} is newer than this plugin - left; update alfred-tools`, restart: false };
     fs.writeFileSync(finding.path!, roots.shippedSource(kind));
     return withCommonjs(path.dirname(finding.path!), { ok: roots.shippedState(kind, finding.path!).state === 'same', detail: `rewrote ${finding.path!} (${word} ${finding.from === undefined ? 'edited' : finding.from} -> ${version})`, restart: Boolean(finding.bridged) }, kind);
 }
@@ -195,8 +195,8 @@ export function rootIgnoreDetect(context: FixCtx): Finding[]
         const lines = rootIgnoreLines(root);
         const fixes = { secrets: secretsGap && lines.lack.includes(lines.mine ? '*' : roots.FILES.secrets), helper: helperGap && lines.mine && lines.lack.includes(`!${roots.FILES.helper}`), signIns: signInsGap && lines.lack.includes(lines.mine ? '*' : `${roots.FILES.signIns}/`), unignore: lines.mine ? unignore.filter((file) => lines.lack.includes(`!${file}`)) : [] };
         const left = [
-            secretsGap && !fixes.secrets && `every line preferred-tools writes is in ${lines.file}, yet git would still commit ${secrets}: a later line re-includes ${roots.FILES.secrets}, or git tracks it already (git rm --cached -- ${secrets})`,
-            signInsGap && !fixes.signIns && `every line preferred-tools writes is in ${lines.file}, yet git would still commit ${signIns}/: a later line re-includes it, or git tracks it already (git rm -r --cached -- ${signIns})`,
+            secretsGap && !fixes.secrets && `every line alfred-tools writes is in ${lines.file}, yet git would still commit ${secrets}: a later line re-includes ${roots.FILES.secrets}, or git tracks it already (git rm --cached -- ${secrets})`,
+            signInsGap && !fixes.signIns && `every line alfred-tools writes is in ${lines.file}, yet git would still commit ${signIns}/: a later line re-includes it, or git tracks it already (git rm -r --cached -- ${signIns})`,
             helperGap && !fixes.helper && `git ignores ${helper} through lines of your own - add !${roots.FILES.helper} at the end of ${lines.file}`,
             ...unignore.filter((file) => !fixes.unignore.includes(file)).map((file) => `git ignores ${path.join(root, file)} through lines of your own - add !${file} at the end of ${lines.file}`),
         ].filter(Boolean).join('; ');

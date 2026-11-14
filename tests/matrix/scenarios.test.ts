@@ -115,7 +115,7 @@ test('install beside a copy for every project: this project gets its own registr
     assert.ok(!r.plan.steps.some((s) => /remove|move|replace/.test(s.op)), 'nothing is removed or moved');
     const mine = reg(p, 'copy-mem', 'local');
     assert.ok(mine, 'this project\'s copy, at local scope');
-    assert.strictEqual(path.resolve((mine.entry.env as Record<string, string> & { MCP_MEMORY_SQLITE_PATH: string }).MCP_MEMORY_SQLITE_PATH), path.join(p, '.preferred-tools', 'copy-mem', 'memory.db'), 'its own data');
+    assert.strictEqual(path.resolve((mine.entry.env as Record<string, string> & { MCP_MEMORY_SQLITE_PATH: string }).MCP_MEMORY_SQLITE_PATH), path.join(p, '.alfred-tools', 'copy-mem', 'memory.db'), 'its own data');
     assert.strictEqual(JSON.stringify(reg(p, 'copy-mem', 'user').entry), before, 'the copy for every project is untouched');
     for (const scope of ['local', 'user']) h.claude(p, ['mcp', 'remove', 'copy-mem', '-s', scope]);
 });
@@ -224,9 +224,9 @@ test('a remove: the registration is gone from its file, the data folder stays, a
     // an earlier case may leave a serena at user scope in this shared account: the install adds beside it, never moves it
     const global = reg(p, 'serena', 'user');
     assert.strictEqual(h.run(p, { picks: { serena: { scope: 'local' }, context7: { route: 'remote', scope: 'project' } } }).report.failed, null);
-    // the folder the registration names: <project>/.preferred-tools/serena, or on Windows serena's absolute home
+    // the folder the registration names: <project>/.alfred-tools/serena, or on Windows serena's absolute home
     const data = reg(p, 'serena', 'local').entry.env!.SERENA_HOME!;
-    if (process.platform !== 'win32') assert.strictEqual(data, path.join(p, '.preferred-tools', 'serena'));
+    if (process.platform !== 'win32') assert.strictEqual(data, path.join(p, '.alfred-tools', 'serena'));
     assert.ok(fs.existsSync(data));
     const r = h.run(p, { picks: {}, remove: [{ kind: 'mcp', name: 'serena', scope: 'local' }] });
     assert.deepStrictEqual(r.plan.errors, []);

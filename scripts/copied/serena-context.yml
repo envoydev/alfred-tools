@@ -1,5 +1,5 @@
-# preferred-tools serena-context 1
-description: preferred-tools - code navigation for Claude Code and Cursor
+# alfred-tools serena-context 2
+description: alfred-tools - code navigation for Claude Code and Cursor
 prompt: |
   Serena gives you language-server navigation for this project: what a file defines, where a symbol is declared,
   what implements it and what references it. Reading, editing, text search and shell commands stay with your own

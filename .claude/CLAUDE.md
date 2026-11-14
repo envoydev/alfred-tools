@@ -1,29 +1,29 @@
-# CLAUDE.md - preferred-tools
+# CLAUDE.md - alfred-tools
 
 ## What this repo is
 
 The tools its owner has tested and likes to use, MCP servers that work in Claude Code and Cursor, packaged as ONE Claude
-Code plugin, `preferred-tools`. The plugin carries each tool's install, update, rename, relocation and fix procedure. It
+Code plugin, `alfred-tools`. The plugin carries each tool's install, update, rename, relocation and fix procedure. It
 is listed in the `envoydev` marketplace, which lives in its own repo since 2026-11-14
 (`https://github.com/envoydev/plugins-marketplaces`, `.claude-plugin/marketplace.json`); users install it as
-`preferred-tools@envoydev`. The entry is a GitHub source on this repo's `main` with no `sha` (the user's ruling,
+`alfred-tools@envoydev`. The entry is a GitHub source on this repo's `main` with no `sha` (the user's ruling,
 2026-11-04): a fresh install fetches `main`'s tip, and a version bump merged to `main` is the release with no
 marketplace change. So `main` stays release-only.
 
-- `/preferred-tools:install` - manual (`disable-model-invocation: true`); adds only tools not installed in this project
+- `/alfred-tools:install` - manual (`disable-model-invocation: true`); adds only tools not installed in this project
   and asks nothing about a server already set up (one it recognises is managed; a claude.ai connector or another
   plugin's server is a label in the pick list): pick tools, then which apps (Claude Code and Cursor, or Claude Code
   only; since 0.5.0), then one tool at a time its route, scope and name, root, location, key and key name, and
   settings. A tool installed for every project is offered as this project's own copy beside it; install never
   changes, moves or removes a registration.
-- `/preferred-tools:configure` - manual; changes or removes what is installed, one registration at a time (keyed
+- `/alfred-tools:configure` - manual; changes or removes what is installed, one registration at a time (keyed
   `mcp:<name>~<scope>`; plugins left configure with the catalog's plugin rows in 0.5.0), a server left on its own, or a
   root folder (`root:<family>`), every question recommending what it has now; its first question about a server is
   who looks after it. The user's ruling (2026-10-27): install is install, configure is configure.
-- `/preferred-tools:fix` - manual; detects known problems and applies the recorded fix.
-- `/preferred-tools:update` - manual; updates installed plugins, pinned catalog servers and the copied files
+- `/alfred-tools:fix` - manual; detects known problems and applies the recorded fix.
+- `/alfred-tools:update` - manual; updates installed plugins, pinned catalog servers and the copied files
   (`mcp-headers.js`, `mcp-bridge.js`, `serena-context.yml`) that are behind, to releases at least 7 days old, and
-  moves what an older preferred-tools wrote to the way it passes data now, through fix's rows marked `upgrade` (the
+  moves what an older alfred-tools wrote to the way it passes data now, through fix's rows marked `upgrade` (the
   user's ruling, 2026-11-12). It was the model-invocable `update-tools` skill until the user's ruling (2026-10-27) made
   it a command; manual like the other three, so the plugin puts no description in every session.
   Since 0.5.0 it also offers Cursor once per root when Cursor is found, and once to uninstall the retired plugins.
@@ -60,7 +60,7 @@ private project names, no absolute local paths, no tokens, nothing from a user's
   `<project>/.cursor/mcp.json` and `~/.cursor/mcp.json` from the list, through a temporary file, keeping every entry the
   user added and asking before it replaces a name the list does not mark for Cursor.
 - **Plain registrations, no launcher** (the user's ruling, 2026-10-27, made twice). Per-machine values are resolved
-  at install time, and `/preferred-tools:fix` repairs a changed machine. The one exception is the URL bridge (the
+  at install time, and `/alfred-tools:fix` repairs a changed machine. The one exception is the URL bridge (the
   user's ruling, 2026-11-11): a route whose URL holds a value from `.mcps-secrets` runs `node <root>/mcp-bridge.js`,
   which fills the URL at each start and runs a pinned mcp-remote; it is copied into the root like the helper, never run
   from the plugin cache. Since 0.5.0 the bridge also serves Cursor's copy of every keyed hosted route, since Cursor
@@ -71,19 +71,19 @@ private project names, no absolute local paths, no tokens, nothing from a user's
   (0.5.0, the user's ruling 2, 2026-11-12) - every server the plugin manages in that scope family, with its apps
   (`clients`), its Claude Code entry and Cursor's copy where it differs, never a key value, read and written only by
   `scripts/mcps-list/mcps-list.ts`; its `own` array holds the servers left on their own (the user's ruling, 2026-11-11, 'Managed
-  by default'), which install, configure, update and fix skip, and replaces 0.2.0-0.4.x's record
-  `<root>/preferred-tools.json`, which update moves in and renames `preferred-tools.json.0.4.bak` - and the roots map
+  by default'), which install, configure, update and fix skip, and replaces the 0.4.x record (0.2.0-0.4.x),
+  which update moves in and renames with `.0.4.bak` added - and the roots map
   `${CLAUDE_PLUGIN_DATA}/roots.json` (2026-11-10), which finds a named root again. A left entry whose fingerprint
   changed is dropped.
 - **A change starts from what is installed.** Only a fresh add builds from `catalog/tools.json`. A rename, a move, a
   fix or a re-run starts from the registration as read (its pin, its cut-off, the args or env the user added), so an
   updated pin is never downgraded.
 - **A key lives in `.mcps-secrets` in a root folder** (the user's rulings, 2026-11-10: 'we need to have .mcps-secrets
-  that will be in root of .preferred-tools or .alfred', replacing the key-file rule of 2026-10-29). The user writes
+  that will be in root of .alfred-tools or .alfred', replacing the key-file rule of 2026-10-29). The user writes
   every value; the plugin writes names only (`ensure-key-name`). A hosted keyed route reads its key through the header
   helper `mcp-headers.js` each time Claude Code connects, and its registration holds neither the key nor a `${VAR}` for
   it. A stdio keyed route is written in by `apply.ts` at local and global scope, and is not offered at project scope.
-  The 0.1.x key files (alfred-code's store, `.preferred-tools/.secrets`) are read for names only. `scripts/keys/keys.ts` holds
+  The 0.1.x key files (alfred-code's store, `.alfred-tools/.secrets`) are read for names only. `scripts/keys/keys.ts` holds
   the chains. No key in a file a command line names (`scripts/core/kept.ts`), none printed, none asked for. A key is the
   recommended way into every hosted route (2026-11-11), recommended at Global scope, since Claude Code runs no parent
   folder's helper in a child folder; with no key, a route that has OAuth uses it. The bridge (0.4.0) reads the key and
@@ -119,7 +119,8 @@ those dates.
   change without a version bump is not delivered, so bump on every user-visible change.
 - **Updates are pulled.** Auto-update is off for third-party marketplaces, so a release reaches users on their own
   `claude plugin marketplace update` / `claude plugin update`.
-- **Never rename or drop the id `preferred-tools`.** Every install goes silent and does not self-heal.
+- **Never rename or drop the id `alfred-tools`.** It was renamed once (the user's ruling, 2026-11-14) - never again:
+  every install goes silent and does not self-heal.
 - **`install` is not a no-op over an installed plugin.** It adds a second row, or flips a disabled one on, and always
   prints `Successfully installed`. `enable` over enabled and `disable` over disabled exit 1.
 - **`plugin list --json` `enabled` is not proof** that a plugin runs. Read the settings file at its scope; its

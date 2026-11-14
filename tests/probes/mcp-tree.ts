@@ -353,7 +353,7 @@ function main(argv: string[])
     const wanted = val('--scratch') ? path.resolve(val('--scratch')!) : os.tmpdir();
     fs.mkdirSync(wanted, { recursive: true });
     const base = fs.realpathSync.native(wanted);
-    const S = fs.mkdtempSync(path.join(base, 'preferred-tools-mcp-tree-'));
+    const S = fs.mkdtempSync(path.join(base, 'alfred-tools-mcp-tree-'));
     const clean = (text: unknown) => String(text).split(S).join('<S>').split(S.replace(/\\/g, '/')).join('<S>');
     const print = (line: string) => console.log(clean(line));
     let code = 1;

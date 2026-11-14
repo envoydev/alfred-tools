@@ -94,6 +94,6 @@ export function fillStep(step: PlanStep, context: ApplyCtx): { step: PlanStep; n
     if (found) return { step: fill(found.value), note: `${name} for ${where} from ${found.file}` };
     const held = (step as McpReplaceStep).old ? keys.tokenFields((step as McpReplaceStep).old, route).map((field) => field.at.reduce<unknown>((node, segment) => (node == null ? undefined : (node as Record<string, unknown>)[segment]), (step as McpReplaceStep).old)).find((candidate) => typeof candidate === 'string' && candidate !== '' && !keys.PLACEHOLDER.test(candidate) && !candidate.includes(kept.MARKER)) : undefined;
     if (held !== undefined) return { step: fill(held as string), note: `${name} for ${where} is in none of ${files.join(', ')} - the key it holds is kept; fill ${name} in ${files[0]} to replace it` };
-    return { step: fill(''), note: `${name} for ${where} is in none of ${files.join(', ')} - written empty: fill ${name} in ${files[0]}, then run /preferred-tools:configure and keep ${name} as the key's name - it writes the key in` };
+    return { step: fill(''), note: `${name} for ${where} is in none of ${files.join(', ')} - written empty: fill ${name} in ${files[0]}, then run /alfred-tools:configure and keep ${name} as the key's name - it writes the key in` };
 }
 

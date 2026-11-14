@@ -66,7 +66,7 @@ test('the fix engine against the REAL CLI: detect, apply as one replace, read ba
     assert.strictEqual(now.serena.env!.SERENA_USAGE_REPORTING, 'false');
     assert.deepStrictEqual(now['my-own-server'], own);
     assert.deepStrictEqual(detectAll(ctx()).found, []);
-    const list = JSON.parse(fs.readFileSync(path.join(h.home, '.preferred-tools', 'mcps.json'), 'utf8'));
+    const list = JSON.parse(fs.readFileSync(path.join(h.home, '.alfred-tools', 'mcps.json'), 'utf8'));
     assert.deepStrictEqual(list.servers.map((s: { name: string; scope: string; entry: ServerEntry }) => [s.name, s.scope, s.entry.args![0]]), [['serena', 'user', '--python']], 'the list holds the repaired entry, as the real CLI reads it back');
     assert.ok(h.realUntouched().ok);
 });

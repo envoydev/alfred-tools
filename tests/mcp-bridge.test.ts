@@ -33,7 +33,7 @@ function world()
 {
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-bridge-')));
     const project = path.join(dir, 'project');
-    const root = path.join(project, '.preferred-tools');
+    const root = path.join(project, '.alfred-tools');
     const global = path.join(dir, 'global');
     const home = path.join(dir, 'home');
     const bin = path.join(dir, 'bin');
@@ -176,7 +176,7 @@ test('a missing key exits 1 before npx starts, naming the files (Review Focus 2)
     finally { w.clean(); }
 });
 
-test('a bridge beside helper 3, or with no helper, exits 1 naming /preferred-tools:fix (Review Focus 3)', () => {
+test('a bridge beside helper 3, or with no helper, exits 1 naming /alfred-tools:fix (Review Focus 3)', () => {
     const w = world();
     try
     {
@@ -184,11 +184,11 @@ test('a bridge beside helper 3, or with no helper, exits 1 naming /preferred-too
         fs.writeFileSync(path.join(w.root, 'mcp-headers.js'), "'use strict';\nmodule.exports = { HELPER_VERSION: 3 };\n");
         const r = w.run([T, K, 'Sentry-Bearer', PKG]);
         assert.strictEqual(r.status, 1);
-        assert.strictEqual(r.stderr.trim(), 'mcp-bridge: mcp-headers.js beside it is helper 3 - the bridge needs 4; run /preferred-tools:fix');
+        assert.strictEqual(r.stderr.trim(), 'mcp-bridge: mcp-headers.js beside it is helper 3 - the bridge needs 4; run /alfred-tools:fix');
         fs.rmSync(path.join(w.root, 'mcp-headers.js'));
         const gone = w.run([T, K, 'Sentry-Bearer', PKG]);
         assert.strictEqual(gone.status, 1);
-        assert.strictEqual(gone.stderr.trim(), 'mcp-bridge: mcp-headers.js beside it is helper missing - the bridge needs 4; run /preferred-tools:fix');
+        assert.strictEqual(gone.stderr.trim(), 'mcp-bridge: mcp-headers.js beside it is helper missing - the bridge needs 4; run /alfred-tools:fix');
         assert.deepStrictEqual(w.calls(), []);
     }
     finally { w.clean(); }
@@ -283,12 +283,12 @@ test('a root under a type-module package.json runs with its own commonjs package
 
 test('the bridge requires only node: modules and ./mcp-headers.js, and its CREDENTIAL equals keys.js', () => {
     const src = fs.readFileSync(BRIDGE, 'utf8');
-    assert.match(src.split(/\r?\n/)[0]!, /^\/\/ preferred-tools mcp-bridge 1$/, 'the first line, CRLF or LF (roots.js SHIPPED_LINE reads both)');
+    assert.match(src.split(/\r?\n/)[0]!, /^\/\/ alfred-tools mcp-bridge 2$/, 'the first line, CRLF or LF (roots.js SHIPPED_LINE reads both)');
     const reqs = [...src.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]);
     assert.ok(reqs.length && reqs.every((r) => r!.startsWith('node:') || r === './mcp-headers.js'), reqs.join(', '));
     const b = bridge();
-    assert.strictEqual(b.BRIDGE_VERSION, 1);
+    assert.strictEqual(b.BRIDGE_VERSION, 2);
     assert.strictEqual(b.NEEDS_HELPER, 4);
     assert.ok(b.CREDENTIAL.test('MY_API_KEY') && !b.CREDENTIAL.test('SENTRY_ORG'));
-    assert.strictEqual(helper().HELPER_VERSION, 4);
+    assert.strictEqual(helper().HELPER_VERSION, 5);
 });

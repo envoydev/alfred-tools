@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // THE RELATIVE DATA FOLDER - does a tool resolve the relative data folder project scope writes against the folder it
-// starts in? Each row is launched as plan.ts builds it at project scope (data folder `.preferred-tools/<name>`), over
+// starts in? Each row is launched as plan.ts builds it at project scope (data folder `.alfred-tools/<name>`), over
 // stdio, from a root folder R and then from R/child, under a throwaway HOME, and the file the tool writes into its data
 // folder is looked for. A row with two passes may carry `locations.relative: true` in catalog/tools.json.
 //
@@ -11,7 +11,7 @@
 //   memory   memory.db           created at start (no call)
 //   browsers Local State         the browser profile's own file: browser_navigate about:blank, then browser_close
 //   appium   *.png               appium_screenshot, which needs a device session
-// PASS: the file is under <cwd>/.preferred-tools/<name>, and no new copy of it appeared anywhere else under HOME or R.
+// PASS: the file is under <cwd>/.alfred-tools/<name>, and no new copy of it appeared anywhere else under HOME or R.
 // A named tool missing from tools/list fails the row loudly (a pin bump renamed it: run --list and update CALLS).
 //
 // One line per run: RESULT <row> <root|child> <pass|fail> <where the data file was found>. Exit 1 when a named tool is
@@ -168,7 +168,7 @@ async function runRow(id: string, base: string, cache: string, opts: ReturnType<
     const child = path.join(R, 'child');
     for (const d of [HOME, child]) fs.mkdirSync(d, { recursive: true });
     const ctx = { platform: process.platform, arch: process.arch, project: R, home: HOME, env: {}, machine: {} };
-    const entry = buildEntry(row, 'local', { rootStr: `.preferred-tools/${row.name}`, scope: 'project', params: {} }, ctx, catalog.rules);
+    const entry = buildEntry(row, 'local', { rootStr: `.alfred-tools/${row.name}`, scope: 'project', params: {} }, ctx, catalog.rules);
     if (isBrowser(id)) entry.args = [...entry.args!, '--headless'];
     console.log(`LAUNCH ${id} ${entry.command} ${(entry.args || []).join(' ')} ${JSON.stringify(entry.env || {})}`);
     const env = {
@@ -183,7 +183,7 @@ async function runRow(id: string, base: string, cache: string, opts: ReturnType<
         const s = await session(entry, { cwd, env, calls: opts.list ? [] : callsOf(id).map((c) => ({ ...c })) });
         if (opts.list) { console.log(`TOOLS ${id} ${s.tools.join(' ')}`); break; }
         if (s.error && /^MISSING TOOL/.test(s.error)) { missing = true; console.log(`RESULT ${id} ${where} fail - ${s.error}`); break; }
-        const expected = path.join(cwd, '.preferred-tools', row.name);
+        const expected = path.join(cwd, '.alfred-tools', row.name);
         // a browser may flush its profile on close: give the file a moment to land
         let fresh: string[] = [];
         for (let t = 0; t < 30; t++)

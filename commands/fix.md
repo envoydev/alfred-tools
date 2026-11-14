@@ -10,7 +10,7 @@ in `catalog/fixes.json`; the detectors are in `scripts/fix/`. A row whose detect
 argument, when given, narrows everything below to one fix id, tool or registration name: `$ARGUMENTS`.
 
 If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
-preferred-tools needs Node 22.18 or newer - `node --version` shows yours.
+alfred-tools needs Node 22.18 or newer - `node --version` shows yours.
 
 ## 1. Detect
 
@@ -22,7 +22,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --detect --data "${CLAUDE_PLUGIN_DAT
 
 Paste its output verbatim in a fenced block. It lists each problem found - the fix id, the tool by its registration
 name and scope, what was found - and any note. A line ending 'NOT APPLICABLE' has a reason and is never applied. A
-server left on its own at install is listed as 'on its own - not checked'; `/preferred-tools:configure` hands it back.
+server left on its own at install is listed as 'on its own - not checked'; `/alfred-tools:configure` hands it back.
 A `note:` line (a Project-scope key helper waiting for the trust prompt, say) is advice, not a fix: relay it. A row
 named 'Held' is an open decision, not a problem; mention it in one line and leave it.
 
@@ -42,7 +42,7 @@ claude-hud, its own statusLine goes too, any other line stays). One the user tur
 APPLICABLE: <id> is kept at <scope>; remove it with ...': advice, never offered again. Where alfred-code is set up, the
 line ends '<id> - alfred-code also installs it, and this removes it for both'.
 
-A finding about a parent folder's `.mcp.json` ends 'NOT APPLICABLE: run /preferred-tools:fix in <folder>': that file
+A finding about a parent folder's `.mcp.json` ends 'NOT APPLICABLE: run /alfred-tools:fix in <folder>': that file
 is the parent's, and fix run there repairs it. `data-folder-ignore` also finds a 0.2.0 copy a session made in this
 folder (`.alfred/playwright-chrome`, say) that no server uses any more: its fix writes the copy's `.gitignore`, and its
 data is left, never moved or deleted.
@@ -50,7 +50,7 @@ data is left, never moved or deleted.
 `client-drift` finds a server on the plugin's list whose copy in Claude Code or in Cursor was edited or removed by
 hand (compared with each key value masked, so a key filled in Cursor is not drift). It is never in 'Apply all found' or
 'Pick which': each is its own question in step 2. `cursor-file` is advice: a Cursor `mcp.json` that is a symbolic
-link, holds comments or trailing commas, or has no `mcpServers` - preferred-tools writes no such file; its line says
+link, holds comments or trailing commas, or has no `mcpServers` - alfred-tools writes no such file; its line says
 what to do.
 
 If it says 'No known problem found.', say so in one line and stop.
@@ -129,7 +129,7 @@ parent folder's `.mcp.json` gives this folder, since that cache is the machine's
 Run it with the Bash tool's `timeout: 600000` (10 minutes, the most it allows by default).
 Paste the output verbatim. Report each fix as 'fixed' or 'STILL FOUND', each skipped one with its reason, and a failure
 with the line it printed - a failed rewrite prints a `RESTORE BY HAND` line, give it to the user as written.
-A key in it shows as `${PREFERRED_TOOLS_KEPT}`, never its value: the user puts their key back there.
+A key in it shows as `${ALFRED_TOOLS_KEPT}`, never its value: the user puts their key back there.
 
 A fix that changes what a server launches (a python request, a cut-off), or removes a broken npx cache folder
 (`npx-cache-entry`), prints `Fetch next, in the background (...):

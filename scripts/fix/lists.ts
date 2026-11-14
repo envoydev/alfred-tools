@@ -1,9 +1,9 @@
 // The fixes for the list, <root>/mcps.json (spec D1, D9). A row of kind `file` names no `fix` function: its `steps`
 // function plans list-write and the rest, which fix.ts's file pass runs through apply.ts as one plan.
 //
-// list-import: a managed registration with no entry in its family's list, or a 0.4.x preferred-tools.json, moves onto
+// list-import: a managed registration with no entry in its family's list, or the 0.4.x record, moves onto
 // the list - each registration as read with clients claude, the record's own entries as they are, and the record moved
-// aside as preferred-tools.json.0.4.bak. Install and configure do the same the first time they write a family
+// aside with .0.4.bak added. Install and configure do the same the first time they write a family
 // (plan/lists.ts), with the same importUnlisted.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -30,7 +30,7 @@ const plural = (count: number, word: string) => `${count} ${word}${count === 1 ?
 // The family's roots as install would take them: the root in use, else the recommended one.
 const rootsOf = (context: FixCtx) => roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
 
-// -> [{ id, name: <list file>, scope: null, family, servers, record: <preferred-tools.json> | null, found }]
+// -> [{ id, name: <list file>, scope: null, family, servers, record: <the 0.4.x record> | null, found }]
 export function listImportDetect(context: FixCtx): Finding[]
 {
     const pathApi = pathOf(context);
@@ -72,7 +72,7 @@ export function listImportSteps(finding: Finding, context: FixCtx): PlanStep[]
         op: 'list-write', file: finding.name, family: finding.family!,
         upserts: finding.servers!.map((server) => ({ server, after: null, cursorFile: null })), drops: [],
         own: finding.record ? { entries: [], keep, live: null } : null,
-        why: `${finding.name}: the servers preferred-tools manages, as read, and the ones left on their own`,
+        why: `${finding.name}: the servers alfred-tools manages, as read, and the ones left on their own`,
     });
     if (finding.record) steps.push({ op: 'retire-record', file: finding.record, why: `${finding.record}: the 0.4.x record - its entries are in ${finding.name} now` });
     const map = (context.inventory.roots && context.inventory.roots.map) || null;
@@ -98,7 +98,7 @@ export function readGuardDetect(context: FixCtx): Finding[]
     if (signIns) { want.push(roots.READ_GUARD.signIns); why.push(`${pathApi.join(signIns, roots.FILES.signIns)}/`); }
     if (!want.length) return [];
     const guard = readGuardOf(context, want);
-    if (guard.bad) return [{ id: 'read-guard', name: guard.file, scope: null, rules: want, found: `${guard.file}: not a settings object preferred-tools can read`, blocked: `add ${want.join(' and ')} to permissions.deny yourself` }];
+    if (guard.bad) return [{ id: 'read-guard', name: guard.file, scope: null, rules: want, found: `${guard.file}: not a settings object alfred-tools can read`, blocked: `add ${want.join(' and ')} to permissions.deny yourself` }];
     if (!guard.rules.length) return [];
     return [{ id: 'read-guard', name: guard.file, scope: null, rules: guard.rules, found: `${guard.file} does not deny ${guard.rules.join(' or ')} - an AI session's Read tool can open ${why.join(' and ')}` }];
 }
@@ -297,7 +297,7 @@ export function clientDriftSteps(finding: Finding, context: FixCtx, input: Recor
     return [claudeStep(back.error ? copy! : back.entry!), listStep({ ...listServer, entry: kept.maskCredentials(copy!, row) })];
 }
 
-// cursor-file (advice): a Cursor file preferred-tools will not write, with what to do.
+// cursor-file (advice): a Cursor file alfred-tools will not write, with what to do.
 export function cursorFileDetect(context: FixCtx): Finding[]
 {
     const cctx = cursorCtx(context);

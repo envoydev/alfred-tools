@@ -15,6 +15,7 @@ import { createRequire } from 'node:module';
 import * as cli from '../../scripts/core/claude-cli.ts';
 import * as account from '../../scripts/core/account.ts';
 import * as kept from '../../scripts/core/kept.ts';
+import * as roots from '../../scripts/roots/roots.ts';
 import * as catalogLib from '../../scripts/catalog/catalog.ts';
 import * as fake from '../fake-mcp-http.ts';
 import * as fakeOauth from '../fake-oauth-http.ts';
@@ -93,7 +94,7 @@ function session(entry: ServerEntry, cwd: string, requests: { method: string; pa
                 next += 1;
             }
         });
-        send({ jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'preferred-tools-matrix', version: '0' } } });
+        send({ jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'alfred-tools-matrix', version: '0' } } });
     });
 }
 
@@ -127,8 +128,8 @@ test('M1 install for both: each entry is the same in its app files and its list;
     const r = hh.run(p, answers);
     assert.deepStrictEqual(r.plan.errors, [], r.rendered);
     assert.strictEqual(r.report.failed, null, `${r.rendered}\n${r.text}`);
-    const projectList = listOf(path.join(p, '.preferred-tools'));
-    const globalList = listOf(path.join(hh.home, '.preferred-tools'));
+    const projectList = listOf(path.join(p, '.alfred-tools'));
+    const globalList = listOf(path.join(hh.home, '.alfred-tools'));
     const all = [...projectList.servers, ...globalList.servers];
     assert.deepStrictEqual(all.map((s) => `${s.name}~${s.scope}`).sort(), ['context7~user', 'memory~project', 'playwright-chrome~local', 'serena~project']);
     for (const s of all)
@@ -164,7 +165,7 @@ test('M3 one sign-in for both apps: one /authorize for two starts, one refresh f
         const r = hh.run(p, { clients: ['claude', 'cursor'], picks: { atlassian: { route: 'remote', scope: 'project', token: false } } }, { catalog });
         assert.deepStrictEqual(r.plan.errors, [], r.rendered);
         assert.strictEqual(r.report.failed, null, `${r.rendered}\n${r.text}`);
-        const projRoot = path.join(p, '.preferred-tools');
+        const projRoot = path.join(p, '.alfred-tools');
         const c = readJson(path.join(p, '.mcp.json')).mcpServers.atlassian;
         const k = readJson(path.join(p, '.cursor', 'mcp.json')).mcpServers.atlassian;
         assert.deepStrictEqual(k, c, 'Claude Code and Cursor hold the same entry');
@@ -244,7 +245,7 @@ test('M5 Windows: the shared sign-in entry starts through cmd /c npx and reaches
         const c = readJson(path.join(p, '.mcp.json')).mcpServers.atlassian;
         assert.deepStrictEqual(readJson(path.join(p, '.cursor', 'mcp.json')).mcpServers.atlassian, c, 'the same entry in both apps');
         assert.ok(/cmd(\.exe)?$/i.test(c.command) && c.args.slice(0, 2).join(' ').toLowerCase() === '/c npx', `the cmd /c npx wrapper: ${JSON.stringify(c)}`);
-        assert.strictEqual(c.env.MCP_REMOTE_CONFIG_DIR, path.join(p, '.preferred-tools'));
+        assert.strictEqual(c.env.MCP_REMOTE_CONFIG_DIR, path.join(p, '.alfred-tools'));
         if (r.report.fetchFile)
         {
             const f = await hh.fetch(r.report.fetchFile);
@@ -300,7 +301,7 @@ test('M2 Cursor CLI: each server enabled starts and lists its tools; serena list
         const r = hh.run(p, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'project' }, context7: { route: 'remote', scope: 'user', token: true } } }, { catalog });
         assert.deepStrictEqual(r.plan.errors, [], r.rendered);
         assert.strictEqual(r.report.failed, null, r.text);
-        fake.fill(path.join(hh.home, '.preferred-tools', '.mcps-secrets'), 'CONTEXT7_API_KEY', KEY);
+        fake.fill(path.join(hh.home, '.alfred-tools', '.mcps-secrets'), 'CONTEXT7_API_KEY', KEY);
         if (r.report.fetchFile)
         {
             const f = await hh.fetch(r.report.fetchFile);
@@ -388,7 +389,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     const oh = new Harness040({ root: world });
     const hh = new Harness({ root: world });
     const p = oh.project('m6');
-    const projRoot = path.join(p, '.preferred-tools');
+    const projRoot = path.join(p, '.alfred-tools');
 
     // 1. a 0.4.0 install: serena, github with the helper, context7 (left on its own next), the two retired plugins
     const first = oh.run(p, { picks: { serena: { scope: 'project' }, github: { route: 'remote', scope: 'project' }, context7: { route: 'remote', scope: 'project' }, 'typescript-lsp': { scope: 'project' }, 'claude-hud': { scope: 'user' } }, hud: 'defer' });
@@ -397,7 +398,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     assert.strictEqual(first.report.failed, null, first.text);
     const left = oh.run(p, { existing: { 'mcp:context7~project': 'own' } });
     assert.strictEqual(left.report.failed, null, left.text);
-    assert.ok(fs.existsSync(path.join(projRoot, 'preferred-tools.json')), '0.4.0 wrote its record');
+    assert.ok(fs.existsSync(path.join(projRoot, roots.FILES.record)), '0.4.0 wrote its record');
     const serena040 = readJson(path.join(p, '.mcp.json')).mcpServers.serena;
     assert.strictEqual(serena040.args[serena040.args.indexOf('--context') + 1], 'claude-code', '0.4.0\'s serena context');
     assert.ok(fs.existsSync(path.join(projRoot, '.mcps-secrets')), 'github\'s key file in the project root');
@@ -440,7 +441,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     assert.deepStrictEqual(list.servers.map((s) => s.name).sort(), ['github', 'serena'], text);
     assert.ok(list.servers.every((s) => s.clients.length === 1 && s.clients[0] === 'claude'), 'Claude Code only until Cursor is taken');
     assert.ok((list.own || []).some((e) => e.name === 'context7' && e.scope === 'project' && e.choice === 'own'), JSON.stringify(list.own));
-    assert.ok(!fs.existsSync(path.join(projRoot, 'preferred-tools.json')) && fs.existsSync(path.join(projRoot, 'preferred-tools.json.0.4.bak')), 'the record renamed .0.4.bak');
+    assert.ok(!fs.existsSync(path.join(projRoot, roots.FILES.record)) && fs.existsSync(path.join(projRoot, `${roots.FILES.record}.0.4.bak`)), 'the record renamed .0.4.bak');
     assert.strictEqual(list.cursorOffer, 'declined');
     // serena on the context file
     const serena = readJson(path.join(p, '.mcp.json')).mcpServers.serena;

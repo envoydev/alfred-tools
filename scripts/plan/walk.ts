@@ -22,7 +22,7 @@ export function ownStep(item: { key: string; name?: string | undefined; scope?: 
     const file = pathApi.join(root, roots.FILES.list);
     const where = item.scope === 'project' ? '; in .mcp.json it sits with your own servers, after the managed ones' : '';
     const options = [
-        { label: `preferred-tools${RECOMMENDED_SUFFIX}`, description: 'configure, update and fix look after it', choice: 'manage' },
+        { label: `alfred-tools${RECOMMENDED_SUFFIX}`, description: 'configure, update and fix look after it', choice: 'manage' },
         { label: 'Leave it on its own', description: `nothing in this plugin changes its entry again${where}; saved in ${file}`, choice: 'own' },
     ];
     return {

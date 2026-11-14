@@ -96,14 +96,14 @@ test('asks.js never requires plan.js: the shared readers (currentOf, logicalRoot
     for (const f of asks)
         assert.doesNotMatch(fs.readFileSync(path.join(plan, f), 'utf8'), /^\s*(?:import|export)\b[^;]*?\bfrom\s+'(?:\.\/|\.\.\/plan\/)(plan|context|pick|change|render|command)\.ts'/m, f);
     assert.strictEqual(typeof currentOf, 'function');
-    assert.deepStrictEqual(logicalRoot('/work/shop/.preferred-tools/serena', { platform: 'darwin', project: '/work/shop', home: '/Users/me' }), { kind: 'project', rel: '.preferred-tools/serena' });
-    assert.deepStrictEqual(logicalRoot('/Users/me/.preferred-tools/serena', { platform: 'darwin', project: '/work/shop', home: '/Users/me' }), { kind: 'home', rel: '.preferred-tools/serena' });
+    assert.deepStrictEqual(logicalRoot('/work/shop/.alfred-tools/serena', { platform: 'darwin', project: '/work/shop', home: '/Users/me' }), { kind: 'project', rel: '.alfred-tools/serena' });
+    assert.deepStrictEqual(logicalRoot('/Users/me/.alfred-tools/serena', { platform: 'darwin', project: '/work/shop', home: '/Users/me' }), { kind: 'home', rel: '.alfred-tools/serena' });
 });
 
 test('staticAsk fills a STATIC function\'s own placeholders', () => {
     assert.deepStrictEqual(STATIC['cursor-name-taken'].placeholders, ['<file>', '<name>']);
     const q = staticAsk('cursor-name-taken') as Question;
-    assert.match(q.question, /^Cursor's <file> already has a server named <name> that preferred-tools did not write/);
+    assert.match(q.question, /^Cursor's <file> already has a server named <name> that alfred-tools did not write/);
     assert.deepStrictEqual(q.options.map((o) => o.label), ["Replace it with the plugin's (Recommended)", "Keep Cursor's own"]);
     // a function with no placeholders of its own still gets '<n>', '<m>', '<k>'
     assert.match((staticAsk('prereqMissing') as Question).question, /^<n> needs <m>, which is missing/);

@@ -12,7 +12,7 @@
 //   W5  a root's project-scope tool in alfred-code's folder, absolute: inherited by the child, a 0.2.0 copy found in
 //       a child (data-folder-ignore), and the environment a server starts with
 //
-// alfred-code's source is --alfred, else PREFERRED_TOOLS_ALFRED, else ../alfred-code (Global Constraints); a version it
+// alfred-code's source is --alfred, else ALFRED_TOOLS_ALFRED, else ../alfred-code (Global Constraints); a version it
 // cannot resolve is NOT RUN, named.
 import test from 'node:test';
 import assert from 'node:assert';
@@ -114,7 +114,7 @@ const alfredWorld = () =>
     if (!alfred) alfred = buildAlfred(path.join(root, 'w2'), { version: '3.2.1', workspace: true });
     return alfred;
 };
-// every file alfred-code wrote into a folder: its .claude/ and .alfred/ trees, without the files preferred-tools puts in
+// every file alfred-code wrote into a folder: its .claude/ and .alfred/ trees, without the files alfred-tools puts in
 // an .alfred root (spec D2: the key file, the helper, the record; 0.4.0: the bridge and package.json, type commonjs),
 // which alfred-code never wrote
 const PT_FILES = new Set([roots.FILES.secrets, roots.FILES.helper, roots.FILES.record, roots.FILES.list, roots.FILES.bridge, 'package.json']);
@@ -227,10 +227,10 @@ test('W4 - keys without alfred-code: the root and its ignores, a stdio key writt
         // github's hosted route at local scope makes the project root: its .gitignore keeps the key file out of git and
         // lets the helper in
         run({ picks: { github: { route: 'remote', scope: 'local' } } });
-        const ptRoot = path.join(api, '.preferred-tools');
+        const ptRoot = path.join(api, '.alfred-tools');
         const secrets = path.join(ptRoot, roots.FILES.secrets);
         assert.strictEqual(fs.readFileSync(path.join(ptRoot, '.gitignore'), 'utf8'), roots.GITIGNORE);
-        const ignored = (f: string) => spawnSync('git', ['check-ignore', '-q', `.preferred-tools/${f}`], { cwd: api }).status === 0;
+        const ignored = (f: string) => spawnSync('git', ['check-ignore', '-q', `.alfred-tools/${f}`], { cwd: api }).status === 0;
         assert.strictEqual(ignored(roots.FILES.secrets), true, 'git ignores the key file');
         assert.strictEqual(ignored(roots.FILES.helper), false, 'and not the helper');
         helperOnly(localOf(h, api).github, g);
@@ -240,7 +240,7 @@ test('W4 - keys without alfred-code: the root and its ignores, a stdio key writt
 
         // a stdio key is written in at local scope, from the project root's .mcps-secrets
         run({ picks: { sentry: { route: 'local', scope: 'local' } } });
-        assert.strictEqual(localOf(h, api).sentry!.env![S], s1, 'the value from .preferred-tools/.mcps-secrets');
+        assert.strictEqual(localOf(h, api).sentry!.env![S], s1, 'the value from .alfred-tools/.mcps-secrets');
 
         // the move to project scope keeps the helper: the committed file holds no key and no ${VAR}
         run({ change: { 'mcp:github~local': { scope: 'project' } } });
@@ -291,7 +291,7 @@ test('W4 - keys with alfred-code: the root is .alfred, a key left in a 0.1.x sto
     noErrors(r);
     ok(r);
     assert.strictEqual(localOf(h, b.child!)['sentry-keys']!.env![S], sv, "the child's .alfred/.mcps-secrets");
-    assert.ok(!fs.existsSync(path.join(b.child!, '.preferred-tools')), 'no .preferred-tools root made');
+    assert.ok(!fs.existsSync(path.join(b.child!, '.alfred-tools')), 'no .alfred-tools root made');
     noValueInTmp(h, [sv]);
 
     // a key left only in the root's 0.1.x store, alfred-code's own key file: the key-name ask offers the near-miss name
@@ -309,7 +309,7 @@ test('W4 - keys with alfred-code: the root is .alfred, a key left in a 0.1.x sto
         noErrors(gh);
         ok(gh);
         const secrets = path.join(b.root!, '.alfred', roots.FILES.secrets);
-        assert.ok(gh.rendered.includes(`${G} is in ${store}, which preferred-tools no longer reads: move it to ${secrets}`), gh.rendered);
+        assert.ok(gh.rendered.includes(`${G} is in ${store}, which alfred-tools no longer reads: move it to ${secrets}`), gh.rendered);
         helperOnly(localOf(h, b.root!).github, tg);
         fake.trust(h, b.root!);
         assert.strictEqual((await fake.authOnGet(s, b.root!, 'github', h.env)).auth, 'none', 'the 0.1.x store is never read for a value');

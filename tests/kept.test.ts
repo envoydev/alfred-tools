@@ -102,7 +102,7 @@ test('restore matches a kept arg a splice moved', () => {
 test('an entry with nothing live is unchanged', () => {
     const serena = {
         command: 'uvx', args: ['--python', '3.13', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'],
-        env: { SERENA_HOME: '/p/.preferred-tools/serena', SERENA_USAGE_REPORTING: 'false', SENTRY_ACCESS_TOKEN: '${SENTRY_ACCESS_TOKEN}' },
+        env: { SERENA_HOME: '/p/.alfred-tools/serena', SERENA_USAGE_REPORTING: 'false', SENTRY_ACCESS_TOKEN: '${SENTRY_ACCESS_TOKEN}' },
     };
     const remote = { type: 'http', url: 'https://mcp.context7.com/mcp', headers: { Authorization: 'Bearer ${CONTEXT7_API_KEY}' } };
     for (const [entry, row] of [[serena, rowOf('serena')], [remote, rowOf('context7')], [{}, null]] as [ServerEntry, CatalogRow | null | undefined][])

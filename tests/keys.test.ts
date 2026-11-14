@@ -58,17 +58,17 @@ test('hosted chain per scope: the root beside the helper, the named global root 
     const p = path.join(path.sep, 'w', 'p', '.alfred');
     const k = path.join(path.sep, 'k');
     const h = path.join(path.sep, 'h');
-    const homeFiles = [sec(path.join(h, '.preferred-tools')), sec(path.join(h, '.alfred'))];
+    const homeFiles = [sec(path.join(h, '.alfred-tools')), sec(path.join(h, '.alfred'))];
     assert.deepStrictEqual(keys.hostedChain({ scope: 'project', projectRoot: p, globalRoot: k, globalNamed: true, home: h }), [sec(p), ...homeFiles]);
     assert.deepStrictEqual(keys.hostedChain({ scope: 'local', projectRoot: p, globalRoot: k, globalNamed: true, home: h }), [sec(p), sec(k), ...homeFiles]);
     assert.deepStrictEqual(keys.hostedChain({ scope: 'local', projectRoot: p, globalRoot: k, globalNamed: false, home: h }), [sec(p), ...homeFiles], 'a global root that is not named is not the third argument');
-    assert.deepStrictEqual(keys.hostedChain({ scope: 'user', projectRoot: p, globalRoot: path.join(h, '.preferred-tools'), globalNamed: false, home: h }), homeFiles, 'duplicates dropped');
+    assert.deepStrictEqual(keys.hostedChain({ scope: 'user', projectRoot: p, globalRoot: path.join(h, '.alfred-tools'), globalNamed: false, home: h }), homeFiles, 'duplicates dropped');
     assert.deepStrictEqual(keys.hostedChain({ scope: 'user', projectRoot: p, globalRoot: k, globalNamed: true, home: h }), [sec(k), ...homeFiles]);
 });
 
 test('stdio chain: local reads the project root then the global root; global reads the global root alone', () => {
-    const p = path.join(path.sep, 'w', 'p', '.preferred-tools');
-    const g = path.join(path.sep, 'h', '.preferred-tools');
+    const p = path.join(path.sep, 'w', 'p', '.alfred-tools');
+    const g = path.join(path.sep, 'h', '.alfred-tools');
     assert.deepStrictEqual(keys.stdioChain({ scope: 'local', projectRoot: p, globalRoot: g }), [sec(p), sec(g)]);
     assert.deepStrictEqual(keys.stdioChain({ scope: 'user', projectRoot: p, globalRoot: g }), [sec(g)]);
     assert.deepStrictEqual(keys.stdioChain({ scope: 'project', projectRoot: p, globalRoot: g }), [], 'a stdio keyed route is not offered at project scope');
@@ -121,7 +121,7 @@ test('oldHolding names the old file and never the value', () => {
         assert.strictEqual(keys.oldHolding(w.project, w.home, S), null);
         const files = keys.oldFiles(w.project, w.home);
         assert.deepStrictEqual(files.slice(0, 2), [store, path.join(w.project, '.alfred', '.sensitive-data')]);
-        assert.ok(files.includes(path.join(w.project, '.preferred-tools', '.secrets')) && files.includes(path.join(w.home, '.preferred-tools', '.secrets')));
+        assert.ok(files.includes(path.join(w.project, '.alfred-tools', '.secrets')) && files.includes(path.join(w.home, '.alfred-tools', '.secrets')));
     }
     finally { w.clean(); }
 });

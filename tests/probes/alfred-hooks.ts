@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// THE HOOK REPLAY - does alfred-code break preferred-tools' commands? Every step the four commands take is put through
+// THE HOOK REPLAY - does alfred-code break alfred-tools' commands? Every step the four commands take is put through
 // the hooks alfred-code registers, at each released version, in a plain alfred-code project and (from 2.11.0, the first
 // release with workspaces) in a workspace root and its child. No model, no login.
 //
@@ -13,7 +13,7 @@
 // A COMMAND IS ONE SESSION. Its events go out in the order Claude Code fires them, under one session_id and one
 // transcript the replay appends to: SessionStart (startup), UserPromptSubmit, UserPromptExpansion, then each tool step
 // to PreToolUse, a real run, and PostToolUse with the real output, then Stop. The payload fields are the ones a
-// logged-out `claude -p "/preferred-tools:install"` sent to logging hooks (Claude Code 2.1.312, 2026-10-29). A step a
+// logged-out `claude -p "/alfred-tools:install"` sent to logging hooks (Claude Code 2.1.312, 2026-10-29). A step a
 // PreToolUse hook blocks still runs, so the steps after it are judged on real input; its FINDING says where a real
 // session would have stopped.
 //
@@ -211,7 +211,7 @@ class Session
         this.used = new Set();
         this.skipped = [];
         this.lines = commandLines(command);
-        this.prompt = `/preferred-tools:${command}`;
+        this.prompt = `/alfred-tools:${command}`;
     }
 
     log(entry: Record<string, unknown>) { fs.appendFileSync(this.transcript, `${JSON.stringify({ uuid: crypto.randomUUID(), sessionId: this.id, cwd: this.folder, timestamp: new Date().toISOString(), ...entry })}\n`); }
@@ -235,10 +235,10 @@ class Session
     start()
     {
         this.fire('SessionStart', { source: 'startup' });
-        this.log({ type: 'user', message: { role: 'user', content: `<command-message>preferred-tools:${this.command}</command-message>\n<command-name>${this.prompt}</command-name>` } });
+        this.log({ type: 'user', message: { role: 'user', content: `<command-message>alfred-tools:${this.command}</command-message>\n<command-name>${this.prompt}</command-name>` } });
         const common = { prompt_id: this.promptId, permission_mode: 'default' };
         this.fire('UserPromptSubmit', { ...common, prompt: this.prompt });
-        this.fire('UserPromptExpansion', { ...common, expansion_type: 'slash_command', command_name: `preferred-tools:${this.command}`, command_args: '', command_source: 'plugin', prompt: this.prompt });
+        this.fire('UserPromptExpansion', { ...common, expansion_type: 'slash_command', command_name: `alfred-tools:${this.command}`, command_args: '', command_source: 'plugin', prompt: this.prompt });
         this.log({ type: 'user', isMeta: true, message: { role: 'user', content: [{ type: 'text', text: this.lines.body.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, REPO) }] } });
     }
 
@@ -265,7 +265,7 @@ class Session
             .replace(/\s*\[--only "\$ARGUMENTS"\]/, '').replace(/\s*\[--input key=value\]/, '');
         for (const [k, v] of Object.entries(fill)) command = command.split(k).join(v);
         if (fill.extra) command += ` ${fill.extra}`;
-        const out = this.tool('Bash', { command, description: `preferred-tools ${script}` }, () =>
+        const out = this.tool('Bash', { command, description: `alfred-tools ${script}` }, () =>
         {
             const r = spawnSync(command, { shell: true, cwd: this.folder, env: this.ctx.b.env, encoding: 'utf8', timeout: 600000 });
             return { stdout: r.stdout || '', stderr: r.stderr || '', interrupted: false, isImage: false, status: r.status };

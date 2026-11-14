@@ -1,5 +1,5 @@
 // Servers already set up (spec D6, F4): a matching registration, a plugin's server and a claude.ai connector. One the user
-// leaves on its own is recorded in the root's preferred-tools.json; a managed one has no record.
+// leaves on its own is recorded in the root's 0.4.x record; a managed one has no record.
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -11,7 +11,7 @@ import * as inventory from '../scripts/inventory/inventory.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import { apply } from '../scripts/apply/run.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
-import { helperSource } from '../scripts/roots/roots.ts';
+import { FILES, helperSource } from '../scripts/roots/roots.ts';
 import type { Inventory, InvRegistration } from '../scripts/inventory/types.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
 import type { World } from './types.ts';
@@ -79,14 +79,14 @@ test("a matching registration, a plugin's server and a connector are each one it
 
 test('a registration whose helper points into a root is not asked about', () => {
     const helper = regOf('github', 'local', { ...GH, headersHelper: 'node /work/shop/keys/mcp-headers.js GITHUB_PERSONAL_ACCESS_TOKEN Bearer' }, 'github', 'remote');
-    const data = regOf('memory', 'user', { command: 'uvx', args: ['--from', 'mcp-memory-service', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: `${HOME}/.preferred-tools/memory/memory.db` } }, 'memory', 'local');
+    const data = regOf('memory', 'user', { command: 'uvx', args: ['--from', 'mcp-memory-service', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: `${HOME}/.alfred-tools/memory/memory.db` } }, 'memory', 'local');
     const elsewhere = regOf('serena', 'user', { command: 'uvx', args: ['--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'], env: { SERENA_HOME: `${HOME}/.serena` } }, 'serena', 'local');
     const retired = regOf('chrome-control', 'local', { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83'] }, 'playwright-chrome', 'local', { alfredRetired: true });
     const inherited = regOf('c7', 'inherited', C7, 'context7', 'remote');
     assert.deepStrictEqual(X.items(invOf({ registrations: [helper, data, elsewhere, retired, inherited] }), [], catalog, ctx).map((x) => x.key), ['mcp:serena~user']);
 });
 
-test("a helper file of the user's own - no preferred-tools number line, or not this plugin's arguments - is asked about", () => {
+test("a helper file of the user's own - no alfred-tools number line, or not this plugin's arguments - is asked about", () => {
     const w = world();
     try
     {
@@ -116,8 +116,8 @@ test('own round-trips: a server left on its own is listed in its family root\'s 
         assert.deepStrictEqual(X.items(inv, ['Atlassian'], catalog, { home: w.home }).map((x) => x.key), ['mcp:c7~local', 'mcp:github~user', 'connector:Atlassian']);
         const p = plan(inv, { existing: { 'mcp:github~user': 'own', 'mcp:c7~local': 'manage', 'connector:Atlassian': 'own' } }, { home: w.home, env: w.env, connectors: ['Atlassian'] });
         assert.deepStrictEqual(p.errors, []);
-        const proot = path.join(w.project, '.preferred-tools');
-        const groot = path.join(w.home, '.preferred-tools');
+        const proot = path.join(w.project, '.alfred-tools');
+        const groot = path.join(w.home, '.alfred-tools');
         assert.deepStrictEqual(p.steps.map((s) => [s.op, (s as Located).file || (s as Located).path || (s as Located).root]), [
             ['root-ignore', groot], ['list-write', path.join(groot, 'mcps.json')], ['record-root', groot],
         ]);
@@ -149,13 +149,13 @@ test('a 0.4.x record in a named root no registration points into is found throug
     {
         const data = path.join(w.dir, 'data');
         const named = path.join(w.home, 'my-keys');
-        writeJson(path.join(named, 'preferred-tools.json'), { version: 1, servers: [{ name: 'github', scope: 'user', fingerprint: 'url:api.githubcopilot.com/mcp', choice: 'own' }] });
+        writeJson(path.join(named, FILES.record), { version: 1, servers: [{ name: 'github', scope: 'user', fingerprint: 'url:api.githubcopilot.com/mcp', choice: 'own' }] });
         register(w, 'github', GH, 'user');
         assert.strictEqual(inventory.buildInventory({ project: w.project, env: w.env, data }).registrations[0]!.choice, null, 'no map: not found');
         writeJson(path.join(data, 'roots.json'), { version: 1, global: named, projects: {} });
         const inv = inventory.buildInventory({ project: w.project, env: w.env, data });
         assert.strictEqual(inv.registrations[0]!.choice, 'own');
-        assert.deepStrictEqual([inv.lists!.global!.file, inv.lists!.global!.old], [path.join(named, 'mcps.json'), path.join(named, 'preferred-tools.json')]);
+        assert.deepStrictEqual([inv.lists!.global!.file, inv.lists!.global!.old], [path.join(named, 'mcps.json'), path.join(named, FILES.record)]);
     }
     finally { w.clean(); }
 });

@@ -1,4 +1,4 @@
-# preferred-tools
+# alfred-tools
 
 The MCP servers I have tested and like to use, packaged as one Claude Code plugin that sets each of them up for Claude
 Code and for Cursor from one list. It carries each tool's install, update, rename, move and fix steps, so setting up a
@@ -28,7 +28,7 @@ It installs nothing on its own. You drive it with four commands, run from the pr
 
 ```bash
 claude plugin marketplace add envoydev/plugins-marketplaces
-claude plugin install preferred-tools@envoydev
+claude plugin install alfred-tools@envoydev
 ```
 
 It needs Node 22.18 or newer and the `claude` CLI on your `PATH`. The plugin is listed in the `envoydev` marketplace
@@ -38,7 +38,7 @@ alfred-code installed. If you added `envoydev` from `envoydev/alfred-code` befor
 
 ## Quick start
 
-1. Open Claude Code in your project (not in this repo) and run `/preferred-tools:install`.
+1. Open Claude Code in your project (not in this repo) and run `/alfred-tools:install`.
 2. It prints the catalog for your OS with what is already installed. Pick the tools you want.
 3. Say which apps the servers are for: 'Claude Code and Cursor' is recommended when Cursor is on this machine.
 4. Answer 'Use the recommended settings', or set each tool up one at a time (see
@@ -65,13 +65,13 @@ alfred-code installed. If you added `envoydev` from `envoydev/alfred-code` befor
 | macos-control | macOS desktop control (macOS only) | local (`uvx`) | - |
 | windows-control | Windows desktop control (Windows only) | local (`uvx`) | - |
 
-Every package is pinned to a release at least 7 days old; `/preferred-tools:update` moves the pins. What each tool
+Every package is pinned to a release at least 7 days old; `/alfred-tools:update` moves the pins. What each tool
 needs on your machine (`uvx`, `npx`, Docker, a browser, the Android SDK) is checked before the plan, and install offers
 to skip a tool whose prerequisite is missing.
 
 Every tool works in Claude Code and in Cursor; a tool that works in one app only is not in the catalog. 0.5.0 removed
 claude-hud, typescript-lsp and csharp-lsp for that reason (serena covers the code navigation). An install of them keeps
-working: `/preferred-tools:update` offers once to uninstall each, and remembers a 'No'. claude-hud's status line goes
+working: `/alfred-tools:update` offers once to uninstall each, and remembers a 'No'. claude-hud's status line goes
 with it only when it is claude-hud's own.
 
 serena runs with a context file of the plugin's, `<root>/serena-context.yml`, that gives it six navigation tools only;
@@ -79,24 +79,24 @@ reading, editing and searching stay with the app's own tools.
 
 ## The four commands
 
-- **`/preferred-tools:install`** adds tools that are not installed in this project. It never changes, moves or removes
+- **`/alfred-tools:install`** adds tools that are not installed in this project. It never changes, moves or removes
   what is there. A tool already reaching you another way - installed for every project, through claude.ai, or from
   another plugin - is labelled in the list and can get this project's own copy beside it.
-- **`/preferred-tools:configure`** changes or removes what is installed, one tool at a time: its route, scope, name,
+- **`/alfred-tools:configure`** changes or removes what is installed, one tool at a time: its route, scope, name,
   data folder, key name or settings, which apps it is set up for, or a root folder. Every question
   recommends what the tool has now. Its first question about a server is who looks after it: this plugin, or 'Leave it
   on its own', which configure, update and fix then skip.
-- **`/preferred-tools:fix`** looks for known problems in what is installed and applies the recorded fix after you
+- **`/alfred-tools:fix`** looks for known problems in what is installed and applies the recorded fix after you
   confirm. Run it after moving a project, or when a server will not start; after a plugin upgrade,
-  `/preferred-tools:update` runs the checks that move what an older version wrote.
-- **`/preferred-tools:update`** brings installed plugins, pinned servers, the key helper, the URL bridge and serena's
+  `/alfred-tools:update` runs the checks that move what an older version wrote.
+- **`/alfred-tools:update`** brings installed plugins, pinned servers, the key helper, the URL bridge and serena's
   context file up to date when they are behind, offering only releases at least 7 days old. It also moves the servers an
   older version of this plugin set up to the way it passes data now: a key read from `.mcps-secrets` instead of the
   registration, absolute paths, the root's `.gitignore` and the `.mcp.json` order. When Cursor is on this machine and a
   root's servers are set up for Claude Code only, it offers once to add Cursor.
 
 Each one shows a plan and changes nothing before you confirm it. Pass a tool id to go straight to it, for example
-`/preferred-tools:configure sentry`.
+`/alfred-tools:configure sentry`.
 
 ## Which settings to pick
 
@@ -108,7 +108,7 @@ questions and what to choose.
 - **Global** (Claude Code's user scope; `~/.cursor/mcp.json` in Cursor): every project on this machine. Recommended for
   a hosted server with a key (github, gitlab, atlassian, sentry, context7 with a key).
 - **Project**: this project's `.mcp.json` (and `.cursor/mcp.json`), which you commit. Teammates get the server too,
-  but the paths in it are this machine's, so a clone on another machine points at yours - run `/preferred-tools:fix`
+  but the paths in it are this machine's, so a clone on another machine points at yours - run `/alfred-tools:fix`
   there.
 - **Local**: this project, only you. Recommended for the local tools (serena, memory, the browsers, appium, desktop
   control): their paths and runtime are this machine's. Cursor has no private file per project, so a Local server set
@@ -169,10 +169,10 @@ CONTEXT7_API_KEY=ctx7sk-...   # a note after whitespace and # is not part of the
 - A hosted server reads its key through `mcp-headers.js`, the small helper beside the file, each time Claude Code
   connects. The registration holds neither the key nor a `${VAR}` for it, so changing a key is: edit the file, then
   `/mcp` -> the server -> Reconnect.
-- The helper looks in the `.mcps-secrets` beside it, then the global root's, then `~/.preferred-tools` and `~/.alfred`:
+- The helper looks in the `.mcps-secrets` beside it, then the global root's, then `~/.alfred-tools` and `~/.alfred`:
   the first value found wins, so one key in the global root serves every project.
 - A local server (github in Docker, sentry with `npx`) gets its key written into its registration at Local or Global
-  scope; `/preferred-tools:fix` writes it again after you change it. Those routes are not offered at Project scope.
+  scope; `/alfred-tools:fix` writes it again after you change it. Those routes are not offered at Project scope.
 - The helper prints a key only when Claude Code runs it; run by hand it prints `{}`. The file itself is plain text: a
   command that reads it shows its keys, so keep it out of anything you share.
 - After an install, the plan says for each keyed server whether its key is filled, and how it connects once it is. A
@@ -185,7 +185,7 @@ Sentry's hosted server is scoped to an organization and a project only by its UR
 'Bridge' route fills that URL from `.mcps-secrets` each time the server starts, so switching projects is: change a line,
 then restart.
 
-1. Run `/preferred-tools:install sentry`, choose 'Set sentry up' and pick the route 'Bridge'. Project scope is
+1. Run `/alfred-tools:install sentry`, choose 'Set sentry up' and pick the route 'Bridge'. Project scope is
    recommended: the registration holds names only, and a session started in a subfolder uses it too.
 2. Keep the names it offers, or pick yours: the key (`SENTRY_ACCESS_TOKEN`), the organization slug (`SENTRY_ORG`) and
    the project slug (`SENTRY_PROJECT`) - sentry-cli's own names, recommended. A name you already keep holding `SENTRY`
@@ -205,7 +205,7 @@ start that small file, copied into the root beside `mcp-headers.js`, reads the n
 `mcp-remote` through `npx`, handing it the key in its environment, never on a command line. A slug must be a plain name
 (letters, digits, `_`, `.` and `-`). With the key or the organization not filled, the server does not start; Sentry
 accepts any token when it connects, so a wrong token shows at the first tool call, as Sentry's own error. Node and
-`npx` must be on the `PATH` Claude Code starts with. `/preferred-tools:configure sentry` changes the names later and
+`npx` must be on the `PATH` Claude Code starts with. `/alfred-tools:configure sentry` changes the names later and
 keeps the pin.
 
 ## Cursor
@@ -222,7 +222,7 @@ the `claude` CLI) and Cursor's file from it in the same run.
   in Docker, sentry with `npx`) reaches Cursor at Global scope only, so the key never lands in a project file.
 - **Approve again after a change.** Cursor asks you to approve a server again whenever its entry changes, so after an
   update that moves pins the plan names each one to approve.
-- **Edited by hand.** When one app's copy differs from the list, `/preferred-tools:fix` asks which copy stays. A key
+- **Edited by hand.** When one app's copy differs from the list, `/alfred-tools:fix` asks which copy stays. A key
   pasted into Cursor's copy is never copied anywhere.
 - **A workspace** (a root folder with projects below it, each opened on its own): Claude Code finds a parent folder's
   `.mcp.json`, Cursor does not. With alfred-code's workspace record (`.alfred/workspace.json`), each member's
@@ -237,7 +237,7 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
 
 - **Where the sign-in lives.** `<root>/mcp-remote-v1/`, one set of `<hash>_*` files per server. They are tokens: the
   plugin never reads, prints or copies them, and the root's `.gitignore` keeps them out of git. Where git would commit
-  that folder, the server is set up for Claude Code only until `/preferred-tools:fix` adds the line.
+  that folder, the server is set up for Claude Code only until `/alfred-tools:fix` adds the line.
 - **Kept out of AI sessions.** Two deny rules in your Claude Code settings (`~/.claude/settings.json`, or
   `CLAUDE_CONFIG_DIR`'s) stop a session from opening the tokens or the keys: `Read(//**/mcp-remote-v1/**)` and
   `Read(//**/.mcps-secrets)`. The plugin adds them when it first writes a sign-in entry or a key name; a rule you
@@ -245,7 +245,7 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
 - **Signing out.** Delete that server's `<hash>_*` files in `<root>/mcp-remote-v1/`, or the folder for every server.
   The next start opens the browser again.
 - **When the sign-in fails in both apps.** A vendor can turn off the self-registration mcp-remote relies on (a GitLab
-  admin can). Use a key instead: `/preferred-tools:configure <tool>` -> 'Use a key from .mcps-secrets'.
+  admin can). Use a key instead: `/alfred-tools:configure <tool>` -> 'Use a key from .mcps-secrets'.
 - Set up for Claude Code only, the server stays a plain `http` entry and Claude Code signs in on its own (`/mcp`).
 
 ## Where the files go
@@ -253,15 +253,15 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
 Two root folders hold everything the plugin writes:
 
 - **The project root**, for Project and Local scope: `.alfred` when alfred-code is set up in the project, else
-  `.preferred-tools`, or a folder you name inside the project.
-- **The global root**, for Global scope: `~/.preferred-tools`, `~/.alfred` when it exists, or a folder you name.
+  `.alfred-tools`, or a folder you name inside the project.
+- **The global root**, for Global scope: `~/.alfred-tools`, `~/.alfred` when it exists, or a folder you name.
 
 Each holds the tools' data folders (`<root>/<name>`), `.mcps-secrets`, `mcp-headers.js` (with `mcp-bridge.js` beside it
 for a bridge route, and a `package.json` saying CommonJS, so both load in a project whose own `package.json` says
 `"type": "module"`), serena's `serena-context.yml`, a `.gitignore` that keeps everything but itself and the helper out
 of git, `mcps.json` - the list of the servers the plugin manages and the ones you left on their own - and, after a
 sign-in, `mcp-remote-v1/`. Install asks for each root
-once; `/preferred-tools:configure` moves one (the data stays where it is, and the plan says so).
+once; `/alfred-tools:configure` moves one (the data stays where it is, and the plan says so).
 
 Every path the plugin writes is absolute, at Project scope too, so a session started in a subfolder uses the same
 profile, index and database.
@@ -272,10 +272,10 @@ The plugin: updates are pulled, never pushed.
 
 ```bash
 claude plugin marketplace update envoydev
-claude plugin update preferred-tools@envoydev
+claude plugin update alfred-tools@envoydev
 ```
 
-The tools: run `/preferred-tools:update` in each project after updating the plugin. It lists what is behind and moves
+The tools: run `/alfred-tools:update` in each project after updating the plugin. It lists what is behind and moves
 only what you pick, in one confirmation:
 
 - **Versions** - plugins and pinned MCP servers, to releases at least 7 days old; the newer key helper
@@ -284,35 +284,25 @@ only what you pick, in one confirmation:
   that still carries its key in an Authorization header reads it through the key helper instead, once you have put the
   key in `.mcps-secrets`; a relative or `${HOME}` path at Project scope becomes absolute (on Windows, serena's home
   moves under the root folder); the root folder's `.gitignore` gains the lines it lacks; and `.mcp.json` is put in
-  order. 0.5.0 adds its own: every server the plugin manages goes into the root's `mcps.json` (an old
-  `preferred-tools.json` is moved in and renamed `preferred-tools.json.0.4.bak`), serena gets the navigation context
+  order. 0.5.0 adds its own: every server the plugin manages goes into the root's `mcps.json` (the 0.4.x
+  record is moved in and renamed with `.0.4.bak` added), serena gets the navigation context
   and `base_modes: []` in its `serena_config.yml`, the two deny rules are added, and each retired plugin is offered for
   uninstall. These run before the version moves, so both changes stay.
 - **Cursor** - asked after the updates, once per root, when Cursor is on this machine and the root's servers are set
   up for Claude Code only. 'Not now' is remembered in the list.
 
 Something it cannot do alone - a key whose value is not in `.mcps-secrets` yet - is listed as a note, and the last line
-says how many wait on you: put the key in, then run `/preferred-tools:fix`. A copy a 0.2.0 session left in a subfolder
-is kept out of git by `/preferred-tools:fix` run in that subfolder.
+says how many wait on you: put the key in, then run `/alfred-tools:fix`. A copy a 0.2.0 session left in a subfolder
+is kept out of git by `/alfred-tools:fix` run in that subfolder.
 
 ## Going back to 0.4.x
 
-0.4.x reads no `mcps.json` and sees the registrations as they are; every Claude Code entry 0.5.0 writes still works
-under it. What to know:
-
-- **Servers left on their own.** Rename `<root>/preferred-tools.json.0.4.bak` back to `preferred-tools.json`.
-- **serena's manual.** 0.5.0 set `base_modes: []` in serena's `serena_config.yml` (in its data folder, `<root>/serena`
-  by default); 0.4.x keeps every tool, but its
-  manual then lacks the editing guidance. Put back Serena's default with the line `base_modes: [interactive, editing]`.
-- **The shared sign-in.** 0.4.x reads an mcp-remote entry with a sign-in folder as a server of your own: it keeps
-  working; configure's remove and a fresh install bring back the `http` form.
-- **The deny rules** stay in your Claude Code settings; they block sessions, not the plugin's own scripts.
-- Cursor's files stay as written; no version edits them again. A removed plugin comes back with
-  `claude plugin install`.
+There is no going back to 0.4.x: once the marketplace lists alfred-tools, the plugin under its former name no longer
+loads.
 
 ## When something is wrong
 
-Run `/preferred-tools:fix` first; it knows these:
+Run `/alfred-tools:fix` first; it knows these:
 
 - a bridge server does not start: `mcp-bridge.js`, or the helper beside it, is missing or out of date;
 - a server connects without its key: the folder's trust prompt was not accepted (a Project or Local server's helper

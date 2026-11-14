@@ -33,7 +33,7 @@ const FAKE: Record<string, string> = {
     SENTRY_ACCESS_TOKEN: ['fake', 'sentry', 'value', 'a1b2c3d4e5f6'].join('-'),
     CONTEXT7_API_KEY: ['fake', 'context7', 'value', 'a1b2c3d4e5f6'].join('-'),
 };
-const globalRoot = path.join(h.home, '.preferred-tools');
+const globalRoot = path.join(h.home, '.alfred-tools');
 fs.mkdirSync(globalRoot, { recursive: true });
 fs.writeFileSync(path.join(globalRoot, keys.SECRETS), Object.entries(FAKE).map(([k, v]) => `${k}=${v}\n`).join(''));
 // the registrations a key was written into: { scope, name, project }

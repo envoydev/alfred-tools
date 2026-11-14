@@ -5,7 +5,7 @@ description: "Use when solving a task in this repo end to end - '/solve-task', '
 
 # Solve task - this repo's own flow
 
-One change to preferred-tools, from the request to a local commit, through the superpowers skills and this repo's
+One change to alfred-tools, from the request to a local commit, through the superpowers skills and this repo's
 invariants (`.claude/CLAUDE.md`). Each step that names a skill loads it with the Skill tool.
 
 ## When to use

@@ -80,7 +80,7 @@ test('K1 - the helper sends the key at project, local and global scope; the writ
             const r = h.run(dir, { picks: { github: { route: 'remote', scope } } }, { catalog });
             ok(r);
             assert.ok(!`${r.rendered}\n${r.text}`.includes(KEY), 'no key printed');
-            const root = scope === 'user' ? path.join(h.home, '.preferred-tools') : path.join(dir, '.preferred-tools');
+            const root = scope === 'user' ? path.join(h.home, '.alfred-tools') : path.join(dir, '.alfred-tools');
             const secrets = path.join(root, roots.FILES.secrets);
             assert.deepStrictEqual(fs.readFileSync(secrets, 'utf8').split('\n').filter((l) => l && !l.startsWith('#')), [`${G}=`], `${scope}: the apply wrote the name only`);
             assert.strictEqual(roots.helperState(path.join(root, roots.FILES.helper)).state, 'same', `${scope}: the helper in the root`);
@@ -110,8 +110,8 @@ test('K2 - a chosen key name (ACME_GITHUB_TOKEN) at project scope', T, async () 
         helperOnly(w);
         // absolute since 0.3.0 at every scope, project included
         const style = process.platform === 'win32' ? 'win32' : 'posix';
-        assert.strictEqual(w.entry.headersHelper, `node ${shellArg(path.join(dir, '.preferred-tools', roots.FILES.helper), style)} ACME_GITHUB_TOKEN Bearer`);
-        const secrets = path.join(dir, '.preferred-tools', roots.FILES.secrets);
+        assert.strictEqual(w.entry.headersHelper, `node ${shellArg(path.join(dir, '.alfred-tools', roots.FILES.helper), style)} ACME_GITHUB_TOKEN Bearer`);
+        const secrets = path.join(dir, '.alfred-tools', roots.FILES.secrets);
         assert.ok(fs.readFileSync(secrets, 'utf8').split('\n').includes('ACME_GITHUB_TOKEN='), 'the chosen name written');
         fill(secrets, G, 'not-this-one');
         assert.notStrictEqual((await fake.authOnGet(s, dir, 'github', h.env)).auth, 'expected', 'the default name is not read');
@@ -129,7 +129,7 @@ test('K3 - an untrusted folder: no header reaches the server, and fix notes the 
         const dir = h.project('untrusted');
         const r = h.run(dir, { picks: { github: { route: 'remote', scope: 'project' } } }, { catalog });
         ok(r);
-        fill(path.join(dir, '.preferred-tools', roots.FILES.secrets), G, KEY);
+        fill(path.join(dir, '.alfred-tools', roots.FILES.secrets), G, KEY);
         assert.strictEqual((await fake.authOnGet(s, dir, 'github', h.env)).auth, 'none');
         const notes = detectAll(makeCtx({ inventory: h.inventory(dir, { catalog }), catalog, env: h.env, data: h.data })).notes;
         assert.ok(notes.some((n) => n.startsWith('github (project): accept the trust dialog')), notes.join('\n'));
@@ -147,7 +147,7 @@ test('K4 - the helper deleted: connects without the header; fix finds helper-mis
         const dir = h.project('missing');
         trust(h, dir);
         ok(h.run(dir, { picks: { github: { route: 'remote', scope: 'local' } } }, { catalog }));
-        const root = path.join(dir, '.preferred-tools');
+        const root = path.join(dir, '.alfred-tools');
         fill(path.join(root, roots.FILES.secrets), G, KEY);
         assert.strictEqual((await fake.authOnGet(s, dir, 'github', h.env)).auth, 'expected');
         fs.rmSync(path.join(root, roots.FILES.helper));
@@ -178,9 +178,9 @@ test('K5 - a server matching atlassian at global scope, recorded on its own: upd
     assert.ok(inv0.registrations.some((r) => r.name === 'atl' && r.rowId === 'atlassian' && r.scope === 'user'), 'matched to the atlassian row');
     const r = h.run(dir, { existing: { 'mcp:atl~user': 'own' } });
     ok(r);
-    const list = readJson(path.join(h.home, '.preferred-tools', roots.FILES.list));
+    const list = readJson(path.join(h.home, '.alfred-tools', roots.FILES.list));
     assert.deepStrictEqual(list.own.map((e: { name: string; scope: string; choice: string }) => [e.name, e.scope, e.choice]), [['atl', 'user', 'own']], 'in the global root\'s list');
-    assert.strictEqual(readJson(path.join(h.data, roots.FILES.map)).global, path.join(h.home, '.preferred-tools'), 'the roots map names the global root');
+    assert.strictEqual(readJson(path.join(h.data, roots.FILES.map)).global, path.join(h.home, '.alfred-tools'), 'the roots map names the global root');
 
     const inv = h.inventory(dir);
     assert.strictEqual(inv.registrations.find((x) => x.name === 'atl')!.choice, 'own', 'the inventory reads the record');
@@ -212,7 +212,7 @@ test('K6 - update moves a 0.1.x key header to the helper and keeps the key file 
         // as 0.1.x wrote it: the key in an Authorization header, its value from the environment
         const old = { type: 'http', url: catalog.byId.get('github')!.routes.remote!.url, headers: { Authorization: `Bearer \${${G}}` } };
         assert.strictEqual(h.claude(dir, ['mcp', 'add-json', 'github', JSON.stringify(old), '-s', 'local']).status, 0);
-        const root = path.join(dir, '.preferred-tools');
+        const root = path.join(dir, '.alfred-tools');
         fs.mkdirSync(root, { recursive: true });
         fill(path.join(root, roots.FILES.secrets), G, KEY);
         const uctx = update.makeCtx({ inventory: h.inventory(dir, { catalog }), project: dir, catalog, env: h.env, refresh: false, data: h.data });

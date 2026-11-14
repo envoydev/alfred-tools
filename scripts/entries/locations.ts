@@ -149,13 +149,13 @@ export function alfredNameProblem(name: string, context: Machine): string | null
 }
 
 // The root of a scope family (spec D2): context.roots when the plan or the questions resolved them, else the recommended
-// ones without alfred-code - <project>/.preferred-tools and <home>/.preferred-tools.
+// ones without alfred-code - <project>/.alfred-tools and <home>/.alfred-tools.
 export function rootOf(family: string, context: Machine): string
 {
     const pathApi = pathFor(context.platform);
     const set = context.roots && context.roots[family as 'project' | 'global'];
     if (set) return set;
-    return family === 'global' ? pathApi.join(context.home, '.preferred-tools') : pathApi.join(context.project, '.preferred-tools');
+    return family === 'global' ? pathApi.join(context.home, '.alfred-tools') : pathApi.join(context.project, '.alfred-tools');
 }
 
 // The location side recommended for a row at a scope (spec D2, F6): the data folder sits in the root of the scope's
@@ -173,7 +173,7 @@ export function recommendedSide(row: CatalogRow, scope: string, context: Machine
 export function otherPlace(_row: CatalogRow, name: string, side: string, context: Machine | null = null): Root
 {
     if (context && context.platform && (context.roots || context.project)) return logicalRoot(pathFor(context.platform).join(rootOf(side === 'account' ? 'global' : 'project', context), name), context);
-    return side === 'account' ? { kind: 'home', rel: `.preferred-tools/${name}` } : { kind: 'project', rel: `.preferred-tools/${name}` };
+    return side === 'account' ? { kind: 'home', rel: `.alfred-tools/${name}` } : { kind: 'project', rel: `.alfred-tools/${name}` };
 }
 
 // The other place from 'Locations': the account folder for a project default, the project folder for memory.

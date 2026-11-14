@@ -81,7 +81,7 @@ test('a BOM, a comment or a trailing comma is an error and nothing is written', 
             fs.writeFileSync(file, text);
             const r = O.orderFile(file, catalog, NONE);
             assert.deepStrictEqual([r.ok, r.changed], [true, false]);
-            assert.match(r.detail, /^warning: .* left as it is - \/preferred-tools:fix \(mcp-order\) orders it$/);
+            assert.match(r.detail, /^warning: .* left as it is - \/alfred-tools:fix \(mcp-order\) orders it$/);
             assert.strictEqual(fs.readFileSync(file, 'utf8'), text, 'byte-identical');
         }
         assert.deepStrictEqual(fs.readdirSync(dir), ['.mcp.json'], 'no temporary file left');
@@ -100,7 +100,7 @@ test('a file changed between the read and the rename is not written; one in orde
     let renamed = 0;
     const r = O.orderFile('/nowhere/.mcp.json', catalog, NONE, { read: () => reads.shift() as string, write: () => { wrote++; }, rename: () => { renamed++; } });
     assert.deepStrictEqual([r.ok, r.changed, wrote, renamed], [true, false, 0, 0]);
-    assert.match(r.detail, /^warning: .*changed while it was being ordered.* left as it is - \/preferred-tools:fix \(mcp-order\) orders it$/);
+    assert.match(r.detail, /^warning: .*changed while it was being ordered.* left as it is - \/alfred-tools:fix \(mcp-order\) orders it$/);
     const dir = tmpDir();
     try
     {
@@ -114,7 +114,7 @@ test('a file changed between the read and the rename is not written; one in orde
         fs.writeFileSync(file, a);
         const failed = O.orderFile(file, catalog, NONE, { write: () => { throw Object.assign(new Error('disk full'), { code: 'ENOSPC' }); } });
         assert.deepStrictEqual([failed.ok, failed.changed], [true, false]);
-        assert.match(failed.detail, /^warning: .*ENOSPC.* left as it is - \/preferred-tools:fix \(mcp-order\) orders it$/);
+        assert.match(failed.detail, /^warning: .*ENOSPC.* left as it is - \/alfred-tools:fix \(mcp-order\) orders it$/);
         assert.strictEqual(fs.readFileSync(file, 'utf8'), a);
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }

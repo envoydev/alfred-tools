@@ -1,5 +1,7 @@
 # Sources - every external fact, with its URL and the date read
 
+Records dated before 2026-11-14 were made under the plugin's former name and are written here as alfred-tools.
+
 Read on 2026-10-27 (build session) unless a line says otherwise. A line is `CONFIRMED` when the vendor's page matches
 the build brief, `CHANGED` when it does not (the catalog follows the page, not the brief), `MEASURED` when it was run
 on this machine under an isolated `CLAUDE_CONFIG_DIR` and `HOME`. Registry facts (version, publish time) are the
@@ -545,7 +547,7 @@ Docs: https://code.claude.com/docs/en/plugins/cli-reference.md and https://code.
 ## Decision - serena-windows-ts-shim
 
 The brief put the shim patch in three places: the install plan on Windows (pre-warm, then patch), the serena bump in the
-update skill, and `/preferred-tools:fix`. Its stated reason was serena #311. Verified in step 1: #311 is closed as an
+update skill, and `/alfred-tools:fix`. Its stated reason was serena #311. Verified in step 1: #311 is closed as an
 incorrect analysis, there is no upstream fix to wait for, and the 2.1.0 launch runs through `shell=True`/cmd.exe, which may
 resolve the extensionless shim itself. Nothing proves the patch is needed or that it is not: only a Windows run of an
 unpatched 2.1.0 does, and the patch edits a file in uv's cache.
@@ -658,7 +660,7 @@ the same machines:
 `<tmp>/answers.json`, every ask) through the hooks the `alfred-code` entry of each release's
 `.claude-plugin/marketplace.json` registers, as one session per command: SessionStart, UserPromptSubmit,
 UserPromptExpansion, PreToolUse / real run / PostToolUse per step, Stop. The payload fields are the ones a logged-out
-`claude -p "/preferred-tools:install"` sent to logging hooks. Each release is installed by the real CLI into its own
+`claude -p "/alfred-tools:install"` sent to logging hooks. Each release is installed by the real CLI into its own
 isolated account (every release names its marketplace `envoydev`), its projects set up by its own installer: a plain
 project at every release; a workspace root and its child from v2.11.0, the first release with workspaces (v2.11.0 joins
 the child with `workspace.js register`, its own matrix's way; v3.0.0 on answers `workspace.js role`). The folder is
@@ -692,7 +694,7 @@ Every release and every folder gave the same FINDINGs, all on the live values (D
 - `guard-stop-contract.js` AskUserQuestion PreToolUse (additionalContext, configure steps 6 and 7) - 'This ask named
   remote or job state that no remote-aware read in this turn backed. Read it fresh (`git fetch` ...) before acting':
   the route ask '<tool>: remote or local?' with its 'Remote' option. The guard's `REMOTE_STATE_RE` (v3.2.1 :2528)
-  matches a bare `remote`, which in preferred-tools names the hosted route, not git state. Counted as a FINDING: it
+  matches a bare `remote`, which in alfred-tools names the hosted route, not git state. Counted as a FINDING: it
   sends Claude to fetch and re-ask.
 
 The rest of the CONTEXT lines only inform and are recorded as PASS: `docs-session.js`, `preferences-session.js`,
@@ -702,7 +704,7 @@ UserPromptSubmit. `fix` and `update` passed whole at every release. NOT RUN in e
 picked).
 
 **After the fix (same day, same releases and folders).** Every file a command line names carries a credential value as
-`${PREFERRED_TOOLS_KEPT}` (`scripts/kept.js`), which the guard's `isPlaceholder` reads as no value, and `apply.js` takes
+`${ALFRED_TOOLS_KEPT}` (`scripts/kept.js`), which the guard's `isPlaceholder` reads as no value, and `apply.js` takes
 the real one back from the registration in its own process; the route is worded 'hosted' in every ask. The full replay
 gave 1864 PASS, 0 `shell-guards.js` blocks, no Stop block and no rotation ask; its only FINDINGs were the remote-state
 note on configure's change pick ('remote route, pin ...'), and a configure replay after that word changed gave 631 PASS
@@ -792,7 +794,7 @@ D7 (key files, `scripts/keys.js`) rests on these:
   data root `layout.dataRootOf` reports (`.alfred` unless a `DATA_PATH` setting moves it).
 - The store grammar is `layout.js` `readDotenv` (v3.2.1 `:443`, `DOTENV_LINE` `:417`): `KEY=value`, an optional
   `export `, one pair of matching quotes dropped from the trimmed value, `#` and `;` lines and blank lines comments, a
-  BOM deciding UTF-16. `keys.js` `readDotenv` reads the same grammar for `.preferred-tools/.secrets` and an engine-less
+  BOM deciding UTF-16. `keys.js` `readDotenv` reads the same grammar for `.alfred-tools/.secrets` and an engine-less
   `.alfred` store.
 - `tests/keys.test.js` requires the real engine of v2.11.0 and v3.2.1 from their tags and reads a project store through
   it (the contract test); a release that drops or changes `chainOf` is a named error and the registration keeps
@@ -878,7 +880,7 @@ signed-in desktop.
 alfred-code launches windows-mcp from plugins: its v2.9.0 `.claude-plugin/marketplace.json` lists `windows-control`
 (mcpServers `windows-control`) and `windows-desktop` ('RETIRED in 2.4.0 - renamed windows-control', mcpServers
 `windows-desktop`), both through `desktop-launch.js` with `windows-mcp==0.8.8`; v2.10.0 is the last to list them,
-v2.11.0 lists neither, and preferred-tools is first listed in v3.0.0 - so no marketplace version lists both. A plugin
+v2.11.0 lists neither, and alfred-tools is first listed in v3.0.0 - so no marketplace version lists both. A plugin
 whose id the marketplace dropped stops loading and says so only in `plugin list --json`'s `errors`
 (`docs/plugin-cli-evidence.md` S13, S25), so `inventory.windowsMcpServers` counts these plugins only enabled and with no
 `errors` (a stale marketplace clone still loads them), beside the registrations that start here (M2, M3, M7 above).
@@ -942,24 +944,24 @@ project server beside a same-name user or parent server) NOT RUN: no catalog rou
 ## Relative data folders - the probe (measured 2026-11-10, macOS arm64)
 
 `tests/probes/relative-root.js` (node 24.11.0, darwin arm64): each row launched as `plan.js` builds it at project scope,
-its data folder `.preferred-tools/<name>`, over stdio, from a throwaway folder `R` and then from `R/child`, under a
+its data folder `.alfred-tools/<name>`, over stdio, from a throwaway folder `R` and then from `R/child`, under a
 throwaway HOME. The pins: serena-agent 2.1.0 (uvx, Python 3.13, cut-off 2026-10-20), mcp-memory-service[sqlite] 12.4.0
 (cut-off 2026-11-04), @playwright/mcp 0.0.83 with Google Chrome (`--headless` added for the run), appium-mcp 1.99.1.
 
 ```text
-RESULT serena root pass R/.preferred-tools/serena/serena_config.yml
-RESULT serena child pass R/child/.preferred-tools/serena/serena_config.yml
-RESULT memory root pass R/.preferred-tools/memory/memory.db
-RESULT memory child pass R/child/.preferred-tools/memory/memory.db
-RESULT playwright-chrome root pass R/.preferred-tools/playwright-chrome/Local State
-RESULT playwright-chrome child pass R/child/.preferred-tools/playwright-chrome/Local State
+RESULT serena root pass R/.alfred-tools/serena/serena_config.yml
+RESULT serena child pass R/child/.alfred-tools/serena/serena_config.yml
+RESULT memory root pass R/.alfred-tools/memory/memory.db
+RESULT memory child pass R/child/.alfred-tools/memory/memory.db
+RESULT playwright-chrome root pass R/.alfred-tools/playwright-chrome/Local State
+RESULT playwright-chrome child pass R/child/.alfred-tools/playwright-chrome/Local State
 RESULT appium root fail - no device
 RESULT appium child fail - no device
 ```
 
 - serena writes `serena_config.yml` into `SERENA_HOME` at start, memory creates `memory.db` at start, and Playwright
   writes the profile's `Local State` once `browser_navigate` opens the browser. A pass means the file landed under
-  `<the folder it started in>/.preferred-tools/<name>` and no other new copy appeared under HOME or `R`. The four
+  `<the folder it started in>/.alfred-tools/<name>` and no other new copy appeared under HOME or `R`. The four
   Playwright rows share the package and its `path.resolve`, so the Chrome run stands for msedge, firefox and webkit.
 - appium-mcp 1.99.1 writes nothing without a device (`appium_screenshot` answers an error with no session), so its flag
   rests on its source, read and not run (O3): `dist/utils/paths.js:12-21`, `resolveScreenshotDir()`, joins a relative
@@ -1068,7 +1070,7 @@ https://github.com/geelen/mcp-remote; the published tarball of 0.16.0 (`npm pack
 
 - Measured by `tests/matrix/field-fixes.test.js` X7 and a scratch probe beside it: a throwaway HOME and
   `CLAUDE_CONFIG_DIR`, github's hosted route registered at local scope against the stub in `tests/fake-mcp-http.js`, the
-  folder trusted, the key filled in `.preferred-tools/.mcps-secrets`, then `claude mcp get github` and `claude mcp list`.
+  folder trusted, the key filled in `.alfred-tools/.mcps-secrets`, then `claude mcp get github` and `claude mcp list`.
 - The helper's header reached the stub in every keyed case. What `claude mcp get` printed:
   - the stub answering 401 with `WWW-Authenticate: Bearer`: `Status: ✘ Failed to connect` and `Issue: Server rejected
     the Authorization header minted by the configured headersHelper (HTTP 401). Check that the helper command returns a

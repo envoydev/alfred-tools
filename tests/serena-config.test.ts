@@ -66,7 +66,7 @@ test('an alfred-code 2.x home is not edited', () => {
     assert.deepStrictEqual(sc.editableHome(home, { platform: 'darwin' }).ok, false);
     assert.match(sc.editableHome(home, { platform: 'darwin' }).reason!, /alfred-code's - base_modes is left/);
     assert.deepStrictEqual(sc.editableHome('C:\\work\\shop\\.alfred\\serena\\home', { platform: 'win32', home: 'C:\\Users\\me' }).ok, false);
-    assert.deepStrictEqual(sc.editableHome(path.join(tmp, 'proj', '.preferred-tools', 'serena'), { platform: 'darwin' }), { ok: true, shared: false });
+    assert.deepStrictEqual(sc.editableHome(path.join(tmp, 'proj', '.alfred-tools', 'serena'), { platform: 'darwin' }), { ok: true, shared: false });
 });
 
 test('a Windows <profile>\\.serena home is edited and the plan carries the shared-file line', () => {

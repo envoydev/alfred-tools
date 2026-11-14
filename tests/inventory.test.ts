@@ -619,9 +619,9 @@ test("the inventory reads each enabled plugin's MCP servers, matched to a row, a
 test('a bridge registration matches sentry route bridge; mcp-remote by hand and a launcher of the user\'s match nothing', () => {
     const T = 'https://mcp.sentry.dev/mcp/{SENTRY_SLUG}';
     const tail = [T, 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'];
-    assert.deepStrictEqual(inv.matchEntry({ command: 'node', args: ['/h/.preferred-tools/mcp-bridge.js', ...tail] }, catalog), { rowId: 'sentry', route: 'bridge' });
-    assert.deepStrictEqual(inv.matchEntry({ command: 'node.exe', args: ['C:/Users/dev/.preferred-tools/mcp-bridge.js', ...tail] }, catalog), { rowId: 'sentry', route: 'bridge' });
-    assert.deepStrictEqual(inv.matchEntry({ command: 'node', args: ['C:\\Users\\dev\\.preferred-tools\\mcp-bridge.js', ...tail] }, catalog), { rowId: 'sentry', route: 'bridge' }, 'a Windows path');
+    assert.deepStrictEqual(inv.matchEntry({ command: 'node', args: ['/h/.alfred-tools/mcp-bridge.js', ...tail] }, catalog), { rowId: 'sentry', route: 'bridge' });
+    assert.deepStrictEqual(inv.matchEntry({ command: 'node.exe', args: ['C:/Users/dev/.alfred-tools/mcp-bridge.js', ...tail] }, catalog), { rowId: 'sentry', route: 'bridge' });
+    assert.deepStrictEqual(inv.matchEntry({ command: 'node', args: ['C:\\Users\\dev\\.alfred-tools\\mcp-bridge.js', ...tail] }, catalog), { rowId: 'sentry', route: 'bridge' }, 'a Windows path');
     // Review Focus 4: a user's own Sentry setup stays the user's
     assert.strictEqual(inv.matchEntry({ command: 'npx', args: ['-y', 'mcp-remote@0.15.2', 'https://mcp.sentry.dev/mcp/acme'] }, catalog), null);
     assert.strictEqual(inv.matchEntry({ command: 'node', args: ['/w/.alfred/sentry-mcp.js'] }, catalog), null);
@@ -641,7 +641,7 @@ test('inv.cursor reads both Cursor files; entries hold only the names a list mar
     try
     {
         const S = { command: 'uvx', args: ['--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'] };
-        writeJson(path.join(w.project, '.preferred-tools', 'mcps.json'), { version: 1, own: [], servers: [
+        writeJson(path.join(w.project, '.alfred-tools', 'mcps.json'), { version: 1, own: [], servers: [
             { name: 'serena', scope: 'project', row: 'serena', route: 'local', clients: ['claude', 'cursor'], entry: S, key: null },
             { name: 'memory', scope: 'project', row: 'memory', route: 'local', clients: ['claude'], entry: { command: 'uvx', args: ['mcp-memory-service'] }, key: null },
         ] });

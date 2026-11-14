@@ -25,7 +25,7 @@ const SERENA = { command: 'uvx', args: ['--from', 'serena-agent@2.1.0', 'serena'
 const MEMORY = { command: 'uvx', args: ['mcp-memory-service'] };
 const C7 = { type: 'http', url: 'https://mcp.context7.com/mcp' };
 const srv = (name: string, scope: string, entry: ServerEntry, extra: Partial<ListServer> = {}): ListServer => ({ name, scope, row: name, route: 'local', clients: ['claude', 'cursor'], entry, key: null, ...extra });
-const listFile = (d: string, servers: ListServer[]) => { const f = path.join(d, '.preferred-tools', 'mcps.json'); write(f, JSON.stringify({ version: 1, servers, own: [] })); return f; };
+const listFile = (d: string, servers: ListServer[]) => { const f = path.join(d, '.alfred-tools', 'mcps.json'); write(f, JSON.stringify({ version: 1, servers, own: [] })); return f; };
 const ctx = { catalog };
 const step = (file: string, lists: { file: string; scopes: string[] }[], extra: Partial<CursorWriteStep> = {}) => ({ op: 'cursor-write', file, family: 'project', lists, before: [], skip: [], replace: [], ...extra });
 
@@ -147,7 +147,7 @@ test('cursor-mcp writes through a temporary file then a rename, and makes the fo
     assert.ok(!fs.existsSync(path.join(d, '.cursor', '.gitignore')), 'a folder it makes gets no .gitignore');
     // the same again: nothing written
     calls.length = 0;
-    assert.match(C.cursorWrite(step(file, [{ file: path.join(d, '.preferred-tools', 'mcps.json'), scopes: ['local', 'project'] }]), ctx).detail, /already holds/);
+    assert.match(C.cursorWrite(step(file, [{ file: path.join(d, '.alfred-tools', 'mcps.json'), scopes: ['local', 'project'] }]), ctx).detail, /already holds/);
     assert.deepStrictEqual(calls, []);
 });
 
@@ -172,7 +172,7 @@ test('fileFor: the project\'s .cursor/mcp.json, or the home\'s', () => {
 });
 
 test('matchesRow matches context7\'s bridge copy to the context7 row and an unrelated bridge to none', () => {
-    const bridge = (url: string, key = 'CONTEXT7_API_KEY') => ({ command: 'node', args: ['/r/.preferred-tools/mcp-bridge.js', url, key, 'Bearer', 'mcp-remote@0.1.37'] });
+    const bridge = (url: string, key = 'CONTEXT7_API_KEY') => ({ command: 'node', args: ['/r/.alfred-tools/mcp-bridge.js', url, key, 'Bearer', 'mcp-remote@0.1.37'] });
     const rows = catalog.tools.filter((r) => r.kind === 'mcp');
     const hits = (entry: ServerEntry) => rows.filter((r) => C.matchesRow(entry, r)).map((r) => r.id);
     assert.deepStrictEqual(hits(bridge('https://mcp.context7.com/mcp')), ['context7']);
@@ -198,7 +198,7 @@ test('cursor-mcp loads before and after inventory without a partial export', () 
 });
 
 // ---- hosted routes (spec D5) ----------------------------------------------------------------------------------------
-const HOSTED_CTX = { platform: 'darwin', project: '/work/shop', home: '/Users/me', roots: { project: '/work/shop/.preferred-tools', global: '/Users/me/.preferred-tools' } };
+const HOSTED_CTX = { platform: 'darwin', project: '/work/shop', home: '/Users/me', roots: { project: '/work/shop/.alfred-tools', global: '/Users/me/.alfred-tools' } };
 const helperEntry = (id: string, scope = 'user', ctx = HOSTED_CTX) => buildEntry(catalog.byId.get(id)!, 'remote', { scope, token: true, params: { host: 'gitlab.com' } }, ctx, catalog.rules);
 const MR = catalog.byId.get('sentry')!.routes!.bridge!.package!;
 
@@ -210,7 +210,7 @@ for (const id of ['context7', 'github', 'gitlab', 'atlassian', 'sentry'])
         assert.equal(b.command, 'node');
         assert.strictEqual(b.args[4], `mcp-remote@${MR.version}`);
         assert.match(b.args[4], /^mcp-remote@0\.16\.0$/);
-        assert.equal(b.args[0], '/Users/me/.preferred-tools/mcp-bridge.js');
+        assert.equal(b.args[0], '/Users/me/.alfred-tools/mcp-bridge.js');
         assert.equal(b.args[1], e.url);
         assert.deepEqual(b.args.slice(2, 4), helperParts(e.headersHelper)!.args.slice(0, 2));
         assert.deepStrictEqual(b.env, { npm_config_before: MR.cutoff });
@@ -225,14 +225,14 @@ test('the bridge form is the object buildEntry makes for sentry\'s bridge route,
     const b = C.bridgeFormOf(e, catalog) as ServerEntry & { args: string[] };
     assert.deepStrictEqual(Object.keys(b), Object.keys(built));
     assert.deepStrictEqual({ ...b, args: [...b.args.slice(0, 1), ...b.args.slice(2)] }, { ...built, args: [...built.args!.slice(0, 1), ...built.args!.slice(2)] });
-    assert.strictEqual(b.args[5], '/Users/me/.preferred-tools');
+    assert.strictEqual(b.args[5], '/Users/me/.alfred-tools');
 });
 
 test('bridgeFormOf keeps a prior copy\'s pin, cut-off and the args and env pairs it does not set', () => {
     const e = helperEntry('context7');
     const prior = { command: 'node', args: ['--no-warnings', '/old/mcp-bridge.js', 'https://old.example/mcp', 'OLD', 'Bearer', 'mcp-remote@0.17.0'], env: { npm_config_before: '2026-12-01T00:00:00Z', MINE: '1' } };
     const b = C.bridgeFormOf(e, catalog, prior) as ServerEntry & { args: string[] };
-    assert.deepStrictEqual(b.args, ['--no-warnings', '/Users/me/.preferred-tools/mcp-bridge.js', e.url, 'CONTEXT7_API_KEY', 'Bearer', 'mcp-remote@0.17.0']);
+    assert.deepStrictEqual(b.args, ['--no-warnings', '/Users/me/.alfred-tools/mcp-bridge.js', e.url, 'CONTEXT7_API_KEY', 'Bearer', 'mcp-remote@0.17.0']);
     assert.deepStrictEqual(b.env, { npm_config_before: '2026-12-01T00:00:00Z', MINE: '1' });
 });
 
@@ -245,9 +245,9 @@ test('bridgeFormOf is null for an entry with no helper, or a header besides the 
 });
 
 test('signInParts reads the plugin form and returns null without MCP_REMOTE_CONFIG_DIR', () => {
-    const f = signInFormOf('https://mcp.atlassian.com/v2/mcp', '/Users/me/.preferred-tools', catalog, { platform: 'darwin' });
-    assert.deepStrictEqual(f, { type: 'stdio', command: 'npx', args: ['-y', `mcp-remote@${MR.version}`, 'https://mcp.atlassian.com/v2/mcp'], env: { npm_config_before: MR.cutoff, MCP_REMOTE_CONFIG_DIR: '/Users/me/.preferred-tools' } });
-    assert.deepStrictEqual(signInParts(f), { url: 'https://mcp.atlassian.com/v2/mcp', dir: '/Users/me/.preferred-tools', pin: `mcp-remote@${MR.version}` });
+    const f = signInFormOf('https://mcp.atlassian.com/v2/mcp', '/Users/me/.alfred-tools', catalog, { platform: 'darwin' });
+    assert.deepStrictEqual(f, { type: 'stdio', command: 'npx', args: ['-y', `mcp-remote@${MR.version}`, 'https://mcp.atlassian.com/v2/mcp'], env: { npm_config_before: MR.cutoff, MCP_REMOTE_CONFIG_DIR: '/Users/me/.alfred-tools' } });
+    assert.deepStrictEqual(signInParts(f), { url: 'https://mcp.atlassian.com/v2/mcp', dir: '/Users/me/.alfred-tools', pin: `mcp-remote@${MR.version}` });
     const { MCP_REMOTE_CONFIG_DIR: _d, ...env } = f.env;
     assert.strictEqual(signInParts({ ...f, env }), null);
     assert.strictEqual(signInParts({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0', 'not a url'], env: { MCP_REMOTE_CONFIG_DIR: '/x' } }), null);
@@ -255,7 +255,7 @@ test('signInParts reads the plugin form and returns null without MCP_REMOTE_CONF
 });
 
 test('on win32 the shared sign-in form is wrapped in cmd /c npx', () => {
-    const f = signInFormOf('https://mcp.sentry.dev/mcp', 'C:\\Users\\me\\.preferred-tools', catalog, { platform: 'win32' });
+    const f = signInFormOf('https://mcp.sentry.dev/mcp', 'C:\\Users\\me\\.alfred-tools', catalog, { platform: 'win32' });
     assert.deepStrictEqual([f.command, f.args!.slice(0, 4)], ['cmd', ['/c', 'npx', '-y', `mcp-remote@${MR.version}`]]);
-    assert.deepStrictEqual(signInParts(f), { url: 'https://mcp.sentry.dev/mcp', dir: 'C:\\Users\\me\\.preferred-tools', pin: `mcp-remote@${MR.version}` });
+    assert.deepStrictEqual(signInParts(f), { url: 'https://mcp.sentry.dev/mcp', dir: 'C:\\Users\\me\\.alfred-tools', pin: `mcp-remote@${MR.version}` });
 });

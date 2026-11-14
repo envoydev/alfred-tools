@@ -140,7 +140,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
     if (same)
     {
         out.expect.push({ kind: 'mcp', row: row.id, name, scope, route: same.route });
-        return out.unchanged.push(`${row.id}: '${name}' is already installed at ${scope} scope - a change to it is /preferred-tools:configure`);
+        return out.unchanged.push(`${row.id}: '${name}' is already installed at ${scope} scope - a change to it is /alfred-tools:configure`);
     }
     const taken = inventory.registrations.filter((registration) => registration.scope === scope);
     const problem = nameProblem(name, { catalog, taken, self: current ? { name: current.name, scope: current.scope } : null });
@@ -210,7 +210,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
             urlNames[urlVar.var] = urlName;
         }
     }
-    if (unfilledStdio) out.notes.push(`${row.id}: fill ${keyName} in ${keyState!.files[0]}, then /preferred-tools:configure -> Use a key from .mcps-secrets writes it in`);
+    if (unfilledStdio) out.notes.push(`${row.id}: fill ${keyName} in ${keyState!.files[0]}, then /alfred-tools:configure -> Use a key from .mcps-secrets writes it in`);
     // the server's settings (spec D9): pairs merged into a stdio route's env - never a key, and no machine path in the
     // committed file
     if (pick.settings)
@@ -279,7 +279,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
                 delete entry.headersHelper;
                 if (header) { delete entry.headers!.Authorization; if (!Object.keys(entry.headers!).length) delete entry.headers; }
             }
-            else if (header) out.notes.push(`${row.id}: '${current!.name}' sends its key from an Authorization header - /preferred-tools:fix moves it into .mcps-secrets, read by mcp-headers.js (key-to-helper)`);
+            else if (header) out.notes.push(`${row.id}: '${current!.name}' sends its key from an Authorization header - /alfred-tools:fix moves it into .mcps-secrets, read by mcp-headers.js (key-to-helper)`);
             else entry.headersHelper = helperFor(route, scope, context, keyName);
         }
         else if (route.authMode === 'optional-token' && sendNow !== current!.token)
@@ -307,7 +307,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
         const exists = context.exists || ((filePath) => fs.existsSync(filePath));
         if (clients.includes('cursor') && root && (exists(root) || pathApi.basename(root) === '.alfred') && roots.gitIgnores(pathApi.join(root, roots.FILES.signIns, 'tokens')) === false)
         {
-            out.notes.push(`${root}: git would commit ${roots.FILES.signIns}/ - ${name} is set up for Claude Code only; /preferred-tools:fix (root-ignore) covers it, then configure adds Cursor`);
+            out.notes.push(`${root}: git would commit ${roots.FILES.signIns}/ - ${name} is set up for Claude Code only; /alfred-tools:fix (root-ignore) covers it, then configure adds Cursor`);
             clients = clients.filter((client) => client !== 'cursor');
         }
         if (clients.includes('cursor') && root)
@@ -354,7 +354,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
         const own = new Set(keys.tokenFields(entry, route).map((field) => field.at.join('.')));
         const held = kept.credentialPaths(entry, row).filter((credentialPath) => !own.has(credentialPath));
         const viaFix = route.helper && held.every((credentialPath) => /^headers\.authorization$/i.test(credentialPath));
-        if (held.length) return out.errors.push(`${row.id}: '${current.name}' holds a credential in ${held.join(', ')}, which the committed .mcp.json must not carry - keep it at ${current.scope} scope, or ${viaFix ? 'run /preferred-tools:fix first: key-to-helper moves the key into mcp-headers.js' : `take it out of ${held.join(', ')} first`}`);
+        if (held.length) return out.errors.push(`${row.id}: '${current.name}' holds a credential in ${held.join(', ')}, which the committed .mcp.json must not carry - keep it at ${current.scope} scope, or ${viaFix ? 'run /alfred-tools:fix first: key-to-helper moves the key into mcp-headers.js' : `take it out of ${held.join(', ')} first`}`);
     }
 
     // the key (spec D3-D5): a hosted route's helper reads the hosted chain each time Claude Code connects, a stdio route's

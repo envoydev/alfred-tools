@@ -136,10 +136,10 @@ export function renderUpdates(out: UpdateCheck): string
     const offered = out.cursorOffers || [];
     if (offered.length) lines.push('Cursor (asked after the updates):', ...offered.map((cursorOffer) => `  ${cursorOffer.servers.length} servers in ${cursorOffer.root} are set up for Claude Code only`));
     // a note that waits on the user is never 'everything current' (a key to fill, a key file git would commit)
-    if (!behind(out) && out.waiting) lines.push('', `preferred-tools: nothing to update - ${out.waiting} wait${out.waiting === 1 ? 's' : ''} on you first (the notes above)`);
-    else if (!behind(out) && offered.length) lines.push('', 'preferred-tools: nothing to update - Cursor can be set up (asked next)');
-    else if (!behind(out) && !out.errors.length) lines.push('', 'preferred-tools: everything current');
-    else if (!behind(out)) lines.push('', 'preferred-tools: nothing behind among what could be checked');
+    if (!behind(out) && out.waiting) lines.push('', `alfred-tools: nothing to update - ${out.waiting} wait${out.waiting === 1 ? 's' : ''} on you first (the notes above)`);
+    else if (!behind(out) && offered.length) lines.push('', 'alfred-tools: nothing to update - Cursor can be set up (asked next)');
+    else if (!behind(out) && !out.errors.length) lines.push('', 'alfred-tools: everything current');
+    else if (!behind(out)) lines.push('', 'alfred-tools: nothing behind among what could be checked');
     return lines.join('\n').replace(/^\n/, '');
 }
 

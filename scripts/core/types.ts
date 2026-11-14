@@ -12,8 +12,8 @@ export interface Env
     PATH?: string | undefined;
     Path?: string | undefined;
     ComSpec?: string | undefined;
-    PREFERRED_TOOLS_NPM_URL?: string | undefined;
-    PREFERRED_TOOLS_PYPI_URL?: string | undefined;
+    ALFRED_TOOLS_NPM_URL?: string | undefined;
+    ALFRED_TOOLS_PYPI_URL?: string | undefined;
     PROCESSOR_ARCHITECTURE?: string | undefined;
     PROCESSOR_ARCHITEW6432?: string | undefined;
     PROCESSOR_IDENTIFIER?: string | undefined;

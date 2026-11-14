@@ -1,7 +1,7 @@
 // SERVERS ALREADY SET UP (spec D6, F4) - a registration that matches a catalog row, an MCP server an enabled plugin
 // provides, and a claude.ai connector this session has loaded. A matching registration is managed by configure, update
 // and fix; one the user leaves on its own in configure is saved in the root's mcps.json, in its `own`, by the apply's
-// list-write step (a 0.4.x root's preferred-tools.json is read until list-import moves it). Nothing here writes, and no server is started to find one.
+// list-write step (a 0.4.x root's record is read until list-import moves it). Nothing here writes, and no server is started to find one.
 import fs from 'node:fs';
 import path from 'node:path';
 import * as account from '../core/account.ts';
@@ -182,14 +182,14 @@ export function ownItems(inventory: Inventory, catalog: Catalog): ExistingItem[]
     ];
 }
 
-// configure's question for one of them: keep it so, or hand it over - a registration to preferred-tools, a plugin's
+// configure's question for one of them: keep it so, or hand it over - a registration to alfred-tools, a plugin's
 // server or a connector to install's offer beside it. The answer is a list-write step only.
 export function ownQuestion(item: ExistingItem)
 {
     const isRegistration = item.kind === 'mcp';
     const options = isRegistration
-        ? [{ label: 'Keep it on its own', choice: 'own', description: 'nothing in this plugin changes it' }, { label: 'Let preferred-tools manage it', choice: 'manage', description: 'configure, update and fix look after it from now on' }]
-        : [{ label: `Keep it with ${ownerOf(item)}`, choice: 'own', description: `install does not offer ${item.label} here` }, { label: "Let install offer preferred-tools' own as well", choice: 'add', description: `${item.label} is offered again - ${twoServers(item.label, ownerOf(item))}` }];
+        ? [{ label: 'Keep it on its own', choice: 'own', description: 'nothing in this plugin changes it' }, { label: 'Let alfred-tools manage it', choice: 'manage', description: 'configure, update and fix look after it from now on' }]
+        : [{ label: `Keep it with ${ownerOf(item)}`, choice: 'own', description: `install does not offer ${item.label} here` }, { label: "Let install offer alfred-tools' own as well", choice: 'add', description: `${item.label} is offered again - ${twoServers(item.label, ownerOf(item))}` }];
     const labeled = options.map((option, i) => ({ ...option, label: `${option.label}${i === 0 ? RECOMMENDED : ''}` }));
     const what = isRegistration ? `${item.name} (${scopeWord(item.scope)}) is on its own` : item.kind === 'plugin' ? `${item.label} is left with the ${ownerOf(item)} plugin` : `${item.label} is left with claude.ai (${item.connector})`;
     return {

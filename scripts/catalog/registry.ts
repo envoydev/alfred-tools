@@ -1,10 +1,10 @@
-// Registry lookups for pins: which release of a package may be offered. One rule for /preferred-tools:update and for
+// Registry lookups for pins: which release of a package may be offered. One rule for /alfred-tools:update and for
 // `npm run refresh-pins`: the newest STABLE release that is at least `days` old (the age gate) and newer than the pin.
 // A newer release that is too young is reported as held back, never offered.
 //
 // A registry is read with `fetch`. The two base URLs can be overridden for a test or a mirror:
-//   PREFERRED_TOOLS_NPM_URL   default https://registry.npmjs.org
-//   PREFERRED_TOOLS_PYPI_URL  default https://pypi.org/pypi
+//   ALFRED_TOOLS_NPM_URL   default https://registry.npmjs.org
+//   ALFRED_TOOLS_PYPI_URL  default https://pypi.org/pypi
 import { compareVersions } from '../fix/common.ts';
 import type { Env } from '../core/types.ts';
 import type { Aged, Choice, FetchFn, NpmDoc, PypiDoc, Release } from './types.ts';
@@ -13,8 +13,8 @@ export const DAY = 86400000;
 export const AGE_DAYS = 7;
 export const STABLE = { npm: /^\d+\.\d+\.\d+$/, pypi: /^\d+(\.\d+)*$/ }; // no -rc / -beta / a1 / b2 / .dev / .post
 
-const npmBase = (env: Env): string => (env.PREFERRED_TOOLS_NPM_URL || 'https://registry.npmjs.org').replace(/\/$/, '');
-const pypiBase = (env: Env): string => (env.PREFERRED_TOOLS_PYPI_URL || 'https://pypi.org/pypi').replace(/\/$/, '');
+const npmBase = (env: Env): string => (env.ALFRED_TOOLS_NPM_URL || 'https://registry.npmjs.org').replace(/\/$/, '');
+const pypiBase = (env: Env): string => (env.ALFRED_TOOLS_PYPI_URL || 'https://pypi.org/pypi').replace(/\/$/, '');
 
 async function getJson(url: string, fetchFn: FetchFn): Promise<unknown>
 {

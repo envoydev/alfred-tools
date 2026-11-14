@@ -242,12 +242,12 @@ export function heldCopies(file: string, before: Map<string, Managed>, after: Ma
         if (!Object.hasOwn(have, name))
         {
             hold.push(name);
-            out.notes.push(`${name} is on the list for Cursor but not in ${file} - left; run /preferred-tools:fix`);
+            out.notes.push(`${name} is on the list for Cursor but not in ${file} - left; run /alfred-tools:fix`);
         }
         else if (!deepEqual(keepOf(catalog, have[name]!, managed.row), keepOf(catalog, managed.entry, managed.row)))
         {
             hold.push(name);
-            out.notes.push(`${name}: Cursor's copy was changed by hand - left; run /preferred-tools:fix`);
+            out.notes.push(`${name}: Cursor's copy was changed by hand - left; run /alfred-tools:fix`);
         }
     }
     return hold;

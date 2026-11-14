@@ -98,7 +98,7 @@ test('serverKey and regKey: mcp:<name>~<scope>, the destination of a move', () =
 });
 
 test('listFile: <root>/mcps.json', () => {
-    assert.equal(listFile('/work/shop/.preferred-tools'), path.join('/work/shop/.preferred-tools', 'mcps.json'));
+    assert.equal(listFile('/work/shop/.alfred-tools'), path.join('/work/shop/.alfred-tools', 'mcps.json'));
 });
 
 test('fromRegistration: a stdio key is the kept marker, never the value', () => {

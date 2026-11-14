@@ -24,7 +24,7 @@ export const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', recor
 export const READ_GUARD = { signIns: 'Read(//**/mcp-remote-v1/**)', secrets: 'Read(//**/.mcps-secrets)' };
 export const GITIGNORE = '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n';
 // serena's context file (spec D7): its number, on its first line
-export const SERENA_CONTEXT_VERSION = 1;
+export const SERENA_CONTEXT_VERSION = 2;
 const MAP_VERSION = 1;
 
 const pathFor = (platform: string) => (platform === 'win32' ? path.win32 : path.posix);
@@ -81,8 +81,8 @@ export function withRoot(map: RootsMap | null | undefined, family: string, proje
 export function standard(family: string, context: Machine): { id: string; root: string }[]
 {
     const pathApi = pathFor(context.platform);
-    if (family === 'global') return [{ id: 'preferred-tools', root: pathApi.join(context.home, '.preferred-tools') }, { id: 'home-alfred', root: pathApi.join(context.home, '.alfred') }];
-    return [{ id: 'alfred', root: pathApi.join(context.project, '.alfred') }, { id: 'preferred-tools', root: pathApi.join(context.project, '.preferred-tools') }];
+    if (family === 'global') return [{ id: 'alfred-tools', root: pathApi.join(context.home, '.alfred-tools') }, { id: 'home-alfred', root: pathApi.join(context.home, '.alfred') }];
+    return [{ id: 'alfred', root: pathApi.join(context.project, '.alfred') }, { id: 'alfred-tools', root: pathApi.join(context.project, '.alfred-tools') }];
 }
 
 // A written path as an absolute one: `~`, `${HOME}` / `${USERPROFILE}`, absolute, else relative to the project.
@@ -164,13 +164,13 @@ export function options(inventory: InventoryView, family: Family, context: Roots
     const [homePt, homeAlfred] = standard('global', context) as [{ id: string; root: string }, { id: string; root: string }];
     const list: RootOption[] = family === 'global'
         ? [
-            { ...homePt, label: '~/.preferred-tools', description: `${homePt.root} - one folder for every project on this machine` },
+            { ...homePt, label: '~/.alfred-tools', description: `${homePt.root} - one folder for every project on this machine` },
             ...(exists(homeAlfred.root) ? [{ ...homeAlfred, label: '~/.alfred', description: `${homeAlfred.root} - alfred-code's folder in your home, shared with it` }] : []),
             { id: 'named', root: null, label: 'A folder you name', description: `a folder of yours, asked next - ${NAMED_GLOBAL_TAIL}` },
         ]
         : [
             ...(alfredData(context, inventory.alfredCodeEnabled) ? [{ ...alfred, label: '.alfred in this project', description: `${alfred.root} - kept out of git by alfred-code` }] : []),
-            { ...preferred, label: '.preferred-tools in this project', description: `${preferred.root} - its own .gitignore keeps the keys, the record and the data out of git` },
+            { ...preferred, label: '.alfred-tools in this project', description: `${preferred.root} - its own .gitignore keeps the keys, the record and the data out of git` },
             { id: 'named', root: null, label: 'A folder you name', description: 'a folder of yours inside this project, asked next' },
         ];
     const used = inUse(inventory, family, context);
@@ -342,7 +342,7 @@ export function ignoreGap(root: string, family: string, { writes = [] }: { write
 
 // The files this plugin copies into a root: the key helper (D4), the URL bridge (0.4.0) and serena's context (0.5.0,
 // D7). Each carries its version on its first line.
-const SHIPPED_LINE: Record<ShippedKind, RegExp> = { helper: /^\/\/ preferred-tools mcp-headers (\d+)\s*$/, bridge: /^\/\/ preferred-tools mcp-bridge (\d+)\s*$/, serenaContext: /^# preferred-tools serena-context (\d+)\s*$/ };
+const SHIPPED_LINE: Record<ShippedKind, RegExp> = { helper: /^\/\/ alfred-tools mcp-headers (\d+)\s*$/, bridge: /^\/\/ alfred-tools mcp-bridge (\d+)\s*$/, serenaContext: /^# alfred-tools serena-context (\d+)\s*$/ };
 const shippedVersion = (kind: ShippedKind): number => (kind === 'bridge' ? BRIDGE_VERSION : kind === 'serenaContext' ? SERENA_CONTEXT_VERSION : helper.HELPER_VERSION);
 const shippedText: Partial<Record<ShippedKind, string>> = {};
 export const shippedSource = (kind: ShippedKind): string => (shippedText[kind] = shippedText[kind] || fs.readFileSync(path.join(import.meta.dirname, '..', 'copied', FILES[kind]), 'utf8'));

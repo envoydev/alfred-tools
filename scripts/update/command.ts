@@ -46,7 +46,7 @@ export async function runUpdateCommand(argv: string[], { env = process.env, out 
     catch (caught) { const error = caught as NodeJS.ErrnoException; out(`update: ${error.message}\nusage: node scripts/update.ts --check | --questions | --apply <id,id|all|none> [--input key=value] [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`); return 2; }
     const project = path.resolve(args.project || process.cwd());
     const projectInventory = inventory.buildInventory({ project, env, run: runCli || cli.runClaude, data: args.data || null });
-    if (!projectInventory.cli!.ok) { out('preferred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
+    if (!projectInventory.cli!.ok) { out('alfred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
     const context = makeCtx({ inventory: projectInventory, project, env, machine, registry, now, runCli: runCli || cli.runClaude, refresh: !args['no-refresh'], data: args.data || null });
     const found = await checkUpdates(context);
     if (args.apply)

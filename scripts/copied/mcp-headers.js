@@ -1,10 +1,10 @@
-// preferred-tools mcp-headers 4
+// alfred-tools mcp-headers 5
 'use strict';
 // The header helper a hosted registration names as `headersHelper` (spec D4): `node <root>/mcp-headers.js <NAME> <SCHEME>
 // [<global root>]`. Claude Code runs it before it connects and sends the JSON it prints as request headers, so the key stays
 // in a key file and never enters a registration.
 //
-// It reads <NAME> from `.mcps-secrets` beside it, then from the third argument's folder, then ~/.preferred-tools, then
+// It reads <NAME> from `.mcps-secrets` beside it, then from the third argument's folder, then ~/.alfred-tools, then
 // ~/.alfred - the first non-empty value wins - and prints {"Authorization":"<SCHEME> <value>"}. With no value it prints {}
 // and one stderr line naming <NAME> and the files it read, never a value. It always exits 0 with JSON on stdout.
 // For `Basic`, a value holding `:` is `email:api_token` as the user wrote it and is sent base64-encoded; any other value
@@ -22,7 +22,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const HELPER_VERSION = 4;
+const HELPER_VERSION = 5;
 const SECRETS = '.mcps-secrets';
 const NAME_RULE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SCHEME_RULE = /^[!-~]+$/;
@@ -57,7 +57,7 @@ function readDotenv(file)
 // The files read, in order: beside the helper, the extra root, then the two home roots. Equal to keys.js hostedChain.
 function chainOf(dir, extraRoot, home)
 {
-    const dirs = [dir, extraRoot, path.join(home, '.preferred-tools'), path.join(home, '.alfred')].filter(Boolean);
+    const dirs = [dir, extraRoot, path.join(home, '.alfred-tools'), path.join(home, '.alfred')].filter(Boolean);
     return [...new Set(dirs.map((d) => path.join(d, SECRETS)))];
 }
 

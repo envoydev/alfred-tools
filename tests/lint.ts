@@ -24,7 +24,7 @@ for (const rel of jsonFiles)
 }
 
 const manifest = docs['.claude-plugin/plugin.json'] || {};
-need(manifest.name === 'preferred-tools', 'plugin.json name must stay preferred-tools (renaming it silences every install)');
+need(manifest.name === 'alfred-tools', 'plugin.json name must stay alfred-tools (renaming it silences every install)');
 need(/^\d+\.\d+\.\d+$/.test(manifest.version || ''), 'plugin.json version must be semver');
 need(!('dependencies' in manifest), 'plugin.json must not declare dependencies (claude plugin update installs none)');
 need(manifest.version === (docs['package.json'] || {}).version, 'package.json version must equal plugin.json version');
@@ -87,7 +87,7 @@ for (const file of textFiles)
 // The scripts are .ts and run on Node's type stripping (22.18 and newer): each command says what an older Node prints
 // and what to tell the user, before its first script call in the body (the frontmatter, allowed-tools included, is
 // skipped, as the CALL check skips it). Read with its line breaks folded, since prose wraps.
-const OLD_NODE = 'If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user: preferred-tools needs Node 22.18 or newer - `node --version` shows yours.';
+const OLD_NODE = 'If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user: alfred-tools needs Node 22.18 or newer - `node --version` shows yours.';
 for (const file of fs.readdirSync(path.join(root, 'commands')).filter((f) => f.endsWith('.md')).map((f) => path.join(root, 'commands', f)))
 {
     const body = fs.readFileSync(file, 'utf8').replace(/^---\n[\s\S]*?\n---\n/, '').replace(/\s+/g, ' ');
@@ -121,13 +121,14 @@ const HELPER_SHA256: Record<number, string> = {
     2: '184d9162cd9d506266eb989704a743fd3608728b0601e8f21a398bbc8b8566de', // prints only when Claude Code runs it
     3: '388dc7ad5ad0093e2340ccadde11ca8b92929f6c3598a306dbebda5b60b798ac', // Basic: email:api_token sent base64-encoded
     4: '6376dc81ff5b192a8e75de1f350e75a766dc9ad01cd950d58fd6733700469017', // exports its reader for mcp-bridge.js
+    5: '5631cbd6b2f168595a16ea40e2adee470994d33eebb9f4bf66a5e014443cda26', // the plugin is alfred-tools: ~/.alfred-tools in the chain
 };
 {
     const rel = path.join('scripts', 'copied', 'mcp-headers.js');
     const text = fs.readFileSync(path.join(root, rel), 'utf8');
     const helper = requireCopied(path.join(root, rel));
-    const first = /^\/\/ preferred-tools mcp-headers (\d+)\r?$/m.exec(text.split('\n')[0]!);
-    need(first, `${rel}: the first line must be '// preferred-tools mcp-headers <version>'`);
+    const first = /^\/\/ alfred-tools mcp-headers (\d+)\r?$/m.exec(text.split('\n')[0]!);
+    need(first, `${rel}: the first line must be '// alfred-tools mcp-headers <version>'`);
     if (first)
     {
         const version = Number(first[1]);
@@ -143,13 +144,14 @@ const HELPER_SHA256: Record<number, string> = {
 // ./mcp-headers.js only, and its CREDENTIAL is keys.ts credentialName's test.
 const BRIDGE_SHA256: Record<number, string> = {
     1: '8aff5de859ba6b69c3f40d20d35c2d36738d6c35c791a821614f53a48bc29635', // 0.4.0
+    2: 'f4a2b606ee8ab71c0df750b09c47ea80d3474e887a85de81bc1f3dd1904a293c', // the plugin is alfred-tools
 };
 {
     const rel = path.join('scripts', 'copied', 'mcp-bridge.js');
     const text = fs.readFileSync(path.join(root, rel), 'utf8');
     const bridge = requireCopied(path.join(root, rel));
-    const first = /^\/\/ preferred-tools mcp-bridge (\d+)\r?$/m.exec(text.split('\n')[0]!);
-    need(first, `${rel}: the first line must be '// preferred-tools mcp-bridge <version>'`);
+    const first = /^\/\/ alfred-tools mcp-bridge (\d+)\r?$/m.exec(text.split('\n')[0]!);
+    need(first, `${rel}: the first line must be '// alfred-tools mcp-bridge <version>'`);
     if (first)
     {
         const version = Number(first[1]);
@@ -166,13 +168,14 @@ const BRIDGE_SHA256: Record<number, string> = {
 
 // serena's context file (0.5.0, D7): its number on the first line, and each number's bytes pinned like the helper's
 const SERENA_CONTEXT_SHA256: Record<number, string> = {
-    1: '5bd9211269e4440ac32b1240b5aa66a277ba16cd84f754adedd58f278ccf5321', // 0.5.0
+    1: '5bd9211269e4440ac32b1240b5aa66a277ba16cd84f754adedd58f278ccf5321', // never released
+    2: 'fd9132d02abb3ea9d185b43d6ae718af15c8c9a2ff0857353df7e23434dad38e', // 0.5.0, the plugin is alfred-tools
 };
 {
     const rel = path.join('scripts', 'copied', 'serena-context.yml');
     const text = fs.readFileSync(path.join(root, rel), 'utf8');
-    const first = /^# preferred-tools serena-context (\d+)\r?$/.exec(text.split('\n')[0]!);
-    need(first, `${rel}: the first line must be '# preferred-tools serena-context <version>'`);
+    const first = /^# alfred-tools serena-context (\d+)\r?$/.exec(text.split('\n')[0]!);
+    need(first, `${rel}: the first line must be '# alfred-tools serena-context <version>'`);
     if (first)
     {
         const version = Number(first[1]);

@@ -204,11 +204,11 @@ test('writeJob with append adds to a fetch file already there: its steps stay as
 test('a bridge entry fetches its mcp-remote pin with its cut-off', () => {
     const env = { npm_config_before: '2026-11-11T23:59:59Z' };
     const tail = ['https://mcp.sentry.dev/mcp/{SENTRY_ORG}', 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'];
-    const posix = fetchStep('sentry', { command: 'node', args: ['/work/shop/.preferred-tools/mcp-bridge.js', ...tail], env }, 'sentry')!;
+    const posix = fetchStep('sentry', { command: 'node', args: ['/work/shop/.alfred-tools/mcp-bridge.js', ...tail], env }, 'sentry')!;
     assert.deepStrictEqual(posix.argv, ['npm', 'exec', '--yes', '--package', 'mcp-remote@0.16.0', '--', 'node', '-e', '0']);
     assert.strictEqual(posix.what, 'mcp-remote@0.16.0');
     assert.deepStrictEqual(posix.env, env);
-    const win = fetchStep('sentry', { command: 'node', args: ['C:\\work\\shop\\.preferred-tools\\mcp-bridge.js', ...tail], env }, 'sentry')!;
+    const win = fetchStep('sentry', { command: 'node', args: ['C:\\work\\shop\\.alfred-tools\\mcp-bridge.js', ...tail], env }, 'sentry')!;
     assert.deepStrictEqual(win.argv.slice(0, 4), ['cmd', '/c', 'npm', 'exec']);
 });
 
@@ -216,7 +216,7 @@ test('the fetch job fetches a bridge\'s mcp-remote but never starts the bridge',
     const w = world();
     try
     {
-        const BRIDGE = { command: 'node', args: [path.join(w.project, '.preferred-tools', 'mcp-bridge.js'), 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}', 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'], env: { npm_config_before: '2026-11-11T23:59:59Z' } };
+        const BRIDGE = { command: 'node', args: [path.join(w.project, '.alfred-tools', 'mcp-bridge.js'), 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}', 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'], env: { npm_config_before: '2026-11-11T23:59:59Z' } };
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { sentry: BRIDGE } });
         const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), fetchJob(w.project, [{ ...fetchStep('sentry', BRIDGE, 'sentry')!, scope: 'project' }], []));
         const started: unknown[] = [];
@@ -238,7 +238,7 @@ test('fetch fetches mcp-remote for a shared sign-in entry and does not start it'
     const w = world();
     try
     {
-        const SIGNIN = { type: 'stdio', command: 'npx', args: ['-y', 'mcp-remote@0.16.0', 'https://mcp.atlassian.com/v1/mcp'], env: { npm_config_before: '2026-11-11T23:59:59Z', MCP_REMOTE_CONFIG_DIR: path.join(w.project, '.preferred-tools') } };
+        const SIGNIN = { type: 'stdio', command: 'npx', args: ['-y', 'mcp-remote@0.16.0', 'https://mcp.atlassian.com/v1/mcp'], env: { npm_config_before: '2026-11-11T23:59:59Z', MCP_REMOTE_CONFIG_DIR: path.join(w.project, '.alfred-tools') } };
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { atlassian: SIGNIN } });
         const step = fetchStep('atlassian', SIGNIN, 'atlassian')!;
         assert.strictEqual(step.what, 'mcp-remote@0.16.0');
@@ -261,7 +261,7 @@ test('fetch empties base_modes after serena\'s first start', async () => {
     const w = world();
     try
     {
-        const home = path.join(w.project, '.preferred-tools', 'serena');
+        const home = path.join(w.project, '.alfred-tools', 'serena');
         const S = { command: 'uvx', args: [...UVX.args], env: { SERENA_HOME: home } };
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { serena: S } });
         const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), fetchJob(w.project, [{ ...fetchStep('serena', S, 'serena')!, scope: 'project' }], []));

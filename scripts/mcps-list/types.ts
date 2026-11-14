@@ -44,7 +44,7 @@ export interface ListRead extends McpsList
     state?: ReadState;
 }
 
-// <root>/preferred-tools.json, the 0.2.0-0.4.x record (stored - do not rename).
+// <root>/<roots.FILES.record>, the 0.2.0-0.4.x record (stored - do not rename).
 export interface OldRecord
 {
     version: number; // stored - do not rename

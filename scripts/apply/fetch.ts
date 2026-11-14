@@ -32,7 +32,7 @@ import type { FetchJob, FetchOptions, FetchRun, JobStep, Log, RunCli, StartResul
 
 export const VERSION = 1;
 const START_MS = 600000;
-const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'preferred-tools', version: '0' } } };
+const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'alfred-tools', version: '0' } } };
 // ${VAR} and ${VAR:-default}, as Claude Code expands them in an MCP entry (entries/locations.ts expandVars)
 export const expandedText = (text: unknown, env: Env): string => expandVars(text, env).value;
 // the first ${VAR} with no default that is not set: a start without it only fails

@@ -59,7 +59,7 @@ test('X1 - gitlab at project scope with a key: the helper named by its absolute 
     const dir = h.project('p');
     const r = h.run(dir, { picks: { gitlab: { scope: 'project', token: true } } });
     ok(r);
-    const root = path.join(dir, '.preferred-tools');
+    const root = path.join(dir, '.alfred-tools');
     const e = servers(dir).gitlab;
     assert.strictEqual(e.headersHelper, `node ${shellArg(path.join(root, roots.FILES.helper), style)} GITLAB_TOKEN Bearer`);
     assert.ok(fs.existsSync(path.join(root, roots.FILES.helper)), 'the helper is in the root');
@@ -72,7 +72,7 @@ test('X2 - playwright-chrome and serena at project scope: their data folders abs
     const h = world('x2');
     const dir = h.project('p');
     ok(h.run(dir, { picks: { 'playwright-chrome': { scope: 'project' }, serena: { scope: 'project' } } }));
-    const root = path.join(dir, '.preferred-tools');
+    const root = path.join(dir, '.alfred-tools');
     const s = servers(dir);
     assert.strictEqual(arg(s['playwright-chrome'], '--user-data-dir'), path.join(root, 'playwright-chrome'));
     assert.strictEqual(arg(s['playwright-chrome'], '--output-dir'), path.join(root, 'playwright-chrome', 'output'));
@@ -101,10 +101,10 @@ test('X4 - fix on a 0.2.0 project file: relative paths and helper written absolu
     const dir = h.project('p');
     const ctx = { platform: process.platform, arch: process.arch, env: h.env, home: h.home, project: dir };
     // what 0.2.0 wrote: relative folders, a relative helper, and the servers in the order they were added
-    const pw = buildEntry(catalog.byId.get('playwright-chrome')!, 'local', { rootStr: '.preferred-tools/playwright-chrome', scope: 'project', token: false }, ctx, catalog.rules);
-    pw.args = pw.args!.map((a) => (a.startsWith('@playwright/mcp@') ? '@playwright/mcp@0.0.70' : a === path.join('.preferred-tools/playwright-chrome', 'output') ? '.preferred-tools/playwright-chrome/output' : a));
-    const serena = buildEntry(catalog.byId.get('serena')!, 'local', { rootStr: '.preferred-tools/serena', scope: 'project', token: false }, ctx, catalog.rules);
-    const c7 = { type: 'http', url: catalog.byId.get('context7')!.routes.remote!.url, headersHelper: 'node .preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' };
+    const pw = buildEntry(catalog.byId.get('playwright-chrome')!, 'local', { rootStr: '.alfred-tools/playwright-chrome', scope: 'project', token: false }, ctx, catalog.rules);
+    pw.args = pw.args!.map((a) => (a.startsWith('@playwright/mcp@') ? '@playwright/mcp@0.0.70' : a === path.join('.alfred-tools/playwright-chrome', 'output') ? '.alfred-tools/playwright-chrome/output' : a));
+    const serena = buildEntry(catalog.byId.get('serena')!, 'local', { rootStr: '.alfred-tools/serena', scope: 'project', token: false }, ctx, catalog.rules);
+    const c7 = { type: 'http', url: catalog.byId.get('context7')!.routes.remote!.url, headersHelper: 'node .alfred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' };
     for (const [name, entry] of [['playwright-chrome', pw], ['serena', serena], ['context7', c7]] as [string, ServerEntry][])
         assert.strictEqual(h.claude(dir, ['mcp', 'add-json', name, JSON.stringify(entry), '-s', 'project']).status, 0);
     const before = servers(dir);
@@ -116,7 +116,7 @@ test('X4 - fix on a 0.2.0 project file: relative paths and helper written absolu
     const res = applyFixes(fctx, ['all'], { tmp: path.join(h.root, 'tmp', 'fix'), log: (...a) => lines.push(a.join(' ')) });
     assert.strictEqual(res.failed, null, lines.join('\n'));
     const after = servers(dir);
-    const root = path.join(dir, '.preferred-tools');
+    const root = path.join(dir, '.alfred-tools');
     assert.deepStrictEqual(Object.keys(after), ['context7', 'serena', 'playwright-chrome'], 'in catalog order');
     assert.strictEqual(arg(after['playwright-chrome'], '--user-data-dir'), path.join(root, 'playwright-chrome'));
     assert.strictEqual(arg(after['playwright-chrome'], '--output-dir'), path.join(root, 'playwright-chrome', 'output'));
@@ -135,12 +135,12 @@ test('X5 - a 0.2.0 record of managed servers: the install plan drops them from t
     const dir = h.project('p');
     const c7 = { type: 'http', url: catalog.byId.get('context7')!.routes.remote!.url };
     assert.strictEqual(h.claude(dir, ['mcp', 'add-json', 'context7', JSON.stringify(c7), '-s', 'project']).status, 0);
-    const record = path.join(dir, '.preferred-tools', roots.FILES.record);
+    const record = path.join(dir, '.alfred-tools', roots.FILES.record);
     fs.mkdirSync(path.dirname(record), { recursive: true });
     fs.writeFileSync(record, JSON.stringify({ version: 1, servers: [{ name: 'context7', scope: 'project', fingerprint: existing.fingerprintOf(c7, catalog), choice: 'manage' }] }, null, 2));
     const r = h.run(dir, { picks: { 'playwright-chrome': { scope: 'project' } } });
     ok(r);
-    const list = path.join(dir, '.preferred-tools', roots.FILES.list);
+    const list = path.join(dir, '.alfred-tools', roots.FILES.list);
     const clean = r.plan.steps.find((x): x is ListWriteStep => x.op === 'list-write' && x.file === list);
     assert.ok(clean && clean.own, r.rendered);
     assert.deepStrictEqual([clean.own.entries, clean.own.keep], [[], []]);
@@ -153,9 +153,9 @@ test('X6 - configure answered \'Leave it on its own\': one own entry in the fami
     const dir = h.project('p');
     ok(h.run(dir, { picks: { context7: { scope: 'project', token: false } } }));
     ok(h.run(dir, { existing: { 'mcp:context7~project': 'own' } }));
-    const list = path.join(dir, '.preferred-tools', roots.FILES.list);
+    const list = path.join(dir, '.alfred-tools', roots.FILES.list);
     assert.deepStrictEqual(readJson(list).own.map((e: { name: string; scope: string; choice: string }) => [e.name, e.scope, e.choice]), [['context7', 'project', 'own']]);
-    assert.ok(!fs.existsSync(path.join(h.home, '.preferred-tools', roots.FILES.list)), 'no list in the global root');
+    assert.ok(!fs.existsSync(path.join(h.home, '.alfred-tools', roots.FILES.list)), 'no list in the global root');
     const inv = h.inventory(dir);
     const d = detectAll(makeCtx({ inventory: inv, env: h.env, data: h.data }));
     assert.ok(renderFixes(d).includes('context7 (project): on its own - not checked'), renderFixes(d));
@@ -176,7 +176,7 @@ test('X7 - a refused key: claude mcp get on a hosted server that answers 401 or 
             const dir = h.project('p');
             fake.trust(h, dir);
             ok(h.run(dir, { picks: { github: { route: 'remote', scope: 'local', token: true } } }, { catalog }));
-            fake.fill(path.join(dir, '.preferred-tools', roots.FILES.secrets), G, KEY);
+            fake.fill(path.join(dir, '.alfred-tools', roots.FILES.secrets), G, KEY);
             // the first get in a fresh world was once seen to print no Issue line (docs/sources.md): one more get, then the words
             let out = '';
             for (let i = 0; i < 2 && !/^\s*Issue:/m.test(out); i++) out = (await fake.claude(dir, ['mcp', 'get', 'github'], h.env)).out;

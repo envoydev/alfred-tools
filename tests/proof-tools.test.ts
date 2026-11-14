@@ -17,7 +17,7 @@ test('normalise replaces the world root, mkdtemp suffixes, ISO times and 127.0.0
         golden.normalise('/tmp/pt-AbC123/project 2026-11-14T01:02:03.456Z 127.0.0.1:53211', { root: '/tmp/pt-AbC123' }),
         '<ROOT>/project <TIME> 127.0.0.1:<PORT>',
     );
-    assert.strictEqual(golden.normalise('/x/preferred-tools-Q1w2E3/plan.json'), '/x/preferred-tools-XXXXXX/plan.json');
+    assert.strictEqual(golden.normalise('/x/alfred-tools-Q1w2E3/plan.json'), '/x/alfred-tools-XXXXXX/plan.json');
 });
 
 test('normalise replaces the tree root and a tests file\'s extension', () =>
@@ -36,12 +36,12 @@ test('collect keeps every file two temp folders hold under one name, in the orde
         const norm = (t: string) => golden.normalise(t, { root });
         for (const [suffix, text] of [['Zz9Zz9', '{"b":2}'], ['Aa1Aa1', '{"a":1}']] as [string, string][])
         {
-            fs.mkdirSync(path.join(root, 'temp', `preferred-tools-${suffix}`), { recursive: true });
-            fs.writeFileSync(path.join(root, 'temp', `preferred-tools-${suffix}`, 'fetch.json'), text);
+            fs.mkdirSync(path.join(root, 'temp', `alfred-tools-${suffix}`), { recursive: true });
+            fs.writeFileSync(path.join(root, 'temp', `alfred-tools-${suffix}`, 'fetch.json'), text);
         }
         assert.deepStrictEqual(golden.collect(root, norm), {
-            'temp/preferred-tools-XXXXXX/fetch.json': '{"a":1}',
-            'temp/preferred-tools-XXXXXX/fetch.json#2': '{"b":2}',
+            'temp/alfred-tools-XXXXXX/fetch.json': '{"a":1}',
+            'temp/alfred-tools-XXXXXX/fetch.json#2': '{"b":2}',
         });
     }
     finally { fs.rmSync(root, { recursive: true, force: true }); }

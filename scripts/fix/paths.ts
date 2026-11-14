@@ -20,7 +20,7 @@ import type { Finding, FixCtx, MachineFixResult, PathChange } from './types.ts';
 
 const pathOf = (context: { platform: string }) => (context.platform === 'win32' ? path.win32 : path.posix);
 const styleOf = (context: { platform: string }) => (context.platform === 'win32' ? 'win32' : 'posix');
-const runThere = (context: FixCtx, dir: string) => `run /preferred-tools:fix in ${fromHere(context.inventory, dir)}`;
+const runThere = (context: FixCtx, dir: string) => `run /alfred-tools:fix in ${fromHere(context.inventory, dir)}`;
 const HOME_FORM = /^\$\{(HOME|USERPROFILE)\}(?=[\\/]|$)/;
 const isAbsolute = (filePath: string) => path.posix.isAbsolute(filePath) || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(filePath);
 
@@ -87,7 +87,7 @@ function changesOf(entry: ServerEntry, rowId: string | null | undefined, context
 function relativeText(paths: PathChange[], rowId: string | null): string
 {
     const each = paths.map((change) => `${change.key} '${change.from}' -> ${change.to}${change.to === change.was ? '' : ` - the old data stays at ${change.was} - moving the path moves no data${rowId === 'serena' ? ', and serena downloads its language servers there once (about 327MB)' : ''}`}`);
-    return `named relative or through \${HOME}/\${USERPROFILE}, so a session started in a child folder uses its own copy: ${each.join('; ')}; a copy in a child folder is kept out of git by /preferred-tools:fix run there`;
+    return `named relative or through \${HOME}/\${USERPROFILE}, so a session started in a child folder uses its own copy: ${each.join('; ')}; a copy in a child folder is kept out of git by /alfred-tools:fix run there`;
 }
 
 export function projectRelativePathDetect(context: FixCtx): Finding[]
@@ -96,7 +96,7 @@ export function projectRelativePathDetect(context: FixCtx): Finding[]
     for (const registration of C.registrationsOf(context, 'project-relative-path').filter((candidate) => candidate.scope === 'project'))
     {
         const { paths, unset } = changesOf(registration.entry, registration.rowId, context);
-        if (unset.length) out.push(C.finding('project-relative-path', registration, `a path names \${${unset[0]}}`, { blocked: `${unset[0]} is not set here - there is no value to write the path as; set it, or pick the folder again with /preferred-tools:configure, Location` }));
+        if (unset.length) out.push(C.finding('project-relative-path', registration, `a path names \${${unset[0]}}`, { blocked: `${unset[0]} is not set here - there is no value to write the path as; set it, or pick the folder again with /alfred-tools:configure, Location` }));
         else if (paths.length) out.push(C.finding('project-relative-path', registration, relativeText(paths, registration.rowId), { proposal: { paths: paths.map(({ key, from, to }) => ({ key, from, to })) } }));
     }
     // a parent's .mcp.json: one finding per folder, fixed by running fix there
@@ -213,7 +213,7 @@ export function helperChildFolderDetect(context: FixCtx): Finding[]
         {
             const there = fromHere(context.inventory, registration.from!);
             return C.finding('helper-child-folder', registration, `${registration.name} comes from ${there}/.mcp.json, and Claude Code does not run a parent folder's key helper in a child folder - it connects here without its key`,
-                { blocked: `move it to Global with /preferred-tools:configure in ${there}, or start Claude in ${there}` });
+                { blocked: `move it to Global with /alfred-tools:configure in ${there}, or start Claude in ${there}` });
         });
 }
 

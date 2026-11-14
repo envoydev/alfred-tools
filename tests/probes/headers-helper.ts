@@ -91,7 +91,7 @@ async function main()
     if (![env.HOME, env.CLAUDE_CONFIG_DIR].every((d) => d.startsWith(P + path.sep))) throw new Error('HOME and CLAUDE_CONFIG_DIR must lie under the scratch folder');
     for (const d of [proj, proj2])
     {
-        const root = path.join(d, '.preferred-tools');
+        const root = path.join(d, '.alfred-tools');
         fs.mkdirSync(root, { recursive: true });
         fs.writeFileSync(path.join(root, 'mcp-headers.js'), WRAPPER);
         if (a.helper) fs.copyFileSync(a.helper, path.join(root, 'real-headers.js'));
@@ -104,15 +104,15 @@ async function main()
 
     const { server, port, seen } = await fake.stub({ expected: EXPECTED });
     const url = (p: string) => `http://127.0.0.1:${port}/${p}`;
-    const abs = path.join(proj, '.preferred-tools', 'mcp-headers.js');
+    const abs = path.join(proj, '.alfred-tools', 'mcp-headers.js');
     const quoted = abs.includes(' ') ? `"${abs}"` : abs;
     const regs = [
-        { cwd: proj, name: 'hh-project', scope: 'project', entry: { type: 'http', url: url('p'), headersHelper: 'node .preferred-tools/mcp-headers.js PROBE_VALUE Bearer' } },
+        { cwd: proj, name: 'hh-project', scope: 'project', entry: { type: 'http', url: url('p'), headersHelper: 'node .alfred-tools/mcp-headers.js PROBE_VALUE Bearer' } },
         { cwd: proj, name: 'hh-local', scope: 'local', entry: { type: 'http', url: url('l'), headersHelper: `node ${quoted} PROBE_VALUE Bearer` } },
         { cwd: proj, name: 'hh-user', scope: 'user', entry: { type: 'http', url: url('u'), headersHelper: `node ${quoted} PROBE_VALUE Bearer` } },
         { cwd: proj, name: 'hh-missing', scope: 'local', entry: { type: 'http', url: url('m'), headersHelper: 'node /nonexistent-probe-dir/mcp-headers.js PROBE_VALUE Bearer' } },
         { cwd: proj, name: 'hh-project-abs', scope: 'project', entry: { type: 'http', url: url('a'), headersHelper: `node ${quoted} PROBE_VALUE Bearer` } },
-        { cwd: proj2, name: 'hh-untrusted', scope: 'project', entry: { type: 'http', url: url('n'), headersHelper: 'node .preferred-tools/mcp-headers.js PROBE_VALUE Bearer' } },
+        { cwd: proj2, name: 'hh-untrusted', scope: 'project', entry: { type: 'http', url: url('n'), headersHelper: 'node .alfred-tools/mcp-headers.js PROBE_VALUE Bearer' } },
     ];
     const results: boolean[] = [];
     const report = (id: string, pass: boolean, detail: string) => { results.push(pass); console.log(`RESULT ${id} ${pass ? 'pass' : 'fail'} ${detail}`); };
@@ -135,7 +135,7 @@ async function main()
             const got = stored[s] && stored[s]!.headersHelper;
             report(`stored-${s}`, got === want, got === undefined ? 'not stored' : got === want ? 'headersHelper unchanged' : 'headersHelper changed');
         }
-        const runsFile = (d: string) => path.join(d, '.preferred-tools', 'helper-runs.log');
+        const runsFile = (d: string) => path.join(d, '.alfred-tools', 'helper-runs.log');
         const runs = (d: string) => (fs.existsSync(runsFile(d)) ? fs.readFileSync(runsFile(d), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
         // one `claude mcp get`: what the stub saw on initialize, and which helper runs it logged
         const get = async (cwd: string, name: string, dir: string) =>

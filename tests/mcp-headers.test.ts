@@ -21,7 +21,7 @@ const sec = (dir: string) => path.join(dir, '.mcps-secrets');
 function world()
 {
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-helper-')));
-    const root = path.join(dir, 'project', '.preferred-tools');
+    const root = path.join(dir, 'project', '.alfred-tools');
     const home = path.join(dir, 'home');
     const elsewhere = path.join(dir, 'elsewhere');
     for (const d of [root, home, elsewhere]) fs.mkdirSync(d, { recursive: true });
@@ -57,12 +57,12 @@ test('the third argument\'s folder is read after the one beside it, the home fil
     {
         const named = path.join(w.dir, 'keys');
         put(sec(named), `${G}=fake-named\n`);
-        put(sec(path.join(w.home, '.preferred-tools')), `${G}=fake-home\n`);
+        put(sec(path.join(w.home, '.alfred-tools')), `${G}=fake-home\n`);
         put(sec(path.join(w.home, '.alfred')), `${G}=fake-alfred\n`);
         put(sec(w.root), `${G}=\n`);
         assert.deepStrictEqual(w.run(G, 'Bearer', named).json, { Authorization: 'Bearer fake-named' }, 'an empty value beside it is missing');
         assert.deepStrictEqual(w.run(G, 'Bearer').json, { Authorization: 'Bearer fake-home' }, 'without the third argument: the home file');
-        fs.rmSync(sec(path.join(w.home, '.preferred-tools')));
+        fs.rmSync(sec(path.join(w.home, '.alfred-tools')));
         assert.deepStrictEqual(w.run(G, 'Bearer').json, { Authorization: 'Bearer fake-alfred' }, 'then ~/.alfred');
         put(sec(w.root), `${G}=fake-beside\n`);
         assert.deepStrictEqual(w.run(G, 'Bearer', named).json, { Authorization: 'Bearer fake-beside' }, 'the file beside it first');
@@ -130,7 +130,7 @@ test('its chain equals keys.hostedChain for project, local and global scope', ()
     const h = path.join(path.sep, 'h');
     const p = path.join(path.sep, 'w', 'p', '.alfred');
     const k = path.join(path.sep, 'k');
-    const g = path.join(h, '.preferred-tools');
+    const g = path.join(h, '.alfred-tools');
     assert.deepStrictEqual(helper.chainOf(p, null, h), keys.hostedChain({ scope: 'project', projectRoot: p, globalRoot: k, globalNamed: true, home: h }));
     assert.deepStrictEqual(helper.chainOf(p, k, h), keys.hostedChain({ scope: 'local', projectRoot: p, globalRoot: k, globalNamed: true, home: h }));
     assert.deepStrictEqual(helper.chainOf(g, null, h), keys.hostedChain({ scope: 'user', projectRoot: p, globalRoot: g, globalNamed: false, home: h }));
@@ -229,10 +229,10 @@ test('authValue is the scheme and the value, with the Basic base64 rule', () => 
     assert.strictEqual(helper.authValue('Basic', 'YUBiOnQ='), 'Basic YUBiOnQ=');
 });
 
-test('helper 4 prints the same headers as helper 3, and exports its reader', () => {
+test('helper 5 prints the same headers as helper 4, and exports its reader', () => {
     const helper = requireCopied(SOURCE);
-    assert.strictEqual(helper.HELPER_VERSION, 4);
-    assert.match(fs.readFileSync(SOURCE, 'utf8').split('\n')[0]!, /^\/\/ preferred-tools mcp-headers 4$/);
+    assert.strictEqual(helper.HELPER_VERSION, 5);
+    assert.match(fs.readFileSync(SOURCE, 'utf8').split('\n')[0]!, /^\/\/ alfred-tools mcp-headers 5$/);
     for (const k of ['chainOf', 'digestOf', 'readDotenv', 'valueIn', 'authValue']) assert.strictEqual(typeof helper[k], 'function', k);
     assert.deepStrictEqual(schemeRun('fake-1', 'Bearer'), { Authorization: 'Bearer fake-1' });
     assert.deepStrictEqual(schemeRun('fake-1', 'Sentry-Bearer'), { Authorization: 'Sentry-Bearer fake-1' });

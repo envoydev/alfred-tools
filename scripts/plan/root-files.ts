@@ -71,32 +71,32 @@ export function fileSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
             if (lines.text !== null && lines.mine && lines.lack.length)
                 ignore.push({ op: 'root-ignore', path: rootWrite.root, why: `${rootWrite.root}: its .gitignore gains ${lines.lack.join(', ')}` });
         }
-        if (gap && gap.secrets) out.notes.push(`${rootWrite.root}: ${gap.reason} - no key file is written there; /preferred-tools:fix (root-ignore) covers it`);
+        if (gap && gap.secrets) out.notes.push(`${rootWrite.root}: ${gap.reason} - no key file is written there; /alfred-tools:fix (root-ignore) covers it`);
         if (gap && gap.helper && rootWrite.committed)
-            out.notes.push(`${rootWrite.root}: ${gap.reason} - ${gap.excluded ? `a .gitignore above excludes ${rootWrite.root}: remove that line (git check-ignore -v ${rootWrite.root} names it)` : '/preferred-tools:fix (root-ignore) covers it'}`);
+            out.notes.push(`${rootWrite.root}: ${gap.reason} - ${gap.excluded ? `a .gitignore above excludes ${rootWrite.root}: remove that line (git check-ignore -v ${rootWrite.root} names it)` : '/alfred-tools:fix (root-ignore) covers it'}`);
         if (rootWrite.helper)
         {
             const { state } = roots.helperState(pathApi.join(rootWrite.root, roots.FILES.helper), exists);
             if (state === 'absent' || state === 'lower')
                 helpers.push({ op: 'write-helper', path: rootWrite.root, why: `${rootWrite.root}: mcp-headers.js, which reads a hosted key from .mcps-secrets each time Claude Code connects` });
-            else if (state === 'higher') out.notes.push(`mcp-headers.js in ${rootWrite.root} is newer than this plugin - update preferred-tools`);
-            else if (state === 'edited') out.notes.push(`mcp-headers.js in ${rootWrite.root} changed since preferred-tools wrote it - left as it is; /preferred-tools:fix (helper-stale) rewrites it`);
+            else if (state === 'higher') out.notes.push(`mcp-headers.js in ${rootWrite.root} is newer than this plugin - update alfred-tools`);
+            else if (state === 'edited') out.notes.push(`mcp-headers.js in ${rootWrite.root} changed since alfred-tools wrote it - left as it is; /alfred-tools:fix (helper-stale) rewrites it`);
         }
         if (rootWrite.bridge)
         {
             const { state } = roots.shippedState('bridge', pathApi.join(rootWrite.root, roots.FILES.bridge), exists);
             if (state === 'absent' || state === 'lower')
                 helpers.push({ op: 'write-bridge', path: rootWrite.root, why: `${rootWrite.root}: mcp-bridge.js, which fills a hosted URL from .mcps-secrets each time the server starts` });
-            else if (state === 'higher') out.notes.push(`mcp-bridge.js in ${rootWrite.root} is newer than this plugin - update preferred-tools`);
-            else if (state === 'edited') out.notes.push(`mcp-bridge.js in ${rootWrite.root} changed since preferred-tools wrote it - left as it is; /preferred-tools:fix (helper-stale) rewrites it`);
+            else if (state === 'higher') out.notes.push(`mcp-bridge.js in ${rootWrite.root} is newer than this plugin - update alfred-tools`);
+            else if (state === 'edited') out.notes.push(`mcp-bridge.js in ${rootWrite.root} changed since alfred-tools wrote it - left as it is; /alfred-tools:fix (helper-stale) rewrites it`);
         }
         if (rootWrite.serenaContext)
         {
             const { state } = roots.shippedState('serenaContext', pathApi.join(rootWrite.root, roots.FILES.serenaContext), exists);
             if (state === 'absent' || state === 'lower')
                 helpers.push({ op: 'write-serena-context', path: rootWrite.root, why: `${rootWrite.root}: serena-context.yml, the context serena runs with - code navigation only, in Claude Code and Cursor` });
-            else if (state === 'higher') out.notes.push(`serena-context.yml in ${rootWrite.root} is newer than this plugin - update preferred-tools`);
-            else if (state === 'edited') out.notes.push(`serena-context.yml in ${rootWrite.root} changed since preferred-tools wrote it - left as it is; /preferred-tools:fix (helper-stale) rewrites it`);
+            else if (state === 'higher') out.notes.push(`serena-context.yml in ${rootWrite.root} is newer than this plugin - update alfred-tools`);
+            else if (state === 'edited') out.notes.push(`serena-context.yml in ${rootWrite.root} changed since alfred-tools wrote it - left as it is; /alfred-tools:fix (helper-stale) rewrites it`);
         }
         if (!gap || !gap.secrets)
             for (const [file, want] of rootWrite.keys)

@@ -1,27 +1,29 @@
-# Build prompt - the preferred-tools plugin
+# Build prompt - the alfred-tools plugin
 
-Paste this into a Claude Code session opened at the root of this repository (`preferred-tools`). It is self-contained:
+Records dated before 2026-11-14 were made under the plugin's former name and are written here as alfred-tools.
+
+Paste this into a Claude Code session opened at the root of this repository (`alfred-tools`). It is self-contained:
 everything it relies on is either stated here or named with the file to read.
 
 Graded 2026-10-27 by independent reviewers: 79 -> 79 -> 88 -> 95; six findings fixed after the last grade.
 
 ---
 
-You are building `preferred-tools`, a Claude Code plugin in this repository. The repo collects the tools its owner has
+You are building `alfred-tools`, a Claude Code plugin in this repository. The repo collects the tools its owner has
 tested and likes - MCP servers and Claude Code plugins - with their install, update, rename, relocation and fix
 procedures. The plugin installs nothing by itself: the user drives it through four manual commands.
 
 ## Goal
 
-1. `/preferred-tools:install` - a guided walk over the tools NOT installed yet: pick tools, then per tool the route
+1. `/alfred-tools:install` - a guided walk over the tools NOT installed yet: pick tools, then per tool the route
    (remote or local, only where the tool has both), the scope, the registration NAME and the data LOCATION; then apply,
    read back and report.
-2. `/preferred-tools:configure` - the same walk over what IS installed: pick a registration or a plugin (one option
+2. `/alfred-tools:configure` - the same walk over what IS installed: pick a registration or a plugin (one option
    each; a tool at two scopes is two), then change its route, scope, name or location, a plugin's scope, or
    claude-hud's settings, or remove it. Every question recommends what the pick has now.
-3. `/preferred-tools:fix` - detects known problems in the installed tools (the first one: serena's TypeScript language
+3. `/alfred-tools:fix` - detects known problems in the installed tools (the first one: serena's TypeScript language
    server failing on Windows) and applies the recorded fix.
-4. `/preferred-tools:update` - brings every installed plugin and every registered catalog server up to date when it is
+4. `/alfred-tools:update` - brings every installed plugin and every registered catalog server up to date when it is
    behind, and says so in one line when nothing is. It was built as the model-invocable `update-tools` skill; the
    user's ruling of 2026-10-27 made it a command (see 'The update command').
 
@@ -98,7 +100,7 @@ Why, against the alternatives:
   version, so every plugin update breaks every registration, and `${CLAUDE_PLUGIN_ROOT}` is not expanded in a project's
   `.mcp.json` (verify in step 1; if it is, this alternative is still rejected for the version path).
 - A plain registration costs the runtime work the launchers did (Python per machine, SDK paths): it moves to install
-  time, and `/preferred-tools:fix` re-checks it when the machine changes. The user chose this over a launcher layer
+  time, and `/alfred-tools:fix` re-checks it when the machine changes. The user chose this over a launcher layer
   on 2026-10-27 ('Keep it simple').
 
 **Identity is the launch, not the name.** `scripts/inventory.js` matches each registration it finds to a catalog row by
@@ -106,7 +108,7 @@ its fingerprint - the package name in `args` (`serena-agent`, `@playwright/mcp` 
 `mcp-memory-service`, ...) or, for a remote one, its URL host plus path pattern (gitlab: any host whose path is
 `/api/v4/mcp`, so a self-managed GitLab is recognised too). So a tool under a custom name is still recognised by every
 command, with no ledger file to drift. A registration that matches no row is the user's and is never touched. Two
-files are the exceptions to 'no ledger' (the user's rulings, 2026-11-10): the record `<root>/preferred-tools.json`,
+files are the exceptions to 'no ledger' (the user's rulings, 2026-11-10): the 0.4.x record in `<root>`,
 which holds each answer about a server already set up (D6), and the roots map `${CLAUDE_PLUGIN_DATA}/roots.json`, which
 finds a named root (D2). Neither names a tool's identity: a record entry whose fingerprint no longer matches is dropped
 and asked again.
@@ -149,17 +151,17 @@ uses its own, and asked as its own question (step 5). The default root is the pl
 alfred-code's (the user's ruling, 2026-10-27 - the plugin stands alone, and deleting `.alfred/` must not erase its
 tools' data):
 
-1. The project default `.preferred-tools/<registration name>/`. Since 0.3.0 memory follows its root like every other
+1. The project default `.alfred-tools/<registration name>/`. Since 0.3.0 memory follows its root like every other
    row (the user's ruling, 2026-11-11, 'Follow the root'): the project root at Project and Local scope, the global root
    at Global scope, so memories are shared across projects only when memory is installed at Global scope. 0.2.0 kept
-   memory's default in the account folder `~/.preferred-tools/memory/`.
+   memory's default in the account folder `~/.alfred-tools/memory/`.
 2. The alfred-code data already on disk, when present - the user's existing profiles, index and memories - is offered
    at install, never recommended ('alfred-code 2.x data'), saying the folder is alfred-code's. Read each row's
    old root from its entry in `original-mcps.json`, never from a pattern: serena `.alfred/serena/home` (its
    `SERENA_HOME`, not `.alfred/serena`), each browser `.alfred/<engine>-control`, appium `.alfred/mobile-control`,
    memory `~/.alfred-memory`.
 
-The walk also offers the other place: the account folder `~/.preferred-tools/<registration name>/` for a project
+The walk also offers the other place: the account folder `~/.alfred-tools/<registration name>/` for a project
 default, the project folder for memory - each option only where it can be written at the scope, the recommended one
 first (alfred-code's folder, below, changes which). Path form: since 0.3.0 `plan.js` writes the root resolved to an
 absolute path at every scope, `project` included (the user's ruling, 2026-11-11, 'Absolute, always'), with `~`
@@ -219,10 +221,10 @@ configure move into `project` scope whose entry holds a credential outside the r
 user's own, a userinfo URL) is a plan error naming the field.
 
 What 0.1.x did, and why it was replaced: at local and user scope `apply.js` wrote the key in from alfred-code's store
-when alfred-code was set up, else `.preferred-tools/.secrets`, then `~/.preferred-tools/.secrets`; at project scope the
+when alfred-code was set up, else `.alfred-tools/.secrets`, then `~/.alfred-tools/.secrets`; at project scope the
 committed entry kept `${VAR}`, read only from the environment Claude Code starts with. A hosted github then sent a bare
 'Bearer ' while its key sat in a file (2026-11-10). Those files are read for names only now, so a line can say where a
-key still sits and that preferred-tools no longer reads it.
+key still sits and that alfred-tools no longer reads it.
 
 **Per-OS rules, applied at install time** (each also a fix row): uvx servers get the row's `--python` (3.13; 3.14 for
 windows-control) and on Windows ARM64 the x64 build (`cpython-3.13-windows-x86_64-none`) - `../alfred-code/docs/uv-python-pin-evidence.md`
@@ -238,17 +240,17 @@ user's own example is never installed broken:
   uv has fetched the package, then applies the patch.
 
 Both appear in the plan the user confirms. The user ruled on 2026-10-27, twice, against a launcher: the patch is
-re-applied after install, inside every serena update, and by `/preferred-tools:fix`.
+re-applied after install, inside every serena update, and by `/alfred-tools:fix`.
 
 ## Roots, keys and servers already set up - 0.2.0
 
 **The user's rulings, 2026-11-10**, quoted in order: 'scope, dfinition must be global/project/local'; 'root folder for
-preferred-tools must be .preferred-tools or .alfred (only when presen) or custom'; 'You must ask user about how he want
+alfred-tools must be .alfred-tools or .alfred (only when presen) or custom'; 'You must ask user about how he want
 to handle the existing mcps, maybve he want that atlassian should not be the part of plugin and to be on it's own.';
 'this implementation with secrets work and I guess we need to add it there' (the `headersHelper` script a workspace
-session built); 'we need to have .mcps-secrets that will be in root of .preferred-tools or .alfred. It will contain mcps
-data which is sensative and will be used by preferred-tools.'; 'approve' (stdio keyed routes only at local and global
-scope, the 'on its own' choices saved in `<root>/preferred-tools.json`, the old key files pointed to by name and never
+session built); 'we need to have .mcps-secrets that will be in root of .alfred-tools or .alfred. It will contain mcps
+data which is sensative and will be used by alfred-tools.'; 'approve' (stdio keyed routes only at local and global
+scope, the 'on its own' choices saved in the 0.4.x record in `<root>`, the old key files pointed to by name and never
 read for a value, the helper as a file); 'During install or configure ask user what token name or and other data env
 will be for plugin or mcp'. They replace the key rule of 2026-10-29, 'Project scope keeps `${VAR}`' for keys, and 'no
 ledger' for the record and the roots map only. 'Plain registrations, no launcher' stands: the helper starts no server.
@@ -259,9 +261,9 @@ with, while the key sat in a file (the user's Windows workspace, 2026-11-10).
   `project`, `local` on the CLI and in every file. The plan says 'global (user scope)' the first time.
 - **D2 - One root folder per scope family.** The project root serves project and local scope, the global root global
   scope. A root holds each tool's data folder `<root>/<name>`, the key file `.mcps-secrets`, the helper
-  `mcp-headers.js`, the record `preferred-tools.json` and, unless it is `.alfred`, a `.gitignore` (`*`, `!.gitignore`,
-  `!mcp-headers.js`). Options: project - `.alfred` (recommended where alfred-code is set up), `.preferred-tools`, a
-  folder named inside the project; global - `~/.preferred-tools`, `~/.alfred` when it exists, a folder named. A root in
+  `mcp-headers.js`, the 0.4.x record and, unless it is `.alfred`, a `.gitignore` (`*`, `!.gitignore`,
+  `!mcp-headers.js`). Options: project - `.alfred` (recommended where alfred-code is set up), `.alfred-tools`, a
+  folder named inside the project; global - `~/.alfred-tools`, `~/.alfred` when it exists, a folder named. A root in
   use is listed first. Each root is asked once a run, only when a pick or an answer needs it. The roots map
   `${CLAUDE_PLUGIN_DATA}/roots.json` (folder paths only) finds a named root again; the commands pass
   `--data "${CLAUDE_PLUGIN_DATA}"` to every script that reads it.
@@ -270,11 +272,11 @@ with, while the key sat in a file (the user's Windows workspace, 2026-11-10).
   the user writes every value. The apply's `ensure-key-name` appends empty `NAME=` lines only, refuses when git would
   not ignore the file, and leaves a UTF-16 file as it is (the plan's `Key:` line names the line to add). A hosted route's
   key is read by the helper from the root beside it (at local scope then a named global root), then
-  `~/.preferred-tools/.mcps-secrets`, then `~/.alfred/.mcps-secrets`; a stdio route's by the apply (local: the project
-  root, then the global root; global: the global root). The 0.1.x files (alfred-code's store, `.preferred-tools/.secrets`,
-  `~/.preferred-tools/.secrets`) are read for names only, so a line can say where a key still sits.
+  `~/.alfred-tools/.mcps-secrets`, then `~/.alfred/.mcps-secrets`; a stdio route's by the apply (local: the project
+  root, then the global root; global: the global root). The 0.1.x files (alfred-code's store, `.alfred-tools/.secrets`,
+  `~/.alfred-tools/.secrets`) are read for names only, so a line can say where a key still sits.
 - **D4 - The header helper, `mcp-headers.js`.** `scripts/copied/mcp-headers.js`, Node built-ins only, first line
-  `// preferred-tools mcp-headers <n>`, its SHA-256 pinned per number in `tests/lint.ts`. `write-helper` copies it into
+  `// alfred-tools mcp-headers <n>`, its SHA-256 pinned per number in `tests/lint.ts`. `write-helper` copies it into
   the root when absent or lower; a higher number is never overwritten. A hosted keyed registration carries
   `headersHelper: node <path> <NAME> <SCHEME> [<global root>]` and no `Authorization` header - a path the shell would
   split is quoted (single quotes on macOS and Linux, double quotes in the committed `.mcp.json`, forward slashes on
@@ -295,14 +297,14 @@ with, while the key sat in a file (the user's Windows workspace, 2026-11-10).
   nothing about a server already set up - one it recognises is managed - and a claude.ai connector or another plugin's
   server shows in the pick list as `(also connected through claude.ai)` / `(also provided by the <plugin> plugin)`.
   configure's first question about a server is 'Who looks after <name>?', and only 'Leave it on its own' is recorded,
-  so `preferred-tools.json` exists only when the user leaves one out; install plans the removal of a 0.2.0 record's
+  so the 0.4.x record exists only when the user leaves one out; install plans the removal of a 0.2.0 record's
   'manage' entries (`record-clean`). What 0.2.0 did: before the picks, install asked once about each server here that matches a catalog
-  row - a registration ('Leave it on its own' or 'Let preferred-tools manage it', the second recommended when a fix
+  row - a registration ('Leave it on its own' or 'Let alfred-tools manage it', the second recommended when a fix
   detector would repair it, a `key-to-helper` or `token-sync` that waits on a key the user fills included), a server an
   enabled plugin provides, a claude.ai connector the session has loaded ('Leave it with <owner>' or 'Add
-  preferred-tools' own registration as well'). A registration whose helper is this plugin's (its number line, or no
+  alfred-tools' own registration as well'). A registration whose helper is this plugin's (its number line, or no
   file yet and `<NAME> <SCHEME>` arguments) is not asked about; a helper of the user's own under the same name is. The
-  answer is recorded in the family root's `preferred-tools.json` (names, scopes, fingerprints and choices only), so it
+  answer is recorded in the family root's 0.4.x record (names, scopes, fingerprints and choices only), so it
   is asked once - install plans the answers even when nothing is picked; 'on its own' is honoured by install,
   configure ('On their own' group), update and fix ('on its own - not checked').
 - **D7 - Fix, update and configure.** Fix rows `key-to-helper`, `helper-missing`, `helper-stale` and `root-ignore`;
@@ -335,7 +337,7 @@ The spec is `docs/superpowers/specs/2026-11-11-field-fixes-0.3.0-design.md` (mac
   teammate's clone points at yours.' It replaces 'project scope gets relative paths'; 'never a key' stands.
 - Record, 'Managed by default (Recommended)' - 'Install asks nothing about servers already set up; a server it
   recognises is managed, with no file. Configure offers 'Leave it on its own', and only that answer is saved, so
-  preferred-tools.json exists only if you leave one out. A claude.ai connector just shows in the pick list as '(also
+  the 0.4.x record exists only if you leave one out. A claude.ai connector just shows in the pick list as '(also
   connected through claude.ai)'.' It replaces D6's install-time ask.
 - Order, 'Reorder-only write (Recommended)' - 'After its CLI calls, apply.js rewrites .mcp.json with the same servers
   and values in your order. It checks that nothing but the order changed and writes through a temp file: a narrow
@@ -396,8 +398,8 @@ The alternatives, and why each fails:
   never reaches it, and a slug must then live in a shell profile.
 - `headersHelper` - it changes headers only; nothing a helper prints can change a URL.
 - A launcher in the plugin cache - `${CLAUDE_PLUGIN_ROOT}` changes on every update, so a registration pointing into it
-  breaks at the next update; the bridge is copied into the root like the helper, and `/preferred-tools:update` and
-  `/preferred-tools:fix` (`helper-missing`, `helper-stale`) keep it current.
+  breaks at the next update; the bridge is copied into the root like the helper, and `/alfred-tools:update` and
+  `/alfred-tools:fix` (`helper-missing`, `helper-stale`) keep it current.
 
 What 0.4.0 adds around it: sentry's third route 'Bridge', recommended at Project scope since it holds names only; the
 walk's 'URL name' questions beside the key name (`answers.urlNames`); configure rewrites only the template and the key
@@ -418,7 +420,7 @@ Quoted in order (typos kept):
 1. 'Apply this changes that during setup everything will be okay and do the same for rest of mcps, update command must
    update mcps in .mcp file.' (2026-11-12)
 2. 'Then you need to handle mcp for both and when running something like install particular plugin from preffered
-   tools than it must be installed from both. Let's .preferred-tools or .alfred contains json which will store all mcps
+   tools than it must be installed from both. Let's .alfred-tools or .alfred contains json which will store all mcps
    that are installed and they will be just copied and moved to mcp files of cursor/agent and claude data.' This
    replaces the link design discussed on 2026-11-12, and 'no ledger' for the servers the plugin manages.
 3. 'I allow you to delete from current plugin lsp for typescript and csharp.'
@@ -446,7 +448,7 @@ Quoted in order (typos kept):
 11. Serena in a workspace, 2026-11-13: 'Each project itself (Recommended)' - `--project-from-cwd` stays, so a session
     in a child repo indexes that repo with its own language; a session at the root indexes the root with one language.
 12. One sign-in for both apps, 2026-11-13: 'can we have generic source of signing via oauth for both?', then, on where
-    the sign-ins are kept, 'I want to store inside .alfred workspace or .preferred-tools folder this data', and on the
+    the sign-ins are kept, 'I want to store inside .alfred workspace or .alfred-tools folder this data', and on the
     proposal (both apps run the server through mcp-remote, its store at `<root>/mcp-remote-v1/`): 'yes, go with (a) and
     the root folder'. This replaces D5's keyless line, under which each app signed in on its own (D5).
 13. Keeping AI sessions out of the sign-ins and the keys, 2026-11-13, to two questions: 'Add the deny rule
@@ -457,7 +459,7 @@ What 0.5.0 builds on them:
 
 - **The list.** Each root folder holds `<root>/mcps.json`: every server the plugin manages in that scope family, with
   its `clients`, its Claude Code entry and, for a keyed hosted route, Cursor's copy (`cursorEntry`), never a key value.
-  Its `own` array replaces `preferred-tools.json` (ruling 2's exception to 'no ledger'). `scripts/mcps-list.js` is its
+  Its `own` array replaces the 0.4.x record (ruling 2's exception to 'no ledger'). `scripts/mcps-list.js` is its
   only reader and writer; a list from a newer version is never replaced.
 - **Both apps from it.** Claude Code is written through the `claude` CLI as before; Cursor's two files by
   `scripts/cursor-mcp.js` (the `cursor-write` step), which keeps every entry the user added and asks before replacing
@@ -647,10 +649,10 @@ answer. The answer is applied after the plugin install:
 - 'Skip' runs `hud-statusline.js --statusline-only`, so claude-hud still shows on screen.
 
 No catalog row for a picked plugin means
-no ask. `/preferred-tools:configure hud` jumps straight to this ask for an installed claude-hud (the 2026-10-27 split;
-it was `/preferred-tools:install hud`).
+no ask. `/alfred-tools:configure hud` jumps straight to this ask for an installed claude-hud (the 2026-10-27 split;
+it was `/alfred-tools:install hud`).
 
-**After an update.** When `/preferred-tools:update` moves claude-hud to a newer version, it re-runs `--check`, and it names
+**After an update.** When `/alfred-tools:update` moves claude-hud to a newer version, it re-runs `--check`, and it names
 any catalog key the new `DEFAULT_CONFIG` no longer holds. It never removes such a key.
 
 The same catalog takes a row for another plugin later. Each row's keys are read from that plugin's own source,
@@ -664,7 +666,7 @@ problem can be applied: 'Apply all found (Recommended)', 'Pick which' (the group
 APPLICABLE, nothing is asked: the lines are the advice. `scripts/fix.js --apply <ids>` applies each pick. A
 registration fix rewrites the entry through the CLI (remove, then add-json with the same name and scope). A file fix
 (the shim patch) edits the package file and keeps a `.bak`. Each fix is read back, then the restart line is printed - none when every fix applied only wrote a data folder's `.gitignore`. A
-row whose detector finds nothing is not shown. `/preferred-tools:fix <tool or id>` narrows it.
+row whose detector finds nothing is not shown. `/alfred-tools:fix <tool or id>` narrows it.
 
 A fix row: `id`, `tool`, `os`, `symptom` (what the user sees), `detect` (the name of a function in `scripts/fixes/`),
 `fix` (the same), `verifiedOn` (tool version and OS the fix was proved on), `source` (where the lesson comes from),
@@ -682,7 +684,7 @@ rows - each `source` line is the alfred-code file to read for the detail:
 | playwright-webmcp | page-registered WebMCP tools appear beside Playwright's own | add `--no-webmcp` | `browser-launch.js` header |
 | appium-sdk-env | appium cannot find the Android SDK or a JDK (Claude Code started from the dock or an IDE) | look up `ANDROID_HOME` / `JAVA_HOME` and set them in the registration's `env` | `mobile-launch.js` header |
 | serena-telemetry | serena sends a usage ping at every start | `SERENA_USAGE_REPORTING=false` | `serena-launch.js` |
-| token-sync | a stdio token server at local or global scope lacks the key `.mcps-secrets` has, or holds an older one | write the key in from the root's `.mcps-secrets` (D3's stdio chain); a key held under no name there is blocked: 'pick the key's name with /preferred-tools:configure' | `scripts/keys.js`, D7 |
+| token-sync | a stdio token server at local or global scope lacks the key `.mcps-secrets` has, or holds an older one | write the key in from the root's `.mcps-secrets` (D3's stdio chain); a key held under no name there is blocked: 'pick the key's name with /alfred-tools:configure' | `scripts/keys.js`, D7 |
 | key-to-helper | a hosted server's `Authorization` header holds a `${VAR}` or a key (0.1.x wrote both) | re-add it with `headersHelper` and without the header, once its name is filled in the hosted chain; the root's `.gitignore` and helper are written first | D4, D7 |
 | helper-missing | a registration names a `mcp-headers.js` that is not there (a teammate's clone) - the server connects without its key | write the helper | D4, D7 |
 | helper-stale | the helper copy is older than this plugin's, or was edited by hand | rewrite it; a newer copy is left with a note to update the plugin, and a file with no number line - not this plugin's - is never overwritten | D4, D7 |
@@ -700,7 +702,7 @@ A new problem the user meets later becomes a new row, with its `verifiedOn`.
 ## The update command - `commands/update.md`
 
 `disable-model-invocation: true`, like the other three commands. **The user's ruling, 2026-10-27:** the update is a
-command, `/preferred-tools:update`, not a skill. It was first built as the model-invocable `skills/update-tools/SKILL.md`
+command, `/alfred-tools:update`, not a skill. It was first built as the model-invocable `skills/update-tools/SKILL.md`
 (description under 160 chars, starting 'Use when'); the body, the asks and `scripts/update.js` are unchanged by the move,
 and the plugin now puts no skill description in every session. It runs `node scripts/update.js`:
 
@@ -730,16 +732,16 @@ and the plugin now puts no skill description in every session. It runs `node scr
   health check starts a pin before fetch.js has it (the review of 2026-11-12). One an earlier step already did (a
   rewrite puts `.mcp.json` in order) counts as done. Its launches join the run's one fetch file, one step per server and
   scope, the last written. A finding that cannot apply alone (blocked, or needing a folder) is a note naming
-  `/preferred-tools:fix`, and the last line then says how many wait on the user instead of 'everything current'. Not an
+  `/alfred-tools:fix`, and the last line then says how many wait on the user instead of 'everything current'. Not an
   upgrade: a route the user picks, such as sentry's Bridge - that stays configure's.
-- Nothing behind: one line, `preferred-tools: everything current`.
+- Nothing behind: one line, `alfred-tools: everything current`.
 
 `catalog/tools.json`'s own pins move only through a repo script (`npm run refresh-pins`), never during an update.
 
 ## Repo layout
 
 ```text
-.claude-plugin/plugin.json    name preferred-tools, version 0.1.0, description, author envoydev
+.claude-plugin/plugin.json    name alfred-tools, version 0.1.0, description, author envoydev
 .claude-plugin/icon.png       1024 px square toolbox (Material Symbols, Apache 2.0; docs/sources.md), for Anthropic's directory listing only - Claude Code ignores it, and the first submission may fix it for good
 commands/install.md
 commands/configure.md
@@ -821,13 +823,13 @@ Each step ends with its check; the next step starts only when it passes.
     a nested interactive session, so it prints a checklist and waits for the user's go:
     - create a scratch project (the exact `mkdir` line);
     - start `claude --plugin-dir <this repo>` there (verify the flag in step 1);
-    - run `/preferred-tools:install` once, picking serena, memory, context7, one browser and the LSP pair;
-    - run `claude mcp get <name>` per server, then `/preferred-tools:fix` and `/preferred-tools:update` once each;
+    - run `/alfred-tools:install` once, picking serena, memory, context7, one browser and the LSP pair;
+    - run `claude mcp get <name>` per server, then `/alfred-tools:fix` and `/alfred-tools:update` once each;
     - paste the read-back into this session.
 
     The build session reads the pasted output and records PASS or the failure. With no go, the step is NOT RUN.
     Cleanup is on the same checklist, and its read-back is pasted too:
-    - run `/preferred-tools:configure`'s Remove round at every scope used, and uninstall the plugins installed for
+    - run `/alfred-tools:configure`'s Remove round at every scope used, and uninstall the plugins installed for
       the scratch project;
     - delete the scratch folder;
     - read `claude plugin list --json` and the `mcpServers` of `~/.claude.json` to confirm no scratch registration
@@ -849,14 +851,14 @@ Each step ends with its check; the next step starts only when it passes.
 - Inventory recognises a catalog tool under any name and never lists or touches a registration it does not match.
 - No file the plugin writes contains a token; since 0.3.0 `.mcp.json` holds absolute paths (and `${VAR}` for nothing
   but a machine path a user wrote), and its catalog servers stay in `catalog.order` after every change.
-- `/preferred-tools:fix` finds and fixes a seeded `serena-windows-home` entry and a seeded unpatched
+- `/alfred-tools:fix` finds and fixes a seeded `serena-windows-home` entry and a seeded unpatched
   `typescript_language_server.py` (fixtures here; live on Windows or NOT RUN).
 - Every script call in a command or skill body is spelled under `${CLAUDE_PLUGIN_ROOT}`, and the user's live check ran
   the commands from a project that is not this repo - or the report says NOT RUN.
-- `/preferred-tools:update` offers a newer pin, rewrites the registration under the same name and scope, and says
+- `/alfred-tools:update` offers a newer pin, rewrites the registration under the same name and scope, and says
   `everything current` when nothing is behind.
 - Picking claude-hud ends with the recommended-settings ask; each of its three answers writes exactly what
-  `hud-statusline.js --check` reported for it (the statusLine alone for 'Skip'), and `/preferred-tools:configure hud` reaches the same ask on an installed claude-hud.
+  `hud-statusline.js --check` reported for it (the statusLine alone for 'Skip'), and `/alfred-tools:configure hud` reaches the same ask on an installed claude-hud.
 - Install offers only what is not installed. Configure offers each installed registration and plugin once per scope,
   recommends what it has now in every question, changes the one picked and leaves a second registration of the same
   row as it is.
@@ -867,7 +869,7 @@ Each step ends with its check; the next step starts only when it passes.
 - A registration rewrite (fix, update, rename) loses the server for a moment, and fails between remove and add: apply
   adds first under a temporary name where the name changes; for a same-name rewrite, it saves the old JSON to
   `<tmp>/rollback.json` and re-adds it when the add fails, and the report prints the line that restores it by hand.
-- A vendor endpoint or package moves after step 1: `/preferred-tools:update` re-reads the registry; a remote route that stops
+- A vendor endpoint or package moves after step 1: `/alfred-tools:update` re-reads the registry; a remote route that stops
   answering shows as failed in `claude mcp get`, and the fix is a catalog change plus a re-run of install.
 - Supply chain: pins plus the cut-off; the 7-day age gate on updates; appium-mcp 1.97.1 had 20 critical and 21 high
   npm advisories on 2026-10-21 (alfred-code's `shipped-mcps.json` pins) - the walk shows the current count from
@@ -878,16 +880,16 @@ Each step ends with its check; the next step starts only when it passes.
   re-resolved them at every start. What is frozen is narrow: uvx still resolves the `--python` request at each start,
   so only the request string is fixed (the x64 build string on Windows ARM64 - one more reason a uvx row's local
   route is `local` scope). The Android SDK and JDK paths in appium's `env` are fixed too. A moved SDK is caught by
-  `/preferred-tools:fix` (`appium-sdk-env` checks that the paths still exist).
+  `/alfred-tools:fix` (`appium-sdk-env` checks that the paths still exist).
 - The serena shim patch is a file edit in uv's cache, lost on every serena upgrade or uv cache wipe. Mitigation: the
   install applies it after a pre-warm, and a serena update re-applies it in the same run. Gap: a wipe outside an
-  update (`uv cache clean`) leaves serena broken until `/preferred-tools:fix` runs. The user accepted that gap on
+  update (`uv cache clean`) leaves serena broken until `/alfred-tools:fix` runs. The user accepted that gap on
   2026-10-27 over a launcher.
 - Three servers expose a tool that runs arbitrary code (Playwright's `browser_run_code_unsafe`, windows-mcp's `App` in
   mode `launch_executable`, macos-mcp's `Shell`). This build adds no guard of its own; see the deny-row line under
   'Optional'. It relies on no other plugin's guard.
 - Shared plugins. alfred-code also installs claude-hud and the LSP pair, and its update installs an absent pick, so it
-  may add back one that preferred-tools removed. The plugins stay standalone (no hand-over), so the gap stays open.
+  may add back one that alfred-tools removed. The plugins stay standalone (no hand-over), so the gap stays open.
   Mitigation: while `claude plugin list --json` shows alfred-code enabled, the walk notes on those three rows that
   alfred-code installs them too and may add a removed one back.
 - Backward compatibility: a project still on alfred-code 2.10.0 or older has the stack's servers under the reserved
@@ -897,7 +899,7 @@ Each step ends with its check; the next step starts only when it passes.
 ## Rollback
 
 Every server is one `claude mcp remove <name> -s <scope>`; every plugin one `claude plugin uninstall <spec> --scope
-<scope>`; the install command's Remove round does both. Uninstalling `preferred-tools` itself leaves every registration
+<scope>`; the install command's Remove round does both. Uninstalling `alfred-tools` itself leaves every registration
 working (none depends on it). The only irreversible-looking step - a location change - moves no data. claude-hud's
 statusLine write is add-only and named in the report so it can be deleted by hand; the recommended settings back up
 the account `settings.json` before their first write (`settings.json.bak.<timestamp>`), and the `config.json` keys
@@ -928,23 +930,23 @@ they added are listed in the report.
 
 ## Hand-off - the marketplace entry in alfred-code, a separate session there
 
-preferred-tools is a standalone plugin (the user's ruling, 2026-10-27). It is listed beside alfred-code in the
+alfred-tools is a standalone plugin (the user's ruling, 2026-10-27). It is listed beside alfred-code in the
 `envoydev` marketplace, like any two plugins in a store: neither depends on, requires, installs or removes the other,
 the user picks it or not, and it works the same with alfred-code absent. Removing alfred-code never removes
-preferred-tools. Report this as the next step; it follows this repo's first push:
+alfred-tools. Report this as the next step; it follows this repo's first push:
 
 - **Marketplace entry.** alfred-code's `.claude-plugin/marketplace.json` (marketplace name `envoydev`) is generated by
    `scripts/build-marketplace.js`, and every entry it generates has `source: './'`. The generator keeps an entry it
    does not own (`applyToMarketplace`: anything not generated, not retired or folded, and not an MCP-only entry). So
-   the `preferred-tools` entry, sourced from this GitHub repo in the shape step 1 verified, is written by hand. Then
+   the `alfred-tools` entry, sourced from this GitHub repo in the shape step 1 verified, is written by hand. Then
    `npm run marketplace` confirms it survives, and `npm run lint` confirms lint accepts an entry with an outside
    source; if lint refuses it, that is a lint change there. Users then run
-   `claude plugin install preferred-tools@envoydev`. The entry adds no `dependencies`, and nothing in the alfred-code
-   entry names preferred-tools.
+   `claude plugin install alfred-tools@envoydev`. The entry adds no `dependencies`, and nothing in the alfred-code
+   entry names alfred-tools.
 
 No hand-over is planned (the user's ruling, 2026-10-27, replacing an earlier hand-over of claude-hud and the LSP
-pair). alfred-code keeps installing what it installs today, as if preferred-tools did not exist; pointing its users
-at preferred-tools for those three would make one plugin need the other.
+pair). alfred-code keeps installing what it installs today, as if alfred-tools did not exist; pointing its users
+at alfred-tools for those three would make one plugin need the other.
 
 ## Optional
 
@@ -954,13 +956,13 @@ at preferred-tools for those three would make one plugin need the other.
   `plugin-settings.js`, and the Remove round would take the row out with its server. A permission rule cannot see a
   mode, so denying windows-mcp's `App` also loses launch, switch and resize; its ask says so. The recommendation does
   not depend on which other plugins are installed.
-- Recommended - `/preferred-tools:status`, a read-only print of the install walk's table (`table.js`), since the walk already renders it.
+- Recommended - `/alfred-tools:status`, a read-only print of the install walk's table (`table.js`), since the walk already renders it.
 - Recommended - a `docs/tools/<row>.md` page per tool with why it was chosen and its quirks, matching the repo's
   purpose of collecting tested tools.
 - Not worth it - a local GitLab route through a community server (such as `@zereight/mcp-gitlab`): third-party, and
   it holds a token in its env. It is only worth adding for a self-managed GitLab too old to serve `/api/v4/mcp`.
 - Not worth it - a per-project names file; identity by fingerprint already covers custom names.
-- Not worth it - a launcher layer for runtime adaptation; `/preferred-tools:fix` covers a changed machine.
+- Not worth it - a launcher layer for runtime adaptation; `/alfred-tools:fix` covers a changed machine.
 
 ## Revisit when
 

@@ -13,7 +13,7 @@ import type { Catalog } from '../catalog/types.ts';
 import type { InventoryView } from '../roots/types.ts';
 import type { FileOps, OrderStep, StepEnd, StepLike } from './types.ts';
 
-const LEFT = 'left as it is - /preferred-tools:fix (mcp-order) orders it';
+const LEFT = 'left as it is - /alfred-tools:fix (mcp-order) orders it';
 const ORDER_REASON = '.mcp.json: the catalog servers in your order, your own after them - no value changes';
 
 // The server names in their new order. `own`: the names left on their own, which sit with the user's own servers.

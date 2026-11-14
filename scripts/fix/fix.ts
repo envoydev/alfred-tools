@@ -269,7 +269,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         for (const rootUse of [...new Map(fileCtx.uses.map((usage) => [usage.root, usage] as const)).values()]) log(`the key helper goes in the ${rootUse.family} root ${rootUse.root}`);
         for (const note of [...fileNotes, ...tailNotes]) log(`note: ${note}`);
         const plan = { version: 1, project: context.inventory.project, os: context.platform, alfredCodeEnabled: Boolean(context.inventory.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch, ...tail], context.inventory.project, mcpOrder.ownProjectNames(context.inventory)), notes: [], errors: [], expect: steps.map((step) => ({ kind: 'mcp', name: step.name, scope: step.scope, route: context.inventory.registrations.find((candidate) => candidate.name === step.name && candidate.scope === step.scope)!.route })) };
-        result.tmp = tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
+        result.tmp = tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'alfred-tools-fix-'));
         const report = apply(plan, { env: context.env, tmp: result.tmp, runCli, log, fetchFile });
         result.fetchFile = report.fetchFile;
         result.fetch = report.fetch;
@@ -295,7 +295,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         if (planned.length)
         {
             const plan = { version: 1, project: context.inventory.project, os: context.platform, alfredCodeEnabled: Boolean(context.inventory.alfredCodeEnabled), steps: planned, notes: [], errors: [], expect: [] };
-            result.tmp = result.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
+            result.tmp = result.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'alfred-tools-fix-'));
             const report = apply(plan, { env: context.env, tmp: result.tmp, runCli, log, fetchFile: false, data: context.data });
             if (report.failed) { result.failed = report.failed.detail; return result; }
         }
@@ -316,7 +316,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     if (refetch.length)
     {
         // beside a fetch file a registration fix already wrote, or in a new one
-        result.tmp = result.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
+        result.tmp = result.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'alfred-tools-fix-'));
         result.fetchFile = writeJob(result.fetchFile || path.join(result.tmp, 'fetch.json'), fetchJob(context.inventory.project, refetch, refetch.map((jobStep) => jobStep.name)), { append: true });
         log('', ...nextLines(result.fetchFile, JSON.parse(fs.readFileSync(result.fetchFile, 'utf8'))));
     }

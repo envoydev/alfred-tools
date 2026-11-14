@@ -14,7 +14,7 @@ import type { UpdateCheck, UpdateCtx } from './types.ts';
 // ---- key helpers (spec D7, R10) ---------------------------------------------------------------------------------------
 
 // Each mcp-headers.js a managed registration names, or a root in use holds, with a lower number than this plugin's is
-// offered; a hand edit or a newer copy is left to /preferred-tools:fix, with a note.
+// offered; a hand edit or a newer copy is left to /alfred-tools:fix, with a note.
 export function helperOffers(context: UpdateCtx, out: UpdateCheck): void
 {
     const pathApi = pathFor(context.inventory.os);
@@ -42,8 +42,8 @@ export function helperOffers(context: UpdateCtx, out: UpdateCheck): void
         const { state, number } = roots.shippedState(kind, file);
         const idKind = kind === 'serenaContext' ? 'context' : kind;
         if (state === 'lower') out.offers.push({ kind: idKind, id: `${idKind}:${file}`, file, root, from: String(number), to: String(version), group: 'helper', label: `${name} in ${root}` });
-        else if (state === 'higher') out.notes.push(`${name} in ${root} is newer than this plugin - update preferred-tools`);
-        else if (state === 'edited') out.notes.push(`${name} in ${root} changed since preferred-tools wrote it - left; /preferred-tools:fix (helper-stale) rewrites it`);
+        else if (state === 'higher') out.notes.push(`${name} in ${root} is newer than this plugin - update alfred-tools`);
+        else if (state === 'edited') out.notes.push(`${name} in ${root} changed since alfred-tools wrote it - left; /alfred-tools:fix (helper-stale) rewrites it`);
     };
     for (const root of dirs) offer('helper', root, HELPER_VERSION);
     for (const root of bridgeDirs) offer('bridge', root, BRIDGE_VERSION);
@@ -52,11 +52,11 @@ export function helperOffers(context: UpdateCtx, out: UpdateCheck): void
 
 // ---- new ways to pass data (the user's ruling, 2026-11-12) ---------------------------------------------------------------
 
-// The fix rows marked `upgrade` carry what an older preferred-tools wrote to the way this version passes data: a key in
+// The fix rows marked `upgrade` carry what an older alfred-tools wrote to the way this version passes data: a key in
 // an Authorization header read through mcp-headers.js from .mcps-secrets once the user has put it there (key-to-helper),
 // absolute project paths (project-relative-path), the root's .gitignore (root-ignore), the .mcp.json order (mcp-order).
 // Only those detectors run. A finding that cannot apply alone - blocked, or needing a folder - is a note naming
-// /preferred-tools:fix, counted in `waiting`.
+// /alfred-tools:fix, counted in `waiting`.
 export const upgradeCatalog = (catalog: Catalog): Catalog => ({ ...catalog, fixes: catalog.fixes.filter((fixRow) => fixRow.upgrade) });
 const upgradeLabel = (finding: Finding) => (finding.kind === 'registration' ? `${finding.name} (${finding.scope})` : finding.name);
 
@@ -80,7 +80,7 @@ export function upgradeOffers(context: UpdateCtx, out: UpdateCheck): void
         if (finding.blocked || finding.input)
         {
             const why = finding.blocked || `needs a folder from you (${finding.input!.prompt})`;
-            out.notes.push(`${label}: ${finding.found} - not applied here: ${why}${/\/preferred-tools:fix/.test(why) ? '' : '; then run /preferred-tools:fix'}`);
+            out.notes.push(`${label}: ${finding.found} - not applied here: ${why}${/\/alfred-tools:fix/.test(why) ? '' : '; then run /alfred-tools:fix'}`);
             out.waiting += 1;
             continue;
         }

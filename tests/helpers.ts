@@ -78,7 +78,7 @@ export function tempOf(w: World)
     const root = path.join(w.dir, 'temp');
     fs.mkdirSync(root, { recursive: true });
     const env = { ...w.env, TMPDIR: root, TEMP: root, TMP: root };
-    const made = (prefix = 'preferred-tools-') => fs.mkdtempSync(path.join(fs.realpathSync(root), prefix));
+    const made = (prefix = 'alfred-tools-') => fs.mkdtempSync(path.join(fs.realpathSync(root), prefix));
     return { root, env, made };
 }
 export function files(dir: string): string[]

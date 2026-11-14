@@ -48,9 +48,9 @@ export function readCursor(file: string): CursorRead
 // Why a file is left as it is, or null when it can be written.
 export function refusal(read: CursorRead): string | null
 {
-    if (read.state === 'symlink') return 'is a symbolic link - preferred-tools writes no file through a link; replace it with the file itself';
-    if (read.state === 'bad') return read.error ? `cannot be read (${read.error})` : 'is not JSON (Cursor reads comments and trailing commas, preferred-tools does not) - remove them, then run the command again';
-    if (read.state === 'shape') return 'has no mcpServers object - not a file preferred-tools recognises';
+    if (read.state === 'symlink') return 'is a symbolic link - alfred-tools writes no file through a link; replace it with the file itself';
+    if (read.state === 'bad') return read.error ? `cannot be read (${read.error})` : 'is not JSON (Cursor reads comments and trailing commas, alfred-tools does not) - remove them, then run the command again';
+    if (read.state === 'shape') return 'has no mcpServers object - not a file alfred-tools recognises';
     return null;
 }
 
@@ -171,7 +171,7 @@ function fillStdioKeys(managed: Map<string, Managed>, context: CursorCtx | null 
             if (filled.length && filled.every((value) => typeof value === 'string' && value.trim() && !value.includes(kept.MARKER))) { managed.set(name, { ...managedServer, entry: back!.entry! }); continue; }
         }
         managed.set(name, { ...managedServer, entry: keys.fillKeys(managedServer.entry, row, managedServer.route!, 'user', { [route!.tokenVar!]: found ? found.value : '' }) });
-        if (!found) notes.push(`${managedServer.key} for '${name}' (user) is in none of ${files.join(', ')} - written empty: fill ${managedServer.key} in ${files[0]}, then run /preferred-tools:configure and keep ${managedServer.key} as the key's name - it writes the key in`);
+        if (!found) notes.push(`${managedServer.key} for '${name}' (user) is in none of ${files.join(', ')} - written empty: fill ${managedServer.key} in ${files[0]}, then run /alfred-tools:configure and keep ${managedServer.key} as the key's name - it writes the key in`);
     }
     return notes;
 }

@@ -66,7 +66,7 @@ function ctxFor({ platform = 'darwin', arch = 'x64', registrations = [], plugins
     const inv = { version: 1, project: project || (win ? 'C:\\proj' : '/proj'), os: platform, arch, registrations, plugins, cli: { ok: true } } as Inventory;
     // a 0.5.0 install: every registration is in its family's list, so list-import has nothing to do here
     const P = win ? path.win32 : path.posix;
-    const listOf = (family: string, root: string): InvList => ({ file: P.join(root, '.preferred-tools', 'mcps.json'), servers: registrations.filter((r) => r.scope !== 'inherited' && (family === 'global') === (r.scope === 'user')) as unknown as ListServer[], own: [] });
+    const listOf = (family: string, root: string): InvList => ({ file: P.join(root, '.alfred-tools', 'mcps.json'), servers: registrations.filter((r) => r.scope !== 'inherited' && (family === 'global') === (r.scope === 'user')) as unknown as ListServer[], own: [] });
     inv.lists = { project: listOf('project', inv.project), global: listOf('global', home || (win ? 'C:\\Users\\dev' : '/home/dev')) };
     return makeCtx({ inventory: inv, catalog, env: { ...env, HOME: home || (win ? 'C:\\Users\\dev' : '/home/dev') }, machine, platform, arch });
 }
@@ -131,7 +131,7 @@ test('a fresh entry from the catalog is clean on every OS - no detector fires on
 test('serena-windows-home: slashes keep the folder, a space needs another one, a relative path resolves against the project', () =>
 {
     const homes = (ctx: FixCtx) => detect(ctx).found.filter((f) => f.id === 'serena-windows-home');
-    const mk = (home: string, extra = {}, opts: { name?: string; scope?: string; route?: string; ctx?: CtxFor } = {}) => ctxFor({ platform: 'win32', registrations: [reg('serena', { command: 'uvx', args: ['--python', '3.13', '--context', 'C:\\proj\\.preferred-tools\\serena-context.yml'], env: { SERENA_HOME: home, ...extra } }, opts)], ...opts.ctx });
+    const mk = (home: string, extra = {}, opts: { name?: string; scope?: string; route?: string; ctx?: CtxFor } = {}) => ctxFor({ platform: 'win32', registrations: [reg('serena', { command: 'uvx', args: ['--python', '3.13', '--context', 'C:\\proj\\.alfred-tools\\serena-context.yml'], env: { SERENA_HOME: home, ...extra } }, opts)], ...opts.ctx });
     // slashes only
     let [f] = homes(mk('C:/Users/dev/.serena')) as [Finding];
     assert.strictEqual(f.id, 'serena-windows-home');
@@ -179,7 +179,7 @@ test('serena-windows-home: no SERENA_HOME is serena\'s default <profile>\\.seren
     assert.deepStrictEqual(F.serenaWindowsHomeFix(bare().entry, f, spaced).env, { SERENA_USAGE_REPORTING: 'false', SERENA_HOME: 'D:\\serena-home' });
     // project scope: named, with the Location question to pick a space-free folder
     const [p] = homes(ctxFor({ platform: 'win32', home: 'C:\\Users\\Jo Doe', registrations: [bare('project')] })) as [Finding];
-    assert.match(p.blocked!, /pick a space-free folder with \/preferred-tools:configure, Location/);
+    assert.match(p.blocked!, /pick a space-free folder with \/alfred-tools:configure, Location/);
     assert.deepStrictEqual(homes(ctxFor({ platform: 'darwin', home: '/Users/Jo Doe', registrations: [bare()] })), [], 'not Windows');
 });
 
@@ -349,19 +349,19 @@ test('data-folder-ignore: a relative folder here with no ignore is found and fix
         // a real git: this world is no work tree, so git cannot answer and the folder's own files decide
         const ctx = (registrations: InvRegistration[]) => ctxFor({ platform: process.platform, project: w.project, registrations, machine: noMachine({ exists: (p) => fs.existsSync(p), run: C.realMachine().run }) });
         const found = (registrations: InvRegistration[]) => F.dataFolderIgnoreDetect(ctx(registrations));
-        const folder = path.join(w.project, '.preferred-tools', 'playwright-chrome');
+        const folder = path.join(w.project, '.alfred-tools', 'playwright-chrome');
 
-        const f = found([parent('.preferred-tools/playwright-chrome')]);
+        const f = found([parent('.alfred-tools/playwright-chrome')]);
         assert.deepStrictEqual(f.map((x) => [x.id, x.name, x.scope, x.proposal!.path]), [['data-folder-ignore', 'playwright-chrome', 'inherited', folder]]);
-        assert.match(f[0]!.found, /\.preferred-tools\/playwright-chrome .*not git-ignored/);
+        assert.match(f[0]!.found, /\.alfred-tools\/playwright-chrome .*not git-ignored/);
         // through the engine: a machine fix, offered
-        const d = detectAll(ctx([parent('.preferred-tools/playwright-chrome')]), { only: 'data-folder-ignore' });
+        const d = detectAll(ctx([parent('.alfred-tools/playwright-chrome')]), { only: 'data-folder-ignore' });
         assert.deepStrictEqual(d.found.map((x) => [x.id, x.kind, Boolean(x.blocked)]), [['data-folder-ignore', 'machine', false]]);
 
         const r = F.dataFolderIgnoreFix(f[0]!, ctx([]));
         assert.strictEqual(r.ok, true, r.detail);
         assert.strictEqual(fs.readFileSync(path.join(folder, '.gitignore'), 'utf8'), '*\n');
-        assert.deepStrictEqual(found([parent('.preferred-tools/playwright-chrome')]), [], 'read back: covered');
+        assert.deepStrictEqual(found([parent('.alfred-tools/playwright-chrome')]), [], 'read back: covered');
         // a .gitignore already there is left as it is
         fs.writeFileSync(path.join(folder, '.gitignore'), 'mine\n');
         assert.strictEqual(F.dataFolderIgnoreFix(f[0]!, ctx([])).ok, true);
@@ -372,18 +372,18 @@ test('data-folder-ignore: a relative folder here with no ignore is found and fix
         fs.mkdirSync(path.join(w.project, '.alfred'));
         fs.writeFileSync(path.join(w.project, '.alfred', '.gitignore'), '*\n');
         assert.deepStrictEqual(found([parent('.alfred/playwright-chrome')]), []);
-        assert.strictEqual(found([parent('.preferred-tools/pw2')]).length, 1, "alfred-code's file does not cover .preferred-tools");
+        assert.strictEqual(found([parent('.alfred-tools/pw2')]).length, 1, "alfred-code's file does not cover .alfred-tools");
 
         // what is not found: a parent's server rejected here or shadowed, an absolute, ${HOME} or ~ folder, a user's own server
-        assert.deepStrictEqual(found([parent('.preferred-tools/pw3', { approval: 'rejected' })]), []);
-        assert.deepStrictEqual(found([parent('.preferred-tools/pw3', { shadowed: { scope: 'project' } })]), []);
-        for (const root of [path.join(w.home, 'pw'), '${HOME}/.preferred-tools/pw', '~/.preferred-tools/pw']) assert.deepStrictEqual(found([parent(root)]), [], root);
-        assert.deepStrictEqual(found([{ ...parent('.preferred-tools/pw3'), own: true, rowId: null }]), []);
+        assert.deepStrictEqual(found([parent('.alfred-tools/pw3', { approval: 'rejected' })]), []);
+        assert.deepStrictEqual(found([parent('.alfred-tools/pw3', { shadowed: { scope: 'project' } })]), []);
+        for (const root of [path.join(w.home, 'pw'), '${HOME}/.alfred-tools/pw', '~/.alfred-tools/pw']) assert.deepStrictEqual(found([parent(root)]), [], root);
+        assert.deepStrictEqual(found([{ ...parent('.alfred-tools/pw3'), own: true, rowId: null }]), []);
         // this folder's own project-scope server; local and user scope write absolute folders, never relative ones
-        assert.strictEqual(found([reg('playwright-chrome', pw('.preferred-tools/pw3'), { scope: 'project' })]).length, 1);
-        assert.deepStrictEqual(found([reg('playwright-chrome', pw('.preferred-tools/pw3'), { scope: 'local' })]), []);
+        assert.strictEqual(found([reg('playwright-chrome', pw('.alfred-tools/pw3'), { scope: 'project' })]).length, 1);
+        assert.deepStrictEqual(found([reg('playwright-chrome', pw('.alfred-tools/pw3'), { scope: 'local' })]), []);
         // two registrations naming one folder are one finding
-        assert.strictEqual(found([parent('.preferred-tools/pw3'), reg('playwright-chrome', pw('.preferred-tools/pw3'), { scope: 'project', name: 'pw' })]).length, 1);
+        assert.strictEqual(found([parent('.alfred-tools/pw3'), reg('playwright-chrome', pw('.alfred-tools/pw3'), { scope: 'project', name: 'pw' })]).length, 1);
     }
     finally { w.clean(); }
 });
@@ -564,7 +564,7 @@ test('windows-mcp-one-per-desktop: two servers give one blocked finding naming b
     assert.strictEqual(found.length, 1);
     assert.match(found[0]!.found, /^2 windows-mcp servers start in this project: windows-desktop \(local\), windows-control@envoydev \(user\)/);
     assert.match(found[0]!.blocked!, /claude plugin disable windows-control@envoydev --scope user/);
-    assert.match(found[0]!.blocked!, /\/preferred-tools:configure/);
+    assert.match(found[0]!.blocked!, /\/alfred-tools:configure/);
     assert.match(found[0]!.blocked!, /a stuck one recovers only in a new Claude Code session/);
     assert.strictEqual(mine(detect(two('win32'), 'windows-control')).length, 1, '--only by the tool finds it');
     assert.deepStrictEqual(F.windowsMcpOneDetect(ctxFor({ platform: 'win32', registrations: [wd] })), []);
@@ -578,7 +578,7 @@ test("windows-mcp-one-per-desktop: each owner's own drop line", () =>
     const alfred = { name: 'windows-control', scope: 'local', entry: {}, rowId: null, route: null, own: true, alfredRetired: true };
     const parent = (r: InvRegistration): InvRegistration => ({ ...r, scope: 'inherited', from: '/', approval: 'approved', shadowed: null });
     assert.match(blockedWith(alfred)!, /claude mcp remove windows-control -s local/);
-    assert.match(blockedWith(parent(reg('windows-control', fresh('windows-control', 'win32'), { name: 'wd-parent' })))!, /\/preferred-tools:configure \(Remove\), run in \.\./);
+    assert.match(blockedWith(parent(reg('windows-control', fresh('windows-control', 'win32'), { name: 'wd-parent' })))!, /\/alfred-tools:configure \(Remove\), run in \.\./);
     assert.match(blockedWith(parent(alfred))!, /claude mcp remove windows-control -s project, run in \.\./);
 });
 
@@ -601,9 +601,9 @@ test('data-folder-ignore: in a git work tree git decides - the project\'s own ig
         spawnSync('git', ['init', '-q'], { cwd: w.project });
         const pw = (root: string) => reg('playwright-chrome', { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', root] }, { scope: 'project' });
         const found = (root: string) => F.dataFolderIgnoreDetect(ctxFor({ platform: process.platform, project: w.project, registrations: [pw(root)], machine: noMachine({ exists: (p) => fs.existsSync(p), run: C.realMachine().run }) }));
-        // the project ignores .preferred-tools/: covered, though the folder has no .gitignore of its own
-        fs.writeFileSync(path.join(w.project, '.gitignore'), '.preferred-tools/\n');
-        assert.deepStrictEqual(found('.preferred-tools/playwright-chrome'), []);
+        // the project ignores .alfred-tools/: covered, though the folder has no .gitignore of its own
+        fs.writeFileSync(path.join(w.project, '.gitignore'), '.alfred-tools/\n');
+        assert.deepStrictEqual(found('.alfred-tools/playwright-chrome'), []);
         // a folder's own .gitignore that ignores only logs: its data is not covered, and the fix leaves the user's file
         const own = path.join(w.project, 'tools', 'pw');
         fs.mkdirSync(own, { recursive: true });
@@ -684,7 +684,7 @@ test('apply: two fixes on one registration are ONE replace, from the entry as re
         // the entry as the installer writes it on this machine, so the same two fixes apply on every OS - with its
         // context file in the global root, as the install leaves it
         const entry = fresh('serena', process.platform, process.arch, 'user', { project: w.project, home: w.home });
-        put(path.join(w.home, '.preferred-tools', 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
+        put(path.join(w.home, '.alfred-tools', 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
         const theirs = {
             command: 'uvx',
             args: entry.args!.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python').map((a) => (a === 'serena-agent@2.1.0' ? 'serena-agent@2.0.0' : a)).concat(['--verbose']),
@@ -907,7 +907,7 @@ test('a fix that only writes a data folder\'s .gitignore asks for no restart', (
     const w = world();
     try
     {
-        seed(w, 'playwright-chrome', 'project', { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '.preferred-tools/playwright-chrome'] });
+        seed(w, 'playwright-chrome', 'project', { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '.alfred-tools/playwright-chrome'] });
         const lines: string[] = [];
         const res = applyFixes(ctxOf(w, { machine: noMachine({ exists: (p) => fs.existsSync(p), run: C.realMachine().run }) }), ['data-folder-ignore'], { log: (...a) => lines.push(a.join(' ')) });
         assert.strictEqual(res.failed, null, lines.join('\n'));
@@ -959,13 +959,13 @@ const HOSTED_SENTRY = (auth: string) => ({ type: 'http', url: 'https://mcp.sentr
 const hexv = (p: string) => `${p}-${cryptox.randomBytes(10).toString('hex')}`;
 const put = (file: string, text: string) => { fsx.mkdirSync(path.dirname(file), { recursive: true }); fsx.writeFileSync(file, text); };
 const secretsAt = (root: string, pairs: Record<string, string>) => put(path.join(root, '.mcps-secrets'), Object.entries(pairs).map(([k, v]) => `${k}=${v}`).join('\n') + '\n');
-const ptRoot = (w: World) => path.join(w.project, '.preferred-tools');
-const homeRoot = (w: World) => path.join(w.home, '.preferred-tools');
+const ptRoot = (w: World) => path.join(w.project, '.alfred-tools');
+const homeRoot = (w: World) => path.join(w.home, '.alfred-tools');
 const localEntry = (w: World, name: string) => account.readAccount(w.env, w.project).local[name];
 const ctxData = (w: World, data: string) => makeCtx({ inventory: inventory.buildInventory({ project: w.project, env: w.env, data }), env: w.env, machine: noMachine(), data });
 const logged = () => { const lines: string[] = []; return { lines, log: (...a: string[]) => lines.push(a.join(' ')), text: () => lines.join('\n') }; };
 const gitInit = (dir: string) => { fsx.mkdirSync(dir, { recursive: true }); assert.strictEqual(spawnx('git', ['init', '-q', dir]).status, 0); };
-const helperAt = (root: string, number: number | string, extra = '') => put(path.join(root, 'mcp-headers.js'), rootsLib.helperSource().replace(/^\/\/ preferred-tools mcp-headers \d+/, `// preferred-tools mcp-headers ${number}`) + extra);
+const helperAt = (root: string, number: number | string, extra = '') => put(path.join(root, 'mcp-headers.js'), rootsLib.helperSource().replace(/^\/\/ alfred-tools mcp-headers \d+/, `// alfred-tools mcp-headers ${number}`) + extra);
 const shownOf = (d: Detected) => `${renderFixes(d)}${JSON.stringify(d)}`;
 
 test('key-to-helper: a ${VAR} filled in the chain is moved to the helper under that name', () =>
@@ -1001,10 +1001,10 @@ test('key-to-helper: a ${VAR} not filled is blocked and names the old file that 
     try
     {
         seed(w, 'github', 'local', HOSTED_GH(`Bearer \${${GK}}`));
-        put(path.join(w.project, '.preferred-tools', '.secrets'), `${GK}=${hexv('old')}\n`);
+        put(path.join(w.project, '.alfred-tools', '.secrets'), `${GK}=${hexv('old')}\n`);
         const [f] = detect(ctxOf(w)).found.filter((x) => x.id === 'key-to-helper') as [Finding];
         const chain0 = path.join(ptRoot(w), '.mcps-secrets');
-        assert.strictEqual(f.blocked, `put ${GK}'s value in ${chain0}, then run /preferred-tools:fix; ${GK} is in ${path.join(w.project, '.preferred-tools', '.secrets')}, which preferred-tools no longer reads`);
+        assert.strictEqual(f.blocked, `put ${GK}'s value in ${chain0}, then run /alfred-tools:fix; ${GK} is in ${path.join(w.project, '.alfred-tools', '.secrets')}, which alfred-tools no longer reads`);
         const res = applyFixes(ctxOf(w), ['key-to-helper'], { log: () => {} });
         assert.deepStrictEqual(res.skipped.map((x) => x.id), ['key-to-helper']);
         assert.deepStrictEqual(localEntry(w, 'github')!.headers, { Authorization: `Bearer \${${GK}}` }, 'never moved to a helper that would send no key');
@@ -1025,7 +1025,7 @@ test('key-to-helper: a literal equal to a filled value applies with that name; o
         const s = d.found.find((x) => x.id === 'key-to-helper' && x.name === 'sentry');
         assert.deepStrictEqual([s!.keyName, Boolean(s!.blocked)], ['MY_SENTRY', false]);
         const g = d.found.find((x) => x.id === 'key-to-helper' && x.name === 'github');
-        assert.match(g!.blocked!, /^the key in this registration matches no name in .*\.mcps-secrets.*: put the working key there under a name, then run \/preferred-tools:fix$/);
+        assert.match(g!.blocked!, /^the key in this registration matches no name in .*\.mcps-secrets.*: put the working key there under a name, then run \/alfred-tools:fix$/);
         for (const v of [v1, v2]) assert.ok(!shownOf(d).includes(v), 'no literal in the report');
         const l = logged();
         const res = applyFixes(ctxOf(w), ['key-to-helper'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
@@ -1063,19 +1063,19 @@ test('helper-missing writes the helper; helper-stale rewrites a lower number, na
 
         helperAt(ptRoot(w), HV, '// mine\n');
         const [edited] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-stale') as [Finding];
-        assert.match(edited.found, /changed since preferred-tools wrote it/);
+        assert.match(edited.found, /changed since alfred-tools wrote it/);
         assert.ok(!edited.blocked, 'a hand edit is rewritten on the confirmed plan');
 
         helperAt(ptRoot(w), HV + 1);
         const [higher] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-stale') as [Finding];
-        assert.strictEqual(higher.blocked, `mcp-headers.js in ${ptRoot(w)} is newer than this plugin - update preferred-tools`);
+        assert.strictEqual(higher.blocked, `mcp-headers.js in ${ptRoot(w)} is newer than this plugin - update alfred-tools`);
         applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
-        assert.match(fsx.readFileSync(file, 'utf8'), new RegExp(`^// preferred-tools mcp-headers ${HV + 1}`), 'never rewritten');
+        assert.match(fsx.readFileSync(file, 'utf8'), new RegExp(`^// alfred-tools mcp-headers ${HV + 1}`), 'never rewritten');
     }
     finally { w.clean(); }
 });
 
-test('helper-stale never rewrites a file with no preferred-tools number line: it is blocked and named', () =>
+test('helper-stale never rewrites a file with no alfred-tools number line: it is blocked and named', () =>
 {
     const w = world();
     try
@@ -1085,7 +1085,7 @@ test('helper-stale never rewrites a file with no preferred-tools number line: it
         const mine = "#!/usr/bin/env node\nconsole.log('{}');\n";
         put(file, mine);
         const [f] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-stale') as [Finding];
-        assert.strictEqual(f.blocked, `${file} has no preferred-tools number line - it is not this plugin's helper, and fix never overwrites it: rename yours, or delete it and run /preferred-tools:fix`);
+        assert.strictEqual(f.blocked, `${file} has no alfred-tools number line - it is not this plugin's helper, and fix never overwrites it: rename yours, or delete it and run /alfred-tools:fix`);
         applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
         assert.strictEqual(fsx.readFileSync(file, 'utf8'), mine, 'left as it is');
     }
@@ -1163,11 +1163,11 @@ test('root-ignore blocks a helper gap no appended line can close - a .gitignore 
     try
     {
         gitInit(w.project);
-        put(path.join(w.project, '.gitignore'), '.preferred-tools/\n');
+        put(path.join(w.project, '.gitignore'), '.alfred-tools/\n');
         put(path.join(ptRoot(w), '.gitignore'), rootsLib.GITIGNORE);
         secretsAt(ptRoot(w), { [GK]: '' });
         helperAt(ptRoot(w), HV);
-        seed(w, 'github', 'project', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node .preferred-tools/mcp-headers.js ${GK} Bearer` });
+        seed(w, 'github', 'project', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node .alfred-tools/mcp-headers.js ${GK} Bearer` });
         const [f] = detect(ctxOf(w)).found.filter((x) => x.id === 'root-ignore') as [Finding];
         assert.ok(f, 'found');
         assert.strictEqual(f.blocked, `a .gitignore above excludes ${ptRoot(w)} - remove that line (git check-ignore -v ${ptRoot(w)} names it): git never re-includes a file inside an excluded folder`);
@@ -1220,11 +1220,11 @@ test('token-sync checks stdio routes only, from the stdio chain, by any filled n
         const ts = () => detect(ctxOf(w)).found.filter((x) => x.id === 'token-sync');
         secretsAt(homeRoot(w), { ANY_NAME: v1 });
         assert.deepStrictEqual(ts(), [], 'held by a filled name in the global root, the second file of the local chain');
-        put(path.join(w.project, '.preferred-tools', '.secrets'), `${SK}=${v3}\n`);
+        put(path.join(w.project, '.alfred-tools', '.secrets'), `${SK}=${v3}\n`);
         secretsAt(homeRoot(w), { ANY_NAME: v2 });
         const [f] = ts() as [Finding];
         assert.deepStrictEqual([f.name, f.scope, Boolean(f.blocked)], ['sentry', 'local', true], 'the default name is filled nowhere in the chain: the old file is not read');
-        assert.strictEqual(f.blocked, "pick the key's name with /preferred-tools:configure");
+        assert.strictEqual(f.blocked, "pick the key's name with /alfred-tools:configure");
         assert.match(f.found, /matches no name in .*\.mcps-secrets/);
         secretsAt(ptRoot(w), { [SK]: v3 });
         const [g] = ts() as [Finding];
@@ -1253,7 +1253,7 @@ test('token-sync blocks an empty stdio key and never writes the default name\'s 
         seed(w, 'github', 'local', GITHUB(''));
         secretsAt(ptRoot(w), { ACME_GITHUB_TOKEN: '', [GK]: v });
         const [f] = detect(ctxOf(w)).found.filter((x) => x.id === 'token-sync') as [Finding];
-        assert.strictEqual(f.blocked, "pick the key's name with /preferred-tools:configure");
+        assert.strictEqual(f.blocked, "pick the key's name with /alfred-tools:configure");
         const before = fsx.readFileSync(account.accountFile(w.env), 'utf8');
         const res = applyFixes(ctxOf(w), ['token-sync'], { log: () => {} });
         assert.deepStrictEqual(res.skipped.map((x) => x.id), ['token-sync']);
@@ -1265,7 +1265,7 @@ test('token-sync blocks an empty stdio key and never writes the default name\'s 
 
 test('fix notes an untrusted declaring folder', () =>
 {
-    const helperReg = (scope: string) => reg('github', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: 'node /proj/.preferred-tools/mcp-headers.js X Bearer' }, { scope, route: 'remote' });
+    const helperReg = (scope: string) => reg('github', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: 'node /proj/.alfred-tools/mcp-headers.js X Bearer' }, { scope, route: 'remote' });
     const at = (trusted: boolean, scope: string) => { const ctx = ctxFor({ registrations: [helperReg(scope)] }); ctx.inventory.trusted = trusted; return detect(ctx); };
     const d = at(false, 'local');
     assert.deepStrictEqual(d.notes, ['github (local): accept the trust dialog the next time Claude Code starts in /proj - until then the server connects without its key']);
@@ -1313,11 +1313,11 @@ test('serena-windows-home at project scope: an absolute bad home is fixed in pla
 {
     const homes = (ctx: FixCtx) => detect(ctx).found.filter((f) => f.id === 'serena-windows-home');
     const at = (home: string | undefined, extra = {}) => ctxFor({ platform: 'win32', ...extra, registrations: [reg('serena', { command: 'uvx', args: ['--python', '3.13'], env: home === undefined ? {} : { SERENA_HOME: home } }, { scope: 'project' })] });
-    let [f] = homes(at('C:/work/shop/.preferred-tools/serena')) as [Finding];
-    assert.deepStrictEqual(f.proposal, { SERENA_HOME: 'C:\\work\\shop\\.preferred-tools\\serena' });
+    let [f] = homes(at('C:/work/shop/.alfred-tools/serena')) as [Finding];
+    assert.deepStrictEqual(f.proposal, { SERENA_HOME: 'C:\\work\\shop\\.alfred-tools\\serena' });
     assert.ok(!f.blocked);
     [f] = homes(at(undefined, { home: 'C:\\Users\\Jo Doe' })) as [Finding];
-    assert.ok(f.blocked!.includes('pick a space-free folder with /preferred-tools:configure, Location'), f.blocked);
+    assert.ok(f.blocked!.includes('pick a space-free folder with /alfred-tools:configure, Location'), f.blocked);
     // a ${VAR} value is project-relative-path's to convert
     assert.deepStrictEqual(homes(at('${USERPROFILE}/.serena', { env: { USERPROFILE: 'C:\\Users\\dev' } })), []);
 });
@@ -1343,27 +1343,27 @@ const ctxIn = (w: World, dir: string, machine = noMachine()) => makeCtx({ invent
 test('project-relative-path: relative, ${HOME}, ${USERPROFILE}\\.serena and a relative helper are found and fixed as read, a user arg kept', () =>
 {
     const pw = { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '.alfred/playwright-chrome', '--output-dir', '.alfred/playwright-chrome/output', '--viewport-size', '1280x720'] };
-    const memory = { command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: '${HOME}/.preferred-tools/memory/memory.db' } };
-    const c7 = { ...C7, headersHelper: 'node .preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' };
+    const memory = { command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: '${HOME}/.alfred-tools/memory/memory.db' } };
+    const c7 = { ...C7, headersHelper: 'node .alfred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' };
     const regs = [reg('playwright-chrome', pw, { scope: 'project' }), reg('memory', memory, { scope: 'project' }), reg('context7', c7, { scope: 'project', route: 'remote' })];
     const at = (registrations: InvRegistration[], over: CtxFor = {}) => ctxFor({ project: '/work/shop', home: '/home/dev', registrations, ...over });
     const ctx = at(regs);
     const found = F.projectRelativePathDetect(ctx);
     assert.deepStrictEqual(found.map((f) => [f.id, f.name, f.scope, Boolean(f.blocked)]), ['playwright-chrome', 'memory', 'context7'].map((n) => ['project-relative-path', n, 'project', false]));
-    for (const f of found) assert.match(f.found, /a copy in a child folder is kept out of git by \/preferred-tools:fix run there$/);
+    for (const f of found) assert.match(f.found, /a copy in a child folder is kept out of git by \/alfred-tools:fix run there$/);
     // the same folder, written out: no data to name
     assert.ok(!found.some((f) => /old data stays/.test(f.found)), found.map((f) => f.found).join('\n'));
     const fixed = regs.map((r, i) => F.projectRelativePathFix(r.entry, found[i]!, ctx));
     assert.deepStrictEqual(fixed[0], { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '/work/shop/.alfred/playwright-chrome', '--output-dir', '/work/shop/.alfred/playwright-chrome/output', '--viewport-size', '1280x720'] });
-    assert.deepStrictEqual(fixed[1], { ...memory, env: { MCP_MEMORY_SQLITE_PATH: '/home/dev/.preferred-tools/memory/memory.db' } });
-    assert.deepStrictEqual(fixed[2], { ...C7, headersHelper: 'node /work/shop/.preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' });
+    assert.deepStrictEqual(fixed[1], { ...memory, env: { MCP_MEMORY_SQLITE_PATH: '/home/dev/.alfred-tools/memory/memory.db' } });
+    assert.deepStrictEqual(fixed[2], { ...C7, headersHelper: 'node /work/shop/.alfred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' });
     // read back: the fixed entries are clean
     assert.deepStrictEqual(F.projectRelativePathDetect(at(regs.map((r, i) => ({ ...r, entry: fixed[i]! })))), []);
     // not found: local scope, ~ and another variable
     assert.deepStrictEqual(F.projectRelativePathDetect(at(regs.map((r) => ({ ...r, scope: 'local' })))), []);
     for (const v of ['~/.pw', '${WORK}/pw']) assert.deepStrictEqual(F.projectRelativePathDetect(at([reg('playwright-chrome', { ...pw, args: ['-y', '@playwright/mcp@0.0.83', '--user-data-dir', v] }, { scope: 'project' })])), [], v);
     // an unset variable is blocked: nothing to write it as
-    const [b] = F.projectRelativePathDetect(at([reg('memory', { ...memory, env: { MCP_MEMORY_SQLITE_PATH: '${USERPROFILE}/.preferred-tools/memory/memory.db' } }, { scope: 'project' })])) as [Finding];
+    const [b] = F.projectRelativePathDetect(at([reg('memory', { ...memory, env: { MCP_MEMORY_SQLITE_PATH: '${USERPROFILE}/.alfred-tools/memory/memory.db' } }, { scope: 'project' })])) as [Finding];
     assert.match(b.blocked!, /USERPROFILE is not set/);
 
     // serena on Windows: 0.2.0's ${USERPROFILE}\.serena becomes <project root>\serena, a new folder - the old one is named
@@ -1373,13 +1373,13 @@ test('project-relative-path: relative, ${HOME}, ${USERPROFILE}\\.serena and a re
     const [s] = F.projectRelativePathDetect(wctx) as [Finding];
     assert.match(s.found, /the old data stays at C:\\Users\\dev\\\.serena - moving the path moves no data/);
     assert.match(s.found, /about 327MB/);
-    assert.deepStrictEqual(F.projectRelativePathFix(serena, s, wctx), { ...serena, env: { SERENA_HOME: 'C:\\work\\shop\\.preferred-tools\\serena' } });
+    assert.deepStrictEqual(F.projectRelativePathFix(serena, s, wctx), { ...serena, env: { SERENA_HOME: 'C:\\work\\shop\\.alfred-tools\\serena' } });
     // a project root with a space: the profile's .serena, written out
     const spaced = win('C:\\my work\\shop', [reg('serena', serena, { scope: 'project' })]);
     assert.deepStrictEqual(F.projectRelativePathFix(serena, F.projectRelativePathDetect(spaced)[0]!, spaced).env, { SERENA_HOME: 'C:\\Users\\dev\\.serena' });
     // a relative helper on Windows: absolute, in the forward slashes node and cmd both take
     const wc = win('C:\\work\\shop', [reg('context7', c7, { scope: 'project', route: 'remote' })]);
-    assert.strictEqual(F.projectRelativePathFix(c7, F.projectRelativePathDetect(wc)[0]!, wc).headersHelper, 'node C:/work/shop/.preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer');
+    assert.strictEqual(F.projectRelativePathFix(c7, F.projectRelativePathDetect(wc)[0]!, wc).headersHelper, 'node C:/work/shop/.alfred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer');
 });
 
 test('project-relative-path and mcp-order in a child folder name the parent', () =>
@@ -1395,10 +1395,10 @@ test('project-relative-path and mcp-order in a child folder name the parent', ()
         fs.mkdirSync(child);
         const ours = (d: Detected) => d.found.filter((f) => ['project-relative-path', 'mcp-order'].includes(f.id));
         const d = detect(ctxIn(w, child));
-        assert.deepStrictEqual(ours(d).map((f) => [f.id, f.blocked]), [['project-relative-path', 'run /preferred-tools:fix in ..'], ['mcp-order', 'run /preferred-tools:fix in ..']]);
+        assert.deepStrictEqual(ours(d).map((f) => [f.id, f.blocked]), [['project-relative-path', 'run /alfred-tools:fix in ..'], ['mcp-order', 'run /alfred-tools:fix in ..']]);
         const text = renderFixes(d);
-        assert.match(text, /project-relative-path .* NOT APPLICABLE: run \/preferred-tools:fix in \.\./);
-        assert.match(text, /mcp-order .* NOT APPLICABLE: run \/preferred-tools:fix in \.\./);
+        assert.match(text, /project-relative-path .* NOT APPLICABLE: run \/alfred-tools:fix in \.\./);
+        assert.match(text, /mcp-order .* NOT APPLICABLE: run \/alfred-tools:fix in \.\./);
         // in the parent itself, both apply
         assert.deepStrictEqual(ours(detect(ctxIn(w, w.project))).map((f) => [f.id, Boolean(f.blocked)]), [['project-relative-path', false], ['mcp-order', false]]);
     }
@@ -1421,7 +1421,7 @@ test('mcp-order: found when out of order, not found when in order or when a serv
         assert.deepStrictEqual(Object.keys(readJson(file).mcpServers), ['gh', 'c7', 'mine']);
         assert.deepStrictEqual(F.mcpOrderDetect(ctxIn(w, w.project)), [], 'read back: in order');
         // gh left on its own sits with the user's servers: in order where it is
-        const record = path.join(w.project, '.preferred-tools', 'preferred-tools.json');
+        const record = path.join(w.project, '.alfred-tools', 'preferred-tools.json');
         writeJson(record, { version: 1, servers: [{ name: 'gh', scope: 'project', fingerprint: existingLib.fingerprintOf(GH, catalog), choice: 'own' }] });
         assert.deepStrictEqual(at({ c7: C7, mine, gh: GH }), []);
         fs.rmSync(record);
@@ -1438,14 +1438,14 @@ test('helper-child-folder: found from a child for an inherited helper, not found
     const w = world();
     try
     {
-        const helper = `node ${path.join(w.project, '.preferred-tools', 'mcp-headers.js')} CONTEXT7_API_KEY Bearer`;
+        const helper = `node ${path.join(w.project, '.alfred-tools', 'mcp-headers.js')} CONTEXT7_API_KEY Bearer`;
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { context7: { ...C7, headersHelper: helper } } });
         const child = path.join(w.project, 'C');
         fs.mkdirSync(child);
         const d = detect(ctxIn(w, child), 'helper-child-folder');
         assert.deepStrictEqual(d.found.map((f) => [f.id, f.name, f.scope, f.kind]), [['helper-child-folder', 'context7', 'inherited', 'registration']]);
         assert.match(d.found[0]!.found, /connects here without its key/);
-        assert.strictEqual(d.found[0]!.blocked, 'move it to Global with /preferred-tools:configure in .., or start Claude in ..');
+        assert.strictEqual(d.found[0]!.blocked, 'move it to Global with /alfred-tools:configure in .., or start Claude in ..');
         assert.deepStrictEqual(detect(ctxIn(w, w.project), 'helper-child-folder').found, []);
     }
     finally { w.clean(); }
@@ -1495,7 +1495,7 @@ test('fix prints the reconnect line for each hosted keyed registration it rewrot
         assert.strictEqual(applyFixes(ctxOf(w), ['key-to-helper'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
         assert.ok(l.text().includes('github: connects with its key at the next session start; in a session already running, /mcp -> github -> Reconnect'), l.text());
         // project-relative-path on context7's 0.2.0 helper at project scope, its key not filled: the fill line
-        seed(w, 'context7', 'project', { ...C7, headersHelper: 'node .preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' });
+        seed(w, 'context7', 'project', { ...C7, headersHelper: 'node .alfred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' });
         const m = logged();
         assert.strictEqual(applyFixes(ctxOf(w), ['project-relative-path'], { tmp: path.join(w.dir, 'tmp2'), log: m.log }).failed, null, m.text());
         assert.ok(m.text().includes(`context7: fill CONTEXT7_API_KEY in ${path.join(ptRoot(w), '.mcps-secrets')}, then Reconnect it in /mcp - until then it runs without the key, at lower rate limits`), m.text());
@@ -1507,7 +1507,7 @@ test('fix prints the reconnect line for each hosted keyed registration it rewrot
 // ---- the bridge (0.4.0): its file and the helper beside it, and its mcp-remote cache folder -------------------------
 
 const BRIDGE = (root: string, pin = '0.16.0') => ({ command: 'node', args: [path.join(root, 'mcp-bridge.js'), 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}', SK, 'Sentry-Bearer', `mcp-remote@${pin}`], env: { npm_config_before: '2026-11-11T23:59:59Z' } });
-const bridgeAt = (root: string, number: number | string, extra = '') => put(path.join(root, 'mcp-bridge.js'), rootsLib.shippedSource('bridge').replace(/^\/\/ preferred-tools mcp-bridge \d+/, `// preferred-tools mcp-bridge ${number}`) + extra);
+const bridgeAt = (root: string, number: number | string, extra = '') => put(path.join(root, 'mcp-bridge.js'), rootsLib.shippedSource('bridge').replace(/^\/\/ alfred-tools mcp-bridge \d+/, `// alfred-tools mcp-bridge ${number}`) + extra);
 
 test('helper-missing finds both files of a bridge registration and writes both', () =>
 {
@@ -1551,15 +1551,15 @@ test('helper-stale finds helper 3 beside a bridge, and a hand-edited bridge, and
         bridgeAt(ptRoot(w), BV, '// mine\n');
         const [edited] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-stale') as [Finding];
         assert.strictEqual(edited.name, bridge);
-        assert.match(edited.found, /^mcp-bridge\.js changed since preferred-tools wrote it/);
+        assert.match(edited.found, /^mcp-bridge\.js changed since alfred-tools wrote it/);
         applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
         assert.strictEqual(fsx.readFileSync(bridge, 'utf8'), rootsLib.shippedSource('bridge'));
 
         bridgeAt(ptRoot(w), BV + 1);
         const [higher] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-stale') as [Finding];
-        assert.strictEqual(higher.blocked, `mcp-bridge.js in ${ptRoot(w)} is newer than this plugin - update preferred-tools`);
+        assert.strictEqual(higher.blocked, `mcp-bridge.js in ${ptRoot(w)} is newer than this plugin - update alfred-tools`);
         applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
-        assert.match(fsx.readFileSync(bridge, 'utf8'), new RegExp(`^// preferred-tools mcp-bridge ${BV + 1}`), 'never rewritten');
+        assert.match(fsx.readFileSync(bridge, 'utf8'), new RegExp(`^// alfred-tools mcp-bridge ${BV + 1}`), 'never rewritten');
     }
     finally { w.clean(); }
 });
@@ -1571,7 +1571,7 @@ test("npx-cache-entry finds a bridge registration's mcp-remote folder without pa
     {
         const cache = path.join(w.home, '.npm');
         const folder = npxFolder(cache, 'mcp-remote@0.16.0');
-        const b = reg('sentry', BRIDGE(path.join(w.project, '.preferred-tools')), { scope: 'local' });
+        const b = reg('sentry', BRIDGE(path.join(w.project, '.alfred-tools')), { scope: 'local' });
         const found = () => F.npxCacheEntryDetect(ctxFor({ platform: process.platform, project: w.project, registrations: [b], machine: npmAt(cache) }));
         assert.deepStrictEqual(found(), []);
         fsx.mkdirSync(path.join(folder, 'node_modules'), { recursive: true });
@@ -1591,7 +1591,7 @@ test('a 0.4.x own server is skipped before list-import: fix all leaves it byte-i
         const entry = fresh('serena', process.platform, process.arch);
         const theirs = { command: 'uvx', args: entry.args!.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python'), env: { SERENA_HOME: entry.env!.SERENA_HOME } } as ServerEntry;
         seed(w, 'serena', 'local', theirs);
-        const root = path.join(w.project, '.preferred-tools');
+        const root = path.join(w.project, '.alfred-tools');
         fs.mkdirSync(root, { recursive: true });
         fs.writeFileSync(path.join(root, 'preferred-tools.json'), JSON.stringify({ version: 1, servers: [{ name: 'serena', scope: 'local', fingerprint: X.fingerprintOf(theirs, catalog), choice: 'own' }] }));
         const before = (account.readAccount(w.env, w.project).local as Record<string, ServerEntry> & { serena?: ServerEntry }).serena;
@@ -1619,7 +1619,7 @@ test('list-import writes each managed registration with clients claude and moves
     {
         seed(w, 'serena', 'project', fresh('serena', process.platform, process.arch, 'project'));
         seed(w, 'context7', 'user', C7_HOSTED);
-        const proot = path.join(w.project, '.preferred-tools');
+        const proot = path.join(w.project, '.alfred-tools');
         recordAt(proot, [OWN_X]);
         const l = logged();
         const res = applyFixes(ctxOf(w), ['list-import'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
@@ -1629,7 +1629,7 @@ test('list-import writes each managed registration with clients claude and moves
         assert.deepStrictEqual(list.own, [OWN_X]);
         assert.ok(fsx.existsSync(path.join(proot, 'preferred-tools.json.0.4.bak')), l.text());
         assert.ok(!fsx.existsSync(path.join(proot, 'preferred-tools.json')));
-        assert.deepStrictEqual(listAt(path.join(w.home, '.preferred-tools')).servers.map((s: ListServer) => [s.name, s.scope, s.clients]), [['context7', 'user', ['claude']]]);
+        assert.deepStrictEqual(listAt(path.join(w.home, '.alfred-tools')).servers.map((s: ListServer) => [s.name, s.scope, s.clients]), [['context7', 'user', ['claude']]]);
         assert.deepStrictEqual(res.applied.map((f) => f.id), ['list-import', 'list-import']);
         // a second run finds nothing
         assert.deepStrictEqual(ids(detectAll(ctxOf(w)).found.filter((f) => f.id === 'list-import')), []);
@@ -1646,7 +1646,7 @@ test('list-import into a family with no root writes its .gitignore first and rec
         const data = path.join(w.dir, 'data');
         const ctx = ctxData(w, data);
         const [f] = ctx.catalog && detectAll(ctx).found.filter((x) => x.id === 'list-import') as [Finding];
-        const groot = path.join(w.home, '.preferred-tools');
+        const groot = path.join(w.home, '.alfred-tools');
         assert.deepStrictEqual([f.name, f.scope, f.family, f.record], [path.join(groot, 'mcps.json'), null, 'global', null]);
         assert.deepStrictEqual(F.listImportSteps(f, ctx).map((s) => s.op), ['root-ignore', 'list-write', 'record-root']);
         const l = logged();
@@ -1664,7 +1664,7 @@ test('retire-record after a rollback keeps both backups and list-import finds no
     try
     {
         seed(w, 'context7', 'local', C7_HOSTED);
-        const proot = path.join(w.project, '.preferred-tools');
+        const proot = path.join(w.project, '.alfred-tools');
         recordAt(proot, [OWN_X]);
         put(path.join(proot, 'preferred-tools.json.0.4.bak'), 'the first backup\n');
         const l = logged();
@@ -1684,7 +1684,7 @@ test('the file pass runs after the registration pass, detects on what it wrote, 
     {
         // uvx-python fires on it: no python request (its context file in place, as the install leaves it)
         const entry = fresh('serena', process.platform, process.arch, 'local', { project: w.project, home: w.home });
-        put(path.join(w.project, '.preferred-tools', 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
+        put(path.join(w.project, '.alfred-tools', 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
         seed(w, 'serena', 'local', { ...entry, args: entry.args!.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python') });
         const l = logged();
         const res = applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
@@ -1692,7 +1692,7 @@ test('the file pass runs after the registration pass, detects on what it wrote, 
         assert.deepStrictEqual(res.applied.map((f) => f.id).sort(), ['list-import', 'uvx-python']);
         const text = l.text();
         assert.ok(text.indexOf("'serena'") >= 0 && text.indexOf("'serena'") < text.indexOf('mcps.json'), text);
-        const [s] = listAt(path.join(w.project, '.preferred-tools')).servers;
+        const [s] = listAt(path.join(w.project, '.alfred-tools')).servers;
         assert.strictEqual(s.entry.args[0], '--python', 'the list holds the repaired entry');
         assert.match(text, /fixed +list-import on .*mcps\.json/);
     }
@@ -1705,7 +1705,7 @@ test("install's first touch retires the old record, and a configure 'manage' ans
     try
     {
         seed(w, 'context7', 'local', C7_HOSTED);
-        const proot = path.join(w.project, '.preferred-tools');
+        const proot = path.join(w.project, '.alfred-tools');
         recordAt(proot, [{ name: 'context7', scope: 'local', fingerprint: X.fingerprintOf(C7_HOSTED, catalog), choice: 'own' }, OWN_X]);
         const inv0 = inventory.buildInventory({ project: w.project, env: w.env });
         assert.strictEqual(inv0.registrations.find((r) => r.name === 'context7')!.choice, 'own');
@@ -1734,7 +1734,7 @@ test('read-guard finds a root with .mcps-secrets and no rule, applies deny-read,
     const w = world();
     try
     {
-        const proot = path.join(w.project, '.preferred-tools');
+        const proot = path.join(w.project, '.alfred-tools');
         put(path.join(proot, '.mcps-secrets'), '');
         put(settingsOf(w), JSON.stringify({ permissions: { deny: ['Bash(rm:*)'] }, theme: 'dark' }));
         const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard');
@@ -1762,7 +1762,7 @@ test('read-guard never opens a file in mcp-remote-v1 or .mcps-secrets', () =>
     let undo: (() => void)[] = [];
     try
     {
-        const proot = path.join(w.project, '.preferred-tools');
+        const proot = path.join(w.project, '.alfred-tools');
         put(path.join(proot, '.mcps-secrets'), '');
         put(path.join(proot, 'mcp-remote-v1', 'tokens.json'), '{}');
         const ctx = ctxOf(w);
@@ -1815,7 +1815,7 @@ test('helper-missing covers serena\'s context file', () =>
         assert.strictEqual(fsx.readFileSync(want, 'utf8'), rootsLib.shippedSource('serenaContext'));
         assert.ok(!fsx.existsSync(path.join(ptRoot(w), 'package.json')), 'a YAML file needs no package.json');
         // a lower one is helper-stale
-        fsx.writeFileSync(want, rootsLib.shippedSource('serenaContext').replace(/^# preferred-tools serena-context \d+/, '# preferred-tools serena-context 0'));
+        fsx.writeFileSync(want, rootsLib.shippedSource('serenaContext').replace(/^# alfred-tools serena-context \d+/, '# alfred-tools serena-context 0'));
         assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'helper-stale').map((f) => f.name), [want]);
     }
     finally { w.clean(); }
@@ -1919,7 +1919,7 @@ test('a windows-npx-cmd repair on an entry with cursor ends with list-write and 
     try
     {
         installBoth(w, { picks: { serena: { scope: 'local' } } });
-        const listFile = path.join(w.project, '.preferred-tools', 'mcps.json');
+        const listFile = path.join(w.project, '.alfred-tools', 'mcps.json');
         const cursorFile = path.join(w.project, '.cursor', 'mcp.json');
         // an older install wrote serena with no --python in all three places
         const e = noPython(localEntry(w, 'serena')!);

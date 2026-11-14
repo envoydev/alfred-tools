@@ -35,7 +35,7 @@ const NETWORK = /could not resolve|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|EC
 const START_MS = 600000;
 // Claude Code's own limit for a server's first answer (`claude mcp get` reports 'timed out after 30000ms' past it)
 const CLAUDE_MS = 30000;
-const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'preferred-tools-matrix', version: '0' } } };
+const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'alfred-tools-matrix', version: '0' } } };
 
 const children: ChildProcess[] = [];
 const stop = (child: ChildProcess) =>
@@ -116,7 +116,7 @@ for (const c of LOCAL)
         if (missing.length) return t.skip(`NOT RUN: ${missing.join(', ')} not on PATH`);
         if (c.token && !process.env[c.token]) return t.skip(`NOT RUN: the route needs ${c.token}, which this shell does not set (a real token; the plugin writes none)`);
         // the shell's token goes where 0.2.0 reads a stdio key: the throwaway global root's .mcps-secrets, removed with the world
-        if (c.token) fill(path.join(h.home, '.preferred-tools', roots.FILES.secrets), c.token, process.env[c.token]!);
+        if (c.token) fill(path.join(h.home, '.alfred-tools', roots.FILES.secrets), c.token, process.env[c.token]!);
 
         const p = h.project(`start-${c.row}`);
         const name = `start-${c.row}`;

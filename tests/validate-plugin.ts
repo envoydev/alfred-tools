@@ -12,8 +12,8 @@ const root = path.resolve(import.meta.dirname, '..');
 const ls = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8' });
 if (ls.error || ls.status !== 0) { console.error(`validate: cannot list the repo's files (${ls.error ? ls.error.message : ls.stderr.trim()})`); process.exit(2); }
 
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-validate-'));
-const copy = path.join(scratch, 'preferred-tools');
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'alfred-tools-validate-'));
+const copy = path.join(scratch, 'alfred-tools');
 let code = 0;
 try
 {

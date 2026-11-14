@@ -49,7 +49,7 @@ export function runFixCommand(argv: string[], { env = process.env, out = (line: 
     const project = path.resolve(args.project || process.cwd());
     const data = args.data || null;
     const projectInventory = inventory.buildInventory({ project, env, data });
-    if (!projectInventory.cli!.ok) { out('preferred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
+    if (!projectInventory.cli!.ok) { out('alfred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
     const context = makeCtx({ inventory: projectInventory, env, machine, data });
     if (args.apply)
     {

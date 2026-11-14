@@ -57,7 +57,7 @@ async function run(w: World, argv: string[], opts: MainOpts = {})
 {
     const lines: string[] = [];
     // an apply that hands a fetch file on keeps its <tmp> for the command's next step: inside the world, w.clean() takes it
-    const tmp = argv.includes('--apply') && !argv.includes('--tmp') ? ['--tmp', fs.mkdtempSync(path.join(w.dir, 'preferred-tools-'))] : [];
+    const tmp = argv.includes('--apply') && !argv.includes('--tmp') ? ['--tmp', fs.mkdtempSync(path.join(w.dir, 'alfred-tools-'))] : [];
     const code = await update.runUpdateCommand([...argv, ...tmp, '--project', w.project], { env: w.env, out: (s) => lines.push(s), machine: noLsp, now: NOW, registry: fakeRegistry({}), ...opts });
     return { code, text: lines.join('\n') };
 }
@@ -120,7 +120,7 @@ test('versionsOf reads the npm and PyPI document shapes (a deprecated or yanked 
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     try
     {
-        const env = { PREFERRED_TOOLS_NPM_URL: base, PREFERRED_TOOLS_PYPI_URL: base };
+        const env = { ALFRED_TOOLS_NPM_URL: base, ALFRED_TOOLS_PYPI_URL: base };
         assert.deepStrictEqual((await registry.versionsOf('npm', '@scope/pkg', { env })).map((x) => x.version), ['1.0.0', '1.2.0']);
         assert.deepStrictEqual((await registry.versionsOf('pypi', 'mypkg', { env })).map((x) => x.version), ['1.0']);
         await assert.rejects(registry.versionsOf('npm', 'missing', { env }), /HTTP 404/);
@@ -171,7 +171,7 @@ test('nothing behind: one line, and no write call', async () =>
     {
         install(w, { picks: { serena: { scope: 'local' } } });
         const c = await run(w, ['--check', '--no-refresh'], { registry: fakeRegistry(pypiSerena(['2.1.0', 60])) });
-        assert.match(c.text, /^preferred-tools: everything current$/m);
+        assert.match(c.text, /^alfred-tools: everything current$/m);
         const writesBefore = w.writes().length;
         const q = await run(w, ['--questions', '--no-refresh'], { registry: fakeRegistry(pypiSerena(['2.1.0', 60])) });
         assert.deepStrictEqual(JSON.parse(q.text), { offer: null, pick: [], cursorOffers: [], cursorNameQuestions: [] });
@@ -491,7 +491,7 @@ test('update: a pinned server on its own is skipped, not offered', async () =>
     {
         assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'context7', JSON.stringify(C7_PINNED), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         assert.match((await run(w, ['--check', '--no-refresh'], { registry: C7_AHEAD() })).text, /2\.0\.0 -> 9\.0\.0/, 'managed: offered');
-        ownRecord(path.join(w.project, '.preferred-tools'));
+        ownRecord(path.join(w.project, '.alfred-tools'));
         const c = await run(w, ['--check', '--no-refresh'], { registry: C7_AHEAD() });
         assert.strictEqual(c.code, 0);
         assert.match(c.text, /context7 \(local\): on its own - not checked/);
@@ -531,9 +531,9 @@ test('update offers and rewrites a lower-numbered helper copy; leaves a higher o
     const w = world();
     try
     {
-        const pt = path.join(w.project, '.preferred-tools');
-        const home = path.join(w.home, '.preferred-tools');
-        const helperAt = (root: string, n: number) => { fs.mkdirSync(root, { recursive: true }); fs.writeFileSync(path.join(root, 'mcp-headers.js'), roots.helperSource().replace(/^\/\/ preferred-tools mcp-headers \d+/, `// preferred-tools mcp-headers ${n}`)); };
+        const pt = path.join(w.project, '.alfred-tools');
+        const home = path.join(w.home, '.alfred-tools');
+        const helperAt = (root: string, n: number) => { fs.mkdirSync(root, { recursive: true }); fs.writeFileSync(path.join(root, 'mcp-headers.js'), roots.helperSource().replace(/^\/\/ alfred-tools mcp-headers \d+/, `// alfred-tools mcp-headers ${n}`)); };
         const lower = path.join(pt, 'mcp-headers.js');
         const higher = path.join(home, 'mcp-headers.js');
         assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'github', JSON.stringify({ type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${lower} GITHUB_PERSONAL_ACCESS_TOKEN Bearer` }), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
@@ -542,8 +542,8 @@ test('update offers and rewrites a lower-numbered helper copy; leaves a higher o
         helperAt(home, HV + 1);
         const c = await run(w, ['--check', '--no-refresh']);
         assert.strictEqual(c.code, 0, c.text);
-        assert.match(c.text, new RegExp(`Key helpers:\\n {2}mcp-headers\\.js in .*\\.preferred-tools +0 -> ${HV}`));
-        assert.match(c.text, /mcp-headers\.js in .*home.\.preferred-tools is newer than this plugin - update preferred-tools/);
+        assert.match(c.text, new RegExp(`Key helpers:\\n {2}mcp-headers\\.js in .*\\.alfred-tools +0 -> ${HV}`));
+        assert.match(c.text, /mcp-headers\.js in .*home.\.alfred-tools is newer than this plugin - update alfred-tools/);
         const q = JSON.parse((await run(w, ['--questions', '--no-refresh'])).text);
         const group = q.pick.flat().find((x: { id: string }) => x.id === 'update-helper');
         assert.strictEqual(group.header, 'Key helpers');
@@ -552,7 +552,7 @@ test('update offers and rewrites a lower-numbered helper copy; leaves a higher o
         const a = await run(w, ['--apply', `helper:${lower}`]);
         assert.strictEqual(a.code, 0, a.text);
         assert.strictEqual(fs.readFileSync(lower, 'utf8'), roots.helperSource());
-        assert.match(fs.readFileSync(higher, 'utf8'), new RegExp(`^// preferred-tools mcp-headers ${HV + 1}`), 'a higher number is left');
+        assert.match(fs.readFileSync(higher, 'utf8'), new RegExp(`^// alfred-tools mcp-headers ${HV + 1}`), 'a higher number is left');
         assert.doesNotMatch((await run(w, ['--check', '--no-refresh'])).text, /Key helpers:/);
     }
     finally { w.clean(); }
@@ -566,15 +566,15 @@ test('update offers a lower mcp-bridge.js for rewriting beside the helper', asyn
     const w = world();
     try
     {
-        const pt = path.join(w.project, '.preferred-tools');
+        const pt = path.join(w.project, '.alfred-tools');
         fs.mkdirSync(pt, { recursive: true });
         fs.writeFileSync(path.join(pt, 'mcp-headers.js'), roots.helperSource());
         const bridgeFile = path.join(pt, 'mcp-bridge.js');
-        fs.writeFileSync(bridgeFile, roots.shippedSource('bridge').replace(/^\/\/ preferred-tools mcp-bridge \d+/, '// preferred-tools mcp-bridge 0'));
+        fs.writeFileSync(bridgeFile, roots.shippedSource('bridge').replace(/^\/\/ alfred-tools mcp-bridge \d+/, '// alfred-tools mcp-bridge 0'));
         assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'sentry', JSON.stringify(bridgeEntry(pt)), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         const c = await run(w, ['--check', '--no-refresh'], { registry: fakeRegistry({ 'npm:mcp-remote': [{ version: '0.16.0', time: ago(20) }] }) });
         assert.strictEqual(c.code, 0, c.text);
-        assert.match(c.text, new RegExp(`mcp-bridge\\.js in .*\\.preferred-tools +0 -> ${BV}`));
+        assert.match(c.text, new RegExp(`mcp-bridge\\.js in .*\\.alfred-tools +0 -> ${BV}`));
         const a = await run(w, ['--apply', `bridge:${bridgeFile}`], { registry: fakeRegistry({ 'npm:mcp-remote': [{ version: '0.16.0', time: ago(20) }] }) });
         assert.strictEqual(a.code, 0, a.text);
         assert.strictEqual(fs.readFileSync(bridgeFile, 'utf8'), roots.shippedSource('bridge'));
@@ -587,7 +587,7 @@ test("update moves a bridge's mcp-remote pin and its cut-off", async () => {
     const w = world();
     try
     {
-        const pt = path.join(w.project, '.preferred-tools');
+        const pt = path.join(w.project, '.alfred-tools');
         const e = bridgeEntry(pt);
         assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'sentry', JSON.stringify(e), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         const reg = fakeRegistry({ 'npm:mcp-remote': [{ version: '0.16.0', time: ago(25) }, { version: '0.16.4', time: ago(8) }] });
@@ -620,17 +620,17 @@ test('update offers the new ways to pass data that fix knows - a 0.1.x key heade
     try
     {
         const v = `gh-${crypto.randomBytes(10).toString('hex')}`;
-        const pt = path.join(w.project, '.preferred-tools');
-        for (const root of [pt, path.join(w.home, '.preferred-tools')]) { fs.mkdirSync(root, { recursive: true }); fs.writeFileSync(path.join(root, '.mcps-secrets'), `ACME_GH=${v}\n`); }
+        const pt = path.join(w.project, '.alfred-tools');
+        for (const root of [pt, path.join(w.home, '.alfred-tools')]) { fs.mkdirSync(root, { recursive: true }); fs.writeFileSync(path.join(root, '.mcps-secrets'), `ACME_GH=${v}\n`); }
         const gh = { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headers: { Authorization: 'Bearer ${ACME_GH}' } };
         for (const scope of ['local', 'user']) assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'github', JSON.stringify(gh), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
         // 0.2.0's shape: a project-scope data path relative to the project
-        const memory = { command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: '.preferred-tools/memory/memory.db' } };
+        const memory = { command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: '.alfred-tools/memory/memory.db' } };
         assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'memory', JSON.stringify(memory), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
         const registry = fakeRegistry({ 'pypi:mcp-memory-service': [{ version: '12.1.1', time: ago(40) }, { version: '12.5.0', time: ago(20) }] });
         // already on the list (0.5.0), so list-import has nothing to offer here
         listed(pt, [['github', 'local', gh], ['memory', 'project', memory]]);
-        listed(path.join(w.home, '.preferred-tools'), [['github', 'user', gh]]);
+        listed(path.join(w.home, '.alfred-tools'), [['github', 'user', gh]]);
 
         const c = await run(w, ['--check', '--no-refresh'], { registry });
         assert.strictEqual(c.code, 0, c.text);
@@ -648,7 +648,7 @@ test('update offers the new ways to pass data that fix knows - a 0.1.x key heade
         assert.ok(group.options.some((o: { label: string }) => o.label === 'github (local): key-to-helper'), group.options.map((o: { label: string }) => o.label).join('\n'));
 
         // an upgrade picked before the pin still runs after it, on the registration as it is then: both changes stay
-        const tmp = fs.mkdtempSync(path.join(w.dir, 'preferred-tools-'));
+        const tmp = fs.mkdtempSync(path.join(w.dir, 'alfred-tools-'));
         const a = await run(w, ['--apply', 'upgrade:project-relative-path:memory~project,mcp:memory~project,upgrade:key-to-helper:github~local', '--tmp', tmp], { registry });
         assert.strictEqual(a.code, 0, a.text);
         assert.ok(!a.text.includes(v), 'no key printed');
@@ -674,21 +674,21 @@ test('update offers the new ways to pass data that fix knows - a 0.1.x key heade
     finally { w.clean(); }
 });
 
-test('an upgrade that cannot apply on its own - a key not filled - is a note naming /preferred-tools:fix, never an offer', async () =>
+test('an upgrade that cannot apply on its own - a key not filled - is a note naming /alfred-tools:fix, never an offer', async () =>
 {
     const w = world();
     try
     {
         const gh = { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headers: { Authorization: 'Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}' } };
         assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'github', JSON.stringify(gh), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
-        listed(path.join(w.project, '.preferred-tools'), [['github', 'local', gh]]);
+        listed(path.join(w.project, '.alfred-tools'), [['github', 'local', gh]]);
         const c = await run(w, ['--check', '--no-refresh']);
         assert.strictEqual(c.code, 0, c.text);
         assert.doesNotMatch(c.text, /New ways to pass data/);
-        assert.match(c.text, /Notes:\n(.*\n)* {2}github \(local\): .* - not applied here: put GITHUB_PERSONAL_ACCESS_TOKEN's value in .*, then run \/preferred-tools:fix\n/);
-        assert.strictEqual((c.text.match(/\/preferred-tools:fix/g) || []).length, 1, 'the note names fix once');
+        assert.match(c.text, /Notes:\n(.*\n)* {2}github \(local\): .* - not applied here: put GITHUB_PERSONAL_ACCESS_TOKEN's value in .*, then run \/alfred-tools:fix\n/);
+        assert.strictEqual((c.text.match(/\/alfred-tools:fix/g) || []).length, 1, 'the note names fix once');
         // never 'everything current' while a note waits on the user (review)
-        assert.strictEqual(c.text.trim().split('\n').pop(), 'preferred-tools: nothing to update - 1 waits on you first (the notes above)');
+        assert.strictEqual(c.text.trim().split('\n').pop(), 'alfred-tools: nothing to update - 1 waits on you first (the notes above)');
         const q = JSON.parse((await run(w, ['--questions', '--no-refresh'])).text);
         assert.ok(!q.pick.flat().some((x: { id: string }) => x.id === 'update-upgrade'));
     }
@@ -697,8 +697,8 @@ test('an upgrade that cannot apply on its own - a key not filled - is a note nam
 
 // ---- the upgrade review (2026-11-12): the 0.2.0 path, one registration per pick, one fetch step per server and scope ---------
 
-const PW = (pin: string) => ({ command: 'npx', args: ['-y', `@playwright/mcp@${pin}`, '--browser', 'chrome', '--user-data-dir', '.preferred-tools/playwright-chrome', '--output-dir', '.preferred-tools/playwright-chrome/output', '--viewport-size', '1280x720'] });
-const MEM = (pin = '12.1.1') => ({ command: 'uvx', args: ['--python', '3.13', '--from', `mcp-memory-service[sqlite]==${pin}`, 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: '.preferred-tools/memory/memory.db' } });
+const PW = (pin: string) => ({ command: 'npx', args: ['-y', `@playwright/mcp@${pin}`, '--browser', 'chrome', '--user-data-dir', '.alfred-tools/playwright-chrome', '--output-dir', '.alfred-tools/playwright-chrome/output', '--viewport-size', '1280x720'] });
+const MEM = (pin = '12.1.1') => ({ command: 'uvx', args: ['--python', '3.13', '--from', `mcp-memory-service[sqlite]==${pin}`, 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: '.alfred-tools/memory/memory.db' } });
 
 test("'All of them' on a 0.2.0 .mcp.json - relative paths, out of order, a pin behind - ends in order with no CHECK, the new pin never health-checked before its fetch", async () =>
 {
@@ -711,7 +711,7 @@ test("'All of them' on a 0.2.0 .mcp.json - relative paths, out of order, a pin b
         const registry = fakeRegistry({ 'npm:@playwright/mcp': [{ version: '0.0.83', time: ago(60) }, { version: '0.0.90', time: ago(10) }], 'pypi:mcp-memory-service': [{ version: '12.1.1', time: ago(40) }] });
         const c = await run(w, ['--check', '--no-refresh'], { registry });
         assert.match(c.text, /\n {2}\S*\.mcp\.json +mcp-order: /, c.text);
-        const tmp = fs.mkdtempSync(path.join(w.dir, 'preferred-tools-'));
+        const tmp = fs.mkdtempSync(path.join(w.dir, 'alfred-tools-'));
         const before = w.calls().length;
         const a = await run(w, ['--apply', 'all', '--tmp', tmp], { registry });
         assert.strictEqual(a.code, 0, a.text);
@@ -720,8 +720,8 @@ test("'All of them' on a 0.2.0 .mcp.json - relative paths, out of order, a pin b
         assert.deepStrictEqual(Object.keys(doc.mcpServers), ['memory', 'playwright-chrome'], 'in the catalog order');
         const pw = doc.mcpServers['playwright-chrome'];
         assert.ok(pw.args.includes('@playwright/mcp@0.0.90'), JSON.stringify(pw));
-        assert.strictEqual(pw.args[pw.args.indexOf('--user-data-dir') + 1], path.join(w.project, '.preferred-tools', 'playwright-chrome'));
-        assert.strictEqual(doc.mcpServers.memory.env.MCP_MEMORY_SQLITE_PATH, path.join(w.project, '.preferred-tools', 'memory', 'memory.db'));
+        assert.strictEqual(pw.args[pw.args.indexOf('--user-data-dir') + 1], path.join(w.project, '.alfred-tools', 'playwright-chrome'));
+        assert.strictEqual(doc.mcpServers.memory.env.MCP_MEMORY_SQLITE_PATH, path.join(w.project, '.alfred-tools', 'memory', 'memory.db'));
         // no `claude mcp get` of the new pin before fetch.ts has downloaded it (fetch.ts says why)
         const calls = w.calls().slice(before);
         const newPin = calls.findIndex((x) => x[1] === 'add-json' && x[2] === 'playwright-chrome' && x[3].includes('@playwright/mcp@0.0.90'));
@@ -745,8 +745,8 @@ test('an upgrade picked for one registration never rewrites another of the same 
         const a = await run(w, ['--apply', 'upgrade:project-relative-path:memory~project'], { registry });
         assert.strictEqual(a.code, 0, a.text);
         const doc = readJson(path.join(w.project, '.mcp.json'));
-        assert.strictEqual(doc.mcpServers.memory.env.MCP_MEMORY_SQLITE_PATH, path.join(w.project, '.preferred-tools', 'memory', 'memory.db'));
-        assert.strictEqual(doc.mcpServers['memory-work'].env.MCP_MEMORY_SQLITE_PATH, '.preferred-tools/memory/memory.db', 'not picked: left');
+        assert.strictEqual(doc.mcpServers.memory.env.MCP_MEMORY_SQLITE_PATH, path.join(w.project, '.alfred-tools', 'memory', 'memory.db'));
+        assert.strictEqual(doc.mcpServers['memory-work'].env.MCP_MEMORY_SQLITE_PATH, '.alfred-tools/memory/memory.db', 'not picked: left');
         const all = await run(w, ['--apply', 'all'], { registry });
         assert.strictEqual(all.code, 0, all.text);
         assert.doesNotMatch(all.text, /^CHECK/m, all.text);
@@ -762,7 +762,7 @@ test('one server pin-bumped at two scopes keeps a fetch step for each', async ()
         const m = { command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: path.join(w.home, 'mem.db') } };
         for (const scope of ['user', 'local']) assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'memory', JSON.stringify(m), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
         const registry = fakeRegistry({ 'pypi:mcp-memory-service': [{ version: '12.1.1', time: ago(40) }, { version: '12.5.0', time: ago(20) }] });
-        const tmp = fs.mkdtempSync(path.join(w.dir, 'preferred-tools-'));
+        const tmp = fs.mkdtempSync(path.join(w.dir, 'alfred-tools-'));
         const a = await run(w, ['--apply', 'all', '--tmp', tmp], { registry });
         assert.strictEqual(a.code, 0, a.text);
         assert.deepStrictEqual(readJson(path.join(tmp, 'fetch.json')).fetch.map((s: { name: string; scope: string }) => `${s.name}~${s.scope}`).sort(), ['memory~local', 'memory~user']);
@@ -783,7 +783,7 @@ test('a 0.4.x own server is skipped before list-import: update all leaves it byt
     try
     {
         assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'context7', JSON.stringify(C7_PINNED), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
-        ownRecord(path.join(w.project, '.preferred-tools'));
+        ownRecord(path.join(w.project, '.alfred-tools'));
         const before = JSON.stringify((readAccount(w.env, w.project).local as ServerMap & { context7?: ServerEntry }).context7);
         const a = await run(w, ['--apply', 'all', '--no-refresh'], { registry: C7_AHEAD() });
         assert.doesNotMatch(a.text, /2\.0\.0 -> 9\.0\.0/, a.text);
@@ -799,7 +799,7 @@ const accountOf = (w: World) => readJson(accountFile(w.env));
 function bothContext7(w: World)
 {
     install(w, { clients: ['claude', 'cursor'], picks: { context7: { route: 'remote', scope: 'user', token: true } } });
-    const listFile = path.join(w.home, '.preferred-tools', 'mcps.json');
+    const listFile = path.join(w.home, '.alfred-tools', 'mcps.json');
     const cursorFile = path.join(w.home, '.cursor', 'mcp.json');
     // an env pair the user kept in Cursor's copy ('Keep the change in Cursor'): in the list and in the file alike
     const list = readJson(listFile);
@@ -846,7 +846,7 @@ test('a drifted Cursor copy gets no cursor-pin offer and is named', async () =>
         writeJson(cursorFile, doc);
         const c = await run(w, ['--check', '--no-refresh'], { registry: fakeRegistry(npmRemote(['0.16.0', 60], ['0.17.0', 8])) });
         assert.doesNotMatch(c.text, /cursor-pin|\(user, Cursor\)\s+0\.16\.0/);
-        assert.match(c.text, /context7 \(user\): Cursor's copy in .*mcp\.json differs from the list - not checked; \/preferred-tools:fix settles it/);
+        assert.match(c.text, /context7 \(user\): Cursor's copy in .*mcp\.json differs from the list - not checked; \/alfred-tools:fix settles it/);
     }
     finally { w.clean(); }
 });
@@ -864,7 +864,7 @@ test('update moves the shared form\'s mcp-remote pin in Claude Code', async () =
         assert.strictEqual(a.code, 0, a.text);
         const e = accountOf(w).mcpServers.atlassian;
         assert.ok(e.args.includes('mcp-remote@0.17.0'), JSON.stringify(e));
-        assert.strictEqual(e.env.MCP_REMOTE_CONFIG_DIR, path.join(w.home, '.preferred-tools'));
+        assert.strictEqual(e.env.MCP_REMOTE_CONFIG_DIR, path.join(w.home, '.alfred-tools'));
     }
     finally { w.clean(); }
 });
@@ -873,16 +873,16 @@ test('update offers a lower serena-context.yml as context:<file> and rewrites it
     const w = world();
     try
     {
-        const pt = path.join(w.project, '.preferred-tools');
+        const pt = path.join(w.project, '.alfred-tools');
         fs.mkdirSync(pt, { recursive: true });
         const file = path.join(pt, 'serena-context.yml');
-        fs.writeFileSync(file, roots.shippedSource('serenaContext').replace(/^# preferred-tools serena-context \d+/, '# preferred-tools serena-context 0'));
+        fs.writeFileSync(file, roots.shippedSource('serenaContext').replace(/^# alfred-tools serena-context \d+/, '# alfred-tools serena-context 0'));
         const S = { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20T23:59:59Z', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server', '--context', file, '--project-from-cwd'], env: { SERENA_USAGE_REPORTING: 'false', SERENA_HOME: path.join(pt, 'serena') } };
         assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'serena', JSON.stringify(S), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         const registry = fakeRegistry({ 'pypi:serena-agent': [{ version: '2.1.0', time: ago(30) }] });
         const c = await run(w, ['--check', '--no-refresh'], { registry });
         assert.strictEqual(c.code, 0, c.text);
-        assert.match(c.text, /serena-context\.yml in .*\.preferred-tools +0 -> 1/);
+        assert.match(c.text, /serena-context\.yml in .*\.alfred-tools +0 -> 2/);
         const a = await run(w, ['--apply', `context:${file}`], { registry });
         assert.strictEqual(a.code, 0, a.text);
         assert.strictEqual(fs.readFileSync(file, 'utf8'), roots.shippedSource('serenaContext'));
@@ -892,7 +892,7 @@ test('update offers a lower serena-context.yml as context:<file> and rewrites it
 });
 
 // ---- 0.5.0: every pin move reaches the list and Cursor; update offers Cursor once per root (spec D1, D9) ------------
-const projectList = (w: World) => path.join(w.project, '.preferred-tools', 'mcps.json');
+const projectList = (w: World) => path.join(w.project, '.alfred-tools', 'mcps.json');
 const projectCursor = (w: World) => path.join(w.project, '.cursor', 'mcp.json');
 const listed0 = (w: World, name: string) => readJson(projectList(w)).servers.find((x: { name: string }) => x.name === name);
 const cursorCopy = (w: World, name: string, file = projectCursor(w)) => readJson(file).mcpServers[name];
@@ -914,7 +914,7 @@ test('a registration whose pin is newer than its list entry is updated from the 
         reAdd(w, 'serena', bumpEntry(localReg(w, 'serena').entry, 'serena-agent', '2.2.0', '2026-10-01T23:59:59Z'));
         const reg = fakeRegistry(pypiSerena(['2.1.0', 90], ['2.2.0', 40], ['2.3.0', 20]));
         const c = await run(w, ['--check', '--no-refresh'], { registry: reg });
-        assert.match(c.text, /serena was changed outside preferred-tools/);
+        assert.match(c.text, /serena was changed outside alfred-tools/);
         assert.match(c.text, /serena \(local\)\s+2\.2\.0 -> 2\.3\.0/, 'the offer starts from the registration, not the list');
         const a = await run(w, ['--apply', 'mcp:serena~local'], { registry: reg });
         assert.strictEqual(a.code, 0, a.text);
@@ -956,7 +956,7 @@ test('update moves the shared sign-in form\'s mcp-remote pin, and the list and t
         assert.strictEqual(a.code, 0, a.text);
         const has = (e: ServerEntry) => e.args!.includes('mcp-remote@0.17.0');
         assert.ok(has(accountOf(w).mcpServers.atlassian), 'Claude Code');
-        assert.ok(has(readJson(path.join(w.home, '.preferred-tools', 'mcps.json')).servers.find((x: { name: string }) => x.name === 'atlassian').entry), 'the list');
+        assert.ok(has(readJson(path.join(w.home, '.alfred-tools', 'mcps.json')).servers.find((x: { name: string }) => x.name === 'atlassian').entry), 'the list');
         assert.ok(has(cursorCopy(w, 'atlassian', path.join(w.home, '.cursor', 'mcp.json'))), 'Cursor');
     }
     finally { w.clean(); }
@@ -995,7 +995,7 @@ test('an entry update does not write is named and its list entry left unchanged'
         reAdd(w, 'memory', { ...m, args: [...m.args!, '--debug'] });
         const reg = fakeRegistry(pypiSerena(['2.1.0', 60], ['2.2.0', 20]));
         const c = await run(w, ['--check', '--no-refresh'], { registry: reg });
-        assert.match(c.text, /memory was changed outside preferred-tools/);
+        assert.match(c.text, /memory was changed outside alfred-tools/);
         const a = await run(w, ['--apply', 'mcp:serena~local'], { registry: reg });
         assert.strictEqual(a.code, 0, a.text);
         assert.strictEqual(JSON.stringify(listed0(w, 'memory')), before, 'the list keeps memory as it was');
@@ -1019,10 +1019,10 @@ test('update neither re-adds a missing copy nor rewrites a drifted Cursor copy',
         writeJson(projectCursor(w), doc);
         const reg = fakeRegistry(pypiSerena(['2.1.0', 60], ['2.2.0', 20]));
         const c = await run(w, ['--check', '--no-refresh'], { registry: reg });
-        assert.match(c.text, /memory is on the list but not in Claude Code - run \/preferred-tools:fix/);
+        assert.match(c.text, /memory is on the list but not in Claude Code - run \/alfred-tools:fix/);
         const a = await run(w, ['--apply', 'mcp:serena~local'], { registry: reg });
         assert.strictEqual(a.code, 0, a.text);
-        assert.match(a.text, /serena: Cursor's copy was changed by hand - left; run \/preferred-tools:fix/);
+        assert.match(a.text, /serena: Cursor's copy was changed by hand - left; run \/alfred-tools:fix/);
         assert.strictEqual(serenaPin(localReg(w, 'serena').entry), '2.2.0', 'Claude Code moves');
         const copy = cursorCopy(w, 'serena');
         assert.ok(copy.args.includes('--extra') && serenaPin(copy) === '2.1.0', 'the drifted Cursor copy is left as it is');
@@ -1039,7 +1039,7 @@ test('cursor-offer: two options, Set them up recommended and first; Not now is k
     {
         install(w, { clients: ['claude'], picks: { serena: { scope: 'local' } } });
         fs.mkdirSync(path.join(w.home, '.cursor'), { recursive: true });
-        const root = path.join(w.project, '.preferred-tools');
+        const root = path.join(w.project, '.alfred-tools');
         const q = JSON.parse((await run(w, ['--questions', '--no-refresh'])).text);
         assert.strictEqual(q.cursorOffers.length, 1);
         const ask = q.cursorOffers[0];
@@ -1077,13 +1077,13 @@ test('cursor-offer from 0.4.x: a root with no list yet is offered in the same up
         install(w, { clients: ['claude'], picks: { serena: { scope: 'local' } } });
         fs.rmSync(projectList(w)); // 0.4.x wrote no list
         fs.mkdirSync(path.join(w.home, '.cursor'), { recursive: true });
-        const root = path.join(w.project, '.preferred-tools');
+        const root = path.join(w.project, '.alfred-tools');
         const q = JSON.parse((await run(w, ['--questions', '--no-refresh'])).text);
         assert.deepStrictEqual(q.cursorOffers.map((x: { id: string }) => x.id), [`cursor-offer:${root}`], 'asked in the first update');
         // without the import picked, the offer has no list to write: left, and said so
         const skipped = await run(w, ['--apply', 'none', '--input', `cursor-offer:${root}=set`]);
         assert.strictEqual(skipped.code, 0, skipped.text);
-        assert.match(skipped.text, new RegExp(`NOT OFFERED cursor-offer:${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: its servers join the list through upgrade:list-import:.*, which was not picked - run /preferred-tools:update again`));
+        assert.match(skipped.text, new RegExp(`NOT OFFERED cursor-offer:${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: its servers join the list through upgrade:list-import:.*, which was not picked - run /alfred-tools:update again`));
         assert.ok(!fs.existsSync(projectCursor(w)) && !fs.existsSync(projectList(w)));
         // picked with the import: the list is written, then Cursor
         const a = await run(w, ['--apply', 'all', '--input', `cursor-offer:${root}=set`, '--no-refresh']);
@@ -1103,12 +1103,12 @@ test('update\'s Cursor offer asks for a taken name, and an unanswered one is lef
         fs.mkdirSync(path.join(w.home, '.cursor'), { recursive: true });
         const mine = { command: 'my-memory' };
         writeJson(projectCursor(w), { mcpServers: { memory: mine } });
-        const root = path.join(w.project, '.preferred-tools');
+        const root = path.join(w.project, '.alfred-tools');
         const q = JSON.parse((await run(w, ['--questions', '--no-refresh'])).text);
         assert.deepStrictEqual(q.cursorNameQuestions.map((x: { question: { id: string } }) => x.question.id), [`cursor-name-memory@${projectCursor(w)}`]);
         const a = await run(w, ['--apply', 'none', '--input', `cursor-offer:${root}=set`]);
         assert.strictEqual(a.code, 0, a.text);
-        assert.match(a.text, /memory: Cursor's .*mcp\.json already has its own memory - left; run \/preferred-tools:configure to choose/);
+        assert.match(a.text, /memory: Cursor's .*mcp\.json already has its own memory - left; run \/alfred-tools:configure to choose/);
         assert.deepStrictEqual(cursorCopy(w, 'memory'), mine);
         assert.deepStrictEqual(listed0(w, 'memory').clients, ['claude']);
         assert.deepStrictEqual(listed0(w, 'serena').clients, ['claude', 'cursor'], 'the rest of the offer applies');

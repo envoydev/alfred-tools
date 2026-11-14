@@ -115,7 +115,7 @@ test('a root is asked once, inside the first tool of its family', () => {
     const after = ids.indexOf('serena:questions') >= 0 ? ids.indexOf('serena:questions') : ids.indexOf('serena:keys');
     assert.ok(ids.indexOf('root:project') < after, ids.join(', '));
     // a root already answered is not asked
-    assert.ok(!walk(inv(MAC), { rows: ['serena'], walk: 'each', done: ['clients', 'settings'], roots: { project: { id: 'preferred-tools' } } }).some((s) => s.id.startsWith('root:')));
+    assert.ok(!walk(inv(MAC), { rows: ['serena'], walk: 'each', done: ['clients', 'settings'], roots: { project: { id: 'alfred-tools' } } }).some((s) => s.id.startsWith('root:')));
 });
 
 test('a key answered No key or OAuth leaves out the key name', () => {
@@ -142,17 +142,17 @@ test("configure: a registration target starts with its own question; 'Leave it o
     const q = first.call![0];
     assert.strictEqual(q!.question, 'Who looks after gitlab?');
     assert.deepStrictEqual(q!.options.map((o) => [o.label, o.description]), [
-        ['preferred-tools (Recommended)', 'configure, update and fix look after it'],
-        ['Leave it on its own', 'nothing in this plugin changes its entry again; in .mcp.json it sits with your own servers, after the managed ones; saved in /work/shop/.preferred-tools/mcps.json'],
+        ['alfred-tools (Recommended)', 'configure, update and fix look after it'],
+        ['Leave it on its own', 'nothing in this plugin changes its entry again; in .mcp.json it sits with your own servers, after the managed ones; saved in /work/shop/.alfred-tools/mcps.json'],
     ]);
     assert.deepStrictEqual(Object.values(first.answers![q!.id] as object), [{ key: 'mcp:gitlab~project', choice: 'manage' }, { key: 'mcp:gitlab~project', choice: 'own' }]);
     // a local target: no .mcp.json line
-    const local = ownStep({ key: 'mcp:context7~local', name: 'context7', scope: 'local' }, '/work/shop/.preferred-tools');
-    assert.strictEqual(local.question.options[1]!.description, 'nothing in this plugin changes its entry again; saved in /work/shop/.preferred-tools/mcps.json');
+    const local = ownStep({ key: 'mcp:context7~local', name: 'context7', scope: 'local' }, '/work/shop/.alfred-tools');
+    assert.strictEqual(local.question.options[1]!.description, 'nothing in this plugin changes its entry again; saved in /work/shop/.alfred-tools/mcps.json');
     // 'Leave it on its own': the next step is the next target's
     const left = nextQuestion(i, { targets: ['mcp:gitlab~project', 'mcp:context7~local'], existing: { 'mcp:gitlab~project': 'own' }, done: ['mcp:gitlab~project:own'] }, catalog, OPTS(MAC));
     assert.strictEqual(left.id, 'mcp:context7~local:own');
-    // 'preferred-tools': its own questions follow
+    // 'alfred-tools': its own questions follow
     const managed = walk(i, { targets: ['mcp:gitlab~project'] });
     assert.deepStrictEqual(managed.map((s) => s.id).slice(0, 2), ['mcp:gitlab~project:own', 'mcp:gitlab~project:questions']);
     assert.ok(!managed.some((s) => s.id.startsWith('root:')), 'configure asks no root for a target');
@@ -247,7 +247,7 @@ const bridgeWalk = (base: { os: string; arch: string; project: string }, { secre
     const home = path.join(d, 'home');
     fs.mkdirSync(project, { recursive: true });
     fs.mkdirSync(home, { recursive: true });
-    if (secrets) { fs.mkdirSync(path.join(project, '.preferred-tools')); fs.writeFileSync(path.join(project, '.preferred-tools', '.mcps-secrets'), secrets); }
+    if (secrets) { fs.mkdirSync(path.join(project, '.alfred-tools')); fs.writeFileSync(path.join(project, '.alfred-tools', '.mcps-secrets'), secrets); }
     const i = inv({ ...base, project });
     const steps: WalkStep[] = [];
     const picks: Picks = { rows: ['sentry'], walk: 'each', done: ['clients', 'settings'], routes: { sentry: 'bridge' } };
@@ -319,7 +319,7 @@ function appsHome({ cursorDir = false, onPath = [] }: { cursorDir?: boolean; onP
 const C7_HTTP = { type: 'http', url: 'https://mcp.context7.com/mcp' };
 const c7reg = (scope = 'project'): InvRegistration => ({ name: 'c7', scope, entry: C7_HTTP, rowId: 'context7', route: 'remote', own: false, alfredRetired: false, choice: null });
 const c7listed = (scope: string, clients: string[]): ListServer => ({ name: 'c7', scope, row: 'context7', route: 'remote', clients, entry: C7_HTTP, key: null });
-const LIST = '/work/shop/.preferred-tools/mcps.json';
+const LIST = '/work/shop/.alfred-tools/mcps.json';
 
 test('the clients ask: two options, one recommended and first, following detection', () => {
     const withCursorDir = () => appsHome({ cursorDir: true });

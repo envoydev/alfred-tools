@@ -15,7 +15,7 @@ import { load } from '../scripts/catalog/catalog.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import { renderPlan } from '../scripts/plan/render.ts';
 import { signInParts, signInFormOf } from '../scripts/entries/sign-in.ts';
-import { READ_GUARD } from '../scripts/roots/roots.ts';
+import { FILES, READ_GUARD } from '../scripts/roots/roots.ts';
 import * as wsLib from '../scripts/roots/workspace.ts';
 import * as kept from '../scripts/core/kept.ts';
 import { world } from './helpers.ts';
@@ -31,12 +31,12 @@ import type { ApplyCtx, ApplyReport } from '../scripts/apply/types.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
 
 const POSIX_FIXTURE = process.platform === 'win32' && 'NOT RUN: a darwin fixture meets node\'s win32 path module on this host (the matrix covers Windows)';
-const PROJECT_LIST = '/work/shop/.preferred-tools/mcps.json';
-const GLOBAL_LIST = '/Users/me/.preferred-tools/mcps.json';
+const PROJECT_LIST = '/work/shop/.alfred-tools/mcps.json';
+const GLOBAL_LIST = '/Users/me/.alfred-tools/mcps.json';
 const C7 = { type: 'http', url: 'https://mcp.context7.com/mcp' };
 const listed = (name: string, scope: string, extra: Partial<ListServer> = {}): ListServer => ({ name, scope, row: 'context7', route: 'remote', clients: ['claude'], entry: C7, key: null, ...extra });
 const inv = (lists: NonNullable<Inventory['lists']> = { project: null, global: null }) => ({ project: '/work/shop', os: 'darwin', registrations: [], roots: { map: null }, lists }) as unknown as Inventory;
-const ctx = (roots: Roots = { project: '/work/shop/.preferred-tools', global: '/Users/me/.preferred-tools' }): ListCtx => ({ platform: 'darwin', project: '/work/shop', home: '/Users/me', roots, uses: [], exists: () => false });
+const ctx = (roots: Roots = { project: '/work/shop/.alfred-tools', global: '/Users/me/.alfred-tools' }): ListCtx => ({ platform: 'darwin', project: '/work/shop', home: '/Users/me', roots, uses: [], exists: () => false });
 const add = (name: string, scope: string) => ({ op: 'mcp-add', name, scope, entry: C7, row: 'context7', route: 'remote' }) as McpAddStep;
 
 test('an add upserts into its family root\'s list, after its own registration step, entry filled at apply', { skip: POSIX_FIXTURE }, () => {
@@ -77,12 +77,12 @@ test('a family with no root and no list gets no step; a remove of a server no li
 
 test('install over 0.4.x registrations imports the family it writes', { skip: POSIX_FIXTURE }, () => {
     const serena: InvRegistration = { name: 'serena', scope: 'project', rowId: 'serena', route: 'local', own: false, alfredRetired: false, choice: null, entry: { command: 'uvx', args: ['--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'] } };
-    const i = { ...inv({ project: { file: PROJECT_LIST, servers: [], own: [], old: '/work/shop/.preferred-tools/preferred-tools.json' }, global: null }), registrations: [serena] };
+    const i = { ...inv({ project: { file: PROJECT_LIST, servers: [], own: [], old: `/work/shop/.alfred-tools/${FILES.record}` }, global: null }), registrations: [serena] };
     const steps = listSteps(i, ctx(), { notes: [] }, [add('memory', 'project')]) as ListWriteStep[];
     assert.deepStrictEqual(steps.map((s) => s.op), ['list-write', 'retire-record']);
     assert.deepStrictEqual(steps[0]!.upserts.map((u) => [u.server.name, u.after, u.server.clients]), [['memory', 'mcp:memory~project', ['claude']], ['serena', null, ['claude']]]);
     assert.deepStrictEqual(steps[0]!.upserts[1]!.server.entry, serena.entry, 'an imported server carries its entry as read');
-    assert.strictEqual(steps[1]!.file, '/work/shop/.preferred-tools/preferred-tools.json');
+    assert.strictEqual(steps[1]!.file, `/work/shop/.alfred-tools/${FILES.record}`);
 });
 
 // ---- Cursor's files (spec D2, D4, D4a): cursor-write steps and the cursor-name-taken question --------------------------
@@ -100,7 +100,7 @@ function cursorWorld({ cursor, servers = [], under = null }: { cursor?: string; 
     const project = path.join(dir, under || '', 'shop');
     const home = path.join(dir, 'home');
     for (const d of [project, home]) fs.mkdirSync(d, { recursive: true });
-    const listFile = path.join(project, '.preferred-tools', 'mcps.json');
+    const listFile = path.join(project, '.alfred-tools', 'mcps.json');
     const cursorFile = path.join(project, '.cursor', 'mcp.json');
     if (servers.length) { fs.mkdirSync(path.dirname(listFile), { recursive: true }); fs.writeFileSync(listFile, JSON.stringify({ version: 1, servers, own: [] })); }
     if (typeof cursor === 'string') { fs.mkdirSync(path.dirname(cursorFile), { recursive: true }); fs.writeFileSync(cursorFile, cursor); }
@@ -132,7 +132,7 @@ test('a name Cursor already has asks cursor-name-taken, Replace recommended for 
     assert.strictEqual(q.id, `cursor-name-serena@${f}`);
     assert.ok(q.header.length <= 12, q.header);
     assert.deepStrictEqual(Object.values(answers), ['replace', 'keep']);
-    assert.match(q.question, /already has a server named serena that preferred-tools did not write/);
+    assert.match(q.question, /already has a server named serena that alfred-tools did not write/);
 });
 
 test('another server under that name recommends Keep', () => {
@@ -277,7 +277,7 @@ test('a project inside a parent repo gets the no-workspace note; a repo root wit
     // Global scope alone: no note
     const g = cursorWorld({ under: 'mono2' });
     fs.mkdirSync(path.join(g.dir, 'mono2', '.git'), { recursive: true });
-    const gl = path.join(g.home, '.preferred-tools', 'mcps.json');
+    const gl = path.join(g.home, '.alfred-tools', 'mcps.json');
     const out = outOf({ op: 'list-write', file: gl, family: 'global', upserts: [{ server: srv('serena', 'user'), after: null, cursorFile: null }], drops: [], own: null, why: 'x' });
     const steps = cursorSteps(g.inv, { ...g.ctx, roots: { project: null, global: path.dirname(gl) } }, out, {});
     assert.deepStrictEqual(steps.map((s) => [s.file, s.lists]), [[path.join(g.home, '.cursor', 'mcp.json'), [{ file: gl, scopes: ['user'] }]]]);
@@ -303,7 +303,7 @@ test('a member file holding the name asks for that file, keyed <name>@<file>', (
 const MR = catalogAll.byId.get('sentry')!.routes.bridge!.package!;
 const hinv = (extra: Record<string, unknown> = {}) => ({ version: 1, os: 'darwin', arch: 'arm64', project: '/work/shop', cli: { ok: true }, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, roots: { map: null }, lists: { project: null, global: null }, ...extra }) as unknown as Inventory;
 const HOPTS = { env: {}, home: '/Users/me' };
-const GROOT = '/Users/me/.preferred-tools';
+const GROOT = '/Users/me/.alfred-tools';
 const GLIST = `${GROOT}/mcps.json`;
 const hreg = (name: string, rowId: string, entry: ServerEntry, scope = 'user', route = 'remote'): InvRegistration => ({ name, scope, entry, rowId, route, own: false, alfredRetired: false, choice: null });
 const hlisted = (name: string, row: string, entry: ServerEntry, clients: string[], scope = 'user', extra: Partial<ListServer> = {}): ListServer => ({ name, scope, row, route: 'remote', clients, entry, key: null, ...extra });
@@ -403,12 +403,12 @@ test('a root where git would commit mcp-remote-v1/ gets the Claude-only http for
     const root = path.join(w.project, 'tools');
     fs.mkdirSync(root);
     fs.writeFileSync(path.join(root, 'notes.md'), 'mine\n');
-    fs.writeFileSync(path.join(root, '.gitignore'), '.mcps-secrets\npreferred-tools.json\nmcps.json\n');
+    fs.writeFileSync(path.join(root, '.gitignore'), `.mcps-secrets\n${FILES.record}\nmcps.json\n`);
     const i = hinv({ project: w.project });
     const p = plan(i, { clients: ['claude', 'cursor'], roots: { project: { id: 'named', path: 'tools' } }, picks: { atlassian: { route: 'remote', scope: 'project', token: false } } }, { env: {}, home: w.home });
     assert.deepStrictEqual(p.errors, []);
     assert.deepStrictEqual((p.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry, { type: 'http', url: ATL_URL });
-    assert.ok(p.notes.includes(`${root}: git would commit mcp-remote-v1/ - atlassian is set up for Claude Code only; /preferred-tools:fix (root-ignore) covers it, then configure adds Cursor`), p.notes.join('\n'));
+    assert.ok(p.notes.includes(`${root}: git would commit mcp-remote-v1/ - atlassian is set up for Claude Code only; /alfred-tools:fix (root-ignore) covers it, then configure adds Cursor`), p.notes.join('\n'));
     assert.deepStrictEqual(upsertsOf(p).map((u) => u.server.clients), [['claude']]);
 });
 
@@ -456,7 +456,7 @@ function wsWorld({ own = [], at = null }: { own?: ListServer[]; at?: string | nu
     const w = cursorWorld();
     wsRec(w.project, { role: 'root', children: ['a', 'b', 'c'], ignoredChildren: ['c'] });
     const m = Object.fromEntries(['a', 'b', 'c'].map((c) => { const d = path.join(w.project, c); fs.mkdirSync(d); wsRec(d, { parent: '..' }); return [c, d]; })) as Record<string, string> & { a: string; b: string; c: string };
-    const aList = path.join(m.a, '.preferred-tools', 'mcps.json');
+    const aList = path.join(m.a, '.alfred-tools', 'mcps.json');
     if (own.length) { fs.mkdirSync(path.dirname(aList), { recursive: true }); fs.writeFileSync(aList, JSON.stringify({ version: 1, servers: own, own: [] })); }
     w.inv.workspace = wsLib.workspaceOf(at || w.project, {});
     const cf = (d: string) => path.join(d, '.cursor', 'mcp.json');
@@ -480,7 +480,7 @@ test('workspace: two joined children get the root\'s project entries after their
     assert.deepStrictEqual(cursorDoc(w.cf(w.m.a)).memory, MEMORY_A, 'a\'s own memory wins over the root\'s: the nearest first');
     assert.deepStrictEqual(cursorDoc(w.cf(w.m.a)).serena, SERENA_E);
     assert.strictEqual(cursorNames(w.cf(w.m.c)), null, 'the ignored child is not written');
-    for (const c of ['b', 'c']) assert.ok(!fs.existsSync(path.join(w.m[c]!, '.preferred-tools')), `${c} gets no root`);
+    for (const c of ['b', 'c']) assert.ok(!fs.existsSync(path.join(w.m[c]!, '.alfred-tools')), `${c} gets no root`);
 });
 
 test('workspace: local-scope root entries are not passed down', () => {
@@ -507,7 +507,7 @@ test('workspace: removing a root entry removes it from each member, and no membe
     assert.deepStrictEqual(steps.map((s) => [s.file, [...s.before!].sort()]), [[w.cursorFile, ['memory', 'serena']], [w.cf(w.m.a), ['memory', 'serena']], [w.cf(w.m.b), ['memory', 'serena']]]);
     runFiles(w, out, steps);
     for (const c of ['a', 'b']) assert.deepStrictEqual(cursorNames(w.cf(w.m[c]!)), ['memory'], c);
-    for (const c of ['a', 'b', 'c']) assert.ok(!fs.existsSync(path.join(w.m[c]!, '.preferred-tools')), `${c} gets no root`);
+    for (const c of ['a', 'b', 'c']) assert.ok(!fs.existsSync(path.join(w.m[c]!, '.alfred-tools')), `${c} gets no root`);
 });
 
 test('workspace: a member copy edited or removed by hand is left as it is when the root changes, and named', () => {
@@ -527,7 +527,7 @@ test('workspace: a member copy edited or removed by hand is left as it is when t
     const out = outOf({ ...listWriteOf(w, [srv('serena')]), drops: [{ key: 'mcp:memory~project', after: null }] });
     const steps = cursorSteps(w.inv, w.ctx, out, {});
     assert.deepStrictEqual(steps.find((s) => s.file === w.cf(w.m.a))!.skip, ['serena']);
-    assert.ok(out.notes.includes(`serena: Cursor's copy was changed by hand - left; run /preferred-tools:fix`), out.notes.join('\n'));
+    assert.ok(out.notes.includes(`serena: Cursor's copy was changed by hand - left; run /alfred-tools:fix`), out.notes.join('\n'));
     runFiles(w, out, steps);
     assert.deepStrictEqual(JSON.parse(fs.readFileSync(w.cf(w.m.a), 'utf8')).mcpServers.serena, JSON.parse(editedA).mcpServers.serena, 'the hand edit stays');
     assert.ok(!cursorNames(w.cf(w.m.a))!.includes('memory'), 'the dropped root entry still leaves');
@@ -559,8 +559,8 @@ test('workspace: a root in git with a plain-folder member gets the note for its 
     assert.deepStrictEqual(out.notes, [note]);
     // a member that is its own repo: no note
     gitInit(w.m.b);
-    const bout = outOf({ op: 'list-write', file: path.join(w.m.b, '.preferred-tools', 'mcps.json'), family: 'project', upserts: [{ server: srv('memory'), after: null, cursorFile: null }], drops: [], own: null, why: 'x' });
-    cursorSteps({ ...inv, project: w.m.b, workspace: wsLib.workspaceOf(w.m.b, {}) }, { ...ctx, project: w.m.b, roots: { project: path.join(w.m.b, '.preferred-tools'), global: null } }, bout, {});
+    const bout = outOf({ op: 'list-write', file: path.join(w.m.b, '.alfred-tools', 'mcps.json'), family: 'project', upserts: [{ server: srv('memory'), after: null, cursorFile: null }], drops: [], own: null, why: 'x' });
+    cursorSteps({ ...inv, project: w.m.b, workspace: wsLib.workspaceOf(w.m.b, {}) }, { ...ctx, project: w.m.b, roots: { project: path.join(w.m.b, '.alfred-tools'), global: null } }, bout, {});
     assert.deepStrictEqual(bout.notes, []);
 });
 
@@ -600,7 +600,7 @@ const D6_NOTE = 'Cursor: not written - this route keeps its key in the registrat
 function keyedProject()
 {
     const w = cursorWorld();
-    const root = path.join(w.project, '.preferred-tools');
+    const root = path.join(w.project, '.alfred-tools');
     fs.mkdirSync(root, { recursive: true });
     fs.writeFileSync(path.join(root, '.mcps-secrets'), `CONTEXT7_API_KEY=ctx7sk-${'z'.repeat(32)}\n`);
     return { inv: hinv({ project: w.project, roots: { map: null, project: { path: root, from: 'secrets' }, global: null } }), opts: { env: { HOME: w.home }, home: w.home } };
@@ -637,7 +637,7 @@ test('stdioKeyed is the rule: a route with a tokenVar whose entry holds a token 
 
 test('at global scope the value goes in ~/.cursor/mcp.json from .mcps-secrets and none in the list', () => {
     const w = cursorWorld();
-    const groot = path.join(w.home, '.preferred-tools');
+    const groot = path.join(w.home, '.alfred-tools');
     const glist = path.join(groot, 'mcps.json');
     const secret = `ghp_${'q'.repeat(36)}`;
     fs.mkdirSync(groot, { recursive: true });
@@ -655,10 +655,10 @@ test('at global scope the value goes in ~/.cursor/mcp.json from .mcps-secrets an
     const again = cursorMcp.cursorWrite({ file: cfile, family: 'global', lists: [{ file: glist, scopes: ['user'] }], before: ['github'], skip: [], replace: [] }, { catalog: catalogAll });
     assert.strictEqual(again.ok, true, again.detail);
     assert.strictEqual(cursorDoc(cfile).github.env.GITHUB_PERSONAL_ACCESS_TOKEN, '');
-    assert.match(again.detail, /WORK_GH for 'github' \(user\) is in none of .*\.mcps-secrets - written empty: fill WORK_GH in .*, then run \/preferred-tools:configure/);
+    assert.match(again.detail, /WORK_GH for 'github' \(user\) is in none of .*\.mcps-secrets - written empty: fill WORK_GH in .*, then run \/alfred-tools:configure/);
 });
 
-// ---- 0.5.0: what changed outside preferred-tools (spec D1) -----------------------------------------------------------
+// ---- 0.5.0: what changed outside alfred-tools (spec D1) -----------------------------------------------------------
 test('install names a listed server missing from Claude Code and re-adds nothing', () =>
 {
     const w = world();
@@ -671,12 +671,12 @@ test('install names a listed server missing from Claude Code and re-adds nothing
         cli.runClaude(['mcp', 'remove', 'serena', '-s', 'local'], { cwd: w.project, env: w.env });
         cli.runClaude(['mcp', 'add-json', 'serena', JSON.stringify({ ...s!.entry, args: [...s!.entry.args!, '--mine'] }), '-s', 'local'], { cwd: w.project, env: w.env });
         const inv = inventoryLib.buildInventory({ project: w.project, env: w.env });
-        assert.deepStrictEqual(changedOutside(inv), ['serena was changed outside preferred-tools', 'memory is on the list but not in Claude Code - run /preferred-tools:fix']);
+        assert.deepStrictEqual(changedOutside(inv), ['serena was changed outside alfred-tools', 'memory is on the list but not in Claude Code - run /alfred-tools:fix']);
         const p = plan(inv, { clients: ['claude'], picks: { context7: { route: 'remote', scope: 'local' } } }, { home: w.home, env: w.env });
         assert.deepStrictEqual(p.errors, []);
         assert.deepStrictEqual(p.outside, changedOutside(inv));
         assert.ok(!p.steps.some((x) => (x as McpAddStep).name === 'memory' || (x as McpAddStep).name === 'serena'), 'neither is written');
-        assert.ok(renderPlan(p).startsWith('serena was changed outside preferred-tools\nmemory is on the list but not in Claude Code - run /preferred-tools:fix\n'), renderPlan(p));
+        assert.ok(renderPlan(p).startsWith('serena was changed outside alfred-tools\nmemory is on the list but not in Claude Code - run /alfred-tools:fix\n'), renderPlan(p));
     }
     finally { w.clean(); }
 });

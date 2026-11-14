@@ -26,7 +26,7 @@ export function changeQuestions(inventory: Inventory, catalog: Catalog, context:
     for (const it of X.ownItems(inventory, catalog))
     {
         const label = it.kind === 'mcp' ? `${it.name} (${it.label}, ${it.scope}) - on its own` : it.kind === 'plugin' ? `${it.server} (${it.label}, from ${X.ownerOf(it)}) - on its own` : `${it.connector} (${it.label}, claude.ai) - on its own`;
-        const description = it.kind === 'mcp' ? 'left on its own at install - pick it to keep it so or let preferred-tools manage it' : `left with ${X.ownerOf(it)} - pick it to keep it so or let install offer preferred-tools' own beside it`;
+        const description = it.kind === 'mcp' ? 'left on its own at install - pick it to keep it so or let alfred-tools manage it' : `left with ${X.ownerOf(it)} - pick it to keep it so or let install offer alfred-tools' own beside it`;
         items.push({ group, label, description, target: { kind: 'own', key: it.key } });
     }
     const rootGroup = { id: 'roots', label: 'Root folders' };
@@ -99,7 +99,7 @@ export function scopeQuestion(row: CatalogRow, inventory: Inventory, { route, cu
     if (order.length < 2) return null;
     return {
         id: `scope-${row.id}`, header: 'Scope', multiSelect: false,
-        question: current ? `${row.label}: which scope? Another one moves '${current.name || row.label}' there; /preferred-tools:install adds a second copy instead.` : `${row.label}: which scope?`,
+        question: current ? `${row.label}: which scope? Another one moves '${current.name || row.label}' there; /alfred-tools:install adds a second copy instead.` : `${row.label}: which scope?`,
         options: order.slice(0, 4).map((scope, i) => ({ label: `${SCOPE_LABEL[scope]}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: scope === strandedScope(row, routeId, current, context) ? STRANDED_TEXT : `${scopeText(scope)}${scope === 'project' && hostedKeyed(row, routeId) ? CHILD_NO_KEY : ''}` })),
     };
 }

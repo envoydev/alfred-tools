@@ -4,12 +4,12 @@
 // collide and the first version's hooks would answer for both: each version gets its own tests/harness.ts world under
 // S/<version> (HOME, USERPROFILE and CLAUDE_CONFIG_DIR inside it).
 //
-// THE SOURCE. `--alfred <dir>`, else PREFERRED_TOOLS_ALFRED, else ../alfred-code beside this repo. A version resolves to
+// THE SOURCE. `--alfred <dir>`, else ALFRED_TOOLS_ALFRED, else ../alfred-code beside this repo. A version resolves to
 // that folder when it is a git checkout holding the tag v<version> (exported with `git archive`), else to its
 // `alfred-code-<version>` subfolder whose marketplace lists alfred-code at that version (copied). Neither: NOT RUN.
 //
 // THE BUILD. The real CLI adds the exported marketplace and installs alfred-code at user scope, so `claude plugin list`
-// and preferred-tools' inventory see it enabled and the hooks run from the cache folder the CLI made. alfred-code's own
+// and alfred-tools' inventory see it enabled and the hooks run from the cache folder the CLI made. alfred-code's own
 // installer then sets up each project the way its workspace matrix does (docs/workspace-layering-matrix/ws-matrix-r3.js
 // `sandbox()`): with a stub `claude` (the installer would otherwise install plugins over the network) and uvx, npx, npm
 // and curl stubbed to fail.
@@ -78,7 +78,7 @@ const tail = (text: unknown, n = 600) => String(text || '').trim().slice(-n);
 
 export function sourceDir(alfredDir: string | null | undefined, env: NodeJS.ProcessEnv = process.env)
 {
-    return path.resolve(alfredDir || env.PREFERRED_TOOLS_ALFRED || path.join(REPO, '..', 'alfred-code'));
+    return path.resolve(alfredDir || env.ALFRED_TOOLS_ALFRED || path.join(REPO, '..', 'alfred-code'));
 }
 
 function marketplaceVersion(dir: string)

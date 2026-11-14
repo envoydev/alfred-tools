@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The entry /preferred-tools:fix runs; the work is in fix/.
+// The entry /alfred-tools:fix runs; the work is in fix/.
 import { blockingStdio } from './core/json-file.ts';
 import { runFixCommand } from './fix/command.ts';
 

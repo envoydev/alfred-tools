@@ -137,7 +137,7 @@ export function helperPathFor(scope: string, context: Machine): string
 }
 
 // The helper's third argument: the global root, at local scope only and only when it is a named folder - the helper reads
-// ~/.preferred-tools and ~/.alfred itself.
+// ~/.alfred-tools and ~/.alfred itself.
 export const helperGlobalRoot = (scope: string, context: Machine): string | null | undefined => (scope === 'local' && context.roots && context.roots.globalNamed ? context.roots.global : null);
 
 // The key name a `headersHelper` passes, or null: the helper's arguments as this plugin writes them, `<NAME> <SCHEME>`.

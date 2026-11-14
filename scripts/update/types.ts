@@ -108,7 +108,7 @@ export interface FileOffer extends OfferBase
     from: string; // stored - do not rename
     to: string; // stored - do not rename
 }
-// A fix row marked `upgrade`, found: what an older preferred-tools wrote, moved to the way this one passes data.
+// A fix row marked `upgrade`, found: what an older alfred-tools wrote, moved to the way this one passes data.
 export interface UpgradeOffer extends OfferBase
 {
     kind: 'upgrade'; // stored - do not rename

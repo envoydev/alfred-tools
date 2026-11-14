@@ -50,7 +50,7 @@ export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: P
             }
     out.steps = [...regSteps, ...listW];
     const cursor = cursorSteps(inventory, tctx, out, {});
-    for (const error of out.errors) notes.push(`${error} - Cursor's file is left; run /preferred-tools:configure`);
+    for (const error of out.errors) notes.push(`${error} - Cursor's file is left; run /alfred-tools:configure`);
     const blocked = new Set(out.errors.length ? cursor.map((cursorStep) => cursorStep.file) : []);
     const written = cursor.filter((cursorStep) => !blocked.has(cursorStep.file));
     // a Cursor copy refilled from .mcps-secrets with the list as it is
@@ -69,7 +69,7 @@ export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: P
     return [...listW, ...written];
 }
 
-// What changed outside preferred-tools (spec D1): each list entry whose Claude registration differs after kept.maskCredentials,
+// What changed outside alfred-tools (spec D1): each list entry whose Claude registration differs after kept.maskCredentials,
 // then each the list names that Claude Code no longer has. Install, configure and update print these first; only fix
 // changes either. -> [line]
 export function changedOutside(inventory: Inventory, catalog: Catalog = catalogLib.load()): string[]
@@ -84,8 +84,8 @@ export function changedOutside(inventory: Inventory, catalog: Catalog = catalogL
         {
             if (!(server.clients || ['claude']).includes('claude')) continue;
             const registration = (inventory.registrations || []).find((candidate) => candidate.name === server.name && candidate.scope === server.scope);
-            if (!registration) missing.push(`${server.name} is on the list but not in Claude Code - run /preferred-tools:fix`);
-            else if (!deepEqual(keepOf(catalog, registration.entry, server.row), server.entry)) changed.push(`${server.name} was changed outside preferred-tools`);
+            if (!registration) missing.push(`${server.name} is on the list but not in Claude Code - run /alfred-tools:fix`);
+            else if (!deepEqual(keepOf(catalog, registration.entry, server.row), server.entry)) changed.push(`${server.name} was changed outside alfred-tools`);
         }
     }
     return [...changed, ...missing];
@@ -132,7 +132,7 @@ export function denyReadSteps(steps: PlanStep[], context: { platform: string; ho
     const readGuard = readGuardOf(context, want);
     if (readGuard.bad)
     {
-        out.notes.push(`${readGuard.file} is not a settings object preferred-tools can read - add ${want.join(' and ')} to permissions.deny yourself`);
+        out.notes.push(`${readGuard.file} is not a settings object alfred-tools can read - add ${want.join(' and ')} to permissions.deny yourself`);
         return [];
     }
     return readGuard.rules.length ? [denyReadStep(readGuard.file, readGuard.rules)] : [];
@@ -144,6 +144,6 @@ export function renderLine(step: ListWriteStep | FileStep | CursorWritePlanStep 
     if (step.op === 'deny-read') return `   adds ${step.rules.join(' and ')} to permissions.deny in ${step.file}  (keeps AI sessions out of the sign-in tokens and the key file)`;
     if (step.op === 'cursor-write') return [`   writes ${step.file}  (Cursor: the servers set up for it; your own entries kept)`, ...(step.replace || []).map((name) => `   replaces your own ${name} in ${step.file}`)].join('\n');
     if (step.op === 'retire-record') return `   moves ${step.file} aside as ${roots.FILES.record}.0.4.bak  (its entries are in mcps.json now)`;
-    return step.empty ? `   removes ${step.file}  (no server is listed)` : `   writes ${step.file}  (the servers preferred-tools manages, and the ones left on their own)`;
+    return step.empty ? `   removes ${step.file}  (no server is listed)` : `   writes ${step.file}  (the servers alfred-tools manages, and the ones left on their own)`;
 }
 

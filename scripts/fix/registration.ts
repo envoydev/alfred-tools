@@ -52,7 +52,7 @@ export function serenaWindowsHomeDetect(context: FixCtx): Finding[]
 }
 
 // serena's home in this folder's .mcp.json when no space-free folder is in reach (F7)
-const SPACED_PROJECT = "serena's home on Windows must be space-free - pick a space-free folder with /preferred-tools:configure, Location";
+const SPACED_PROJECT = "serena's home on Windows must be space-free - pick a space-free folder with /alfred-tools:configure, Location";
 
 function unsetSerenaHome(registration: InvRegistration, context: FixCtx): Finding | null
 {
@@ -139,7 +139,7 @@ export function playwrightWebmcpDetect(context: FixCtx): Finding[]
         const documented = NO_WEBMCP_SINCE;
         const older = pin && C.compareVersions(pin, documented) === -1;
         return C.finding('playwright-webmcp', registration, 'page-registered WebMCP tools are not switched off (no --no-webmcp)',
-            older ? { blocked: `pinned @${pin} is older than ${documented}, the version whose README documents --no-webmcp - update it first (/preferred-tools:update), then fix` } : {});
+            older ? { blocked: `pinned @${pin} is older than ${documented}, the version whose README documents --no-webmcp - update it first (/alfred-tools:update), then fix` } : {});
     });
 }
 
@@ -251,7 +251,7 @@ export function serenaContextFix(entry: ServerEntry, finding: Finding): ServerEn
 // a finding names the files, never a value. The fix writes the value of the name a ${VAR} holds, else of the catalog's
 // default name. A stdio registration stores its key and not the key's name, so an empty one is never guessed at (R7): the
 // default name may hold another account's key.
-const PICK_NAME = "pick the key's name with /preferred-tools:configure";
+const PICK_NAME = "pick the key's name with /alfred-tools:configure";
 const ONE_VAR = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
 
 // The key inside a token field: the field's text less the route template's text around ${VAR}.
@@ -325,11 +325,11 @@ export function tokenSyncFix(entry: ServerEntry, finding: Finding, context: FixC
 // ---- windows-mcp-one-per-desktop ------------------------------------------------------------------------------------
 // Advice only (`fix: null`): windows-mcp 0.8.8 makes one missed overlay confirmation permanent for its process, and a
 // second server on the same desktop is the likely cause. The finding is always blocked: each server is dropped by its
-// owner's own command, and preferred-tools changes none of them.
+// owner's own command, and alfred-tools changes none of them.
 function windowsMcpDrop(server: WindowsMcp, context: FixCtx): string
 {
     if (server.kind === 'plugin') return `claude plugin disable ${server.name} --scope ${server.scope}`;
-    const how = server.owner === 'catalog' ? '/preferred-tools:configure (Remove)' : `claude mcp remove ${server.name} -s ${server.scope === 'inherited' ? 'project' : server.scope}`;
+    const how = server.owner === 'catalog' ? '/alfred-tools:configure (Remove)' : `claude mcp remove ${server.name} -s ${server.scope === 'inherited' ? 'project' : server.scope}`;
     return server.scope === 'inherited' ? `${how}, run in ${fromHere(context.inventory, server.from!)}` : how;
 }
 

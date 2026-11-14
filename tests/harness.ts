@@ -182,7 +182,7 @@ export function isolationCheck(h: Harness)
 function main(argv: string[])
 {
     const at = argv.indexOf('--root');
-    const root = at >= 0 ? argv[at + 1]! : path.join(os.tmpdir(), `preferred-tools-harness-${Date.now()}`);
+    const root = at >= 0 ? argv[at + 1]! : path.join(os.tmpdir(), `alfred-tools-harness-${Date.now()}`);
     const h = new Harness({ root });
     const r = isolationCheck(h);
     console.log(r.lines.join('\n'));

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "note": "Known problems and their recorded fixes. `detect` and `fix` name functions in scripts/fix/. `verifiedOn` says where the fix was proved; a row not proved on this build says so. A new problem the user meets later becomes a new row. A row with `advice: true` has `fix: null`: every finding it returns is blocked - shown, never applied. A row with `upgrade` brings a registration an older preferred-tools wrote to the way that version passes data, and /preferred-tools:update offers it too.",
+  "note": "Known problems and their recorded fixes. `detect` and `fix` name functions in scripts/fix/. `verifiedOn` says where the fix was proved; a row not proved on this build says so. A new problem the user meets later becomes a new row. A row with `advice: true` has `fix: null`: every finding it returns is blocked - shown, never applied. A row with `upgrade` brings a registration an older alfred-tools wrote to the way that version passes data, and /alfred-tools:update offers it too.",
   "fixes": [
     {
       "id": "serena-windows-home",
@@ -159,7 +159,7 @@
         "win32"
       ],
       "kind": "registration",
-      "symptom": "a stdio token server at local or user scope holds a key no name in its key files (.mcps-secrets in the project root, then the global root) holds: the key changed in the file since, or the registration still holds the ${VAR} 0.1.x left; an empty key is never guessed at - the key's name is picked with /preferred-tools:configure",
+      "symptom": "a stdio token server at local or user scope holds a key no name in its key files (.mcps-secrets in the project root, then the global root) holds: the key changed in the file since, or the registration still holds the ${VAR} 0.1.x left; an empty key is never guessed at - the key's name is picked with /alfred-tools:configure",
       "detect": "tokenSyncDetect",
       "fix": "tokenSyncFix",
       "verifiedOn": "this build: tests/fix.test.js token-sync (2026-11-10)",
@@ -227,7 +227,7 @@
         "win32"
       ],
       "kind": "file",
-      "symptom": "a managed registration has no entry in its family's list (<root>/mcps.json), or a 0.4.x <root>/preferred-tools.json still holds the servers left on their own",
+      "symptom": "a managed registration has no entry in its family's list (<root>/mcps.json), or the 0.4.x record in <root> still holds the servers left on their own",
       "detect": "listImportDetect",
       "fix": null,
       "steps": "listImportSteps",
@@ -343,7 +343,7 @@
       ],
       "kind": "file",
       "advice": true,
-      "symptom": "Cursor's .cursor/mcp.json or ~/.cursor/mcp.json is a symbolic link, is not JSON (comments or trailing commas), or has no mcpServers object - preferred-tools writes no such file",
+      "symptom": "Cursor's .cursor/mcp.json or ~/.cursor/mcp.json is a symbolic link, is not JSON (comments or trailing commas), or has no mcpServers object - alfred-tools writes no such file",
       "detect": "cursorFileDetect",
       "fix": null,
       "verifiedOn": "this build: tests/drift.test.js cursor-file (2026-11-13)",

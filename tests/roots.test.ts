@@ -28,28 +28,28 @@ const ids = (list: { id: string }[]) => list.map((o) => o.id);
 const reg = (name: string, scope: string, entry: ServerEntry, rowId: string | null, route: string | null): InvRegistration => ({ name, scope, entry, rowId, route, own: !rowId, alfredRetired: false });
 const ALFRED_SET_UP = '/work/shop/.alfred/.gitignore';
 
-test('project root options: .alfred first where alfred-code is set up, else .preferred-tools; \'A folder you name\' last', () => {
+test('project root options: .alfred first where alfred-code is set up, else .alfred-tools; \'A folder you name\' last', () => {
     const set = roots.options(inv({ alfredCodeEnabled: true }), 'project', ctxOf([ALFRED_SET_UP]));
-    assert.deepStrictEqual(ids(set), ['alfred', 'preferred-tools', 'named']);
-    assert.deepStrictEqual(set.map((o) => o.root), ['/work/shop/.alfred', '/work/shop/.preferred-tools', null]);
+    assert.deepStrictEqual(ids(set), ['alfred', 'alfred-tools', 'named']);
+    assert.deepStrictEqual(set.map((o) => o.root), ['/work/shop/.alfred', '/work/shop/.alfred-tools', null]);
     assert.strictEqual(set[2]!.label, 'A folder you name');
-    assert.deepStrictEqual(ids(roots.options(inv({ alfredCodeEnabled: false }), 'project', ctxOf([ALFRED_SET_UP]))), ['preferred-tools', 'named'], 'alfred-code not enabled');
-    assert.deepStrictEqual(ids(roots.options(inv({ alfredCodeEnabled: true }), 'project', ctxOf([]))), ['preferred-tools', 'named'], 'no .alfred/.gitignore');
+    assert.deepStrictEqual(ids(roots.options(inv({ alfredCodeEnabled: false }), 'project', ctxOf([ALFRED_SET_UP]))), ['alfred-tools', 'named'], 'alfred-code not enabled');
+    assert.deepStrictEqual(ids(roots.options(inv({ alfredCodeEnabled: true }), 'project', ctxOf([]))), ['alfred-tools', 'named'], 'no .alfred/.gitignore');
 });
 
-test('global root options: ~/.preferred-tools first; ~/.alfred only when it exists', () => {
-    assert.deepStrictEqual(ids(roots.options(inv(), 'global', ctxOf([]))), ['preferred-tools', 'named']);
+test('global root options: ~/.alfred-tools first; ~/.alfred only when it exists', () => {
+    assert.deepStrictEqual(ids(roots.options(inv(), 'global', ctxOf([]))), ['alfred-tools', 'named']);
     const both = roots.options(inv(), 'global', ctxOf(['/Users/me/.alfred']));
-    assert.deepStrictEqual(ids(both), ['preferred-tools', 'home-alfred', 'named']);
-    assert.deepStrictEqual(both.map((o) => o.root), ['/Users/me/.preferred-tools', '/Users/me/.alfred', null]);
-    assert.deepStrictEqual(both.map((o) => o.label).slice(0, 2), ['~/.preferred-tools', '~/.alfred']);
+    assert.deepStrictEqual(ids(both), ['alfred-tools', 'home-alfred', 'named']);
+    assert.deepStrictEqual(both.map((o) => o.root), ['/Users/me/.alfred-tools', '/Users/me/.alfred', null]);
+    assert.deepStrictEqual(both.map((o) => o.label).slice(0, 2), ['~/.alfred-tools', '~/.alfred']);
 });
 
 test('a root in use is listed first and recommended: the map, else a managed registration\'s helper or data folder, else the root holding .mcps-secrets', { skip: POSIX_FIXTURE }, () => {
     const named = '/work/shop/tools/keys';
     const helper = reg('gh', 'local', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: 'node "/work/shop/kit/mcp-headers.js" GITHUB_PERSONAL_ACCESS_TOKEN Bearer' }, 'github', 'remote');
-    const data = reg('pw', 'local', { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '/work/shop/.preferred-tools/playwright-chrome'] }, 'playwright-chrome', 'local');
-    const secrets = '/work/shop/.preferred-tools/.mcps-secrets';
+    const data = reg('pw', 'local', { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '/work/shop/.alfred-tools/playwright-chrome'] }, 'playwright-chrome', 'local');
+    const secrets = '/work/shop/.alfred-tools/.mcps-secrets';
     const map = { version: 1, global: '/k', projects: { '/work/shop': named } };
     const on = [ALFRED_SET_UP, named, '/k', secrets];
     const base = { alfredCodeEnabled: true };
@@ -57,8 +57,8 @@ test('a root in use is listed first and recommended: the map, else a managed reg
     assert.deepStrictEqual(roots.inUse(inv({ ...base, roots: { map }, registrations: [helper, data] }), 'project', ctxOf(on)), { path: named, from: 'map' });
     assert.deepStrictEqual(roots.inUse(inv({ ...base, roots: { map }, registrations: [helper] }), 'global', ctxOf(on)), { path: '/k', from: 'map' });
     assert.deepStrictEqual(roots.inUse(inv({ ...base, registrations: [data, helper] }), 'project', ctxOf(on)), { path: '/work/shop/kit', from: 'registration' }, 'a helper before a data folder');
-    assert.deepStrictEqual(roots.inUse(inv({ ...base, registrations: [data] }), 'project', ctxOf(on)), { path: '/work/shop/.preferred-tools', from: 'registration' });
-    assert.deepStrictEqual(roots.inUse(inv(base), 'project', ctxOf(on)), { path: '/work/shop/.preferred-tools', from: 'secrets' });
+    assert.deepStrictEqual(roots.inUse(inv({ ...base, registrations: [data] }), 'project', ctxOf(on)), { path: '/work/shop/.alfred-tools', from: 'registration' });
+    assert.deepStrictEqual(roots.inUse(inv(base), 'project', ctxOf(on)), { path: '/work/shop/.alfred-tools', from: 'secrets' });
     assert.strictEqual(roots.inUse(inv(base), 'project', ctxOf([ALFRED_SET_UP])), null);
     assert.strictEqual(roots.inUse(inv({ ...base, roots: { map } }), 'project', ctxOf([])), null, 'a mapped folder that is gone is not in use');
     const own = { ...helper, rowId: null, own: true };
@@ -69,10 +69,10 @@ test('a root in use is listed first and recommended: the map, else a managed reg
 
     // listed first and recommended in its place
     const mapped = roots.options(inv({ ...base, roots: { map } }), 'project', ctxOf(on));
-    assert.deepStrictEqual(ids(mapped), ['in-use', 'alfred', 'preferred-tools', 'named']);
+    assert.deepStrictEqual(ids(mapped), ['in-use', 'alfred', 'alfred-tools', 'named']);
     assert.strictEqual(mapped[0]!.root, named);
     const standard = roots.options(inv({ ...base, registrations: [data] }), 'project', ctxOf(on));
-    assert.deepStrictEqual(ids(standard), ['preferred-tools', 'alfred', 'named'], 'a standard folder in use moves first');
+    assert.deepStrictEqual(ids(standard), ['alfred-tools', 'alfred', 'named'], 'a standard folder in use moves first');
 });
 
 test('a named project root must lie inside the project', () => {
@@ -103,10 +103,10 @@ test('each option\'s description gives the exact folder on this machine; the glo
     const win = { project: 'C:\\ws', home: 'C:\\Users\\mac', platform: 'win32', catalog, exists: (p: string) => ['C:\\ws\\.alfred\\.gitignore', 'C:\\Users\\mac\\.alfred'].includes(p) };
     const project = roots.options(inv({ project: 'C:\\ws', os: 'win32', alfredCodeEnabled: true }), 'project', win);
     assert.match(project[0]!.description!, /^C:\\ws\\\.alfred - kept out of git by alfred-code/);
-    assert.match(project[1]!.description!, /^C:\\ws\\\.preferred-tools - /);
+    assert.match(project[1]!.description!, /^C:\\ws\\\.alfred-tools - /);
     assert.match(project[2]!.description!, /asked next/);
     const global = roots.options(inv({ project: 'C:\\ws', os: 'win32' }), 'global', win);
-    assert.match(global[0]!.description!, /^C:\\Users\\mac\\\.preferred-tools - one folder for every project on this machine/);
+    assert.match(global[0]!.description!, /^C:\\Users\\mac\\\.alfred-tools - one folder for every project on this machine/);
     assert.match(global[1]!.description!, /^C:\\Users\\mac\\\.alfred - /);
     assert.match(global[2]!.description!, /asked next/);
     assert.match(global[2]!.description!, /a project-scope helper does not read keys here/);
@@ -139,9 +139,9 @@ test('roots map: missing or malformed reads empty with a note; a second project 
         const other = path.join(dir, 'other');
         fs.mkdirSync(other);
         const one = roots.withRoot(empty, 'project', child, path.join(repo, '.alfred'));
-        const two = roots.withRoot(one, 'project', other, path.join(other, '.preferred-tools'));
+        const two = roots.withRoot(one, 'project', other, path.join(other, '.alfred-tools'));
         const three = roots.withRoot(two, 'global', other, '/k');
-        assert.deepStrictEqual(three, { version: 1, global: '/k', projects: { [fs.realpathSync.native(repo)]: path.join(repo, '.alfred'), [fs.realpathSync.native(other)]: path.join(other, '.preferred-tools') } });
+        assert.deepStrictEqual(three, { version: 1, global: '/k', projects: { [fs.realpathSync.native(repo)]: path.join(repo, '.alfred'), [fs.realpathSync.native(other)]: path.join(other, '.alfred-tools') } });
         assert.deepStrictEqual(empty, { version: 1, global: null, projects: {} }, 'withRoot leaves its input as it was');
         fs.writeFileSync(file, JSON.stringify(three));
         assert.deepStrictEqual(roots.readMap(dir), three);
@@ -165,8 +165,8 @@ test('a 0.4.x record file: missing is null, malformed or another version reads e
         // where the commands look: the mapped root, the two standard folders, every root a managed registration points into
         const helper = reg('gh', 'local', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: 'node "/work/shop/kit/mcp-headers.js" GITHUB_PERSONAL_ACCESS_TOKEN Bearer' }, 'github', 'remote');
         const files = lists.oldRecordFiles(inv({ roots: { map: { version: 1, global: null, projects: { '/work/shop': '/work/shop/tools/keys' } } }, registrations: [helper] }), 'project', ctxOf(['/work/shop/tools/keys']));
-        assert.deepStrictEqual(files, ['/work/shop/tools/keys', '/work/shop/.preferred-tools', '/work/shop/.alfred', '/work/shop/kit'].map((d) => `${d}/preferred-tools.json`));
-        assert.deepStrictEqual(lists.oldRecordFiles(inv(), 'global', ctxOf()), ['/Users/me/.preferred-tools/preferred-tools.json', '/Users/me/.alfred/preferred-tools.json']);
+        assert.deepStrictEqual(files, ['/work/shop/tools/keys', '/work/shop/.alfred-tools', '/work/shop/.alfred', '/work/shop/kit'].map((d) => `${d}/preferred-tools.json`));
+        assert.deepStrictEqual(lists.oldRecordFiles(inv(), 'global', ctxOf()), ['/Users/me/.alfred-tools/preferred-tools.json', '/Users/me/.alfred/preferred-tools.json']);
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
@@ -198,7 +198,7 @@ test('a root is asked for a family only a pick records into', () => {
     assert.ok(q!.header.length <= 12, q!.header);
     assert.match(q!.options[0]!.label, / \(Recommended\)$/);
     assert.strictEqual(q!.options.filter((o) => /\(Recommended\)/.test(o.label)).length, 1);
-    assert.deepStrictEqual(r!.answers['root-project']![q!.options[0]!.label], { family: 'project', id: 'preferred-tools', root: '/work/shop/.preferred-tools' });
+    assert.deepStrictEqual(r!.answers['root-project']![q!.options[0]!.label], { family: 'project', id: 'alfred-tools', root: '/work/shop/.alfred-tools' });
     assert.deepStrictEqual(r!.answers['root-project']!['A folder you name'], { family: 'project', id: 'named', root: null });
 });
 
@@ -221,13 +221,13 @@ test('shippedState reads the bridge like the helper: absent, lower, same, edited
         assert.strictEqual(roots.FILES.bridge, 'mcp-bridge.js');
         const src = roots.shippedSource('bridge');
         assert.deepStrictEqual(roots.shippedState('bridge', file), { state: 'absent', number: null });
-        fs.writeFileSync(file, src.replace(/^\/\/ preferred-tools mcp-bridge \d+/, '// preferred-tools mcp-bridge 0'));
+        fs.writeFileSync(file, src.replace(/^\/\/ alfred-tools mcp-bridge \d+/, '// alfred-tools mcp-bridge 0'));
         assert.deepStrictEqual(roots.shippedState('bridge', file), { state: 'lower', number: 0 });
         fs.writeFileSync(file, src);
         assert.deepStrictEqual(roots.shippedState('bridge', file), { state: 'same', number: BRIDGE_VERSION });
         fs.writeFileSync(file, `${src}// mine\n`);
         assert.deepStrictEqual(roots.shippedState('bridge', file), { state: 'edited', number: BRIDGE_VERSION });
-        fs.writeFileSync(file, src.replace(/^\/\/ preferred-tools mcp-bridge \d+/, `// preferred-tools mcp-bridge ${BRIDGE_VERSION + 1}`));
+        fs.writeFileSync(file, src.replace(/^\/\/ alfred-tools mcp-bridge \d+/, `// alfred-tools mcp-bridge ${BRIDGE_VERSION + 1}`));
         assert.deepStrictEqual(roots.shippedState('bridge', file), { state: 'higher', number: BRIDGE_VERSION + 1 });
         // the helper reads through the same function
         assert.deepStrictEqual(roots.helperState(path.join(dir, 'none.js')), roots.shippedState('helper', path.join(dir, 'none.js')));
@@ -267,19 +267,19 @@ test('the # version line is read', () => {
     try
     {
         assert.strictEqual(roots.FILES.serenaContext, 'serena-context.yml');
-        assert.strictEqual(roots.SERENA_CONTEXT_VERSION, 1);
+        assert.strictEqual(roots.SERENA_CONTEXT_VERSION, 2);
         const file = path.join(dir, roots.FILES.serenaContext);
         const src = roots.shippedSource('serenaContext');
-        assert.strictEqual(src.split('\n')[0], '# preferred-tools serena-context 1');
+        assert.strictEqual(src.split('\n')[0], '# alfred-tools serena-context 2');
         assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'absent', number: null });
-        fs.writeFileSync(file, src.replace(/^# preferred-tools serena-context \d+/, '# preferred-tools serena-context 0'));
+        fs.writeFileSync(file, src.replace(/^# alfred-tools serena-context \d+/, '# alfred-tools serena-context 0'));
         assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'lower', number: 0 });
         fs.writeFileSync(file, src.replace(/\n/g, '\r\n'));
-        assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'same', number: 1 });
+        assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'same', number: 2 });
         fs.writeFileSync(file, `${src}# mine\n`);
-        assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'edited', number: 1 });
-        fs.writeFileSync(file, src.replace(/^# preferred-tools serena-context \d+/, '# preferred-tools serena-context 2'));
-        assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'higher', number: 2 });
+        assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'edited', number: 2 });
+        fs.writeFileSync(file, src.replace(/^# alfred-tools serena-context \d+/, '# alfred-tools serena-context 3'));
+        assert.deepStrictEqual(roots.shippedState('serenaContext', file), { state: 'higher', number: 3 });
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

@@ -1,5 +1,7 @@
 # Plugin CLI evidence - what Claude Code does with a renamed, dropped or re-installed plugin
 
+Records dated before 2026-11-14 were made under the plugin's former name and are written here as alfred-tools.
+
 Copied on 2026-10-27 from alfred-code's `docs/plugin-cli-evidence.md`, the spikes this repo's installer relies on.
 Measured against Claude Code 2.1.281 (S11-S25), 2.1.282 (S28) and 2.1.300 (S29), macOS, with an isolated `HOME` /
 `CLAUDE_CONFIG_DIR` per case, a local git marketplace served over smart HTTP, and sessions against a Messages API
@@ -17,9 +19,9 @@ before relying on it on a much newer Claude Code.
 | S28 | A plugin installed first, then `claude plugin install` over it from a project: (a) user scope, disabled; (b) user scope, enabled; (c) project scope, disabled; (d) project scope, enabled. Then `enable` on an enabled one, `disable` on a disabled one, `update` on a disabled one, `uninstall` on a disabled one and on one not installed. | **`install` is not a no-op over an installed plugin.** (a), (b): a second, enabled project-scope install beside the user row. (c): project `enabledPlugins` flips from `false` to `true`. (d): `already installed`, exit 0, nothing changed. Every case prints `Successfully installed`, so the output cannot tell a new install from an existing one. `enable` over enabled and `disable` over disabled exit 1 (`is already enabled/disabled at project scope`). `update` over a disabled plugin exits 0 with the flag left `false`. `uninstall` of a disabled plugin exits 0 and drops its row and its `enabledPlugins` key; `uninstall` of one not installed exits 1. A project `uninstall` leaves the user-scope row alone. |
 | S29 | A directory marketplace with one plugin, `source: "./pp"`, whose `SessionStart` hook touches a marker; a project's `settings.json` enables it. (a) the marketplace declared only in that file's `extraKnownMarketplaces`; (b) `claude plugin marketplace add` on the account, no install; (c) installed at project scope in project A, enabled in project B; (d) B with the setting removed. | **A relative-path plugin loads from a REGISTERED marketplace with no install record.** (a) no marker; (b) the marker, with `plugin list --json` reading `[]`; (c) the marker in B; (d) no marker. A marketplace declared in project settings alone serves nothing to a non-interactive start. |
 
-## What this means for preferred-tools
+## What this means for alfred-tools
 
-- **Never rename the plugin id `preferred-tools`, and never drop it from the `envoydev` marketplace** (S11, S13, S16,
+- **Never rename the plugin id `alfred-tools`, and never drop it from the `envoydev` marketplace** (S11, S13, S16,
   S25): every install would go silent.
 - **Never run `install` over a plugin the inventory already shows** (S28). Run `update` at that plugin's own scope.
   Skip an `enable` / `disable` the settings file shows already made, because the no-op exits 1.

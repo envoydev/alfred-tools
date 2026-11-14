@@ -31,7 +31,7 @@ export function retiredPluginDetect(context: FixCtx): Finding[]
     {
         const base = {
             id: 'retired-plugin', name: plugin.id, scope: plugin.scope, alfred,
-            found: `${plugin.id} is installed at ${plugin.scope} scope; preferred-tools no longer lists it - it works in Claude Code alone${alfred ? `; ${plugin.id} - alfred-code also installs it, and this removes it for both` : ''}`,
+            found: `${plugin.id} is installed at ${plugin.scope} scope; alfred-tools no longer lists it - it works in Claude Code alone${alfred ? `; ${plugin.id} - alfred-code also installs it, and this removes it for both` : ''}`,
             proposal: { command: `claude plugin uninstall ${plugin.id} --scope ${plugin.scope}` },
         };
         if (!declined.some((declinedPlugin) => declines.same(declinedPlugin, plugin))) return base;
@@ -64,7 +64,7 @@ export function retiredPluginFix(finding: Finding, context: FixCtx): MachineFixR
 // leave those to fix run in the parent) - and finds each relative data folder whose contents git does not ignore. In a
 // git work tree git decides (`git check-ignore` on a file inside the folder, as keys.ts tests a key file); where git
 // cannot answer, the folder's own .gitignore, or alfred-code's .alfred/.gitignore under .alfred/, counts as covering.
-const PROBE = 'preferred-tools-probe';
+const PROBE = 'alfred-tools-probe';
 function ignoredByGit(context: FixCtx, rel: string): boolean | null
 {
     const result = context.machine.run('git', ['check-ignore', '-q', `${rel}/${PROBE}`], { cwd: context.inventory.project });

@@ -58,7 +58,7 @@ export function walkQuestions(): { where: string; question: Question }[]
             ...Object.values(qb.urlNames!).flatMap((m) => Object.values(m).flatMap(qOf)),
             ...items.flatMap((it) => qOf(existing.ownQuestion(it))),
             // the walk's own question for each registration target (spec F4)
-            ...regs.map((r) => ownStep({ key: `mcp:${r.name}~${r.scope}`, name: r.name, scope: r.scope }, `${base.project}${base.os === 'win32' ? '\\' : '/'}.preferred-tools`).question),
+            ...regs.map((r) => ownStep({ key: `mcp:${r.name}~${r.scope}`, name: r.name, scope: r.scope }, `${base.project}${base.os === 'win32' ? '\\' : '/'}.alfred-tools`).question),
         ];
         for (const question of list) out.push({ where, question });
     }

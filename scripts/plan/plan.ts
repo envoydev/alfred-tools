@@ -48,7 +48,7 @@ export function plan(inventory: Inventory, answers: Answers, options: PlanOption
     out.errors.push(...resolved.errors);
     context.roots = resolved.roots;
     out.roots = context.roots;
-    // what changed outside preferred-tools since its last write (spec D1): named first, only fix changes it
+    // what changed outside alfred-tools since its last write (spec D1): named first, only fix changes it
     out.outside = changedOutside(inventory, catalog);
 
     // the key's name and the settings (spec D9, R4): top-level maps keyed by row id (install) or target key (configure)

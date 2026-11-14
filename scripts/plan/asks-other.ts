@@ -101,7 +101,7 @@ export function cursorNameQuestion({ file, name, sameRow }: Taken): Asked<string
     const keep = { label: "Keep Cursor's own", description: `${name} is set up for Claude Code only, and Cursor's entry stays as it is`, value: 'keep' };
     const options = (sameRow ? [replace, keep] : [keep, replace]).map((option, i) => ({ ...option, label: `${option.label}${i === 0 ? RECOMMENDED_SUFFIX : ''}` }));
     return {
-        question: { id: `cursor-name-${name}@${file}`, header: 'Cursor', multiSelect: false, question: `Cursor's ${file} already has a server named ${name} that preferred-tools did not write. What should happen?`, options: options.map(({ label, description }) => ({ label, description })) },
+        question: { id: `cursor-name-${name}@${file}`, header: 'Cursor', multiSelect: false, question: `Cursor's ${file} already has a server named ${name} that alfred-tools did not write. What should happen?`, options: options.map(({ label, description }) => ({ label, description })) },
         answers: Object.fromEntries(options.map((option) => [option.label, option.value])),
     };
 }

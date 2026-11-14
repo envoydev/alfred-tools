@@ -99,8 +99,8 @@ export function writeShipped(kind: ShippedKind, root: string): StepResult
     const packageJsonResult = plain ? { wrote: false, note: null } : ensureCommonjs(root);
     const withPkg = (detail: string): StepResult => ({ ok: true, detail: [detail, packageJsonResult.wrote ? `wrote ${path.join(root, 'package.json')} (type commonjs)` : null, packageJsonResult.note].filter(Boolean).join('; ') });
     if (state === 'same') return withPkg(`${file} is up to date - left as it is`);
-    if (state === 'higher') return withPkg(`${roots.FILES[kind]} in ${root} is newer than this plugin - update preferred-tools`);
-    if (state === 'edited') return withPkg(`${file} changed since preferred-tools wrote it - left; /preferred-tools:fix rewrites it`);
+    if (state === 'higher') return withPkg(`${roots.FILES[kind]} in ${root} is newer than this plugin - update alfred-tools`);
+    if (state === 'edited') return withPkg(`${file} changed since alfred-tools wrote it - left; /alfred-tools:fix rewrites it`);
     fs.writeFileSync(file, roots.shippedSource(kind));
     return withPkg(state === 'lower' ? `rewrote ${file} (${word} ${number} -> ${version()})` : `wrote ${file} (${word} ${version()})`);
 }
@@ -108,10 +108,10 @@ export const writeHelper = (root: string): StepResult => writeShipped('helper', 
 
 // The key file's names (D3): created with its comment line, readable by its owner only; `NAME=` appended for each name it
 // lacks. Its values are never read out of this process, and no line is rewritten. Refused where git would commit it.
-const KEY_HEAD = '# preferred-tools MCP keys - fill in each value; this file is never committed';
+const KEY_HEAD = '# alfred-tools MCP keys - fill in each value; this file is never committed';
 export function ensureKeyName(file: string, names: string[]): StepResult
 {
-    if (roots.gitIgnores(file) === false) return { ok: false, detail: `git would commit ${file} - not written; /preferred-tools:fix (root-ignore) covers it` };
+    if (roots.gitIgnores(file) === false) return { ok: false, detail: `git would commit ${file} - not written; /alfred-tools:fix (root-ignore) covers it` };
     let buffer: Buffer | null = null;
     try { buffer = fs.readFileSync(file); } catch { /* absent */ }
     // a UTF-16 file (Windows PowerShell 5.1's `>`) is read by both readers but never appended to in UTF-8: the user adds the
@@ -138,7 +138,7 @@ function keepAsIs(read: { state?: string | undefined; note?: string | undefined 
 {
     if (!read || (read.state !== 'newer' && read.state !== 'unreadable')) return null;
     const what = read.note!.replace(/ - read as empty$/, '');
-    return { ok: true, detail: `${what} - left as it is; ${read.state === 'newer' ? 'update preferred-tools' : 'check its permissions'}, then run the command again` };
+    return { ok: true, detail: `${what} - left as it is; ${read.state === 'newer' ? 'update alfred-tools' : 'check its permissions'}, then run the command again` };
 }
 
 // A JSON file written whole: through a temporary file and a rename, so a stop midway never leaves half a file. A file
@@ -216,7 +216,7 @@ export function denyRead(file: string, rules: string[]): StepResult
         try { doc = JSON.parse(stripBom(text)); } catch { doc = null; }
         const isObject = (value: unknown): value is object => (value && typeof value === 'object' && !Array.isArray(value)) as boolean;
         if (!isObject(doc) || (doc.permissions !== undefined && !isObject(doc.permissions)) || (doc.permissions && doc.permissions.deny !== undefined && !Array.isArray(doc.permissions.deny)))
-            return { ok: false, detail: `${file} is not a settings object preferred-tools can read - left as it is; add ${rules.join(' and ')} to permissions.deny yourself` };
+            return { ok: false, detail: `${file} is not a settings object alfred-tools can read - left as it is; add ${rules.join(' and ')} to permissions.deny yourself` };
     }
     const deny = (doc.permissions && doc.permissions.deny) || [];
     const lack = rules.filter((rule) => !deny.includes(rule));
@@ -256,7 +256,7 @@ export function moveRootFile(from: string, to: string): StepResult
     return { ok: false, detail: `${to} is there already and is not ${from} - nothing moved; move or remove one of them, then run the command again` };
 }
 
-// A 0.4.x preferred-tools.json whose entries the list holds now: moved aside as <file>.0.4.bak, or .0.4.bak.2 and on
+// The 0.4.x record whose entries the list holds now: moved aside as <file>.0.4.bak, or .0.4.bak.2 and on
 // when an earlier backup is there - never over one, so the record always leaves and list-import finds nothing next run.
 export function retireRecord(file: string): StepResult
 {

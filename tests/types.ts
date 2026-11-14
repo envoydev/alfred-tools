@@ -28,7 +28,7 @@ declare global
             FAKE_RUNTIME_LOG?: string | undefined;
             FAKE_RUNTIME_WAIT?: string | undefined;
             MCP_REMOTE_CONFIG_DIR?: string | undefined;
-            PREFERRED_TOOLS_ALFRED?: string | undefined;
+            ALFRED_TOOLS_ALFRED?: string | undefined;
             PT_BRIDGE_AUTH?: string | undefined;
             PT_CURSOR_AGENT?: string | undefined;
             PT_PROOF_DIR?: string | undefined;

@@ -12,7 +12,7 @@
 // ${CONTEXT7_API_KEY}`), and a catalog row's location keys, which configure reads.
 import type { Path, RowOf, ServerEntry } from './types.ts';
 
-export const MARKER = '${PREFERRED_TOOLS_KEPT}';
+export const MARKER = '${ALFRED_TOOLS_KEPT}';
 
 // the guard's tests (v3.2.1 :63-67, :143-156), copied so this file masks at least what it blocks
 const SECRET_KEY_RE = /(TOKEN|SECRET|KEY|PASSWORD|PASSWD|DSN|CREDENTIAL|AUTH)$/i;

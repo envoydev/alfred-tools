@@ -6,6 +6,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { FILES } from '../../scripts/roots/roots.ts';
 import type { AccountFile } from '../../scripts/core/types.ts';
 import type { World } from '../types.ts';
 
@@ -82,8 +83,8 @@ const FIXTURES = path.join(import.meta.dirname, 'fixtures');
 // The files a step can leave, by base name: the registrations, the lists, the settings, the roots map, the account
 // file, the ignore files, the key file (names only) and what the copy step puts in a root.
 const KEPT = new Set(['.mcp.json', 'mcp.json', 'mcps.json', 'settings.json', 'settings.local.json', 'roots.json', '.claude.json',
-    '.gitignore', '.mcps-secrets', 'mcp-headers.js', 'mcp-bridge.js', 'serena-context.yml', 'package.json', 'preferred-tools.json',
-    'preferred-tools.json.0.4.bak', 'fetch.json', 'plan.json']);
+    '.gitignore', '.mcps-secrets', 'mcp-headers.js', 'mcp-bridge.js', 'serena-context.yml', 'package.json', FILES.record,
+    `${FILES.record}.0.4.bak`, 'fetch.json', 'plan.json']);
 const SKIP_DIRS = new Set(['bin', 'state', 'node_modules', '.git']);
 
 // Every spelling of a path a script can print: as given, its real path, with forward slashes, and JSON-escaped.
@@ -107,7 +108,7 @@ export function normalise(text: string, { root = null, tree = null, extra = [] }
     const pairs = tokens.flatMap(([p, token]) => spellings(p).map((s): [string, string] => [s, token])).sort((a, b) => b[0].length - a[0].length);
     for (const [s, token] of pairs) out = out.split(s).join(token);
     out = out.replace(/(<TREE>[\\/]+tests[\\/]+(?:[\w-]+[\\/]+)*[\w.-]+)\.(?:js|ts)\b/g, '$1.<EXT>');
-    out = out.replace(/((?:preferred-tools|pt)-(?:[a-z0-9]+-)*)[A-Za-z0-9]{6}\b/g, '$1XXXXXX');
+    out = out.replace(/((?:alfred-tools|pt)-(?:[a-z0-9]+-)*)[A-Za-z0-9]{6}\b/g, '$1XXXXXX');
     out = out.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g, '<TIME>');
     out = out.replace(/127\.0\.0\.1:\d+/g, '127.0.0.1:<PORT>');
     out = out.replace(/\(\d+(?:\.\d+)?s\)/g, '(<N>s)');
@@ -215,7 +216,7 @@ function makeWorld(registry: Registry): GoldenCtx
     const tmp = path.join(w.dir, 'tmp');
     for (const d of [data, tmp, path.join(w.home, '.cursor')]) fs.mkdirSync(d, { recursive: true });
     fs.mkdirSync(path.join(w.project, '.git'), { recursive: true });
-    const env = { ...temp.env, PREFERRED_TOOLS_NPM_URL: registry.url, PREFERRED_TOOLS_PYPI_URL: `${registry.url}/pypi` };
+    const env = { ...temp.env, ALFRED_TOOLS_NPM_URL: registry.url, ALFRED_TOOLS_PYPI_URL: `${registry.url}/pypi` };
     return { w, env, data, tmp };
 }
 
@@ -240,7 +241,7 @@ const BUILDERS: Record<string, Builder> & { retiredPlugin: Builder } = {
         const doc = JSON.parse(fs.readFileSync(mcp, 'utf8'));
         doc.mcpServers = Object.fromEntries(Object.entries(doc.mcpServers).reverse());
         fs.writeFileSync(mcp, `${JSON.stringify(doc, null, 2)}\n`);
-        fs.rmSync(path.join(w.project, '.preferred-tools', 'mcp-headers.js'), { force: true });
+        fs.rmSync(path.join(w.project, '.alfred-tools', 'mcp-headers.js'), { force: true });
         const cursor = path.join(w.project, '.cursor', 'mcp.json');
         const cdoc = JSON.parse(fs.readFileSync(cursor, 'utf8'));
         if (cdoc.mcpServers && cdoc.mcpServers.sentry) cdoc.mcpServers.sentry = { ...cdoc.mcpServers.sentry, url: 'https://example.invalid/mcp' };
@@ -251,7 +252,7 @@ const BUILDERS: Record<string, Builder> & { retiredPlugin: Builder } = {
     from04: (ctx: GoldenCtx) =>
     {
         const { w } = ctx;
-        fs.rmSync(path.join(w.project, '.preferred-tools', 'mcps.json'), { force: true });
+        fs.rmSync(path.join(w.project, '.alfred-tools', 'mcps.json'), { force: true });
         const cursor = path.join(w.project, '.cursor', 'mcp.json');
         fs.mkdirSync(path.dirname(cursor), { recursive: true });
         fs.writeFileSync(cursor, `${JSON.stringify({ mcpServers: { memory: { command: 'my-memory' } } }, null, 2)}\n`);
@@ -278,7 +279,7 @@ function fill(argv: string[], ctx: GoldenCtx)
     return argv.map((a) => a
         .replace(/<fixture:([\w.-]+)>/g, (_: string, name: string) => { fs.mkdirSync(ctx.tmp, { recursive: true }); const to = path.join(ctx.tmp, name); fs.copyFileSync(path.join(FIXTURES, name), to); return to; })
         .replace(/<w>/g, ctx.tmp).replace(/<data>/g, ctx.data)
-        .replace(/<root>/g, path.join(ctx.w.project, '.preferred-tools'))
+        .replace(/<root>/g, path.join(ctx.w.project, '.alfred-tools'))
         .replace(/<cursor>/g, path.join(ctx.w.project, '.cursor', 'mcp.json'))
         .replace(/<first>/g, ctx.first || 'none')
         .replace(/<missing>/g, path.join(ctx.w.dir, 'no-alfred-code')));

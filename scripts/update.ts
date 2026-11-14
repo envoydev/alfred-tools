@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The entry /preferred-tools:update runs; the work is in update/.
+// The entry /alfred-tools:update runs; the work is in update/.
 import { blockingStdio } from './core/json-file.ts';
 import { runUpdateCommand } from './update/command.ts';
 

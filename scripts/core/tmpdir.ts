@@ -4,18 +4,18 @@
 //
 // The folder holds what one command hands from script to script, so the last script that runs on it removes it
 // (`release`): apply.ts, update.ts --apply or fix.ts --apply when no fetch file goes on, else fetch.ts. Only a folder
-// this plugin made is removed - directly under the real temp folder and named preferred-tools-*; any other --tmp is
+// this plugin made is removed - directly under the real temp folder and named alfred-tools-*; any other --tmp is
 // left and said. A command stopped half-way leaves its folder, so each new one sweeps this plugin's folders older than
 // 24 hours.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export const PREFIX = 'preferred-tools-';
+export const PREFIX = 'alfred-tools-';
 const MAX_AGE_MS = 24 * 3600 * 1000;
 const tempRoot = (): string => fs.realpathSync(os.tmpdir());
 
-// true for a folder this plugin made: its real parent is the real temp folder and its name starts preferred-tools-
+// true for a folder this plugin made: its real parent is the real temp folder and its name starts alfred-tools-
 export function isOurTempDir(dir: string): boolean
 {
     try
@@ -30,7 +30,7 @@ export function isOurTempDir(dir: string): boolean
 export function releaseTempDir(dir: string | null | undefined, log: (line: string) => void = console.log): boolean
 {
     if (!dir) return false;
-    if (!isOurTempDir(dir)) { log(`${dir} left as it is: not a folder preferred-tools made in the temp folder`); return false; }
+    if (!isOurTempDir(dir)) { log(`${dir} left as it is: not a folder alfred-tools made in the temp folder`); return false; }
     fs.rmSync(fs.realpathSync(dir), { recursive: true, force: true });
     return true;
 }
