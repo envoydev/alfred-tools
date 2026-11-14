@@ -159,7 +159,16 @@ export function rootRepointFix(entry: ServerEntry, _finding: Finding, context: F
 
 // ---- root-move ------------------------------------------------------------------------------------------------------
 
-export const OPEN_FILE = 'a file in it is open - close Claude Code and Cursor, then run /alfred-tools:update from a terminal session started fresh';
+// Windows refuses to rename a folder while any process holds a file in it or runs in it (EPERM, measured 2026-11-14 on
+// Windows 11: a Node handle, a handle without delete sharing and a working folder inside it alike), and a session
+// started fresh starts the same servers again - so the advice names them and stops them first.
+const OPEN_CODES = ['EPERM', 'EBUSY', 'EACCES'];
+function notMoved(from: string, error: NodeJS.ErrnoException, holders: string[], platform: string): string
+{
+    if (platform !== 'win32' || !OPEN_CODES.includes(error.code || '')) return `${from} not moved: ${error.message}`;
+    const stop = holders.length ? `in /mcp disable ${holders.join(', ')} (${holders.length > 1 ? 'servers that keep' : 'a server that keeps'} files in it), ` : '';
+    return `${from} not moved: a file in it is open (${error.code}) - ${stop}close Claude Code and Cursor, start Claude Code again, run /alfred-tools:update${holders.length ? ', then enable them in /mcp' : ''}`;
+}
 
 // One finding per folder still under the former name (spec D3), keyed by its families. A registration that resolves into
 // it but is not managed - one left on its own, or the user's own - is named, never re-pointed.
@@ -175,7 +184,9 @@ export function rootMoveDetect(context: FixCtx): Finding[]
         const managed = C.registrationsOf(context, 'root-move');
         const mine = regs.filter((registration) => managed.includes(registration));
         const unmanaged = regs.filter((registration) => !managed.includes(registration)).map((registration) => `${registration.name} (${registration.scope}) names ${firstPath(registration.entry, move.from, machine)} - not re-pointed, yours to change`);
-        const base = { id: 'root-move', row: null, name: move.families.join('+'), scope: null, moveFrom: move.from, moveTo: move.to, ...(unmanaged.length ? { unmanaged, note: unmanaged.join('; ') } : {}) };
+        // the stdio servers naming the folder: each may hold a file in it while it runs
+        const holders = [...new Set(regs.filter((registration) => typeof registration.entry.command === 'string').map((registration) => registration.name))];
+        const base = { id: 'root-move', row: null, name: move.families.join('+'), scope: null, moveFrom: move.from, moveTo: move.to, ...(holders.length ? { holders } : {}), ...(unmanaged.length ? { unmanaged, note: unmanaged.join('; ') } : {}) };
         const dir = pathFor(context.platform).dirname(move.from);
         if (move.state === 'link') { out.push({ ...base, found: `${move.from} is a link`, blocked: 'a link - move its target by hand' }); continue; }
         if (move.state === 'both') { out.push({ ...base, found: `${move.from} and ${move.to} both hold this plugin's files`, blocked: `both .preferred-tools and .alfred-tools are in ${dir}: move what you keep from .preferred-tools into .alfred-tools, delete .preferred-tools, then run /alfred-tools:fix` }); continue; }
@@ -272,7 +283,7 @@ export function rootMoveFix(finding: Finding, context: FixCtx): MachineFixResult
         if (beside && !beside.length) fs.rmdirSync(to);
         fs.renameSync(from, to);
     }
-    catch (caught) { const error = caught as NodeJS.ErrnoException; return { ok: false, detail: `${from} not moved: ${error.message} - ${OPEN_FILE}` }; }
+    catch (caught) { return { ok: false, detail: notMoved(from, caught as NodeJS.ErrnoException, finding.holders || [], context.platform) }; }
     const done = !fs.existsSync(from) && fs.existsSync(to);
     return { ok: done, detail: done ? `renamed ${from} to ${to}` : `${from} is still there after the rename` };
 }

@@ -1319,6 +1319,14 @@ unless a URL is given. 'The former plugin' and 'the former folder' are the plugi
   `fs.mkdir(MCP_REMOTE_CONFIG_DIR, { recursive: true })`, before each token write, so a session left running during the
   move can bring the former folder back on its next token write. The memory server's package was not in the cache:
   NOT MEASURED. D3's came-back advice and the note to close other windows cover both.
+- A7 - Windows refuses the move while the folder is in use (measured 2026-11-14 on Windows 11 on ARM64, the Personal
+  Parallels VM, node 22.23.3, `prlctl exec --current-user`): `fs.renameSync(<base>/.preferred-tools, <base>/.alfred-tools)`
+  fails `EPERM` while another process holds a file under it - a Node `fs.openSync` handle, a .NET
+  `FileShare.ReadWrite` handle without delete sharing (how a Python or SQLite server holds its files), or a process
+  whose working folder is inside it - and succeeds once that process exits. A session started fresh in the project
+  starts its servers again, so `root-move` names the stdio servers that use the folder and tells the user to disable
+  them in `/mcp` (https://code.claude.com/docs/en/mcp, 'Disable a server without removing it': Claude Code does not
+  connect to a disabled server; the choice is kept per project), restart, update, and enable them again.
 - A6 - moving an account to another catalog source under the same name (claude 2.1.x, measured 2026-11-14 on a
   throwaway config with two local catalogs, then on the owner's account): `claude plugin marketplace add <new source>`
   for a name already added re-points it in place - 'Plugins already installed from it now update from the new source' -

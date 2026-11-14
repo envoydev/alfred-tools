@@ -2190,6 +2190,30 @@ test('a rename whose folder already moved reports it, never throws (a project th
     finally { w.clean(); }
 });
 
+test('a rename Windows refuses names the servers that keep files in the folder, and how to stop them first', () =>
+{
+    const w = world();
+    try
+    {
+        const root = oldRoot(w);
+        seed(w, 'mine', 'local', { type: 'stdio', command: 'node', args: [path.join(root, 'server.js')] });
+        const [f] = moveOf(w) as [Finding];
+        // a folder the rename cannot touch stands in for one Windows keeps in use (measured: EPERM while a file is open)
+        fs.chmodSync(w.project, 0o555);
+        try
+        {
+            const win = F.rootMoveFix(f, { ...ctxOf(w), platform: 'win32' });
+            assert.strictEqual(win.ok, false);
+            assert.match(win.detail, /not moved: a file in it is open \(EACCES\) - in \/mcp disable mine \(a server that keeps files in it\), close Claude Code and Cursor, start Claude Code again, run \/alfred-tools:update, then enable them in \/mcp/);
+            const posix = F.rootMoveFix(f, ctxOf(w));
+            assert.match(posix.detail, /not moved: EACCES/);
+            assert.doesNotMatch(posix.detail, /a file in it is open/, 'the open-file advice is for Windows only');
+        }
+        finally { fs.chmodSync(w.project, 0o755); }
+    }
+    finally { w.clean(); }
+});
+
 // a 0.4.0 root under the former name: its record, helper 4 and a GitHub server through the helper
 const formerRoot = (base: string) => path.join(base, '.preferred-tools');
 function oldRoot(w: World, base = w.project, scope = 'local', name = 'github')
@@ -2293,7 +2317,7 @@ test('a symlink is blocked; a rename that throws fails with nothing changed', { 
         const l = logged();
         const res = applyFixes(ctxOf(w), ['root-move'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         t.mock.restoreAll();
-        assert.match(res.failed!, /EBUSY.*a file in it is open - close Claude Code and Cursor, then run \/alfred-tools:update from a terminal session started fresh/);
+        assert.match(res.failed!, /not moved: EBUSY: resource busy or locked$/, 'off Windows the error as it is; the open-file advice is Windows\' (see the next rename test)');
         assert.ok(fs.existsSync(path.join(formerRoot(w.project), 'mcp-headers.js')) && !fs.existsSync(ptRoot(w)));
         assert.match(entryAt(w, 'github', 'local').headersHelper!, /\.preferred-tools/);
     }
