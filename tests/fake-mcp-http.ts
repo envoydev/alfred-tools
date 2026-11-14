@@ -1,6 +1,6 @@
 // A stub HTTP MCP server on 127.0.0.1, in the calling process: it answers initialize and tools/list, and records per
 // request the path, the JSON-RPC method and whether the `Authorization` header equals the expected value - never the
-// value itself. Used by tests/probes/headers-helper.ts and the matrix's key cases (keys.test.js, workspace.test.js W4).
+// value itself. Used by tests/probes/headers-helper.ts and the matrix's key cases (keys.test.ts, workspace.test.ts W4).
 import fs from 'node:fs';
 import http from 'node:http';
 import { execFile } from 'node:child_process';
@@ -110,7 +110,7 @@ export const stubBridgeCatalog = (port: number) => catalogWith((raw) =>
 });
 
 // A folder's trust, as the trust dialog writes it in the account file of a harness world (tests/harness.ts), under the
-// key Claude Code reads: on Windows the folder with `/` (account.js projectEntry) - a `\` key leaves the folder untrusted,
+// key Claude Code reads: on Windows the folder with `/` (account.ts projectEntry) - a `\` key leaves the folder untrusted,
 // so a project-scope headersHelper never runs (measured, Windows 11 ARM64, 2.1.309, 2026-11-12)
 export function trust(h: { env: NodeJS.ProcessEnv }, dir: string, on = true)
 {

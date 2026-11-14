@@ -202,7 +202,7 @@ function startRegistry(): Promise<Registry>
     return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ url: `http://127.0.0.1:${(server.address() as { port: number }).port}`, close: () => new Promise<void>((r) => server.close(r as () => void)) })));
 }
 
-// tests/helpers.ts, or helpers.js in a tree from before the move, loaded by its file URL.
+// tests/helpers.ts, or helpers.ts in a tree from before the move, loaded by its file URL.
 const helpers = await import(pathToFileURL(path.join(TREE, 'tests', fs.existsSync(path.join(TREE, 'tests', 'helpers.ts')) ? 'helpers.ts' : 'helpers.js')).href);
 
 // The world a flow runs in: tests/helpers.ts's world, its temp folder and plugin data folder, Cursor present.

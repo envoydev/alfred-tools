@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // APPLY - runs a plan's operations in order through the `claude` CLI, reads each back, and stops at the first failure.
 //
-//   node apply.js <plan.json> [--tmp <dir>] [--data <plugin data dir>]
+//   node apply.ts <plan.json> [--tmp <dir>] [--data <plugin data dir>]
 //
-// The CLI is the only writer of .mcp.json and the account file, but for the order-mcp-json step (mcp-order.js), which
+// The CLI is the only writer of .mcp.json and the account file, but for the order-mcp-json step (mcp-order.ts), which
 // reorders .mcp.json's servers and changes no value (the user's ruling, 2026-11-11); this file otherwise only reads them back. Everything applied
 // before a failure stays in place and is named. An empty plan makes no call at all and says so.
 //
@@ -11,10 +11,10 @@
 // when the add fails; a rename or a scope move adds the new registration FIRST, reads it back, and only then removes the
 // old one, so a failed add leaves the old one running.
 //
-// A plan's fetch steps are not run here. They go to <tmp>/fetch.json with the names of the servers written, for fetch.js:
+// A plan's fetch steps are not run here. They go to <tmp>/fetch.json with the names of the servers written, for fetch.ts:
 // a first download takes minutes, and a command cut off by its time limit must never leave half a plan applied.
 //
-// A plan read from the commands' files carries each credential value as kept.js's marker (inventory.js writes it so).
+// A plan read from the commands' files carries each credential value as kept.ts's marker (inventory.ts writes it so).
 // Before a replace or a move, the real values are taken back in this process from the registration as it is now, and a
 // registration that changed since it was read stops the step. No file under <tmp> and no printed line holds a live value:
 // rollback.json is kept, and a restore line shows the marker in place of the key.
@@ -86,9 +86,9 @@ export function runStep(step: PlanStep, context: ApplyCtx): StepResult
     }
 }
 
-// apply.js does the fast half - the CLI writes and their read-back, seconds - so the command that runs it is never cut off
+// apply.ts does the fast half - the CLI writes and their read-back, seconds - so the command that runs it is never cut off
 // halfway. The slow half - the fetch steps and the `claude mcp get` status, minutes on a first install - goes to
-// <tmp>/fetch.json (or `fetchFile`; false writes none, for a caller that collects several applies) for fetch.js, which
+// <tmp>/fetch.json (or `fetchFile`; false writes none, for a caller that collects several applies) for fetch.ts, which
 // the command runs in the background.
 export function apply(plan: ApplyPlan, { env = process.env, tmp, runCli = cli.runClaude, log = console.log, fetchFile, data = null }: ApplyOptions = {}): ApplyReport
 {
@@ -145,7 +145,7 @@ export function apply(plan: ApplyPlan, { env = process.env, tmp, runCli = cli.ru
     log('', 'Read back:');
     for (const readbackEntry of report.readback)
         log(`  ${readbackEntry.found ? 'ok ' : 'MISSING'} ${readbackEntry.name} - ${readbackEntry.scope} scope, ${readbackEntry.route || '?'} route${readbackEntry.row ? ` (${readbackEntry.row})` : ''}`);
-    // what was written and read back: with a package to fetch, fetch.js fetches it and then asks the CLI for the status;
+    // what was written and read back: with a package to fetch, fetch.ts fetches it and then asks the CLI for the status;
     // with none (a hosted URL, a rename, a move), the status is asked here
     const done = new Set(report.applied.map((appliedStep) => appliedStep.i));
     const written = plan.steps.filter((planStep, i) => done.has(i + 1) && ['mcp-add', 'mcp-replace', 'mcp-move'].includes(planStep.op)).map((planStep): Endpoint => (planStep as McpMoveStep).to || { name: (planStep as McpAddStep).name, scope: (planStep as McpAddStep).scope });

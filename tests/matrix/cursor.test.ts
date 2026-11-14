@@ -171,7 +171,7 @@ test('M3 one sign-in for both apps: one /authorize for two starts, one refresh f
         assert.strictEqual(c.env.MCP_REMOTE_CONFIG_DIR, projRoot, 'the sign-in folder is the project root');
         assert.ok(c.args.includes(`${s.base}${fakeOauth.MCP_PATH}`), JSON.stringify(c.args));
 
-        // mcp-remote into the throwaway npm cache, as the command runs fetch.js
+        // mcp-remote into the throwaway npm cache, as the command runs fetch.ts
         if (r.report.fetchFile)
         {
             const f = await hh.fetch(r.report.fetchFile);
@@ -401,7 +401,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     const serena040 = readJson(path.join(p, '.mcp.json')).mcpServers.serena;
     assert.strictEqual(serena040.args[serena040.args.indexOf('--context') + 1], 'claude-code', '0.4.0\'s serena context');
     assert.ok(fs.existsSync(path.join(projRoot, '.mcps-secrets')), 'github\'s key file in the project root');
-    // serena's first start under 0.4.0 (its own fetch.js) writes serena_config.yml with Serena's default base modes
+    // serena's first start under 0.4.0 (its own fetch.ts) writes serena_config.yml with Serena's default base modes
     const config = path.join(serena040.env.SERENA_HOME, 'serena_config.yml');
     let started: string | null = 'NOT RUN (the base modes only): uvx not on PATH';
     if (which('uvx') && first.report.fetchFile)
@@ -488,7 +488,7 @@ test('M4 serena\'s manual names no tool outside the allow-list', { skip: skipAll
     if (a[a.indexOf('--enable-web-dashboard') + 1] !== 'false') return t.skip('NOT RUN: the registration does not turn the web dashboard off, so starting it would open a browser');
     const ctxFile = a[a.indexOf('--context') + 1]!;
     assert.ok(fs.existsSync(ctxFile) && ctxFile.endsWith('serena-context.yml'), `the context file the registration names is there: ${ctxFile}`);
-    // fetch.js as the command runs it: the fetch, the first start (serena writes serena_config.yml), then base_modes: []
+    // fetch.ts as the command runs it: the fetch, the first start (serena writes serena_config.yml), then base_modes: []
     const f = await h.fetch(r.report.fetchFile!);
     if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0]!.slice(0, 160)})`);
     assert.deepStrictEqual(f.warnings, [], f.text);

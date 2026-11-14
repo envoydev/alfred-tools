@@ -55,7 +55,7 @@ export function runFixCommand(argv: string[], { env = process.env, out = (line: 
     {
         const log = (...lines: string[]) => out(lines.join('\n'));
         const result = applyFixes(context, args.apply.split(',').filter(Boolean), { only: args.only, input: args.input, tmp: args.tmp, log });
-        // the last script on <tmp> removes it, unless fetch.js takes it on
+        // the last script on <tmp> removes it, unless fetch.ts takes it on
         if (!result.fetchFile) tmpdir.releaseTempDir(result.tmp, log);
         return result.failed ? 1 : 0;
     }

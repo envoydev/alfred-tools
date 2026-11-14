@@ -61,7 +61,7 @@ export interface Endpoint
     name: string; // stored - do not rename
     scope: string; // stored - do not rename
 }
-// One tool's answers: an install pick, or a configure change (with its row, for prereq.js).
+// One tool's answers: an install pick, or a configure change (with its row, for prereq.ts).
 export interface PickAnswer
 {
     route?: string | undefined; // stored - do not rename
@@ -362,7 +362,7 @@ export interface PlanCtx extends MadeCtx, ListCtx
     changing: Set<string>;
     rootMoves: RootMove[];
 }
-// Where a Cursor file is and the catalog its rows come from: update.js passes its own.
+// Where a Cursor file is and the catalog its rows come from: update.ts passes its own.
 export interface CursorPlaceCtx
 {
     platform: string;
@@ -371,7 +371,7 @@ export interface CursorPlaceCtx
     env?: Env | undefined;
     catalog?: Catalog | undefined;
 }
-// The part of a plan the step makers add to: fix.js passes its own.
+// The part of a plan the step makers add to: fix.ts passes its own.
 export interface PlanOut
 {
     steps: PlanStep[];
@@ -379,7 +379,7 @@ export interface PlanOut
     errors: string[];
     taken?: Taken[] | undefined;
 }
-// What a repair's tail is given: where it runs, the catalog, and the notes it adds to (fix.js and update.js).
+// What a repair's tail is given: where it runs, the catalog, and the notes it adds to (fix.ts and update.ts).
 export interface RepairCtx
 {
     platform: string;

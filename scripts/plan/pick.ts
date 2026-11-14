@@ -416,13 +416,13 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
     if (row.dangerous && row.dangerous.length) out.dangerous.push({ row: row.id, name, tools: row.dangerous });
     out.expect.push({ kind: 'mcp', row: row.id, name, scope, route: routeId });
 
-    // a launch the cache may not hold yet is fetched once it is written (entries.js fetchStep says why); a change that
+    // a launch the cache may not hold yet is fetched once it is written (entries/names.ts fetchStep says why); a change that
     // keeps the package, such as a location or a name, fetches nothing
     const fetch = fetchStep(name, entry, row.id, current && current.entry);
     const uses: RootUses = { helper: Boolean(entry.headersHelper) || Boolean(bridge), bridge: Boolean(bridge) || form === 'two', serenaContext: contextArgAt(entry) >= 0, keyFile, keyName, keyNames, data: dataAbs };
     // the shared sign-in's folder sits in the family's root: the root is written (its .gitignore) like any other
     const signInRoot = () => { if (form === 'signin') context.uses.push({ family: roots.familyOf(scope), root: context.roots![roots.familyOf(scope)]! }); };
-    // the apps and the form this registration is listed with (plan-lists.js)
+    // the apps and the form this registration is listed with (plan/lists.ts)
     const record = () => { const registrationKey = keyOf('mcp', name, scope); if (context.clientsFor) context.clientsFor.set(registrationKey, clients); if (context.formFor) context.formFor.set(registrationKey, form); };
     // a bridge step says whether its names are filled: the apply's background start skips one that cannot start yet
     const withFilled = bridge ? { filled: Boolean(bridgeFilled) } : {};

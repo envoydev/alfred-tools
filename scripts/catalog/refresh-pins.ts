@@ -4,7 +4,7 @@
 //   node scripts/refresh-pins.ts            print what would move
 //   node scripts/refresh-pins.ts --write    move catalog/tools.json
 //
-// Each package route moves to the newest stable release that is 7 or more days old (scripts/registry.js), and its cut-off
+// Each package route moves to the newest stable release that is 7 or more days old (scripts/catalog/registry.ts), and its cut-off
 // moves to the end of today (UTC). A pin already at or past that release stays, and so does its cut-off. A Docker image
 // tag is not looked up. Moving a pin is a release: the output ends with what to do next.
 import fs from 'node:fs';

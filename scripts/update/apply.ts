@@ -51,7 +51,7 @@ function updateMcp(context: UpdateCtx, offer: McpOffer, tmp: string, log: Log): 
         if (!entry) { log(`CHECK  ${offer.label}: rewritten earlier in this run and no longer pins ${offer.package} - left`); return false; }
         offer = { ...offer, old: now!.entry, entry };
     }
-    // the new pin is not in the cache yet: fetch it right after the rewrite (entries.js fetchStep)
+    // the new pin is not in the cache yet: fetch it right after the rewrite (entries/names.ts fetchStep)
     const fetch = fetchStep(offer.name, offer.entry, offer.row, offer.old);
     const replace: McpReplaceStep = { op: 'mcp-replace', name: offer.name, scope: offer.scope, old: offer.old, entry: offer.entry, row: offer.row, route: offer.route, why: `${offer.package} ${offer.from} -> ${offer.to}` };
     // the list and Cursor take the registration as read back, in the same run (spec D9 Update 2), from the lists as they
@@ -91,7 +91,7 @@ function updateCursorPin(context: UpdateCtx, offer: CursorPinOffer, tmp: string,
 }
 
 // A helper or bridge copy rewritten with this plugin's, if it is still the lower one the check offered; read back. The
-// root's package.json says CommonJS when it has none (apply.js ensureCommonjs).
+// root's package.json says CommonJS when it has none (apply.ts ensureCommonjs).
 function updateHelper(offer: FileOffer, log: Log): boolean
 {
     const kind = offer.kind === 'bridge' ? 'bridge' : offer.kind === 'context' ? 'serenaContext' : 'helper';
@@ -199,7 +199,7 @@ export function applyUpdates(context: UpdateCtx, ids: string[], out: UpdateCheck
     }
     // Cursor asks to approve a changed entry again (spec Risks)
     if (context.reapprove.length) log('', reapproveLine([...new Set(context.reapprove)]));
-    // every rewritten server in one fetch file, for fetch.js in the background (apply.js says why); a server rewritten
+    // every rewritten server in one fetch file, for fetch.ts in the background (apply.ts says why); a server rewritten
     // twice in this run is fetched once at its scope, as it was written last
     const last = new Map<string, JobStep>();
     for (const jobStep of context.fetches.flatMap((fetchJob) => fetchJob.fetch)) { last.delete(`${jobStep.name}~${jobStep.scope}`); last.set(`${jobStep.name}~${jobStep.scope}`, jobStep); }

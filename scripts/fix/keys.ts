@@ -1,6 +1,6 @@
 // The 0.2.0 key rows (spec D7): a hosted key moved out of a registration into the header helper, the helper on disk kept
 // present and current, and a root's .gitignore that keeps its key file out of git. token-sync (stdio keys) is in
-// registration.js.
+// registration.ts.
 //
 // A key is compared in this process only: a finding names a key and a file, never a value.
 import fs from 'node:fs';
@@ -19,7 +19,7 @@ import type { InvRegistration } from '../inventory/types.ts';
 import type { ShippedKind } from '../roots/types.ts';
 import type { Finding, FixCtx, MachineFixResult, ShippedFile } from './types.ts';
 
-// What roots.js needs to place a root, from a fix ctx.
+// What roots.ts needs to place a root, from a fix ctx.
 const rootCtx = (context: FixCtx) => ({ project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog });
 // The roots a fix writes into (R9): each family's root in use, else D2's recommended one.
 const rootsOf = (context: FixCtx) => roots.resolveRoots(context.inventory, null, rootCtx(context)).roots;
@@ -69,7 +69,7 @@ export function keyToHelperDetect(context: FixCtx): Finding[]
     return out;
 }
 
-// The entry as read, with `headersHelper` and without the header. fix.js writes the root's file steps before it (R9).
+// The entry as read, with `headersHelper` and without the header. fix.ts writes the root's file steps before it (R9).
 export function keyToHelperFix(entry: ServerEntry, finding: Finding, context: FixCtx): ServerEntry
 {
     const out = C.clone(entry);
@@ -120,7 +120,7 @@ const helperFinding = (fixId: string, shippedFile: ShippedFile, what: string, ex
 const nameOf = (shippedFile: ShippedFile) => roots.FILES[shippedFile.kind];
 // the file this finding writes: 'helper' or 'bridge' (a finding from before 0.4.0 carries none: a helper)
 const kindOf = (finding: Finding): ShippedKind => (finding.shipped === 'bridge' || finding.shipped === 'serenaContext' ? finding.shipped : 'helper');
-// a fix that writes a file says CommonJS beside it (apply.js ensureCommonjs, 0.4.0 Ruling 12)
+// a fix that writes a file says CommonJS beside it (apply.ts ensureCommonjs, 0.4.0 Ruling 12)
 const withCommonjs = (root: string, result: MachineFixResult, kind: ShippedKind): MachineFixResult =>
 {
     if (kind === 'serenaContext') return result;

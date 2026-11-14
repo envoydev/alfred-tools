@@ -1,4 +1,4 @@
-// prereq.js: read-only checks of the machine, a missing one named with its install line or its vendor page.
+// prereq.ts: read-only checks of the machine, a missing one named with its install line or its vendor page.
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';

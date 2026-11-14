@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 // THE FIX ENGINE - known problems and their recorded fixes (catalog/fixes.json, detectors in scripts/fix/).
 //
-//   node fix.js --detect [--only <fix id | tool | registration name>] [--json] [--project <dir>] [--data <dir>]
-//   node fix.js --questions [--project <dir>] [--data <dir>]   the asks, as data (the same --only narrows it)
-//   node fix.js --apply <id,id | all | none> [--only <x>] [--input key=value] [--project <dir>] [--tmp <dir>] [--data <dir>]
+//   node fix.ts --detect [--only <fix id | tool | registration name>] [--json] [--project <dir>] [--data <dir>]
+//   node fix.ts --questions [--project <dir>] [--data <dir>]   the asks, as data (the same --only narrows it)
+//   node fix.ts --apply <id,id | all | none> [--only <x>] [--input key=value] [--project <dir>] [--tmp <dir>] [--data <dir>]
 //   --input retired-declined=<id>~<scope>,...  the plugin uninstall offers turned down (spec D9), kept in --data
 //
 // --data: the plugin's data folder, whose roots map finds the records - a registration left on its own (spec D6) is
 // not checked, and is listed once as such.
 //
 // A detector looks at the inventory and the machine and returns findings; a row that finds nothing is not shown. A
-// registration fix edits the entry AS READ and is written through apply.js (remove, then add-json, with a rollback), one
+// registration fix edits the entry AS READ and is written through apply.ts (remove, then add-json, with a rollback), one
 // replace per registration however many fixes it takes. A machine fix runs its command. Every fix is read back by running
 // its detector again, and the restart line comes last - unless every fix applied was one a session does not need to restart
 // for (a data folder's .gitignore). A finding with `blocked` is shown and never applied; a row with
@@ -180,7 +180,7 @@ function driftSkip(finding: Finding, picked: Finding[], input: Record<string, st
 
 // `name` and `scope` narrow the findings to one registration, by its exact name (`only` also matches a row id, so two
 // servers of one row would both match) - update applies one at a time; `fetchFile: false` writes no fetch file and
-// returns the launches to fetch as `fetch`, for update to hand on in its own (apply.js). `gone`: nothing picked is found
+// returns the launches to fetch as `fetch`, for update to hand on in its own (apply.ts). `gone`: nothing picked is found
 // any more - an earlier step did it.
 export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, input = {}, tmp, log = console.log, runCli = cli.runClaude, fetchFile }: FixOptions = {}): FixRun
 {
@@ -279,7 +279,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     }
 
     // file fixes (spec D9): detected again on what the registration pass left, their steps in the catalog's row order
-    // as one plan through apply.js, read back below like the rest
+    // as one plan through apply.ts, read back below like the rest
     const filePicked = todo.filter((finding) => finding.kind === 'file');
     if (filePicked.length)
     {
@@ -302,7 +302,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     }
 
     // machine fixes; one that says `restart: false` (a .gitignore written) changes nothing a session has started, and one
-    // that returns `fetch` (an npx cache folder removed) leaves a package for fetch.js to download again
+    // that returns `fetch` (an npx cache folder removed) leaves a package for fetch.ts to download again
     const noRestart = new Set<Finding>();
     const refetch: JobStep[] = [];
     for (const finding of todo.filter((candidate) => candidate.kind === 'machine'))

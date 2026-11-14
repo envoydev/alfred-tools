@@ -1,5 +1,5 @@
 // THE LIST STEPS - what a plan writes into each family's <root>/mcps.json (spec D1, 0.5.0). Nothing here changes
-// anything: apply.js's list-write step does, and only for the registrations the apply wrote and read back.
+// anything: apply.ts's list-write step does, and only for the registrations the apply wrote and read back.
 //
 // One list-write per list file the plan touches: an upsert per mcp-add, mcp-replace and mcp-move (filled at apply from
 // the registration as read), a drop per mcp-remove and per server that leaves a list (a move, a root change), and the
@@ -57,7 +57,7 @@ export function importUnlisted(inventory: Inventory, family: Family, catalog: Ca
 const ownChanged = (foundEntry: FoundList | null, next: OwnEntry[]): boolean => (!foundEntry || foundEntry.state ? next.length > 0 : JSON.stringify(next) !== JSON.stringify(foundEntry.own));
 
 // The list-write steps of a plan. `regSteps`: the plan's steps; its registration steps give the upserts and drops. The
-// own part runs only for a plan that read the answers (`ctx.recordLive`): fix.js has none.
+// own part runs only for a plan that read the answers (`ctx.recordLive`): fix.ts has none.
 export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<PlanOut, 'notes'>, regSteps: PlanStep[] = []): (ListWriteStep | FileStep)[]
 {
     const pathApi = pathFor(context.platform);

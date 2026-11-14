@@ -5,8 +5,8 @@
 //
 // The write follows the record's rules (D8 of 0.2.0): a temporary file then a rename; an unchanged list is not rewritten;
 // a list from a newer version, or one that cannot be read, is never replaced; a file that is not JSON is kept as
-// <file>.bak first; the file goes when both arrays are empty. apply.js's own helpers are not required here, since
-// apply.js requires the planner, which requires this module.
+// <file>.bak first; the file goes when both arrays are empty. apply.ts's own helpers are not required here, since
+// apply.ts requires the planner, which requires this module.
 import fs from 'node:fs';
 import path from 'node:path';
 import * as roots from '../roots/roots.ts';
@@ -145,7 +145,7 @@ export function fromRegistration(registration: Registration, row: CatalogRow | n
 
 // ---- the 0.4.x record, <root>/preferred-tools.json -------------------------------------------------------------------
 // Read only: the servers the user left on their own until list-import moves them into a list's `own` (0.5.0). Moved here
-// from roots.js unchanged, under the names the list's code reads them by.
+// from roots.ts unchanged, under the names the list's code reads them by.
 
 export const OLD_RECORD_VERSION = 1;
 const pathFor = (platform: string) => (platform === 'win32' ? path.win32 : path.posix);

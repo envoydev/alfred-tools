@@ -1,4 +1,4 @@
-// keys.js - the key files' grammar and chains (D3), and how a key is written into a stdio registration by scope.
+// keys.ts - the key files' grammar and chains (D3), and how a key is written into a stdio registration by scope.
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';

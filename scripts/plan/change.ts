@@ -108,7 +108,7 @@ export function movedLists(inventory: Inventory, moves: RootMove[] | null | unde
 }
 
 // The answers about the servers already set up (spec D6, F4), from configure: 'own' puts the server in its family's
-// list's own, 'manage' or 'add' takes it out (plan-lists.js). What is here now, so a list drops a server gone since.
+// list's own, 'manage' or 'add' takes it out (plan/lists.ts). What is here now, so a list drops a server gone since.
 export function planExisting(answers: Answers, inventory: Inventory, context: PlanCtx, catalog: Catalog, out: Plan, connectors: string[] | null): void
 {
     context.recordEntries = { project: [], global: [] };

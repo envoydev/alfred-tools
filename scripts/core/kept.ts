@@ -3,7 +3,7 @@
 // alfred-code's secret guard (v3.2.1 stack/hooks/guard-secret-value.js) refuses a script run that names a JSON file
 // holding a live credential, and its Stop guard asks for a rotation once one shows in a tool result. So the files the
 // commands hand from one script to the next - inventory, plan, rollback - carry each credential value as MARKER, and
-// apply.js puts the real one back in its own process from the registration it was read from.
+// apply.ts puts the real one back in its own process from the registration it was read from.
 //
 // Masked whole: every `headers` value; a value under a key the guard's file-key test names (its credKey, :154-156), or
 // below one; an arg after a flag that test names (`--api-key <v>`, `--token=<v>`). Masked as that part only, anywhere

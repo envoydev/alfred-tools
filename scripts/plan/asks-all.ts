@@ -24,7 +24,7 @@ import type { AskCtx, AskOptions, Asked, Picks, Questions } from './types.ts';
 // for configure; both may carry `scopes` ({ <row id or key>: scope }) and `names` ({ <row id or key>: 'keep' | <name> }),
 // the answers to `first`, which place the data folder. A target's questions start from what it has now: its route,
 // scope, name and data folder are 'Keep'. `env` and `home`: what the key state reads (the shell's variables, the home
-// key file). plan.js --questions passes the real ones; a caller that passes none reads neither, so a test never depends
+// key file). plan.ts --questions passes the real ones; a caller that passes none reads neither, so a test never depends
 // on the shell that runs it.
 export function allQuestions(inventory: Inventory, picks: Picks | null | undefined, catalog: Catalog, { env = {}, home = null, connectors = null }: AskOptions = {}): Questions
 {
@@ -70,7 +70,7 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
         const target = targetOf(inventory, key);
         const row = target && target.item.rowId && !target.item.alfredRetired ? catalog.byId.get(target.item.rowId) : null;
         if (!row) { out.targets[key] = { error: `'${key}' is not a catalog tool installed here` }; continue; }
-        // required here, not at the top: plan.js requires this file
+        // required here, not at the top: plan.ts requires this file
         const current = target!.kind === 'mcp' ? currentOf(row, target!.item as Registration) : { scope: target!.item.scope } as Partial<Current>;
         const listed = target!.kind === 'mcp' ? listedOf(inventory, target!.item as InvRegistration) : null;
         out.targets[key] = {

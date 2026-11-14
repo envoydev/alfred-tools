@@ -1,4 +1,4 @@
-// mcp-order.js - .mcp.json's servers in the catalog's order (spec F8): the managed servers first, by catalog.order, the
+// mcp-order.ts - .mcp.json's servers in the catalog's order (spec F8): the managed servers first, by catalog.order, the
 // user's own and the servers left on their own after them. Only the order of mcpServers changes, never a value.
 import test from 'node:test';
 import assert from 'node:assert';

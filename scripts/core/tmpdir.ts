@@ -3,7 +3,7 @@
 // Node cannot open). The walk keeps its inventory, answers and plan files in it.
 //
 // The folder holds what one command hands from script to script, so the last script that runs on it removes it
-// (`release`): apply.js, update.js --apply or fix.js --apply when no fetch file goes on, else fetch.js. Only a folder
+// (`release`): apply.ts, update.ts --apply or fix.ts --apply when no fetch file goes on, else fetch.ts. Only a folder
 // this plugin made is removed - directly under the real temp folder and named preferred-tools-*; any other --tmp is
 // left and said. A command stopped half-way leaves its folder, so each new one sweeps this plugin's folders older than
 // 24 hours.

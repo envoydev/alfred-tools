@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // THE INVENTORY - what is installed, read-only, no server started.
 //
-//   node inventory.js --project <dir> --json <out> [--data <plugin data dir>]   (--data: the roots map, spec D2)
+//   node inventory.ts --project <dir> --json <out> [--data <plugin data dir>]   (--data: the roots map, spec D2)
 //
 // Reads the project's .mcp.json, the account file (user servers, and this project's local servers), the .mcp.json of
 // every folder above (inherited: listed, never changed from here) and `claude plugin list --json`, and matches each
@@ -334,8 +334,8 @@ function choiceIn(list: InvList | null | undefined, match: (ownEntry: OwnEntry) 
     return ownEntry && ownEntry.fingerprint === fingerprint && allowed.includes(ownEntry.choice as string) ? ownEntry.choice! : null;
 }
 
-// The inventory as a file or a print holds it: every credential value as kept.js's marker, so no command line names a
-// file with a live one (alfred-code's guard refuses it) and nothing printed puts one in the chat. apply.js takes the
+// The inventory as a file or a print holds it: every credential value as kept.ts's marker, so no command line names a
+// file with a live one (alfred-code's guard refuses it) and nothing printed puts one in the chat. apply.ts takes the
 // real values back from the registrations themselves.
 export function keptOf(inventory: Inventory, catalog: Catalog = catalogLib.load()): Inventory
 {
@@ -387,7 +387,7 @@ export function windowsMcpServers(inventory: { registrations: InvRegistration[];
 export const otherWindowsMcp = (inventory: Inventory, name: string): string[] => windowsMcpServers(inventory).filter((server) => server.kind === 'plugin' || server.name !== name).map((server) => `${server.name} (${server.scope})`);
 
 // One installed thing, by the key configure asks with: `mcp:<name>~<scope>` or `plugin:<plugin id>~<scope>` (the same
-// shape as update.js's offer ids). -> { kind, item } or null when nothing is installed under that key.
+// shape as update.ts's offer ids). -> { kind, item } or null when nothing is installed under that key.
 export const keyOf = (kind: string, name: string, scope: string): string => `${kind}:${name}~${scope}`;
 export function targetOf(inventory: Inventory, key: string | null | undefined): { kind: string; item: InvRegistration | PluginRow } | null
 {

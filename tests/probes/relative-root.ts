@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // THE RELATIVE DATA FOLDER - does a tool resolve the relative data folder project scope writes against the folder it
-// starts in? Each row is launched as plan.js builds it at project scope (data folder `.preferred-tools/<name>`), over
+// starts in? Each row is launched as plan.ts builds it at project scope (data folder `.preferred-tools/<name>`), over
 // stdio, from a root folder R and then from R/child, under a throwaway HOME, and the file the tool writes into its data
 // folder is looked for. A row with two passes may carry `locations.relative: true` in catalog/tools.json.
 //

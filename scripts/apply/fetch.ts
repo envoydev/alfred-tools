@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// FETCH - the slow half of an apply: fills the runtime caches for what apply.js just registered, starts each new server
+// FETCH - the slow half of an apply: fills the runtime caches for what apply.ts just registered, starts each new server
 // once, then asks the CLI for each status.
 //
-//   node fetch.js <fetch.json>
+//   node fetch.ts <fetch.json>
 //
-// apply.js (and update.js, fix.js) write fetch.json once the registrations are written and read back. Claude Code gives a
+// apply.ts (and update.ts, fix.ts) write fetch.json once the registrations are written and read back. Claude Code gives a
 // server 30 seconds to answer its first start, and a first start can take minutes - measured on macOS, memory's package
 // came down in about 6 s and its first start then took 110 s more, downloading its embedding model, while its second
 // and third starts took 2 s. So each server is first fetched (its package, image or tool environment) and then started
@@ -33,7 +33,7 @@ import type { FetchJob, FetchOptions, FetchRun, JobStep, Log, RunCli, StartResul
 export const VERSION = 1;
 const START_MS = 600000;
 const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'preferred-tools', version: '0' } } };
-// ${VAR} and ${VAR:-default}, as Claude Code expands them in an MCP entry (entries.js expandVars)
+// ${VAR} and ${VAR:-default}, as Claude Code expands them in an MCP entry (entries/locations.ts expandVars)
 export const expandedText = (text: unknown, env: Env): string => expandVars(text, env).value;
 // the first ${VAR} with no default that is not set: a start without it only fails
 export const unsetVar = (entry: ServerEntry, env: Env): string | null => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((match) => match[1]!).find((variableName) => env[variableName] === undefined) || null;
@@ -99,10 +99,10 @@ export function realStart(entry: ServerEntry, { cwd, env, ms: timeoutMillisecond
     });
 }
 
-// -> the job apply.js hands over: { version, project, fetch: [fetch steps, each with the scope it was written at], check: [server names] }
+// -> the job apply.ts hands over: { version, project, fetch: [fetch steps, each with the scope it was written at], check: [server names] }
 export const fetchJob = (project: string, fetch: JobStep[], check: string[]): FetchJob => ({ version: VERSION, project, fetch, check: [...new Set(check)] });
 
-// Each step's argv and env as kept.js keeps them, so the file a command line names holds no live credential: a download
+// Each step's argv and env as kept.ts keeps them, so the file a command line names holds no live credential: a download
 // needs none (a kept value expands to ''), and the first start reads the registration itself.
 // `append` adds to a fetch file already there (fix: a registration's fetch, then a machine fix's): its steps are kept
 // already, so only the new ones go through kept.maskCredentials.
@@ -116,7 +116,7 @@ export function writeJob(file: string, job: FetchJob, { append = false }: { appe
     return file;
 }
 
-// The lines apply.js prints for the command: the file, and what fetch.js will do with it.
+// The lines apply.ts prints for the command: the file, and what fetch.ts will do with it.
 export const nextLines = (file: string, job: FetchJob): string[] => [
     `Fetch next, in the background (a first download can take minutes): ${file}`,
     `  fetches ${job.fetch.map((step) => step.what).join(', ')} and starts each once, then reports the status of ${job.check.join(', ')} (claude mcp get)`,
@@ -132,7 +132,7 @@ export function serverStatus(names: string[], { cwd, env, runCli = cli.runClaude
         const lines = `${result.stdout || ''}${result.stderr || ''}`.trim().split('\n').map((line) => line.trim()).filter(Boolean);
         const out = lines.find((line) => /^Status:/i.test(line)) || lines.slice(-1)[0] || '(no output)';
         log(`  ${name}: ${out}`);
-        // the CLI's reason for a failed connection (2.1.322): matched by apply.js REFUSED, never printed - it may quote a body
+        // the CLI's reason for a failed connection (2.1.322): matched by apply.ts REFUSED, never printed - it may quote a body
         return { name, out, issue: lines.find((line) => /^Issue:/i.test(line)) || null };
     });
 }

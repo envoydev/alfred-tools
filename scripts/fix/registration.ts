@@ -1,6 +1,6 @@
 // The registration fixes: each finds a known problem in an installed registration and edits that entry AS READ (its pin,
 // its cut-off and the args or env the user added stay). The edit is applied by `claude mcp remove` + `add-json` through
-// apply.js's mcp-replace, with a rollback; this file never writes.
+// apply.ts's mcp-replace, with a rollback; this file never writes.
 //
 // A finding the machine cannot act on carries `blocked` (the reason), is shown, and is never applied.
 import path from 'node:path';
@@ -218,7 +218,7 @@ export function serenaTelemetryFix(entry: ServerEntry): ServerEntry
 
 // ---- serena-context (0.5.0, D7) --------------------------------------------------------------------------------------
 // A managed serena whose --context is not the context file in its family's root: 0.4.x ran Serena's own claude-code
-// context, whose instructions name Claude Code's tools. The fix points it at <root>/serena-context.yml; fix.js plans the
+// context, whose instructions name Claude Code's tools. The fix points it at <root>/serena-context.yml; fix.ts plans the
 // file's write before the replace.
 export function serenaContextDetect(context: FixCtx): Finding[]
 {
@@ -294,7 +294,7 @@ export function tokenSyncDetect(context: FixCtx): Finding[]
 
 // At user scope a server set up for Cursor holds its key in ~/.cursor/mcp.json too (spec D6): its copy is behind when
 // its value is not the one its list's key name has in the chain. The fix refills that copy alone, from .mcps-secrets
-// at apply (plan-lists.js repairTail), with Claude Code's registration as it is. -> finding | null
+// at apply (plan/lists.ts repairTail), with Claude Code's registration as it is. -> finding | null
 function cursorBehind(context: FixCtx, registration: InvRegistration, route: CatalogRoute, chain: string[], extra: { route: string | null; chain: string[] }): Finding | null
 {
     if (registration.scope !== 'user') return null;

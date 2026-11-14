@@ -183,7 +183,7 @@ test('X7 - a refused key: claude mcp get on a hosted server that answers 401 or 
             const line = (re: RegExp) => (out.split('\n').find((l) => re.test(l)) || '').trim();
             console.log(`X7 ${status}: ${line(/Status:/)} | ${line(/Issue:/).slice(0, 120)}`);
             assert.ok(s.seen.some((x) => x.auth === 'expected'), 'the key reached the server');
-            // the glyph is the console's: ✘ on macOS, × on Windows (2.1.309, 2026-11-12) - fetch.js passes the line on as written
+            // the glyph is the console's: ✘ on macOS, × on Windows (2.1.309, 2026-11-12) - fetch.ts passes the line on as written
             assert.match(line(/Status:/), /^Status: \S+ Failed to connect$/);
             assert.match(line(/Issue:/), REFUSED);
             assert.ok(!out.includes(KEY), 'the CLI prints no key');

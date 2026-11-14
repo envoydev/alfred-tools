@@ -843,7 +843,7 @@ test('location: alfred-code data on disk is a second answer, not the recommended
 });
 
 test('plan.js from a kept inventory file leaves location keys as they are', () => {
-    // memory at user scope, renamed by configure from the inventory as inventory.js writes it
+    // memory at user scope, renamed by configure from the inventory as inventory.ts writes it
     const live = `sk-live-${randomBytes(16).toString('hex')}`;
     const db = '/h/.preferred-tools/memory/memory.db';
     const r = reg('memory', 'user', { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20T23:59:59Z', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_STORAGE_BACKEND: 'sqlite_vec', MCP_MEMORY_SQLITE_PATH: db, MEMORY_API_TOKEN: live } }, 'memory', 'local');

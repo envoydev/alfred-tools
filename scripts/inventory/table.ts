@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // THE TABLE - the whole catalog for this OS as one numbered table, with what is installed at each scope.
 //
-//   node table.js <inventory.json>
+//   node table.ts <inventory.json>
 //
 // Printed to the tool result, never written to a file. A cell holds, for each server installed at that scope,
 // `<name> [<route>, <pin>]`. A registration that matches no row is the user's: it is named under the table and nothing

@@ -14,7 +14,7 @@ import type { Catalog } from '../catalog/types.ts';
 import type { Live, OwnEntry } from '../mcps-list/types.ts';
 import type { DeclaredServer, ExistingItem, Inventory, InvRegistration, PluginServer, ServersDoc } from './types.ts';
 
-// inventory.js requires this file lazily, inside buildInventory
+// inventory.ts requires this file lazily, inside buildInventory
 
 // the rows with a hosted route: the only ones a connector can be
 export const HOSTED_ROWS = ['context7', 'github', 'gitlab', 'atlassian', 'sentry'];

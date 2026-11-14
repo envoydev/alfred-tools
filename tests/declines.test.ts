@@ -1,4 +1,4 @@
-// declines.js - the retired-plugin uninstall offers the user declined (spec D9), in <plugin data>/retired-declined.json.
+// declines.ts - the retired-plugin uninstall offers the user declined (spec D9), in <plugin data>/retired-declined.json.
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';

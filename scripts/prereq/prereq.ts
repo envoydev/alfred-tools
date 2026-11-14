@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // PREREQUISITES - what each picked tool needs on this machine, checked read-only.
 //
-//   node prereq.js <answers.json> [--json] [--audit]   the tools in answers.picks, each on its picked route, and each
+//   node prereq.ts <answers.json> [--json] [--audit]   the tools in answers.picks, each on its picked route, and each
 //                                                      answers.change entry that names a new route
-//   node prereq.js --rows serena,github [--json]  rows on their recommended route
+//   node prereq.ts --rows serena,github [--json]  rows on their recommended route
 //
 // A check looks at the machine and installs nothing. A missing one prints how to get it: a command only where the
 // vendor's docs gave one (docs/sources.md), else the vendor's install page. `--json` prints the findings and, under

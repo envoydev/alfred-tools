@@ -23,7 +23,7 @@ export function blockingStdio(streams: NodeJS.WriteStream[] = [process.stdout, p
     }
 }
 
-// Two JSON values the same, whatever their key order (moved from plan.js, which re-exports it).
+// Two JSON values the same, whatever their key order (moved from plan.ts, which re-exports it).
 export function sortKeys(value: unknown): unknown
 {
     if (Array.isArray(value)) return value.map(sortKeys);

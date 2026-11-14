@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// A stdio MCP server for fetch.js's first start: `answer` replies to initialize and keeps running, as a real server does;
+// A stdio MCP server for fetch.ts's first start: `answer` replies to initialize and keeps running, as a real server does;
 // `exit` exits 3 before answering, as a server with a bad launch does. With `--log <file> --tag <tag>` it appends
 // {"tag", "cwd"} to the file as one JSON line when it starts, so a probe can tell which registrations a session started,
 // and exits when its stdin closes, so a session that ends leaves none running. FAKE_MCP_LOG_ENV (names, comma-separated)

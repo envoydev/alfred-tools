@@ -48,7 +48,7 @@ test('B1 - the bridge starts for real, follows a changed slug after a restart, a
         assert.ok(fs.existsSync(path.join(root, 'mcp-bridge.js')) && fs.existsSync(path.join(root, 'mcp-headers.js')), 'both files in the root');
         assert.strictEqual(fs.readFileSync(path.join(root, 'package.json'), 'utf8'), '{"type":"commonjs"}\n');
 
-        // fetch.js as the command runs it: mcp-remote into the throwaway npm cache, the bridge never started
+        // fetch.ts as the command runs it: mcp-remote into the throwaway npm cache, the bridge never started
         assert.ok(r.report.fetchFile, `apply wrote no fetch file:\n${r.text}`);
         const f = await h.fetch(r.report.fetchFile);
         if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0]!.slice(0, 160)})`);

@@ -1,4 +1,4 @@
-// serena-config.js - base_modes: [] in <SERENA_HOME>/serena_config.yml (spec D7, F9). The file holds Serena's
+// serena-config.ts - base_modes: [] in <SERENA_HOME>/serena_config.yml (spec D7, F9). The file holds Serena's
 // auth_secret: the edit reads only the key it changes, touches no other byte and never prints the file.
 import test from 'node:test';
 import assert from 'node:assert';

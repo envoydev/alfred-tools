@@ -30,7 +30,7 @@ export function useRoots(context: { platform: string; roots?: Roots | null | und
 }
 
 // The file steps of the roots the plan writes into, in D8's order - each root's .gitignore, the helpers, the key names -
-// and the lists (plan-lists.js) and the roots map that go last. A root this apply creates gets its .gitignore (R13), never one named .alfred; a root that
+// and the lists (plan/lists.ts) and the roots map that go last. A root this apply creates gets its .gitignore (R13), never one named .alfred; a root that
 // exists is asked of git, and with a gap gets no key file and a note naming the fix.
 export function fileSteps(inventory: Inventory, context: ListCtx, out: Pick<PlanOut, 'notes'>, regSteps: PlanStep[] = []): { before: PlanStep[]; after: PlanStep[] }
 {

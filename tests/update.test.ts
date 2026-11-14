@@ -722,7 +722,7 @@ test("'All of them' on a 0.2.0 .mcp.json - relative paths, out of order, a pin b
         assert.ok(pw.args.includes('@playwright/mcp@0.0.90'), JSON.stringify(pw));
         assert.strictEqual(pw.args[pw.args.indexOf('--user-data-dir') + 1], path.join(w.project, '.preferred-tools', 'playwright-chrome'));
         assert.strictEqual(doc.mcpServers.memory.env.MCP_MEMORY_SQLITE_PATH, path.join(w.project, '.preferred-tools', 'memory', 'memory.db'));
-        // no `claude mcp get` of the new pin before fetch.js has downloaded it (fetch.js says why)
+        // no `claude mcp get` of the new pin before fetch.ts has downloaded it (fetch.ts says why)
         const calls = w.calls().slice(before);
         const newPin = calls.findIndex((x) => x[1] === 'add-json' && x[2] === 'playwright-chrome' && x[3].includes('@playwright/mcp@0.0.90'));
         assert.ok(newPin >= 0, JSON.stringify(calls));

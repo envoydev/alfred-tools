@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // THE PLAN - answers in, an ordered list of operations out. Nothing here changes anything.
 //
-//   node plan.js <inventory.json> <answers.json> [--out <plan.json>]     the plan, printed, and written for apply.js
-//   node plan.js --questions <inventory.json> [<picks.json>]              every ask the walk makes, as data
+//   node plan.ts <inventory.json> <answers.json> [--out <plan.json>]     the plan, printed, and written for apply.ts
+//   node plan.ts --questions <inventory.json> [<picks.json>]              every ask the walk makes, as data
 //   either takes --data <plugin data dir> after its files: the roots map (spec D2)
 //
 // A fresh add builds its entry from catalog/tools.json. A rename, a move, a route or location change (configure) starts
@@ -12,12 +12,12 @@
 // Answers: { picks: { <row id>: { route, scope, name, location, executablePath, token, params } },
 //            change: { <key>: { row, <the same answers as a pick> } },
 //            remove: [{ kind: 'mcp', name, scope }],
-//            machine: { docker } (from prereq.js --json) }
+//            machine: { docker } (from prereq.ts --json) }
 //   name: 'keep' | 'prefixed' | any literal name       location: { side: 'keep' | 'default' | 'project' | 'account' | 'path', path }
 //   picks come from install and only ADD: a pick already there under its name and scope is left unchanged, and a
 //   registration of the row at another scope or name is left as it is, so a project gets its own copy beside one
 //   installed for every project. change comes from configure, keyed `mcp:<name>~<scope>`: it
-//   renames, moves or rewrites that ONE registration, and another of the same row is left. Its `row` is for prereq.js.
+//   renames, moves or rewrites that ONE registration, and another of the same row is left. Its `row` is for prereq.ts.
 import * as catalogLib from '../catalog/catalog.ts';
 import { alsoProvided } from './asks-picks.ts';
 import { cursorNameQuestion } from './asks-other.ts';
@@ -40,7 +40,7 @@ import type { Answers, Plan, PlanCtx, PlanOptions, PlanStep } from './types.ts';
 export function plan(inventory: Inventory, answers: Answers, options: PlanOptions = {}): Plan
 {
     const catalog = options.catalog || catalogLib.load();
-    // answers.machine: what prereq.js found (docker: false picks github's binary fallback); an explicit option wins
+    // answers.machine: what prereq.ts found (docker: false picks github's binary fallback); an explicit option wins
     const context: PlanCtx = { ...makeCtx(inventory, { ...options, machine: options.machine || answers.machine }), changing: new Set(Object.keys(answers.change || {})), uses: [], rootMoves: [] };
     const out: Plan = { version: 1, project: inventory.project, os: inventory.os, alfredCodeEnabled: Boolean(inventory.alfredCodeEnabled), steps: [], notes: [], errors: [], unchanged: [], keys: [], reconnect: [], oauth: [], dangerous: [], expect: [] };
     // the root folders (spec D2): every data folder, key file and helper of a family sits in its root

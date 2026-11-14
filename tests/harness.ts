@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // THE TEMP-PROJECT HARNESS - runs the plugin's scripts against the REAL `claude` CLI in a throwaway world, with no model
-// in the loop. The walk's asks are stood in for by an answers object fed to plan.js and apply.js, so every matrix case is
+// in the loop. The walk's asks are stood in for by an answers object fed to plan.ts and apply.ts, so every matrix case is
 // a script run.
 //
 //   node tests/harness.ts --root <scratch dir>
@@ -105,7 +105,7 @@ export class Harness
         this.before = snapshot();
     }
 
-    // fetch.js on the file an apply wrote, with the real runtimes and the real CLI in the throwaway world. The
+    // fetch.ts on the file an apply wrote, with the real runtimes and the real CLI in the throwaway world. The
     // registration cases leave it out (they prove what is written); tests/matrix/starts.test.ts runs it before each start.
     async fetch(file: string): Promise<FetchRun & { text: string }>
     {
@@ -129,7 +129,7 @@ export class Harness
     inventory(project: string, { catalog }: { catalog?: Catalog | undefined } = {}) { return inventory.buildInventory({ project, env: this.env, data: this.data, ...(catalog ? { catalog } : {}) }); }
 
     // inventory -> plan -> apply, in-process, against the real CLI in the throwaway world. The plan reads the inventory
-    // as inventory.js writes it - every credential value kept - so the apply puts each one back from the registration it
+    // as inventory.ts writes it - every credential value kept - so the apply puts each one back from the registration it
     // reads, as the commands do.
     run(project: string, answers: Answers, { planOpts = {}, tmp, catalog }: { planOpts?: PlanOptions; tmp?: string | undefined; catalog?: Catalog | undefined } = {}): HarnessRun
     {

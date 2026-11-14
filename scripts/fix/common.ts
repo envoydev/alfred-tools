@@ -28,7 +28,7 @@ export const launcher = (entry: ServerEntry): string => path.basename(launchToke
 export const launchArgs = (entry: ServerEntry): string[] => launchTokens(entry).args;
 
 // A committed value read against an environment, as Claude Code expands .mcp.json from the one it starts with
-// (entries.js expandVars). -> the expanded text, or null when a ${NAME} with no fallback is unset (`firstUnset` names it).
+// (entries/locations.ts expandVars). -> the expanded text, or null when a ${NAME} with no fallback is unset (`firstUnset` names it).
 export const expandVars = (text: unknown, env: Env): string | null => { const expanded = E.expandVars(text, env); return expanded.unset.length ? null : expanded.value; };
 export const firstUnset = (text: unknown, env: Env): string | null => E.expandVars(text, env).unset[0] || null;
 

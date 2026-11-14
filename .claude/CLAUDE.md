@@ -134,6 +134,9 @@ those dates.
 
 ## Working in this repo
 
+- **`npm install` first in a fresh clone.** `npm run lint`, `npm test` and `npm run typecheck` import `typescript`
+  (the lint's name and type checks, the rename driver `tests/proof/rename.ts`), pinned exactly in `devDependencies`
+  with no lockfile. The plugin itself runs on Node alone: nothing it ships imports them.
 - **Every change is proven on a throwaway project, never the real account.** Run the matrix under an isolated
   `CLAUDE_CONFIG_DIR` and `HOME` in the session scratchpad. Two real side effects happened before this rule existed:
   matrix installs left records for deleted scratch projects in the real `~/.claude/plugins/installed_plugins.json`,

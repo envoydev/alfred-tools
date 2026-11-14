@@ -1,5 +1,5 @@
 // Do the tools START? The other matrix files prove a registration is written right; this one launches it. Each local
-// row is installed through the real CLI in the throwaway world, its packages fetched by fetch.js as the command runs it,
+// row is installed through the real CLI in the throwaway world, its packages fetched by fetch.ts as the command runs it,
 // read back from the file the CLI wrote, and started exactly as written - command, args and env, ${VAR} expanded as
 // Claude Code expands it - then sent an MCP `initialize` over stdio. A server passes when it answers with its serverInfo
 // within Claude Code's 30-second limit. A remote route is sent the same `initialize` over HTTP with no credentials: an
@@ -127,11 +127,11 @@ for (const c of LOCAL)
         assert.ok(reg, 'read back from the account file');
         if (c.row === 'serena')
         {
-            // never open a browser tab on the machine running the matrix (fetch.js starts it too)
+            // never open a browser tab on the machine running the matrix (fetch.ts starts it too)
             const a = reg.entry.args!;
             if (a[a.indexOf('--enable-web-dashboard') + 1] !== 'false') return t.skip('NOT RUN: the registration does not turn the web dashboard off, so starting it would open a browser');
         }
-        // fetch.js as the command runs it: the fetch, the first start with no 30-second limit, the status
+        // fetch.ts as the command runs it: the fetch, the first start with no 30-second limit, the status
         assert.ok(r.report.fetchFile, `apply wrote no fetch file:\n${r.text}`);
         const f = await h.fetch(r.report.fetchFile);
         if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0]!.slice(0, 160)})`);

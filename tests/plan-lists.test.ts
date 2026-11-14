@@ -1,4 +1,4 @@
-// plan-lists.js - the list-write steps a plan writes into each family's mcps.json (spec D1).
+// plan/lists.ts - the list-write steps a plan writes into each family's mcps.json (spec D1).
 import test from 'node:test';
 import assert from 'node:assert';
 import { listSteps } from '../scripts/plan/lists.ts';

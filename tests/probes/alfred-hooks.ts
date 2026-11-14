@@ -94,7 +94,7 @@ interface AskQuestion
     multiSelect?: boolean | undefined;
     options: { label: string; description?: string | undefined }[];
 }
-// plan.js --questions, the parts these steps read
+// plan.ts --questions, the parts these steps read
 interface PlanQuestions
 {
     static: { apply?: AskQuestion; settings?: AskQuestion; menu?: AskQuestion };

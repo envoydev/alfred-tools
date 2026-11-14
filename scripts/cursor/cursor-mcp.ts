@@ -178,7 +178,7 @@ function fillStdioKeys(managed: Map<string, Managed>, context: CursorCtx | null 
 
 // Is this Cursor entry the row's server? A bridge copy (D5) is matched by its URL, as a plain http entry, against the
 // row's fingerprints, and by itself against a `bridge` fingerprint: inventory.matchesFingerprint alone returns false for
-// every bridge entry against a host or path fingerprint. inventory.js requires this file, so it is required here, late.
+// every bridge entry against a host or path fingerprint. inventory.ts requires this file, so it is required here, late.
 export function matchesRow(entry: ServerEntry, row: CatalogRow | null | undefined): boolean
 {
     const fingerprints = Object.values((row && row.routes) || {}).flatMap((route) => route.fingerprints || []);

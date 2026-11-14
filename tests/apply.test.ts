@@ -83,7 +83,7 @@ test('a fresh install writes through the CLI at each scope, and every add is rea
         const adds = w.calls().filter((a) => a[1] === 'add-json');
         assert.deepStrictEqual(adds.map((a) => [a[2], a[4], a[5]]), [['serena', '-s', 'local'], ['playwright-chrome', '-s', 'user'], ['context7', '-s', 'project']]);
         assert.match(r.text, /Read back:\n\s+ok\s+serena - local scope, local route \(serena\)/);
-        // the slow half is handed to fetch.js, never run here: no download and no `claude mcp get` inside the apply
+        // the slow half is handed to fetch.ts, never run here: no download and no `claude mcp get` inside the apply
         assert.ok(!w.calls().some((a) => a[0] === 'mcp' && a[1] === 'get'), 'apply asks the CLI for no status');
         assert.deepStrictEqual(w.fetches(), [], 'apply runs no runtime');
         assert.match(r.text, /6\. later  serena: fetch serena-agent@/);
@@ -356,7 +356,7 @@ test('the CLI form applies a written plan and exits 1 on a failure', () => {
 
 const hex = (n: number) => crypto.randomBytes(n).toString('hex');
 const register = (w: World, name: string, entry: unknown, scope = 'local') => assert.strictEqual(cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
-// the walk as the commands run it: the inventory as inventory.js writes it (every credential value kept), the plan from
+// the walk as the commands run it: the inventory as inventory.ts writes it (every credential value kept), the plan from
 // it, then the apply, which puts the real values back from the registrations it reads
 function keptWalk(w: World, answers: Answers, { fail }: { fail?: string } = {})
 {

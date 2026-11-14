@@ -1,10 +1,10 @@
 // The fixes for the list, <root>/mcps.json (spec D1, D9). A row of kind `file` names no `fix` function: its `steps`
-// function plans list-write and the rest, which fix.js's file pass runs through apply.js as one plan.
+// function plans list-write and the rest, which fix.ts's file pass runs through apply.ts as one plan.
 //
 // list-import: a managed registration with no entry in its family's list, or a 0.4.x preferred-tools.json, moves onto
 // the list - each registration as read with clients claude, the record's own entries as they are, and the record moved
 // aside as preferred-tools.json.0.4.bak. Install and configure do the same the first time they write a family
-// (plan-lists.js), with the same importUnlisted.
+// (plan/lists.ts), with the same importUnlisted.
 import fs from 'node:fs';
 import path from 'node:path';
 import * as roots from '../roots/roots.ts';
@@ -106,7 +106,7 @@ export function readGuardDetect(context: FixCtx): Finding[]
 export const readGuardSteps = (finding: Finding) => [denyReadStep(finding.name, finding.rules!)];
 
 // serena-base-modes (0.5.0, D7): a managed serena's home, other than an alfred-code 2.x one, whose serena_config.yml
-// lists base modes. Read by serena-config.js, which reads that key alone and never the file's other lines.
+// lists base modes. Read by serena-config.ts, which reads that key alone and never the file's other lines.
 export function serenaBaseModesDetect(context: FixCtx): Finding[]
 {
     const out: Finding[] = [];

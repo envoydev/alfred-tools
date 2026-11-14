@@ -1,7 +1,7 @@
 // The machine fixes: a problem on this machine, not in a registration. The fix changes the machine (a plugin uninstalled,
 // a data folder's .gitignore, a broken npx cache folder removed), so it runs only when the user picked it, and is read
 // back by running the detector again. A fix that changes nothing a running session uses returns `restart: false`; one
-// that leaves a package to download again returns its `fetch` step, which fix.js hands to fetch.js.
+// that leaves a package to download again returns its `fetch` step, which fix.ts hands to fetch.ts.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,8 +19,8 @@ import type { Finding, FixCtx, MachineFixResult, RunResult } from './types.ts';
 // ---- retired-plugin (spec D8, D9, 0.5.0) -------------------------------------------------------------------------------
 // typescript-lsp, csharp-lsp and claude-hud work in Claude Code alone, so the catalog no longer lists them. Each id the row
 // names, installed at a scope, is offered once for `claude plugin uninstall`: one finding per id and scope. A decline is
-// kept in <plugin data>/retired-declined.json (declines.js); a declined one is shown as advice, never applied. Where
-// alfred-code is set up it installs the same plugins, so fix.js keeps those out of 'Apply all found' (`alfred`).
+// kept in <plugin data>/retired-declined.json (declines.ts); a declined one is shown as advice, never applied. Where
+// alfred-code is set up it installs the same plugins, so fix.ts keeps those out of 'Apply all found' (`alfred`).
 
 export function retiredPluginDetect(context: FixCtx): Finding[]
 {
@@ -62,7 +62,7 @@ export function retiredPluginFix(finding: Finding, context: FixCtx): MachineFixR
 // child or a subfolder gets its own copy, which nothing there keeps out of git. This row reads every registration that
 // starts here - this folder's own project-scope ones and those inherited from a parent's .mcp.json (the other rows
 // leave those to fix run in the parent) - and finds each relative data folder whose contents git does not ignore. In a
-// git work tree git decides (`git check-ignore` on a file inside the folder, as keys.js tests a key file); where git
+// git work tree git decides (`git check-ignore` on a file inside the folder, as keys.ts tests a key file); where git
 // cannot answer, the folder's own .gitignore, or alfred-code's .alfred/.gitignore under .alfred/, counts as covering.
 const PROBE = 'preferred-tools-probe';
 function ignoredByGit(context: FixCtx, rel: string): boolean | null
@@ -161,9 +161,9 @@ export function dataFolderIgnoreFix(finding: Finding, _context: FixCtx): Machine
 // ---- npx-cache-entry ------------------------------------------------------------------------------------------------
 // npx installs a package into <npm cache>/_npx/<hash>, named by libnpmexec as sha512 of the package specs (sorted, one per
 // line), hex, the first 16 characters (read in npm 11.6.1's lib/index.js). Two first installs of one package at once - a
-// session started while fetch.js runs - can leave that folder without its package.json, and from then on every start
+// session started while fetch.ts runs - can leave that folder without its package.json, and from then on every start
 // fails with ENOENT: npx never repairs it (measured, docs/sources.md). The fix removes that one folder and hands the
-// package to fetch.js, which fills it again the way the registration resolves it.
+// package to fetch.ts, which fills it again the way the registration resolves it.
 const NPX_FOLDER = /^[0-9a-f]{16}$/;
 
 // The cache in force, from `npm config ls -l`: npm 10 and 11 refuse `npm config get cache` ('The cache option is

@@ -1,4 +1,4 @@
-// The shapes apply/ reads and writes: a step's outcome, the apply's context and report, and the fetch job fetch.js runs.
+// The shapes apply/ reads and writes: a step's outcome, the apply's context and report, and the fetch job fetch.ts runs.
 import type { CliOptions, CliResult, Env, Outcome, ServerEntry } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { FetchStep } from '../entries/types.ts';
@@ -50,7 +50,7 @@ export interface Readback
 }
 
 // A fetch step as the job holds it: the scope it was written at, and the parent folder of an inherited server
-// (stored - do not rename: fetch.js reads it).
+// (stored - do not rename: fetch.ts reads it).
 export type JobStep = FetchStep & { scope?: string | undefined; from?: string | undefined };
 // <tmp>/fetch.json (stored - do not rename).
 export interface FetchJob
@@ -85,7 +85,7 @@ export interface ApplyReport
     lists: StepResult[];
 }
 
-// The part of a plan apply reads: update.js and fix.js build their own, whose expected servers carry no row.
+// The part of a plan apply reads: update.ts and fix.ts build their own, whose expected servers carry no row.
 export type ApplyPlan = Pick<Plan, 'project' | 'steps'> & Partial<Pick<Plan, 'alfredCodeEnabled' | 'reconnect' | 'errors'>> & { expect?: Pick<Expect, 'kind' | 'name' | 'scope' | 'route'>[] };
 
 // What each step runs with: the project, the CLI, the catalog, the plugin data folder, and the report so far.
@@ -111,7 +111,7 @@ export interface ApplyOptions
     data?: string | null;
 }
 
-// ---- fetch.js ---------------------------------------------------------------------------------------------------------
+// ---- fetch.ts ---------------------------------------------------------------------------------------------------------
 
 // A runtime's fetch, as spawnSync reports it.
 export interface FetchRunResult

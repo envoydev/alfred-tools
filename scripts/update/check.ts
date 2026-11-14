@@ -2,10 +2,10 @@
 // THE UPDATE ENGINE - what is installed and behind its release: every plugin, the pinned MCP servers, the helper, bridge
 // and serena-context copies, and the new ways to pass data (fix's `upgrade` rows, the old plugins' uninstall among them).
 //
-//   node update.js --check [--json] [--no-refresh] [--project <dir>] [--data <dir>]   read-only (it refreshes the marketplace clones)
-//   node update.js --questions [--no-refresh] [--project <dir>] [--data <dir>]        the asks, as data
+//   node update.ts --check [--json] [--no-refresh] [--project <dir>] [--data <dir>]   read-only (it refreshes the marketplace clones)
+//   node update.ts --questions [--no-refresh] [--project <dir>] [--data <dir>]        the asks, as data
 //   --data: the plugin's data folder, whose roots map finds the records - a server left on its own (spec D6) is skipped
-//   node update.js --apply <id,id | all | none> [--input retired-declined=<id>~<scope>,...] [--project <dir>] [--tmp <dir>]  changes the install
+//   node update.ts --apply <id,id | all | none> [--input retired-declined=<id>~<scope>,...] [--project <dir>] [--tmp <dir>]  changes the install
 //
 // An offer id is `plugin:<plugin id>~<scope>`, `mcp:<name>~<scope>`, `helper:<file>` (an
 // mcp-headers.js copy older than this plugin's), `bridge:<file>`, `context:<file>` (serena's, 0.5.0), or `upgrade:<fix id>:<name>~<scope>` (`:<path>` for a
@@ -13,7 +13,7 @@
 // marketplace lists no version cannot be compared ahead: it is listed as unchecked, and `claude plugin update` is the
 // check, run only on its own id.
 //
-// An MCP pin moves only to the newest stable release that is 7 or more days old (scripts/registry.js), and the rewrite
+// An MCP pin moves only to the newest stable release that is 7 or more days old (scripts/catalog/registry.ts), and the rewrite
 // starts from the registration AS READ: the user's args, env and name stay, only the pin and the cut-off beside it move
 // (`--exclude-newer` for uvx, `npm_config_before` for npx). A remote route has no pin, a docker image tag is not checked,
 // and a registration that matches no catalog row is the user's and never touched.

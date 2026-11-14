@@ -15,7 +15,7 @@ const SHIMMED = ['claude', 'npm', 'uvx', 'docker'];
 
 // The PATH a world puts after its `bin`. On Windows a spawn looks for `<name>.exe` or `.com` on PATH and never for the
 // `.cmd` shims in `bin`, so a real claude.exe (the native installer's) would answer instead of the fake: the folders
-// holding a real one are left out, the spawn fails, and claude-cli.js takes its cmd.exe route to the shim.
+// holding a real one are left out, the spawn fails, and claude-cli.ts takes its cmd.exe route to the shim.
 function basePath(platform = process.platform, envPath = process.env.PATH || '')
 {
     const parts = envPath.split(path.delimiter);
@@ -67,12 +67,12 @@ export function world(prefix = 'pt-')
 export const writeJson = (file: string, value: unknown) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`); };
 export const readJson = (file: string) => JSON.parse(fs.readFileSync(file, 'utf8'));
 // The account `projects` key the real CLI writes for a folder (docs/sources.md): its real path, or on Windows the cwd as
-// typed, in `/`. fake-claude.js writes the same.
+// typed, in `/`. fake-claude.ts writes the same.
 export const accountKey = (project: string) => (process.platform === 'win32' ? path.resolve(project).replace(/\\/g, '/') : fs.realpathSync.native(project));
 
 // A temp folder of the world's own, for a script run as a child: TMPDIR (TEMP and TMP on Windows) point into it, so the
 // script's os.tmpdir() is there and nothing in the machine's temp folder is made, swept or removed. `made()` is a folder
-// as tmpdir.js makes one; `files(dir)` every file below a folder.
+// as tmpdir.ts makes one; `files(dir)` every file below a folder.
 export function tempOf(w: World)
 {
     const root = path.join(w.dir, 'temp');
@@ -90,6 +90,6 @@ export function files(dir: string): string[]
 }
 
 // The headersHelper a registration names for the helper at `file`, as this platform's apply writes it: the path in
-// forward slashes on Windows (entries.js shellArg, style 'win32'), as it is elsewhere
+// forward slashes on Windows (entries/entry.ts shellArg, style 'win32'), as it is elsewhere
 export const helperCmd = (file: string, name: string, scheme: string) => `node ${shellArg(file, process.platform === 'win32' ? 'win32' : 'posix')} ${name} ${scheme}`;
 

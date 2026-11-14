@@ -140,7 +140,7 @@ const HELPER_SHA256: Record<number, string> = {
 }
 
 // mcp-bridge.js is copied into a root folder the same way (0.4.0): the same first-line and digest rule, node: modules and
-// ./mcp-headers.js only, and its CREDENTIAL is keys.js credentialName's test.
+// ./mcp-headers.js only, and its CREDENTIAL is keys.ts credentialName's test.
 const BRIDGE_SHA256: Record<number, string> = {
     1: '8aff5de859ba6b69c3f40d20d35c2d36738d6c35c791a821614f53a48bc29635', // 0.4.0
 };

@@ -24,7 +24,7 @@ export function parseArgs(argv: string[]): UpdateArgs
         const flagValue = argv[i + 1];
         if (flagValue === undefined || flagValue.startsWith('--')) throw new Error(`${argument} needs a value`);
         i++;
-        // fix.js's rule: split on the first =, repeatable
+        // fix.ts's rule: split on the first =, repeatable
         if (argument === '--input')
         {
             const separatorIndex = flagValue.indexOf('=');
@@ -53,7 +53,7 @@ export async function runUpdateCommand(argv: string[], { env = process.env, out 
     {
         const log = (...lines: string[]) => out(lines.join('\n'));
         const result = applyUpdates(context, args.apply.split(',').filter(Boolean), found, { tmp: args.tmp, log, input: args.input });
-        // the last script on <tmp> removes it, unless fetch.js takes it on; apply() per server never does
+        // the last script on <tmp> removes it, unless fetch.ts takes it on; apply() per server never does
         if (!result.fetchFile) tmpdir.releaseTempDir(result.dir, log);
         return result.failed.length || result.unknown.length ? 1 : 0;
     }
