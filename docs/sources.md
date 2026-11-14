@@ -1286,3 +1286,34 @@ kept locally; this list is the record).
   22.23.3 - `table` 30.9 to 58.2, `plan` 35.9 to 72.7, `fix` 38.5 to 79.8. About 35-45 ms more per start.
 - A `node:test` reporter's `test:start` events carry `file`, `name` and `nesting`; the TAP reporter's output names no
   file (measured on 24.11.0), so the proof's test-name list is a reporter (`tests/proof/test-names.js`).
+
+## Claude Code and GitHub - facts the alfred-tools rename rests on (2026-11-14)
+
+Measured on a local marketplace under a throwaway `HOME` and `CLAUDE_CONFIG_DIR`, Claude Code 2.1.325, macOS arm64,
+unless a URL is given. 'The former plugin' and 'the former folder' are the plugin's and its root folder's name before
+2026-11-14.
+
+- A1 - the plugin data folder is `<config>/plugins/data/<plugin>-<marketplace>`: a SessionStart hook of `probe-a`
+  from marketplace `probemkt` printed `CLAUDE_PLUGIN_DATA` as `<config>/plugins/data/probe-a-probemkt`, in a
+  logged-out `claude -p hi` (it printed 'Not logged in' and still ran the hook). The folder is made at the first
+  session, not at install. So the former plugin's data sits beside this one's, the name's leading part swapped.
+- A3 - with the entry renamed (`probe-a` to `probe-b`, the manifest left `probe-a`) and `marketplace update`,
+  `plugin list --json` keeps `probe-a@probemkt` enabled with `errors: ['Plugin probe-a not found in marketplace
+  probemkt']` (`errorDetails` type `plugin-not-found`). `claude plugin uninstall probe-a@probemkt --scope user`
+  prints 'Successfully uninstalled plugin: probe-a (scope: user)', drops the row and the settings line, and deletes
+  `plugins/data/probe-a-probemkt` - so the roots map is carried before the former plugin's uninstall is offered.
+- A4 - the entry's name wins over the fetched manifest's. `plugin install probe-b@probemkt` with the manifest still
+  named `probe-a` installs `probe-b@probemkt`. An entry `probe-c` whose source's manifest became `probe-d` 0.2.0:
+  `plugin update probe-c@probemkt2` prints 'updated from 0.1.0 to 0.2.0' and lists `probe-c@probemkt2 0.2.0` with no
+  error; a fresh `plugin install probe-c@probemkt2` lists the same. In the release window a machine runs the new code
+  under the former id, and reverting the catalog's entry commit is a working way back.
+- A2 - 'all `git clone`, `git fetch`, or `git push` operations targeting the previous location will continue to
+  function as if made on the new location', web traffic is redirected too, except project site URLs; a repository
+  created later with the old name ends the redirects -
+  https://docs.github.com/en/repositories/creating-and-managing-repositories/renaming-a-repository.
+- A5 - a model of a server writing by path (`fs.mkdirSync(dir, { recursive: true })` then `appendFileSync`, kept
+  running): after its folder's parent was renamed, its next call wrote a new `<parent>/memory/log` under the former
+  name - the folder comes back. mcp-remote 0.15.2 and 0.16.0 (read in the npx cache, not run) call `ensureConfigDir()`,
+  `fs.mkdir(MCP_REMOTE_CONFIG_DIR, { recursive: true })`, before each token write, so a session left running during the
+  move can bring the former folder back on its next token write. The memory server's package was not in the cache:
+  NOT MEASURED. D3's came-back advice and the note to close other windows cover both.
