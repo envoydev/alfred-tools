@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { runClaude } from '../scripts/core/claude-cli.ts';
 
 const root = path.resolve(import.meta.dirname, '..');
 const ls = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8' });
@@ -24,7 +25,8 @@ try
         fs.mkdirSync(path.dirname(path.join(copy, f)), { recursive: true });
         fs.copyFileSync(path.join(root, f), path.join(copy, f));
     }
-    const r = spawnSync('claude', ['plugin', 'validate', copy, '--profile', 'directory', '--strict'], { encoding: 'utf8' });
+    // through runClaude: npm's claude.cmd on Windows starts only through cmd.exe
+    const r = runClaude(['plugin', 'validate', copy, '--profile', 'directory', '--strict']);
     if (r.error) { console.error(`validate: cannot run claude (${r.error.message})`); code = 2; }
     else if (r.status !== 0) { console.error(`${r.stdout}${r.stderr}`.trim()); code = 1; }
     else console.log(`validate: passed (--profile directory --strict, nothing to report) on the ${files.length} files git would ship`);

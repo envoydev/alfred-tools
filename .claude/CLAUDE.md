@@ -145,6 +145,9 @@ those dates.
 - **Read the result, not the exit code.** Open the written `.mcp.json`, account file and settings after each case.
   A case not run is reported as NOT RUN, never implied as passing. Windows-only behaviour is proved on the user's
   Windows VM or reported NOT RUN.
+- **CI runs the same checks** (`.github/workflows/ci.yml`: typecheck, lint, validate, test, kit:check on Linux, macOS
+  and Windows, against the Claude Code build pinned there). The matrix is not in CI: it stays a by-hand run on a
+  throwaway project.
 - **Check order before a publish:** `npm run validate` (`claude plugin validate --profile directory --strict` on a
   scratch copy of the files git would ship, so a Finder `.DS_Store` never fails it), a `claude --plugin-dir .` session
   in a scratch project, then `claude plugin details`. The skill has the full list.
