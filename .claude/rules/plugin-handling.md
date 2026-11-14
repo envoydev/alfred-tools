@@ -21,7 +21,7 @@ Adding, changing, renaming or removing anything the plugin ships. `.claude/CLAUD
 
 - The version lives in `.claude-plugin/plugin.json` and is mirrored in `package.json`; `npm run lint` fails on drift. Bump both on every user-visible change: a change without a bump is not delivered.
 - Never rename or drop the id `alfred-tools`: every install goes silent.
-- The `envoydev` marketplace in alfred-code lists the plugin as a GitHub source on this repo's `main` with no `sha` - `{ "source": "github", "repo": "envoydev/alfred-tools", "ref": "main" }` (the user's ruling, 2026-11-04); alfred-code's lint check 49 allows an unpinned entry only for an `envoydev/` repo on `main`. So a merge to `main` with a new version is the release, with no alfred-code change. A change to that entry follows alfred-code's own CLAUDE.md.
+- The `envoydev` marketplace (`envoydev/plugins-marketplaces`, `.claude-plugin/marketplace.json`, since 2026-11-14) lists the plugin as a GitHub source on this repo's `main` with no `sha` - `{ "source": "github", "repo": "envoydev/alfred-tools", "ref": "main" }` (the user's ruling, 2026-11-04). So a merge to `main` with a new version is the release, with no marketplace change. A change to that entry is a commit in plugins-marketplaces, on the user's word.
 
 ## Release
 

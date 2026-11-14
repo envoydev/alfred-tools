@@ -29,7 +29,7 @@ export function retiredPluginDetect(context: FixCtx): Finding[]
     const declined = declines.read(context.data);
     const alfred = Boolean(context.inventory.alfredCodeEnabled);
     // run under the former name (its data folder says so), it never offers to uninstall itself
-    const self = Boolean(context.data) && path.basename(context.data!).startsWith('preferred-tools-');
+    const self = rename.runsAsFormer(context.data);
     const carry = rename.mapToCarry(context.data);
     return (context.inventory.plugins || []).filter((plugin) => ids.includes(plugin.id) && !(self && plugin.id === rename.OLD_PLUGIN_ID)).map((plugin) =>
     {

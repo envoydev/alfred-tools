@@ -36,6 +36,9 @@ It needs Node 22.18 or newer and the `claude` CLI on your `PATH`. The plugin is 
 alfred-code installed. If you added `envoydev` from `envoydev/alfred-code` before, the catalog has moved: its
 [README](https://github.com/envoydev/plugins-marketplaces#moving-from-the-old-marketplace) has the steps.
 
+alfred-tools was preferred-tools until 0.4.0: install alfred-tools@envoydev and run /alfred-tools:update, which moves
+the .preferred-tools folders and offers to uninstall the old plugin.
+
 ## Quick start
 
 1. Open Claude Code in your project (not in this repo) and run `/alfred-tools:install`.

@@ -178,6 +178,9 @@ export function rootMoveDetect(context: FixCtx): Finding[]
     return out;
 }
 
+// True when this run is the plugin under its former id - its data folder is named after it (A1).
+export const runsAsFormer = (data: string | null | undefined): boolean => Boolean(data) && path.basename(data!).startsWith('preferred-tools-');
+
 // The roots map the former plugin kept (spec D4), while this plugin's data folder has none: { from, to } files, else null.
 export function mapToCarry(data: string | null | undefined): { from: string; to: string } | null
 {
