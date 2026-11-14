@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // The 0.3.0 field fixes end to end: the REAL claude CLI in throwaway homes and accounts (tests/harness.ts), a stub HTTP
 // MCP server on 127.0.0.1 (tests/fake-mcp-http.ts) standing in for a hosted server, every result read back from the
 // files the CLI wrote.
@@ -27,7 +26,10 @@ import { makeCtx, detectAll, applyFixes, render } from '../../scripts/fix/fix.ts
 import * as update from '../../scripts/update/check.ts';
 import { REFUSED } from '../../scripts/apply/run.ts';
 import * as fake from '../fake-mcp-http.ts';
+import type { ListWriteStep } from '../../scripts/plan/types.ts';
+import type { ServerEntry } from '../../scripts/core/types.ts';
 import { Harness } from '../harness.ts';
+import type { HarnessRun } from '../harness.ts';
 import { keepWritten } from '../proof/matrix-keep.ts';
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
@@ -37,14 +39,14 @@ test.after(() => { keepWritten(base, 'field-fixes'); fs.rmSync(base, { recursive
 
 const G = 'GITHUB_PERSONAL_ACCESS_TOKEN';
 const KEY = `mx-${crypto.randomBytes(12).toString('hex')}`;
-const ok = (r) => { assert.deepStrictEqual(r.plan.errors, [], r.rendered); assert.strictEqual(r.report.failed, null, `${r.rendered}\n${r.text}`); };
+const ok = (r: HarnessRun) => { assert.deepStrictEqual(r.plan.errors, [], r.rendered); assert.strictEqual(r.report.failed, null, `${r.rendered}\n${r.text}`); };
 const catalog = catalogLib.load();
-const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
-const servers = (dir) => readJson(path.join(dir, '.mcp.json')).mcpServers;
-const arg = (e, flag) => e.args[e.args.indexOf(flag) + 1];
+const readJson = (f: string) => JSON.parse(fs.readFileSync(f, 'utf8'));
+const servers = (dir: string) => readJson(path.join(dir, '.mcp.json')).mcpServers;
+const arg = (e: ServerEntry, flag: string) => e.args![e.args!.indexOf(flag) + 1];
 const style = process.platform === 'win32' ? 'win32' : 'posix';
 // a world: a throwaway home and account, every project server approved
-function world(name)
+function world(name: string)
 {
     const h = new Harness({ root: path.join(base, name) });
     fs.writeFileSync(path.join(h.account, 'settings.json'), JSON.stringify({ enableAllProjectMcpServers: true }));
@@ -83,13 +85,13 @@ test('X3 - every MCP row for this OS, added in reverse at project scope beside a
     const dir = h.project('p');
     assert.strictEqual(h.claude(dir, ['mcp', 'add-json', 'mine', JSON.stringify({ command: 'my-server' }), '-s', 'project']).status, 0);
     const mine = servers(dir).mine;
-    const rows = catalog.order.filter((id) => catalog.byId.get(id).os.includes(process.platform));
+    const rows = catalog.order.filter((id) => catalog.byId.get(id)!.os.includes(process.platform));
     for (const id of [...rows].reverse())
     {
         const r = h.run(dir, { picks: { [id]: { scope: 'project', token: false } } });
         ok(r);
     }
-    assert.deepStrictEqual(Object.keys(servers(dir)), [...rows.map((id) => catalog.byId.get(id).name), 'mine']);
+    assert.deepStrictEqual(Object.keys(servers(dir)), [...rows.map((id) => catalog.byId.get(id)!.name), 'mine']);
     assert.deepStrictEqual(servers(dir).mine, mine, 'the user\'s entry is left as it was');
 });
 
@@ -99,15 +101,15 @@ test('X4 - fix on a 0.2.0 project file: relative paths and helper written absolu
     const dir = h.project('p');
     const ctx = { platform: process.platform, arch: process.arch, env: h.env, home: h.home, project: dir };
     // what 0.2.0 wrote: relative folders, a relative helper, and the servers in the order they were added
-    const pw = buildEntry(catalog.byId.get('playwright-chrome'), 'local', { rootStr: '.preferred-tools/playwright-chrome', scope: 'project', token: false }, ctx, catalog.rules);
-    pw.args = pw.args.map((a) => (a.startsWith('@playwright/mcp@') ? '@playwright/mcp@0.0.70' : a === path.join('.preferred-tools/playwright-chrome', 'output') ? '.preferred-tools/playwright-chrome/output' : a));
-    const serena = buildEntry(catalog.byId.get('serena'), 'local', { rootStr: '.preferred-tools/serena', scope: 'project', token: false }, ctx, catalog.rules);
-    const c7 = { type: 'http', url: catalog.byId.get('context7').routes.remote.url, headersHelper: 'node .preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' };
-    for (const [name, entry] of [['playwright-chrome', pw], ['serena', serena], ['context7', c7]])
+    const pw = buildEntry(catalog.byId.get('playwright-chrome')!, 'local', { rootStr: '.preferred-tools/playwright-chrome', scope: 'project', token: false }, ctx, catalog.rules);
+    pw.args = pw.args!.map((a) => (a.startsWith('@playwright/mcp@') ? '@playwright/mcp@0.0.70' : a === path.join('.preferred-tools/playwright-chrome', 'output') ? '.preferred-tools/playwright-chrome/output' : a));
+    const serena = buildEntry(catalog.byId.get('serena')!, 'local', { rootStr: '.preferred-tools/serena', scope: 'project', token: false }, ctx, catalog.rules);
+    const c7 = { type: 'http', url: catalog.byId.get('context7')!.routes.remote!.url, headersHelper: 'node .preferred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' };
+    for (const [name, entry] of [['playwright-chrome', pw], ['serena', serena], ['context7', c7]] as [string, ServerEntry][])
         assert.strictEqual(h.claude(dir, ['mcp', 'add-json', name, JSON.stringify(entry), '-s', 'project']).status, 0);
     const before = servers(dir);
     const cutoff = arg(before.serena, '--exclude-newer');
-    const lines = [];
+    const lines: string[] = [];
     const fctx = makeCtx({ inv: h.inventory(dir), env: h.env, data: h.data });
     const found = detectAll(fctx).found.map((f) => f.id);
     for (const id of ['project-relative-path', 'mcp-order']) assert.ok(found.includes(id), `${id} found: ${found.join(', ')}`);
@@ -131,7 +133,7 @@ test('X5 - a 0.2.0 record of managed servers: the install plan drops them from t
 {
     const h = world('x5');
     const dir = h.project('p');
-    const c7 = { type: 'http', url: catalog.byId.get('context7').routes.remote.url };
+    const c7 = { type: 'http', url: catalog.byId.get('context7')!.routes.remote!.url };
     assert.strictEqual(h.claude(dir, ['mcp', 'add-json', 'context7', JSON.stringify(c7), '-s', 'project']).status, 0);
     const record = path.join(dir, '.preferred-tools', roots.FILES.record);
     fs.mkdirSync(path.dirname(record), { recursive: true });
@@ -139,7 +141,7 @@ test('X5 - a 0.2.0 record of managed servers: the install plan drops them from t
     const r = h.run(dir, { picks: { 'playwright-chrome': { scope: 'project' } } });
     ok(r);
     const list = path.join(dir, '.preferred-tools', roots.FILES.list);
-    const clean = r.plan.steps.find((x) => x.op === 'list-write' && x.file === list);
+    const clean = r.plan.steps.find((x): x is ListWriteStep => x.op === 'list-write' && x.file === list);
     assert.ok(clean && clean.own, r.rendered);
     assert.deepStrictEqual([clean.own.entries, clean.own.keep], [[], []]);
     assert.deepStrictEqual(readJson(list).own, [], 'no managed server in own');
@@ -152,7 +154,7 @@ test('X6 - configure answered \'Leave it on its own\': one own entry in the fami
     ok(h.run(dir, { picks: { context7: { scope: 'project', token: false } } }));
     ok(h.run(dir, { existing: { 'mcp:context7~project': 'own' } }));
     const list = path.join(dir, '.preferred-tools', roots.FILES.list);
-    assert.deepStrictEqual(readJson(list).own.map((e) => [e.name, e.scope, e.choice]), [['context7', 'project', 'own']]);
+    assert.deepStrictEqual(readJson(list).own.map((e: { name: string; scope: string; choice: string }) => [e.name, e.scope, e.choice]), [['context7', 'project', 'own']]);
     assert.ok(!fs.existsSync(path.join(h.home, '.preferred-tools', roots.FILES.list)), 'no list in the global root');
     const inv = h.inventory(dir);
     const d = detectAll(makeCtx({ inv, env: h.env, data: h.data }));
@@ -178,7 +180,7 @@ test('X7 - a refused key: claude mcp get on a hosted server that answers 401 or 
             // the first get in a fresh world was once seen to print no Issue line (docs/sources.md): one more get, then the words
             let out = '';
             for (let i = 0; i < 2 && !/^\s*Issue:/m.test(out); i++) out = (await fake.claude(dir, ['mcp', 'get', 'github'], h.env)).out;
-            const line = (re) => (out.split('\n').find((l) => re.test(l)) || '').trim();
+            const line = (re: RegExp) => (out.split('\n').find((l) => re.test(l)) || '').trim();
             console.log(`X7 ${status}: ${line(/Status:/)} | ${line(/Issue:/).slice(0, 120)}`);
             assert.ok(s.seen.some((x) => x.auth === 'expected'), 'the key reached the server');
             // the glyph is the console's: ✘ on macOS, × on Windows (2.1.309, 2026-11-12) - fetch.js passes the line on as written

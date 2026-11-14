@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // plan-lists.js - the list-write steps a plan writes into each family's mcps.json (spec D1).
 import test from 'node:test';
 import assert from 'node:assert';
@@ -23,19 +22,26 @@ import { world } from './helpers.ts';
 import * as inventoryLib from '../scripts/inventory/inventory.ts';
 import { apply } from '../scripts/apply/run.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
+import type { Inventory, InvRegistration } from '../scripts/inventory/types.ts';
+import type { ListServer } from '../scripts/mcps-list/types.ts';
+import type { Roots } from '../scripts/entries/types.ts';
+import type { CursorWritePlanStep, DenyReadStep, ListCtx, ListDrop, ListWriteStep, McpAddStep, McpMoveStep, McpRemoveStep, McpReplaceStep, Plan, PlanOut } from '../scripts/plan/types.ts';
+import type { McpsList } from '../scripts/mcps-list/types.ts';
+import type { ApplyCtx, ApplyReport } from '../scripts/apply/types.ts';
+import type { ServerEntry } from '../scripts/core/types.ts';
 
 const POSIX_FIXTURE = process.platform === 'win32' && 'NOT RUN: a darwin fixture meets node\'s win32 path module on this host (the matrix covers Windows)';
 const PROJECT_LIST = '/work/shop/.preferred-tools/mcps.json';
 const GLOBAL_LIST = '/Users/me/.preferred-tools/mcps.json';
 const C7 = { type: 'http', url: 'https://mcp.context7.com/mcp' };
-const listed = (name, scope, extra = {}) => ({ name, scope, row: 'context7', route: 'remote', clients: ['claude'], entry: C7, key: null, ...extra });
-const inv = (lists = { project: null, global: null }) => ({ project: '/work/shop', os: 'darwin', registrations: [], roots: { map: null }, lists });
-const ctx = (roots = { project: '/work/shop/.preferred-tools', global: '/Users/me/.preferred-tools' }) => ({ platform: 'darwin', project: '/work/shop', home: '/Users/me', roots, uses: [], exists: () => false });
-const add = (name, scope) => ({ op: 'mcp-add', name, scope, entry: C7, row: 'context7', route: 'remote' });
+const listed = (name: string, scope: string, extra: Partial<ListServer> = {}): ListServer => ({ name, scope, row: 'context7', route: 'remote', clients: ['claude'], entry: C7, key: null, ...extra });
+const inv = (lists: NonNullable<Inventory['lists']> = { project: null, global: null }) => ({ project: '/work/shop', os: 'darwin', registrations: [], roots: { map: null }, lists }) as unknown as Inventory;
+const ctx = (roots: Roots = { project: '/work/shop/.preferred-tools', global: '/Users/me/.preferred-tools' }): ListCtx => ({ platform: 'darwin', project: '/work/shop', home: '/Users/me', roots, uses: [], exists: () => false });
+const add = (name: string, scope: string) => ({ op: 'mcp-add', name, scope, entry: C7, row: 'context7', route: 'remote' }) as McpAddStep;
 
 test('an add upserts into its family root\'s list, after its own registration step, entry filled at apply', { skip: POSIX_FIXTURE }, () => {
     const c = ctx();
-    const steps = listSteps(inv(), c, { notes: [] }, [add('c7', 'user'), add('c7l', 'local')]);
+    const steps = listSteps(inv(), c, { notes: [] }, [add('c7', 'user'), add('c7l', 'local')]) as ListWriteStep[];
     assert.deepStrictEqual(steps.map((s) => [s.file, s.family, s.upserts.map((u) => [u.server.name, u.after, u.server.entry])]), [
         [GLOBAL_LIST, 'global', [['c7', 'mcp:c7~user', null]]],
         [PROJECT_LIST, 'project', [['c7l', 'mcp:c7l~local', null]]],
@@ -46,18 +52,18 @@ test('an add upserts into its family root\'s list, after its own registration st
 test('a move drops its from key and upserts the destination, keeping the clients and key it was listed with', { skip: POSIX_FIXTURE }, () => {
     const was = listed('c7', 'local', { clients: ['claude', 'cursor'], key: 'WORK_C7' });
     const i = inv({ project: { file: PROJECT_LIST, servers: [was], own: [] }, global: null });
-    const move = { op: 'mcp-move', from: { name: 'c7', scope: 'local' }, to: { name: 'docs', scope: 'user' }, entry: C7, row: 'context7', route: 'remote' };
-    const steps = listSteps(i, ctx(), { notes: [] }, [move]);
-    const byFile = Object.fromEntries(steps.map((s) => [s.file, s]));
-    assert.deepStrictEqual(byFile[PROJECT_LIST].drops, [{ key: 'mcp:c7~local', after: 'mcp:docs~user' }]);
-    const u = byFile[GLOBAL_LIST].upserts[0];
+    const move = { op: 'mcp-move', from: { name: 'c7', scope: 'local' }, to: { name: 'docs', scope: 'user' }, entry: C7, row: 'context7', route: 'remote' } as unknown as McpMoveStep;
+    const steps = listSteps(i, ctx(), { notes: [] }, [move]) as ListWriteStep[];
+    const byFile = Object.fromEntries(steps.map((s) => [s.file, s])) as Record<string, ListWriteStep>;
+    assert.deepStrictEqual(byFile[PROJECT_LIST]!.drops, [{ key: 'mcp:c7~local', after: 'mcp:docs~user' }]);
+    const u = byFile[GLOBAL_LIST]!.upserts[0]!;
     assert.deepStrictEqual([u.server.name, u.server.scope, u.server.clients, u.server.key, u.after], ['docs', 'user', ['claude', 'cursor'], 'WORK_C7', 'mcp:docs~user']);
 });
 
 test('a root change drops the server from the old root\'s list and lists it in the new one', { skip: POSIX_FIXTURE }, () => {
     const i = inv({ project: { file: PROJECT_LIST, servers: [listed('c7', 'local')], own: [] }, global: null });
-    const replace = { op: 'mcp-replace', name: 'c7', scope: 'local', entry: C7, old: C7, row: 'context7', route: 'remote' };
-    const steps = listSteps(i, ctx({ project: '/work/shop/tools', global: null }), { notes: [] }, [replace]);
+    const replace = { op: 'mcp-replace', name: 'c7', scope: 'local', entry: C7, old: C7, row: 'context7', route: 'remote' } as McpReplaceStep;
+    const steps = listSteps(i, ctx({ project: '/work/shop/tools', global: null }), { notes: [] }, [replace]) as ListWriteStep[];
     assert.deepStrictEqual(steps.map((s) => [s.file, s.upserts.map((u) => u.server.name), s.drops.map((d) => d.key)]), [
         [PROJECT_LIST, [], ['mcp:c7~local']],
         ['/work/shop/tools/mcps.json', ['c7'], []],
@@ -66,17 +72,17 @@ test('a root change drops the server from the old root\'s list and lists it in t
 
 test('a family with no root and no list gets no step; a remove of a server no list holds plans nothing', { skip: POSIX_FIXTURE }, () => {
     assert.deepStrictEqual(listSteps(inv(), ctx({ project: null, global: null }), { notes: [] }, [add('c7', 'user')]), []);
-    assert.deepStrictEqual(listSteps(inv(), ctx(), { notes: [] }, [{ op: 'mcp-remove', name: 'c7', scope: 'user' }]), []);
+    assert.deepStrictEqual(listSteps(inv(), ctx(), { notes: [] }, [{ op: 'mcp-remove', name: 'c7', scope: 'user' } as McpRemoveStep]), []);
 });
 
 test('install over 0.4.x registrations imports the family it writes', { skip: POSIX_FIXTURE }, () => {
-    const serena = { name: 'serena', scope: 'project', rowId: 'serena', route: 'local', own: false, alfredRetired: false, choice: null, entry: { command: 'uvx', args: ['--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'] } };
+    const serena: InvRegistration = { name: 'serena', scope: 'project', rowId: 'serena', route: 'local', own: false, alfredRetired: false, choice: null, entry: { command: 'uvx', args: ['--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'] } };
     const i = { ...inv({ project: { file: PROJECT_LIST, servers: [], own: [], old: '/work/shop/.preferred-tools/preferred-tools.json' }, global: null }), registrations: [serena] };
-    const steps = listSteps(i, ctx(), { notes: [] }, [add('memory', 'project')]);
+    const steps = listSteps(i, ctx(), { notes: [] }, [add('memory', 'project')]) as ListWriteStep[];
     assert.deepStrictEqual(steps.map((s) => s.op), ['list-write', 'retire-record']);
-    assert.deepStrictEqual(steps[0].upserts.map((u) => [u.server.name, u.after, u.server.clients]), [['memory', 'mcp:memory~project', ['claude']], ['serena', null, ['claude']]]);
-    assert.deepStrictEqual(steps[0].upserts[1].server.entry, serena.entry, 'an imported server carries its entry as read');
-    assert.strictEqual(steps[1].file, '/work/shop/.preferred-tools/preferred-tools.json');
+    assert.deepStrictEqual(steps[0]!.upserts.map((u) => [u.server.name, u.after, u.server.clients]), [['memory', 'mcp:memory~project', ['claude']], ['serena', null, ['claude']]]);
+    assert.deepStrictEqual(steps[0]!.upserts[1]!.server.entry, serena.entry, 'an imported server carries its entry as read');
+    assert.strictEqual(steps[1]!.file, '/work/shop/.preferred-tools/preferred-tools.json');
 });
 
 // ---- Cursor's files (spec D2, D4, D4a): cursor-write steps and the cursor-name-taken question --------------------------
@@ -87,8 +93,8 @@ test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 let worlds = 0;
 const SERENA_E = { command: 'uvx', args: ['--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'] };
 const MEMORY_E = { command: 'uvx', args: ['mcp-memory-service'] };
-const srv = (name, scope = 'project', clients = ['claude', 'cursor'], row = name, entry = name === 'serena' ? SERENA_E : MEMORY_E) => ({ name, scope, row, route: 'local', clients, entry, key: null });
-function cursorWorld({ cursor, servers = [], under = null } = {})
+const srv = (name: string, scope = 'project', clients = ['claude', 'cursor'], row = name, entry: ServerEntry = name === 'serena' ? SERENA_E : MEMORY_E): ListServer => ({ name, scope, row, route: 'local', clients, entry, key: null });
+function cursorWorld({ cursor, servers = [], under = null }: { cursor?: string; servers?: ListServer[]; under?: string | null } = {})
 {
     const dir = path.join(tmp, `w${++worlds}`);
     const project = path.join(dir, under || '', 'shop');
@@ -98,28 +104,30 @@ function cursorWorld({ cursor, servers = [], under = null } = {})
     const cursorFile = path.join(project, '.cursor', 'mcp.json');
     if (servers.length) { fs.mkdirSync(path.dirname(listFile), { recursive: true }); fs.writeFileSync(listFile, JSON.stringify({ version: 1, servers, own: [] })); }
     if (typeof cursor === 'string') { fs.mkdirSync(path.dirname(cursorFile), { recursive: true }); fs.writeFileSync(cursorFile, cursor); }
-    const i = { project, os: process.platform, registrations: [], roots: { map: null }, lists: { project: servers.length ? { file: listFile, servers, own: [] } : null, global: null } };
-    const c = { platform: process.platform, project, env: { HOME: home, USERPROFILE: home }, home, roots: { project: path.dirname(listFile), global: null }, uses: [], catalog: catalogAll };
+    const i = { project, os: process.platform, registrations: [], roots: { map: null }, lists: { project: servers.length ? { file: listFile, servers, own: [] } : null, global: null } } as unknown as Inventory & { lists: NonNullable<Inventory['lists']> };
+    const c: ListCtx = { platform: process.platform, project, env: { HOME: home, USERPROFILE: home }, home, roots: { project: path.dirname(listFile), global: null }, uses: [], catalog: catalogAll };
     return { dir, project, home, listFile, cursorFile, inv: i, ctx: c };
 }
-const listWriteOf = (w, servers, drops = []) => ({ op: 'list-write', file: w.listFile, family: 'project', upserts: servers.map((server) => ({ server, after: null, cursorFile: null })), drops, own: null, why: 'x' });
-const outOf = (...steps) => ({ steps, notes: [], errors: [] });
-const runFiles = (w, out, extra) =>
+type CursorWorld = ReturnType<typeof cursorWorld>;
+type Out = PlanOut & { steps: ListWriteStep[] };
+const listWriteOf = (w: CursorWorld, servers: ListServer[], drops: ListDrop[] = []): ListWriteStep => ({ op: 'list-write', file: w.listFile, family: 'project', upserts: servers.map((server) => ({ server, after: null, cursorFile: null })), drops, own: null, why: 'x' });
+const outOf = (...steps: ListWriteStep[]): Out => ({ steps, notes: [], errors: [] });
+const runFiles = (w: CursorWorld, out: Out, extra: CursorWritePlanStep[]) =>
 {
-    const report = { appliedKeys: new Set(), cursorFiles: new Set() };
+    const report = { appliedKeys: new Set(), cursorFiles: new Set() } as unknown as ApplyReport;
     for (const s of [...out.steps, ...extra])
     {
-        const r = s.op === 'list-write' ? listWrite(s, { project: w.project, env: w.ctx.env, report }) : cursorMcp.cursorWrite(s, { catalog: catalogAll });
+        const r = s.op === 'list-write' ? listWrite(s, { project: w.project, env: w.ctx.env, report } as ApplyCtx) : cursorMcp.cursorWrite(s, { catalog: catalogAll });
         assert.strictEqual(r.ok, true, r.detail);
         if (s.op === 'cursor-write') report.cursorFiles.add(s.file);
     }
 };
-const readList = (w) => JSON.parse(fs.readFileSync(w.listFile, 'utf8'));
+const readList = (w: CursorWorld): McpsList => JSON.parse(fs.readFileSync(w.listFile, 'utf8'));
 
 test('a name Cursor already has asks cursor-name-taken, Replace recommended for the same row', () => {
     const f = '/work/shop/.cursor/mcp.json';
     const { question: q, answers } = cursorNameQuestion({ file: f, name: 'serena', sameRow: true });
-    assert.match(q.options[0].label, /^Replace it with the plugin's \(Recommended\)$/);
+    assert.match(q.options[0]!.label, /^Replace it with the plugin's \(Recommended\)$/);
     assert.equal(q.options.length, 2);
     assert.strictEqual(q.id, `cursor-name-serena@${f}`);
     assert.ok(q.header.length <= 12, q.header);
@@ -129,10 +137,10 @@ test('a name Cursor already has asks cursor-name-taken, Replace recommended for 
 
 test('another server under that name recommends Keep', () => {
     const { question: q, answers } = cursorNameQuestion({ file: '/work/shop/.cursor/mcp.json', name: 'serena', sameRow: false });
-    assert.strictEqual(q.options[0].label, "Keep Cursor's own (Recommended)");
-    assert.strictEqual(q.options[1].label, "Replace it with the plugin's");
+    assert.strictEqual(q.options[0]!.label, "Keep Cursor's own (Recommended)");
+    assert.strictEqual(q.options[1]!.label, "Replace it with the plugin's");
     assert.deepStrictEqual(Object.values(answers), ['keep', 'replace']);
-    assert.match(q.options[0].description, /^serena is set up for Claude Code only/);
+    assert.match(q.options[0]!.description, /^serena is set up for Claude Code only/);
 });
 
 test('a plan that sets a server up for Cursor writes one cursor-write per file, after the list-write, before from the lists', () => {
@@ -141,8 +149,8 @@ test('a plan that sets a server up for Cursor writes one cursor-write per file, 
     const steps = cursorSteps(w.inv, w.ctx, out, {});
     assert.deepStrictEqual(out.errors, []);
     assert.deepStrictEqual(steps.map((s) => [s.op, s.file, s.family, s.before, s.replace]), [['cursor-write', w.cursorFile, 'project', ['memory'], []]]);
-    assert.deepStrictEqual(steps[0].lists, [{ file: w.listFile, scopes: ['local', 'project'] }]);
-    assert.strictEqual(out.steps[0].upserts[0].cursorFile, w.cursorFile, 'the upsert names the Cursor file it waits on');
+    assert.deepStrictEqual(steps[0]!.lists, [{ file: w.listFile, scopes: ['local', 'project'] }]);
+    assert.strictEqual(out.steps[0]!.upserts[0]!.cursorFile, w.cursorFile, 'the upsert names the Cursor file it waits on');
     // a plan that leaves every Cursor entry as it was writes none
     assert.deepStrictEqual(cursorSteps(w.inv, w.ctx, outOf(listWriteOf(w, [srv('c7', 'project', ['claude'], 'context7', { type: 'http', url: 'https://mcp.context7.com/mcp' })])), {}), []);
 });
@@ -153,7 +161,7 @@ test('Keep leaves Cursor\'s entry byte-identical and records clients claude', ()
     const out = outOf(listWriteOf(w, [srv('serena')]));
     const steps = cursorSteps(w.inv, w.ctx, out, { cursorNames: { [`serena@${w.cursorFile}`]: 'keep' } });
     assert.deepStrictEqual(out.errors, []);
-    assert.deepStrictEqual(out.steps[0].upserts[0].server.clients, ['claude']);
+    assert.deepStrictEqual(out.steps[0]!.upserts[0]!.server.clients, ['claude']);
     runFiles(w, out, steps);
     assert.strictEqual(fs.readFileSync(w.cursorFile, 'utf8'), text);
     assert.deepStrictEqual(readList(w).servers.map((s) => [s.name, s.clients]), [['serena', ['claude']]]);
@@ -163,8 +171,8 @@ test('Replace puts the name in the step\'s replace and the plan line names it', 
     const w = cursorWorld({ cursor: '{"mcpServers":{"serena":{"command":"my-serena"},"mine":{"command":"node"}}}' });
     const out = outOf(listWriteOf(w, [srv('serena')]));
     const steps = cursorSteps(w.inv, w.ctx, out, { cursorNames: { [`serena@${w.cursorFile}`]: 'replace' } });
-    assert.deepStrictEqual(steps[0].replace, ['serena']);
-    assert.match(renderLine(steps[0]), new RegExp(`replaces your own serena in ${w.cursorFile.replace(/[\\.]/g, '\\$&')}`));
+    assert.deepStrictEqual(steps[0]!.replace, ['serena']);
+    assert.match(renderLine(steps[0]!), new RegExp(`replaces your own serena in ${w.cursorFile.replace(/[\\.]/g, '\\$&')}`));
     runFiles(w, out, steps);
     const doc = JSON.parse(fs.readFileSync(w.cursorFile, 'utf8'));
     assert.deepStrictEqual(doc.mcpServers.serena, SERENA_E);
@@ -196,9 +204,9 @@ test('a symlinked .cursor/mcp.json is a note: Claude Code is written, the entrie
     assert.deepStrictEqual(cursorSteps(w.inv, w.ctx, out, {}), []);
     assert.deepStrictEqual(out.errors, []);
     assert.strictEqual(out.notes.length, 1);
-    assert.match(out.notes[0], new RegExp(`^Cursor: ${w.cursorFile.replace(/[\\.]/g, '\\$&')} is a symbolic link.* - not written; Claude Code is$`));
-    assert.deepStrictEqual(out.steps[0].upserts[0].server.clients, ['claude']);
-    assert.strictEqual(out.steps[0].upserts[0].cursorFile, null);
+    assert.match(out.notes[0]!, new RegExp(`^Cursor: ${w.cursorFile.replace(/[\\.]/g, '\\$&')} is a symbolic link.* - not written; Claude Code is$`));
+    assert.deepStrictEqual(out.steps[0]!.upserts[0]!.server.clients, ['claude']);
+    assert.strictEqual(out.steps[0]!.upserts[0]!.cursorFile, null);
 });
 
 test('under a refusal a new entry is recorded without cursor and an entry already marked keeps it', () => {
@@ -206,11 +214,11 @@ test('under a refusal a new entry is recorded without cursor and an entry alread
     const out = outOf(listWriteOf(w, [srv('memory'), srv('serena')]));
     assert.deepStrictEqual(cursorSteps(w.inv, w.ctx, out, {}), []);
     assert.match(out.notes.join('\n'), /not JSON .* - not written; Claude Code is/);
-    assert.deepStrictEqual(out.steps[0].upserts.map((u) => [u.server.name, u.server.clients]), [['memory', ['claude', 'cursor']], ['serena', ['claude']]]);
+    assert.deepStrictEqual(out.steps[0]!.upserts.map((u) => [u.server.name, u.server.clients]), [['memory', ['claude', 'cursor']], ['serena', ['claude']]]);
 });
 
 const GIT = spawnSync('git', ['--version']).status === 0;
-const gitInit = (dir) => assert.strictEqual(spawnSync('git', ['init', '-q', dir]).status, 0);
+const gitInit = (dir: string) => assert.strictEqual(spawnSync('git', ['init', '-q', dir]).status, 0);
 const GIT_NOTE = '.cursor/mcp.json now holds this machine\'s local servers; add it to .gitignore to keep them private';
 
 test('a local entry in an unignored .cursor/mcp.json gets the git note', { skip: !GIT && 'NOT RUN: git is not on PATH' }, () => {
@@ -252,8 +260,8 @@ test('cursor plan with git absent adds no git note and does not throw', () => {
 });
 
 test('a project inside a parent repo gets the no-workspace note; a repo root with no child repos gets none', () => {
-    const note = (w) => `Cursor reads .cursor/mcp.json only from the folder it opens (its git root for the CLI), never a parent's: open Cursor at ${w.project}, or install at Global scope for servers every folder needs`;
-    const notesOf = (w) => { const out = outOf(listWriteOf(w, [srv('serena')])); cursorSteps(w.inv, w.ctx, out, {}); return out.notes; };
+    const note = (w: CursorWorld) => `Cursor reads .cursor/mcp.json only from the folder it opens (its git root for the CLI), never a parent's: open Cursor at ${w.project}, or install at Global scope for servers every folder needs`;
+    const notesOf = (w: CursorWorld) => { const out = outOf(listWriteOf(w, [srv('serena')])); cursorSteps(w.inv, w.ctx, out, {}); return out.notes; };
     // a folder of a parent repo
     const inside = cursorWorld({ under: 'mono' });
     fs.mkdirSync(path.join(inside.dir, 'mono', '.git'), { recursive: true });
@@ -292,28 +300,28 @@ test('a member file holding the name asks for that file, keyed <name>@<file>', (
 });
 
 // ---- hosted routes in both apps (spec D5, ruling 12, ruling 13) -----------------------------------------------------
-const MR = catalogAll.byId.get('sentry').routes.bridge.package;
-const hinv = (extra = {}) => ({ version: 1, os: 'darwin', arch: 'arm64', project: '/work/shop', cli: { ok: true }, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, roots: { map: null }, lists: { project: null, global: null }, ...extra });
+const MR = catalogAll.byId.get('sentry')!.routes.bridge!.package!;
+const hinv = (extra: Record<string, unknown> = {}) => ({ version: 1, os: 'darwin', arch: 'arm64', project: '/work/shop', cli: { ok: true }, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, roots: { map: null }, lists: { project: null, global: null }, ...extra }) as unknown as Inventory;
 const HOPTS = { env: {}, home: '/Users/me' };
 const GROOT = '/Users/me/.preferred-tools';
 const GLIST = `${GROOT}/mcps.json`;
-const hreg = (name, rowId, entry, scope = 'user', route = 'remote') => ({ name, scope, entry, rowId, route, own: false, alfredRetired: false, choice: null });
-const hlisted = (name, row, entry, clients, scope = 'user', extra = {}) => ({ name, scope, row, route: 'remote', clients, entry, key: null, ...extra });
-const ops = (p) => p.steps.map((s) => s.op);
-const upsertsOf = (p) => p.steps.filter((s) => s.op === 'list-write').flatMap((s) => s.upserts);
+const hreg = (name: string, rowId: string, entry: ServerEntry, scope = 'user', route = 'remote'): InvRegistration => ({ name, scope, entry, rowId, route, own: false, alfredRetired: false, choice: null });
+const hlisted = (name: string, row: string, entry: ServerEntry, clients: string[], scope = 'user', extra: Partial<ListServer> = {}): ListServer => ({ name, scope, row, route: 'remote', clients, entry, key: null, ...extra });
+const ops = (p: Plan) => p.steps.map((s) => s.op);
+const upsertsOf = (p: Plan) => p.steps.filter((s): s is ListWriteStep => s.op === 'list-write').flatMap((s) => s.upserts);
 const HELPER_C7 = { type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: `node ${GROOT}/mcp-headers.js CONTEXT7_API_KEY Bearer` };
 const ATL_URL = 'https://mcp.atlassian.com/v2/mcp';
 
-for (const [id, url] of [['gitlab', 'https://gitlab.com/api/v4/mcp'], ['atlassian', ATL_URL], ['sentry', 'https://mcp.sentry.dev/mcp']])
+for (const [id, url] of [['gitlab', 'https://gitlab.com/api/v4/mcp'], ['atlassian', ATL_URL], ['sentry', 'https://mcp.sentry.dev/mcp']] as [string, string][])
 {
     test(`${id} with no key, for both apps: both get the same mcp-remote entry with the root as MCP_REMOTE_CONFIG_DIR`, { skip: POSIX_FIXTURE }, () => {
         const p = plan(hinv(), { clients: ['claude', 'cursor'], picks: { [id]: { route: 'remote', scope: 'user', token: false } } }, HOPTS);
         assert.deepStrictEqual(p.errors, []);
-        const add = p.steps.find((s) => s.op === 'mcp-add');
+        const add = (p.steps.find((s) => s.op === 'mcp-add') as McpAddStep);
         assert.deepStrictEqual(add.entry, { type: 'stdio', command: 'npx', args: ['-y', `mcp-remote@${MR.version}`, url], env: { npm_config_before: MR.cutoff, MCP_REMOTE_CONFIG_DIR: GROOT } });
         const [u] = upsertsOf(p);
-        assert.deepStrictEqual([u.server.clients, u.server.form, u.server.cursorEntry], [['claude', 'cursor'], 'signin', undefined]);
-        assert.deepStrictEqual(p.steps.filter((s) => s.op === 'cursor-write').map((s) => s.file), ['/Users/me/.cursor/mcp.json']);
+        assert.deepStrictEqual([u!.server.clients, u!.server.form, u!.server.cursorEntry], [['claude', 'cursor'], 'signin', undefined]);
+        assert.deepStrictEqual((p.steps.filter((s) => s.op === 'cursor-write') as CursorWritePlanStep[]).map((s) => s.file), ['/Users/me/.cursor/mcp.json']);
         assert.deepStrictEqual(p.oauth.map((o) => [o.name, o.signin]), [[id, true]]);
         assert.ok(render(p).includes(`OAuth: ${id}: your browser opens to sign in the first time it starts, in Claude Code or Cursor; the sign-in is kept in ${GROOT}/mcp-remote-v1/ and serves both.`), render(p));
     });
@@ -321,30 +329,30 @@ for (const [id, url] of [['gitlab', 'https://gitlab.com/api/v4/mcp'], ['atlassia
 
 test('a keyless OAuth entry for Claude Code only is the http form', { skip: POSIX_FIXTURE }, () => {
     const p = plan(hinv(), { clients: ['claude'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } }, HOPTS);
-    assert.deepStrictEqual(p.steps.find((s) => s.op === 'mcp-add').entry, { type: 'http', url: ATL_URL });
+    assert.deepStrictEqual((p.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry, { type: 'http', url: ATL_URL });
     assert.match(render(p), /OAuth: run \/mcp once in a session to log in to atlassian\./);
     assert.ok(!ops(p).includes('deny-read'), 'no sign-in form, no key name: no rule');
 });
 
 test('context7 with no key stays http in both apps', { skip: POSIX_FIXTURE }, () => {
     const p = plan(hinv(), { clients: ['claude', 'cursor'], picks: { context7: { route: 'remote', scope: 'user', token: false } } }, HOPTS);
-    assert.deepStrictEqual(p.steps.find((s) => s.op === 'mcp-add').entry, { type: 'http', url: 'https://mcp.context7.com/mcp' });
+    assert.deepStrictEqual((p.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry, { type: 'http', url: 'https://mcp.context7.com/mcp' });
     const [u] = upsertsOf(p);
-    assert.deepStrictEqual([u.server.clients, u.server.form], [['claude', 'cursor'], null]);
+    assert.deepStrictEqual([u!.server.clients, u!.server.form], [['claude', 'cursor'], null]);
 });
 
 test('sentry\'s bridge route has no cursorEntry and both apps get the same entry', { skip: POSIX_FIXTURE }, () => {
     const p = plan(hinv(), { clients: ['claude', 'cursor'], picks: { sentry: { route: 'bridge', scope: 'user' } } }, HOPTS);
     assert.deepStrictEqual(p.errors, []);
     const [u] = upsertsOf(p);
-    assert.deepStrictEqual([u.server.clients, u.server.form], [['claude', 'cursor'], null], 'no Cursor form: the list-write keeps no cursorEntry');
+    assert.deepStrictEqual([u!.server.clients, u!.server.form], [['claude', 'cursor'], null], 'no Cursor form: the list-write keeps no cursorEntry');
 });
 
 test('a keyed hosted entry for both apps is two forms: Claude keeps the helper, the plan writes the bridge into the root', { skip: POSIX_FIXTURE }, () => {
     const p = plan(hinv(), { clients: ['claude', 'cursor'], picks: { context7: { route: 'remote', scope: 'user', token: true } } }, HOPTS);
     assert.deepStrictEqual(p.errors, []);
-    assert.ok(p.steps.find((s) => s.op === 'mcp-add').entry.headersHelper);
-    assert.strictEqual(upsertsOf(p)[0].server.form, 'two');
+    assert.ok((p.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry.headersHelper);
+    assert.strictEqual(upsertsOf(p)[0]!.server.form, 'two');
     assert.ok(ops(p).includes('write-bridge'), ops(p).join());
 });
 
@@ -356,7 +364,7 @@ test('adding Cursor to a 0.4.x helper-form context7 writes mcp-bridge.js into th
     assert.ok(ops(p).includes('write-bridge'), ops(p).join());
     assert.ok(ops(p).indexOf('cursor-write') > ops(p).indexOf('list-write'));
     const [u] = upsertsOf(p);
-    assert.deepStrictEqual([u.server.clients, u.server.form, u.after], [['claude', 'cursor'], 'two', null]);
+    assert.deepStrictEqual([u!.server.clients, u!.server.form, u!.after], [['claude', 'cursor'], 'two', null]);
 });
 
 test('an entry with other headers is Claude Code only, with the reason', { skip: POSIX_FIXTURE }, () => {
@@ -373,9 +381,9 @@ test('adding Cursor to an http atlassian entry plans mcp-replace, list-write and
     const i = hinv({ registrations: [hreg('atlassian', 'atlassian', http)], lists: { project: null, global: { file: GLIST, servers: [hlisted('atlassian', 'atlassian', http, ['claude'])], own: [] } } });
     const p = plan(i, { change: { 'mcp:atlassian~user': { row: 'atlassian', clients: ['claude', 'cursor'] } } }, HOPTS);
     assert.deepStrictEqual(p.errors, []);
-    const rep = p.steps.find((s) => s.op === 'mcp-replace');
+    const rep = (p.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep);
     assert.ok(signInParts(rep.entry), JSON.stringify(rep.entry));
-    for (const op of ['list-write', 'cursor-write']) assert.ok(ops(p).includes(op), ops(p).join());
+    for (const op of ['list-write', 'cursor-write'] as Plan['steps'][number]['op'][]) assert.ok(ops(p).includes(op), ops(p).join());
     assert.ok(p.notes.includes(`atlassian: sign in once more - the sign-in now lives in ${GROOT}/mcp-remote-v1/ and serves both apps`), p.notes.join('\n'));
 });
 
@@ -384,9 +392,9 @@ test('taking Cursor off a shared entry plans mcp-replace back to http, with the 
     const i = hinv({ registrations: [hreg('atlassian', 'atlassian', shared)], lists: { project: null, global: { file: GLIST, servers: [hlisted('atlassian', 'atlassian', shared, ['claude', 'cursor'])], own: [] } } });
     const p = plan(i, { change: { 'mcp:atlassian~user': { row: 'atlassian', clients: ['claude'] } } }, HOPTS);
     assert.deepStrictEqual(p.errors, []);
-    assert.deepStrictEqual(p.steps.find((s) => s.op === 'mcp-replace').entry, { type: 'http', url: ATL_URL });
+    assert.deepStrictEqual((p.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep).entry, { type: 'http', url: ATL_URL });
     assert.ok(p.notes.includes('atlassian: Claude Code signs in on its own again (/mcp)'), p.notes.join('\n'));
-    assert.deepStrictEqual(p.steps.filter((s) => s.op === 'cursor-write').map((s) => s.before), [['atlassian']]);
+    assert.deepStrictEqual((p.steps.filter((s) => s.op === 'cursor-write') as CursorWritePlanStep[]).map((s) => s.before), [['atlassian']]);
 });
 
 test('a root where git would commit mcp-remote-v1/ gets the Claude-only http form and the note', { skip: (!GIT && 'NOT RUN: git is not on PATH') || POSIX_FIXTURE }, () => {
@@ -399,20 +407,20 @@ test('a root where git would commit mcp-remote-v1/ gets the Claude-only http for
     const i = hinv({ project: w.project });
     const p = plan(i, { clients: ['claude', 'cursor'], roots: { project: { id: 'named', path: 'tools' } }, picks: { atlassian: { route: 'remote', scope: 'project', token: false } } }, { env: {}, home: w.home });
     assert.deepStrictEqual(p.errors, []);
-    assert.deepStrictEqual(p.steps.find((s) => s.op === 'mcp-add').entry, { type: 'http', url: ATL_URL });
+    assert.deepStrictEqual((p.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry, { type: 'http', url: ATL_URL });
     assert.ok(p.notes.includes(`${root}: git would commit mcp-remote-v1/ - atlassian is set up for Claude Code only; /preferred-tools:fix (root-ignore) covers it, then configure adds Cursor`), p.notes.join('\n'));
     assert.deepStrictEqual(upsertsOf(p).map((u) => u.server.clients), [['claude']]);
 });
 
 test('a plan writing a shared sign-in entry adds the sign-in rule; one with ensure-key-name adds the key-file rule', { skip: POSIX_FIXTURE }, () => {
     const p = plan(hinv(), { clients: ['claude', 'cursor'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } }, HOPTS);
-    const d = p.steps.find((s) => s.op === 'deny-read');
+    const d = (p.steps.find((s) => s.op === 'deny-read') as DenyReadStep);
     assert.deepStrictEqual([d.file, d.rules], ['/Users/me/.claude/settings.json', [READ_GUARD.signIns]]);
     assert.strictEqual(ops(p).indexOf('deny-read'), ops(p).indexOf('list-write') - 1, 'last before list-write');
     assert.ok(render(p).includes(`   adds ${READ_GUARD.signIns} to permissions.deny in /Users/me/.claude/settings.json  (keeps AI sessions out of the sign-in tokens and the key file)`), render(p));
     const k = plan(hinv(), { picks: { context7: { route: 'remote', scope: 'user', token: true } } }, HOPTS);
     assert.ok(ops(k).includes('ensure-key-name'), ops(k).join());
-    assert.deepStrictEqual(k.steps.find((s) => s.op === 'deny-read').rules, [READ_GUARD.secrets]);
+    assert.deepStrictEqual((k.steps.find((s) => s.op === 'deny-read') as DenyReadStep).rules, [READ_GUARD.secrets]);
 });
 
 test('a second plan with the rules present plans no deny-read', () => {
@@ -429,7 +437,7 @@ test('deny-read\'s file sits under the isolated CLAUDE_CONFIG_DIR, never the rea
     const w = cursorWorld();
     const conf = path.join(w.dir, 'claude-config');
     const p = plan(hinv({ project: w.project, os: process.platform }), { clients: ['claude', 'cursor'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } }, { env: { CLAUDE_CONFIG_DIR: conf }, home: w.home });
-    assert.strictEqual(p.steps.find((s) => s.op === 'deny-read').file, path.join(conf, 'settings.json'));
+    assert.strictEqual((p.steps.find((s) => s.op === 'deny-read') as DenyReadStep).file, path.join(conf, 'settings.json'));
     // a settings file that is not JSON: a note, no step, and Claude Code and Cursor are still written
     fs.mkdirSync(conf, { recursive: true });
     fs.writeFileSync(path.join(conf, 'settings.json'), '{ nope');
@@ -440,22 +448,22 @@ test('deny-read\'s file sits under the isolated CLAUDE_CONFIG_DIR, never the rea
 });
 
 // ---- a workspace in Cursor (spec D4a) ----------------------------------------------------------------------------------
-const wsRec = (folder, doc) => { fs.mkdirSync(path.join(folder, '.alfred'), { recursive: true }); fs.writeFileSync(path.join(folder, '.alfred', 'workspace.json'), JSON.stringify(doc)); };
+const wsRec = (folder: string, doc: unknown) => { fs.mkdirSync(path.join(folder, '.alfred'), { recursive: true }); fs.writeFileSync(path.join(folder, '.alfred', 'workspace.json'), JSON.stringify(doc)); };
 const MEMORY_A = { command: 'uvx', args: ['mcp-memory-service', '--a'] };
 // a root (the project, `shop`) listing a, b and c, c ignored; each member's record names the root. `own`: a's own list.
-function wsWorld({ own = [], at = null } = {})
+function wsWorld({ own = [], at = null }: { own?: ListServer[]; at?: string | null } = {})
 {
     const w = cursorWorld();
     wsRec(w.project, { role: 'root', children: ['a', 'b', 'c'], ignoredChildren: ['c'] });
-    const m = Object.fromEntries(['a', 'b', 'c'].map((c) => { const d = path.join(w.project, c); fs.mkdirSync(d); wsRec(d, { parent: '..' }); return [c, d]; }));
+    const m = Object.fromEntries(['a', 'b', 'c'].map((c) => { const d = path.join(w.project, c); fs.mkdirSync(d); wsRec(d, { parent: '..' }); return [c, d]; })) as Record<string, string> & { a: string; b: string; c: string };
     const aList = path.join(m.a, '.preferred-tools', 'mcps.json');
     if (own.length) { fs.mkdirSync(path.dirname(aList), { recursive: true }); fs.writeFileSync(aList, JSON.stringify({ version: 1, servers: own, own: [] })); }
     w.inv.workspace = wsLib.of(at || w.project, {});
-    const cf = (d) => path.join(d, '.cursor', 'mcp.json');
+    const cf = (d: string) => path.join(d, '.cursor', 'mcp.json');
     return { ...w, m, aList, cf };
 }
-const cursorNames = (file) => (fs.existsSync(file) ? Object.keys(JSON.parse(fs.readFileSync(file, 'utf8')).mcpServers) : null);
-const cursorDoc = (file) => JSON.parse(fs.readFileSync(file, 'utf8')).mcpServers;
+const cursorNames = (file: string): string[] | null => (fs.existsSync(file) ? Object.keys(JSON.parse(fs.readFileSync(file, 'utf8')).mcpServers) : null);
+const cursorDoc = (file: string): Record<string, ServerEntry> & { serena: ServerEntry; memory: ServerEntry; github: { env: Record<string, string> & { GITHUB_PERSONAL_ACCESS_TOKEN: string } } } => JSON.parse(fs.readFileSync(file, 'utf8')).mcpServers;
 
 test('workspace: two joined children get the root\'s project entries after their own; the ignored one gets none', () => {
     const w = wsWorld({ own: [srv('memory', 'project', ['claude', 'cursor'], 'memory', MEMORY_A)] });
@@ -468,11 +476,11 @@ test('workspace: two joined children get the root\'s project entries after their
         [w.cf(w.m.b), [{ file: w.listFile, scopes: ['project'] }]],
     ]);
     runFiles(w, out, steps);
-    assert.deepStrictEqual(cursorNames(w.cf(w.m.b)).sort(), ['memory', 'serena']);
+    assert.deepStrictEqual(cursorNames(w.cf(w.m.b))!.sort(), ['memory', 'serena']);
     assert.deepStrictEqual(cursorDoc(w.cf(w.m.a)).memory, MEMORY_A, 'a\'s own memory wins over the root\'s: the nearest first');
     assert.deepStrictEqual(cursorDoc(w.cf(w.m.a)).serena, SERENA_E);
     assert.strictEqual(cursorNames(w.cf(w.m.c)), null, 'the ignored child is not written');
-    for (const c of ['b', 'c']) assert.ok(!fs.existsSync(path.join(w.m[c], '.preferred-tools')), `${c} gets no root`);
+    for (const c of ['b', 'c']) assert.ok(!fs.existsSync(path.join(w.m[c]!, '.preferred-tools')), `${c} gets no root`);
 });
 
 test('workspace: local-scope root entries are not passed down', () => {
@@ -490,16 +498,16 @@ test('workspace: removing a root entry removes it from each member, and no membe
     const w = wsWorld();
     const first = outOf(listWriteOf(w, [srv('serena'), srv('memory')]));
     runFiles(w, first, cursorSteps(w.inv, w.ctx, first, {}));
-    assert.deepStrictEqual(cursorNames(w.cf(w.m.a)).sort(), ['memory', 'serena']);
+    assert.deepStrictEqual(cursorNames(w.cf(w.m.a))!.sort(), ['memory', 'serena']);
     // the inventory as the next run reads it
     const servers = readList(w).servers;
     w.inv.lists.project = { file: w.listFile, servers, own: [] };
     const out = outOf({ ...listWriteOf(w, []), drops: [{ key: 'mcp:serena~project', after: null }] });
     const steps = cursorSteps(w.inv, w.ctx, out, {});
-    assert.deepStrictEqual(steps.map((s) => [s.file, [...s.before].sort()]), [[w.cursorFile, ['memory', 'serena']], [w.cf(w.m.a), ['memory', 'serena']], [w.cf(w.m.b), ['memory', 'serena']]]);
+    assert.deepStrictEqual(steps.map((s) => [s.file, [...s.before!].sort()]), [[w.cursorFile, ['memory', 'serena']], [w.cf(w.m.a), ['memory', 'serena']], [w.cf(w.m.b), ['memory', 'serena']]]);
     runFiles(w, out, steps);
-    for (const c of ['a', 'b']) assert.deepStrictEqual(cursorNames(w.cf(w.m[c])), ['memory'], c);
-    for (const c of ['a', 'b', 'c']) assert.ok(!fs.existsSync(path.join(w.m[c], '.preferred-tools')), `${c} gets no root`);
+    for (const c of ['a', 'b']) assert.deepStrictEqual(cursorNames(w.cf(w.m[c]!)), ['memory'], c);
+    for (const c of ['a', 'b', 'c']) assert.ok(!fs.existsSync(path.join(w.m[c]!, '.preferred-tools')), `${c} gets no root`);
 });
 
 test('workspace: a member copy edited or removed by hand is left as it is when the root changes, and named', () => {
@@ -518,11 +526,11 @@ test('workspace: a member copy edited or removed by hand is left as it is when t
     w.inv.lists.project = { file: w.listFile, servers: readList(w).servers, own: [] };
     const out = outOf({ ...listWriteOf(w, [srv('serena')]), drops: [{ key: 'mcp:memory~project', after: null }] });
     const steps = cursorSteps(w.inv, w.ctx, out, {});
-    assert.deepStrictEqual(steps.find((s) => s.file === w.cf(w.m.a)).skip, ['serena']);
+    assert.deepStrictEqual(steps.find((s) => s.file === w.cf(w.m.a))!.skip, ['serena']);
     assert.ok(out.notes.includes(`serena: Cursor's copy was changed by hand - left; run /preferred-tools:fix`), out.notes.join('\n'));
     runFiles(w, out, steps);
     assert.deepStrictEqual(JSON.parse(fs.readFileSync(w.cf(w.m.a), 'utf8')).mcpServers.serena, JSON.parse(editedA).mcpServers.serena, 'the hand edit stays');
-    assert.ok(!cursorNames(w.cf(w.m.a)).includes('memory'), 'the dropped root entry still leaves');
+    assert.ok(!cursorNames(w.cf(w.m.a))!.includes('memory'), 'the dropped root entry still leaves');
 });
 
 test('workspace: a plan at a member writes its own file with the root\'s project entries after its own', () => {
@@ -537,7 +545,7 @@ test('workspace: a plan at a member writes its own file with the root\'s project
     const steps = cursorSteps(inv, ctx, out, {});
     assert.deepStrictEqual(steps.map((s) => [s.file, s.lists, s.before]), [[a.cursorFile, [{ file: w.aList, scopes: ['local', 'project'] }, { file: w.listFile, scopes: ['project'] }], ['serena']]]);
     runFiles({ ...w, project: w.m.a }, out, steps);
-    assert.deepStrictEqual(cursorNames(a.cursorFile).sort(), ['memory', 'serena']);
+    assert.deepStrictEqual(cursorNames(a.cursorFile)!.sort(), ['memory', 'serena']);
 });
 
 test('workspace: a root in git with a plain-folder member gets the note for its own entries', { skip: !GIT && 'NOT RUN: git is not on PATH' }, () => {
@@ -566,7 +574,7 @@ test('workspace: a member file holding a root name as its own asks for that file
     const kept = outOf(listWriteOf(w, [srv('serena')]));
     const steps = cursorSteps(w.inv, w.ctx, kept, { cursorNames: { [`serena@${w.cf(w.m.b)}`]: 'keep' } });
     assert.deepStrictEqual(kept.errors, []);
-    assert.deepStrictEqual(kept.steps[0].upserts[0].server.clients, ['claude', 'cursor'], 'keep in a member leaves the root\'s entry for Cursor');
+    assert.deepStrictEqual(kept.steps[0]!.upserts[0]!.server.clients, ['claude', 'cursor'], 'keep in a member leaves the root\'s entry for Cursor');
     runFiles(w, kept, steps);
     assert.deepStrictEqual(cursorDoc(w.cf(w.m.b)).serena, { command: 'mine' });
     assert.deepStrictEqual(cursorDoc(w.cf(w.m.a)).serena, SERENA_E);
@@ -602,11 +610,11 @@ for (const id of ['github', 'sentry', 'context7'])
     test(`${id} local, keyed, at local scope: no Cursor write and the note`, { skip: POSIX_FIXTURE }, () => {
         const k = id === 'context7' ? keyedProject() : { inv: hinv(), opts: HOPTS };
         const p = plan(k.inv, { clients: ['claude', 'cursor'], picks: { [id]: { route: 'local', scope: 'local', token: true } } }, k.opts);
-        assert.ok(cursorMcp.stdioKeyed(p.steps.find((s) => s.op === 'mcp-add').entry, catalogAll.byId.get(id), 'local'), 'the entry holds its key field');
+        assert.ok(cursorMcp.stdioKeyed((p.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry, catalogAll.byId.get(id), 'local'), 'the entry holds its key field');
         assert.deepStrictEqual(p.errors, []);
         assert.ok(p.notes.includes(D6_NOTE), p.notes.join('\n'));
         assert.deepStrictEqual(upsertsOf(p).map((u) => u.server.clients), [['claude']]);
-        assert.deepStrictEqual(p.steps.filter((s) => s.op === 'cursor-write'), []);
+        assert.deepStrictEqual((p.steps.filter((s) => s.op === 'cursor-write') as CursorWritePlanStep[]), []);
     });
 }
 
@@ -615,7 +623,7 @@ test('context7 local with no key is written to Cursor', { skip: POSIX_FIXTURE },
     assert.deepStrictEqual(p.errors, []);
     assert.ok(!p.notes.includes(D6_NOTE));
     assert.deepStrictEqual(upsertsOf(p).map((u) => u.server.clients), [['claude', 'cursor']]);
-    assert.strictEqual(p.steps.filter((s) => s.op === 'cursor-write').length, 1);
+    assert.strictEqual((p.steps.filter((s) => s.op === 'cursor-write') as CursorWritePlanStep[]).length, 1);
 });
 
 test('stdioKeyed is the rule: a route with a tokenVar whose entry holds a token field', () => {
@@ -661,13 +669,13 @@ test('install names a listed server missing from Claude Code and re-adds nothing
         cli.run(['mcp', 'remove', 'memory', '-s', 'local'], { cwd: w.project, env: w.env });
         const s = inventoryLib.buildInventory({ project: w.project, env: w.env }).registrations.find((r) => r.name === 'serena');
         cli.run(['mcp', 'remove', 'serena', '-s', 'local'], { cwd: w.project, env: w.env });
-        cli.run(['mcp', 'add-json', 'serena', JSON.stringify({ ...s.entry, args: [...s.entry.args, '--mine'] }), '-s', 'local'], { cwd: w.project, env: w.env });
+        cli.run(['mcp', 'add-json', 'serena', JSON.stringify({ ...s!.entry, args: [...s!.entry.args!, '--mine'] }), '-s', 'local'], { cwd: w.project, env: w.env });
         const inv = inventoryLib.buildInventory({ project: w.project, env: w.env });
         assert.deepStrictEqual(changedOutside(inv), ['serena was changed outside preferred-tools', 'memory is on the list but not in Claude Code - run /preferred-tools:fix']);
         const p = plan(inv, { clients: ['claude'], picks: { context7: { route: 'remote', scope: 'local' } } }, { home: w.home, env: w.env });
         assert.deepStrictEqual(p.errors, []);
         assert.deepStrictEqual(p.outside, changedOutside(inv));
-        assert.ok(!p.steps.some((x) => x.name === 'memory' || x.name === 'serena'), 'neither is written');
+        assert.ok(!p.steps.some((x) => (x as McpAddStep).name === 'memory' || (x as McpAddStep).name === 'serena'), 'neither is written');
         assert.ok(render(p).startsWith('serena was changed outside preferred-tools\nmemory is on the list but not in Claude Code - run /preferred-tools:fix\n'), render(p));
     }
     finally { w.clean(); }

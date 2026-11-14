@@ -89,7 +89,7 @@ export function emptyBaseModes(file: string): { changed: boolean; detail: string
 // Which homes the edit may touch (D7): never an alfred-code 2.x home (.alfred/serena/home), shared with its old setup;
 // on Windows the home is Serena's own default (<profile>\.serena) or a typed space-free folder, which every other Serena
 // on the machine reads too. -> { ok, shared?, reason? }
-export function editableHome(home: string, ctx: { platform?: string } = {}): { ok: false; reason: string; shared?: undefined } | { ok: true; shared: boolean; reason?: undefined }
+export function editableHome(home: string, ctx: { platform?: string; home?: string } = {}): { ok: false; reason: string; shared?: undefined } | { ok: true; shared: boolean; reason?: undefined }
 {
     const p = String(home || '').replace(/\\/g, '/').replace(/\/+$/, '');
     if (/(^|\/)\.alfred\/serena\/home$/.test(p))
@@ -99,7 +99,7 @@ export function editableHome(home: string, ctx: { platform?: string } = {}): { o
 
 // The plan line for a serena add, replace or move: what the edit will do to its home, before the user confirms.
 // -> string | null
-export function planNote(entry: ServerEntry | null | undefined, ctx: { platform?: string } = {}): string | null
+export function planNote(entry: ServerEntry | null | undefined, ctx: { platform?: string; home?: string } = {}): string | null
 {
     const home = entry && entry.env && entry.env.SERENA_HOME;
     if (!home) return null;

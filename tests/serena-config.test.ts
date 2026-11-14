@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // serena-config.js - base_modes: [] in <SERENA_HOME>/serena_config.yml (spec D7, F9). The file holds Serena's
 // auth_secret: the edit reads only the key it changes, touches no other byte and never prints the file.
 import test from 'node:test';
@@ -8,11 +7,13 @@ import os from 'node:os';
 import path from 'node:path';
 import * as sc from '../scripts/apply/serena-config.ts';
 import { plan } from '../scripts/plan/plan.ts';
+import type { McpAddStep } from '../scripts/plan/types.ts';
+import type { Inventory } from '../scripts/inventory/types.ts';
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-serena-')));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 let n = 0;
-const fileWith = (text) => { const d = path.join(tmp, `h${++n}`); fs.mkdirSync(d); const f = path.join(d, 'serena_config.yml'); fs.writeFileSync(f, text); return f; };
+const fileWith = (text: string) => { const d = path.join(tmp, `h${++n}`); fs.mkdirSync(d); const f = path.join(d, 'serena_config.yml'); fs.writeFileSync(f, text); return f; };
 const SECRET = 'auth_secret: s3cr3t-fixture';
 
 test('the base-modes edit changes only base_modes and the secret line is byte-identical', () => {
@@ -49,7 +50,7 @@ test('the base-modes edit changes only base_modes and the secret line is byte-id
 
 test('the base-modes edit prints nothing', () => {
     const f = fileWith(`base_modes:\n- interactive\n${SECRET}\n`);
-    const out = [];
+    const out: string[] = [];
     const keep = { log: console.log, err: console.error, write: process.stdout.write, ew: process.stderr.write };
     console.log = (...a) => out.push(a.join(' '));
     console.error = (...a) => out.push(a.join(' '));
@@ -63,7 +64,7 @@ test('the base-modes edit prints nothing', () => {
 test('an alfred-code 2.x home is not edited', () => {
     const home = path.join(tmp, 'proj', '.alfred', 'serena', 'home');
     assert.deepStrictEqual(sc.editableHome(home, { platform: 'darwin' }).ok, false);
-    assert.match(sc.editableHome(home, { platform: 'darwin' }).reason, /alfred-code's - base_modes is left/);
+    assert.match(sc.editableHome(home, { platform: 'darwin' }).reason!, /alfred-code's - base_modes is left/);
     assert.deepStrictEqual(sc.editableHome('C:\\work\\shop\\.alfred\\serena\\home', { platform: 'win32', home: 'C:\\Users\\me' }).ok, false);
     assert.deepStrictEqual(sc.editableHome(path.join(tmp, 'proj', '.preferred-tools', 'serena'), { platform: 'darwin' }), { ok: true, shared: false });
 });
@@ -76,10 +77,10 @@ test('a Windows <profile>\\.serena home is edited and the plan carries the share
 });
 
 test('install\'s plan carries the base_modes line for each serena home kind', () => {
-    const inv = { version: 1, os: 'darwin', arch: 'arm64', project: '/work/shop', cli: { ok: true }, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false, sources: {} };
+    const inv = { version: 1, os: 'darwin', arch: 'arm64', project: '/work/shop', cli: { ok: true }, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false, sources: {} } as unknown as Inventory;
     const p = plan(inv, { picks: { serena: { scope: 'project' } } }, { home: '/h', env: {}, exists: () => false, machine: { docker: true } });
     assert.deepStrictEqual(p.errors, []);
-    const home = p.steps.find((s) => s.op === 'mcp-add').entry.env.SERENA_HOME;
+    const home = (p.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry.env!.SERENA_HOME;
     assert.ok(p.notes.includes(`serena's settings at ${home}/serena_config.yml: base_modes: [] after its first start, so its manual names only the tools it has`), p.notes.join('\n'));
     // an alfred-code 2.x home
     const alfred = { command: 'uvx', args: [], env: { SERENA_HOME: '/work/shop/.alfred/serena/home' } };

@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -8,31 +7,33 @@ import * as catalogLib from '../scripts/catalog/catalog.ts';
 import { buildEntry } from '../scripts/entries/entry.ts';
 import { render } from '../scripts/inventory/table.ts';
 import { main } from '../scripts/inventory/table-command.ts';
+import type { Inventory, InvRegistration } from '../scripts/inventory/types.ts';
+import type { ServerEntry } from '../scripts/core/types.ts';
 
 const catalog = catalogLib.load();
 
-function entryOf(rowId, platform = 'darwin')
+function entryOf(rowId: string, platform = 'darwin')
 {
-    const row = catalog.byId.get(rowId);
+    const row = catalog.byId.get(rowId)!;
     const ctx = { platform, arch: 'x64', env: {}, home: '/home/dev', project: '/proj' };
     return buildEntry(row, 'local', { rootStr: row.locations ? '/home/dev/.pt/x' : undefined, scope: 'local' }, ctx, catalog.rules);
 }
-const reg = (rowId, name, scope, entry, route = 'local') => ({ name, scope, entry, rowId, route, own: false, alfredRetired: false });
-const inv = (over = {}) => ({ version: 1, project: '/proj', os: 'darwin', arch: 'x64', registrations: [], plugins: [], unreadable: [], ...over });
+const reg = (rowId: string, name: string, scope: string, entry: ServerEntry, route = 'local'): InvRegistration => ({ name, scope, entry, rowId, route, own: false, alfredRetired: false });
+const inv = (over: Partial<Inventory> = {}) => ({ version: 1, project: '/proj', os: 'darwin', arch: 'x64', registrations: [], plugins: [], unreadable: [], ...over }) as Inventory;
 
 test('one numbered table of every row for this OS: nothing installed shows a dash in each scope', () =>
 {
     const text = render(inv(), catalog);
     const lines = text.split('\n');
-    assert.match(lines[0], /^#\s+group\s+tool\s+kind\s+routes\s+local\s+project\s+user$/);
+    assert.match(lines[0]!, /^#\s+group\s+tool\s+kind\s+routes\s+local\s+project\s+user$/);
     const rows = lines.slice(2).filter((l) => /^\d+ /.test(l));
     const offered = catalog.tools.filter((r) => r.os.includes('darwin'));
     assert.strictEqual(rows.length, offered.length, 'windows-control is not offered on macOS');
     assert.deepStrictEqual(rows.map((l) => parseInt(l, 10)), offered.map((_, i) => i + 1), 'numbered from 1, in catalog order');
     assert.match(text, /Not offered on this OS \(darwin\): windows-control\./);
     assert.ok(!/windows-control +mcp/.test(text));
-    assert.match(rows.find((l) => /serena/.test(l)), /serena\s+mcp\s+local\s+-\s+-\s+-$/);
-    assert.match(rows.find((l) => /\bcontext7\b/.test(l)), /context7\s+mcp\s+remote\/local/);
+    assert.match(rows.find((l) => /serena/.test(l))!, /serena\s+mcp\s+local\s+-\s+-\s+-$/);
+    assert.match(rows.find((l) => /\bcontext7\b/.test(l))!, /context7\s+mcp\s+remote\/local/);
     assert.ok(!rows.some((l) => /\splugin\s/.test(l)), 'no plugin row since 0.5.0');
     const win = render(inv({ os: 'win32' }), catalog);
     assert.ok(/windows-control\s+mcp/.test(win));
@@ -42,7 +43,7 @@ test('one numbered table of every row for this OS: nothing installed shows a das
 test('what is installed shows by scope as name [route, pin], a custom name included; the pin is the installed one', () =>
 {
     const old = entryOf('serena');
-    old.args = old.args.map((a) => (a === 'serena-agent@2.1.0' ? 'serena-agent@2.0.0' : a));
+    old.args = old.args!.map((a) => (a === 'serena-agent@2.1.0' ? 'serena-agent@2.0.0' : a));
     const text = render(inv({
         registrations: [
             reg('serena', 'proj-serena', 'local', old),
@@ -53,12 +54,12 @@ test('what is installed shows by scope as name [route, pin], a custom name inclu
             reg('playwright-chrome', 'playwright-chrome', 'local', entryOf('playwright-chrome')),
         ],
     }), catalog);
-    const row = (re) => text.split('\n').find((l) => re.test(l));
-    assert.match(row(/\bserena\s+mcp/), /proj-serena \[local, 2\.0\.0\]\s+-\s+serena \[local, 2\.1\.0\]$/, 'one row, two scopes, two pins');
-    assert.match(row(/\bmemory\s+mcp/), /memory \[local, 12\.5\.0\]$/);
-    assert.match(row(/\bcontext7\s+mcp/), /-\s+context7 \[remote\]\s+-$/);
-    assert.match(row(/\bgithub\s+mcp/), /github \[local, v2\.0\.2\]/);
-    assert.match(row(/playwright-chrome\s+mcp/), /playwright-chrome \[local, 0\.0\.84\]/);
+    const row = (re: RegExp) => text.split('\n').find((l) => re.test(l));
+    assert.match(row(/\bserena\s+mcp/)!, /proj-serena \[local, 2\.0\.0\]\s+-\s+serena \[local, 2\.1\.0\]$/, 'one row, two scopes, two pins');
+    assert.match(row(/\bmemory\s+mcp/)!, /memory \[local, 12\.5\.0\]$/);
+    assert.match(row(/\bcontext7\s+mcp/)!, /-\s+context7 \[remote\]\s+-$/);
+    assert.match(row(/\bgithub\s+mcp/)!, /github \[local, v2\.0\.2\]/);
+    assert.match(row(/playwright-chrome\s+mcp/)!, /playwright-chrome \[local, 0\.0\.84\]/);
 });
 
 test('four Playwright engines are four rows, each with its own registration', () =>
@@ -90,7 +91,7 @@ test('main reads the inventory file; a missing file exits 2', () =>
         const file = path.join(dir, 'inv.json');
         fs.writeFileSync(file, JSON.stringify(inv()));
         let text = '';
-        const out = (s) => { text += `${s}\n`; };
+        const out = (s: string) => { text += `${s}\n`; };
         assert.strictEqual(main([file], { out }), 0);
         assert.match(text, /^#\s+group/);
         text = '';
@@ -102,11 +103,11 @@ test('main reads the inventory file; a missing file exits 2', () =>
 
 test('inherited servers are noted by folder and approval, never in a scope column; an unreadable parent file is named', () =>
 {
-    const c7 = { ...reg('context7', 'context7', 'inherited', { type: 'http', url: 'https://mcp.context7.com/mcp' }, 'remote'), from: '/', approval: 'pending', shadowed: null };
-    const mine = { name: 'tool', scope: 'inherited', entry: { command: 'node', args: ['x'] }, rowId: null, route: null, own: true, alfredRetired: false, from: '/', approval: 'approved', shadowed: { scope: 'local', from: null } };
+    const c7: InvRegistration = { ...reg('context7', 'context7', 'inherited', { type: 'http', url: 'https://mcp.context7.com/mcp' }, 'remote'), from: '/', approval: 'pending', shadowed: null };
+    const mine: InvRegistration = { name: 'tool', scope: 'inherited', entry: { command: 'node', args: ['x'] }, rowId: null, route: null, own: true, alfredRetired: false, from: '/', approval: 'approved', shadowed: { scope: 'local', from: null } };
     const out = render(inv({ registrations: [c7, mine], unreadable: [{ scope: 'inherited', file: '/x/.mcp.json', state: 'malformed', error: 'bad' }] }), catalog);
     const c7Line = out.split('\n').find((l) => / context7 /.test(l));
-    assert.doesNotMatch(c7Line, /context7 \[remote/, 'no scope cell holds it');
+    assert.doesNotMatch(c7Line!, /context7 \[remote/, 'no scope cell holds it');
     assert.match(out, /Inherited from a parent folder's \.mcp\.json - change them there: context7 \(from \.\., pending\), tool \(from \.\., approved, not used here: the local one wins\)\./);
     assert.doesNotMatch(out, /Your own, not in this catalog/, 'an inherited own server is in the inherited note only');
     assert.match(out, /\/x\/\.mcp\.json is malformed \(bad\): Claude Code skips that parent folder's servers; nothing here writes to it\./);

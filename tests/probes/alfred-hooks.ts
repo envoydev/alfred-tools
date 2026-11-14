@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 12
 // THE HOOK REPLAY - does alfred-code break preferred-tools' commands? Every step the four commands take is put through
 // the hooks alfred-code registers, at each released version, in a plain alfred-code project and (from 2.11.0, the first
 // release with workspaces) in a workspace root and its child. No model, no login.
@@ -30,9 +29,78 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import type { SpawnSyncReturns } from 'node:child_process';
 import * as cli from '../../scripts/core/claude-cli.ts';
 import * as catalogLib from '../../scripts/catalog/catalog.ts';
 import { buildAlfred } from './alfred-workspace.ts';
+import type { AlfredBuilt } from './alfred-workspace.ts';
+
+// a hook alfred-code registers, the payload an event carries and a hook's verdict
+export interface Hook
+{
+    event: string;
+    matcher?: string | undefined;
+    if?: string | undefined;
+    command: string;
+    timeout?: number | undefined;
+}
+export interface Payload
+{
+    tool_name?: string | undefined;
+    source?: string | undefined;
+    command_name?: string | undefined;
+    tool_input?: { command?: unknown; [key: string]: unknown } | undefined;
+    [key: string]: unknown;
+}
+interface Verdict
+{
+    verdict: string;
+    detail: string;
+}
+// what a hook prints as JSON, the parts read here
+interface HookOutput
+{
+    continue?: boolean;
+    stopReason?: string;
+    decision?: string;
+    reason?: string;
+    systemMessage?: string;
+    hookSpecificOutput?: {
+        permissionDecision?: string;
+        permissionDecisionReason?: string;
+        updatedInput?: unknown;
+        updatedToolOutput?: unknown;
+        updatedMCPToolOutput?: unknown;
+        additionalContext?: string;
+    };
+}
+type Emit = (verdict: string, where: string, detail?: string) => void;
+// what a session runs in: the built world, the hooks, the folder and where a line goes
+interface HookCtx
+{
+    b: AlfredBuilt & { notRun?: string | undefined };
+    hooks: Hook[];
+    folderName: string;
+    emit: Emit;
+    leftOut: string;
+    liveName: string;
+    newName: string;
+    problems: string[];
+}
+interface AskQuestion
+{
+    question: string;
+    header?: string | undefined;
+    multiSelect?: boolean | undefined;
+    options: { label: string; description?: string | undefined }[];
+}
+// plan.js --questions, the parts these steps read
+interface PlanQuestions
+{
+    static: { apply?: AskQuestion; settings?: AskQuestion; menu?: AskQuestion };
+    pick?: AskQuestion[][];
+    change: { keys: Record<string, string>; calls?: AskQuestion[][] };
+}
 
 const REPO = path.resolve(import.meta.dirname, '..', '..');
 const VERSIONS = ['2.9.0', '2.11.0', '3.0.0', '3.2.1'];
@@ -40,44 +108,44 @@ const WORKSPACE_FROM = '2.11.0';
 const COMMANDS = ['install', 'configure', 'fix', 'update'];
 const NODE_LINE = /node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/([a-z-]+\.js)"([^`\n]*)/g;
 
-const newer = (a, b) => { const x = a.split('.').map(Number); const y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return true; };
+const newer = (a: string, b: string) => { const x = a.split('.').map(Number); const y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i]! > y[i]!; return true; };
 
 // ---- the commands' own lines ----------------------------------------------------------------------------------------
 
-export function commandLines(name)
+export function commandLines(name: string)
 {
     const text = fs.readFileSync(path.join(REPO, 'commands', `${name}.md`), 'utf8');
     const body = text.replace(/^---[\s\S]*?\n---\n/, '');
-    const lines = [];
-    for (const m of body.matchAll(NODE_LINE)) lines.push({ script: m[1], rest: m[2].trim(), text: `node "\${CLAUDE_PLUGIN_ROOT}/scripts/${m[1]}" ${m[2].trim()}`.trim() });
+    const lines: { script: string; rest: string; text: string }[] = [];
+    for (const m of body.matchAll(NODE_LINE)) lines.push({ script: m[1]!, rest: m[2]!.trim(), text: `node "\${CLAUDE_PLUGIN_ROOT}/scripts/${m[1]}" ${m[2]!.trim()}`.trim() });
     return { body, lines };
 }
 
 // ---- the hooks a version registers ------------------------------------------------------------------------------------
 
-export function hooksOf(alfred)
+export function hooksOf(alfred: string)
 {
     const doc = JSON.parse(fs.readFileSync(path.join(alfred, '.claude-plugin', 'marketplace.json'), 'utf8'));
-    const entry = doc.plugins.find((p) => p.name === 'alfred-code');
-    const out = [];
-    for (const [event, groups] of Object.entries(entry.hooks || {}))
+    const entry = doc.plugins.find((p: { name: string }) => p.name === 'alfred-code');
+    const out: Hook[] = [];
+    for (const [event, groups] of Object.entries(entry.hooks || {}) as [string, { matcher?: string; hooks?: { type: string; if?: string; command: string; timeout?: number }[] }[]][])
         for (const g of groups) for (const h of g.hooks || []) if (h.type === 'command') out.push({ event, matcher: g.matcher, if: h.if, command: h.command, timeout: h.timeout });
     return out;
 }
 
-const hookName = (h) => { const m = /([\w.-]+\.js)"?\s*[^/\\]*$/.exec(h.command); return m ? m[1] : h.command.slice(0, 40); };
+const hookName = (h: Hook) => { const m = /([\w.-]+\.js)"?\s*[^/\\]*$/.exec(h.command); return m ? m[1] : h.command.slice(0, 40); };
 
 // The hooks docs' matcher rules: '*', '' or none matches all; else a regex tested on the tool name (tool events), the
 // source (SessionStart) or the command name (UserPromptExpansion). `if: "Tool(pattern)"` narrows a tool event further.
-export function matches(h, payload)
+export function matches(h: Hook, payload: Payload)
 {
-    const on = { PreToolUse: payload.tool_name, PostToolUse: payload.tool_name, SessionStart: payload.source, UserPromptExpansion: payload.command_name }[h.event];
+    const on = ({ PreToolUse: payload.tool_name, PostToolUse: payload.tool_name, SessionStart: payload.source, UserPromptExpansion: payload.command_name } as Record<string, string | undefined>)[h.event];
     if (h.matcher && h.matcher !== '*' && on !== undefined && !new RegExp(h.matcher).test(on)) return false;
     if (h.if)
     {
         const m = /^(\w+)\((.*)\)$/.exec(h.if);
         if (!m || m[1] !== payload.tool_name) return false;
-        const glob = new RegExp(`^${m[2].replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`, 's');
+        const glob = new RegExp(`^${m[2]!.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`, 's');
         if (!glob.test(String((payload.tool_input || {}).command || ''))) return false;
     }
     return true;
@@ -88,16 +156,16 @@ export function matches(h, payload)
 // Claude is told to make before it acts. Everything else alfred-code adds - its docs, preferences, forge and history
 // notes, the answer budget - only informs, and stays CONTEXT.
 const ACTS = /\bre-ask\b|\bask whether\b|\bbefore acting\b|\bBefore this turn closes\b|\bend the turn with\b/i;
-const contextOf = (detail) => ({ verdict: ACTS.test(detail) ? 'FINDING' : 'CONTEXT', detail });
+const contextOf = (detail: string): Verdict => ({ verdict: ACTS.test(detail) ? 'FINDING' : 'CONTEXT', detail });
 
-export function judge(event, r)
+export function judge(event: string, r: SpawnSyncReturns<string>): Verdict
 {
     const err = (r.stderr || '').trim();
-    if (r.error) return { verdict: 'FINDING', detail: `error ${r.error.code || r.error.message}` };
+    if (r.error) return { verdict: 'FINDING', detail: `error ${(r.error as NodeJS.ErrnoException).code || r.error.message}` };
     if (r.status === 2) return { verdict: 'FINDING', detail: `block (exit 2) ${err}` };
     if (r.status !== 0) return { verdict: 'FINDING', detail: `error (exit ${r.status}) ${err}` };
     const text = (r.stdout || '').trim();
-    let o = null;
+    let o: HookOutput | null = null;
     if (text.startsWith('{')) try { o = JSON.parse(text); } catch { /* plain text */ }
     if (o)
     {
@@ -119,7 +187,19 @@ export function judge(event, r)
 
 class Session
 {
-    constructor(ctx, folder, command)
+    declare ctx: HookCtx;
+    declare folder: string;
+    declare command: string;
+    declare id: string;
+    declare promptId: string;
+    declare transcript: string;
+    declare step: number;
+    declare used: Set<string>;
+    declare skipped: string[];
+    declare lines: ReturnType<typeof commandLines>;
+    declare prompt: string;
+
+    constructor(ctx: HookCtx, folder: string, command: string)
     {
         Object.assign(this, { ctx, folder, command });
         this.id = crypto.randomUUID();
@@ -134,9 +214,9 @@ class Session
         this.prompt = `/preferred-tools:${command}`;
     }
 
-    log(entry) { fs.appendFileSync(this.transcript, `${JSON.stringify({ uuid: crypto.randomUUID(), sessionId: this.id, cwd: this.folder, timestamp: new Date().toISOString(), ...entry })}\n`); }
+    log(entry: Record<string, unknown>) { fs.appendFileSync(this.transcript, `${JSON.stringify({ uuid: crypto.randomUUID(), sessionId: this.id, cwd: this.folder, timestamp: new Date().toISOString(), ...entry })}\n`); }
 
-    fire(event, extra)
+    fire(event: string, extra: Payload)
     {
         const payload = { session_id: this.id, transcript_path: this.transcript, cwd: this.folder, hook_event_name: event, ...extra };
         const where = `${this.command}#${this.step}${extra.tool_name ? ` ${extra.tool_name}` : ''}`;
@@ -163,20 +243,20 @@ class Session
     }
 
     // a tool step: PreToolUse, the real run, PostToolUse
-    tool(name, input, run)
+    tool<R>(name: string, input: Record<string, unknown>, run: () => R): R
     {
         this.step++;
         const id = `toolu_${crypto.randomBytes(12).toString('hex')}`;
         this.log({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] } });
         this.fire('PreToolUse', { permission_mode: 'default', tool_name: name, tool_input: input, tool_use_id: id });
         const response = run();
-        this.log({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: typeof response.text === 'string' ? response.text : JSON.stringify(response) }] }, toolUseResult: response });
+        this.log({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: typeof (response as { text?: unknown }).text === 'string' ? (response as { text: string }).text : JSON.stringify(response) }] }, toolUseResult: response });
         this.fire('PostToolUse', { permission_mode: 'default', tool_name: name, tool_input: input, tool_response: response, tool_use_id: id });
         return response;
     }
 
     // a command line from the command's own text, by its script and the start of its arguments
-    bash(script, startsWith, fill = {})
+    bash(script: string, startsWith: string, fill: Record<string, string> & { extra?: string } = {})
     {
         const line = this.lines.lines.find((l) => l.script === script && l.rest.startsWith(startsWith));
         if (!line) throw new Error(`${this.command}.md has no line for ${script} ${startsWith}`);
@@ -193,13 +273,13 @@ class Session
         return out;
     }
 
-    write(file, content)
+    write(file: string, content: string)
     {
         return this.tool('Write', { file_path: file, content }, () => { fs.writeFileSync(file, content); return { type: 'create', filePath: file, content }; });
     }
 
     // an AskUserQuestion as printed, answered with `pick(question) -> label`
-    ask(questions, pick = (q) => q.options[0].label)
+    ask(questions: AskQuestion[], pick: (q: AskQuestion) => string = (q) => q.options[0]!.label)
     {
         const qs = questions.map((q) => ({ question: q.question, header: q.header, multiSelect: Boolean(q.multiSelect), options: q.options.map((o) => ({ label: o.label, description: o.description })) }));
         const answers = Object.fromEntries(qs.map((q) => [q.question, pick(q)]));
@@ -207,7 +287,7 @@ class Session
         return answers;
     }
 
-    skip(script, startsWith, why)
+    skip(script: string, startsWith: string, why: string)
     {
         const line = this.lines.lines.find((l) => l.script === script && l.rest.startsWith(startsWith));
         if (line) { this.used.add(line.text); this.skipped.push(`${line.text} (${why})`); }
@@ -222,22 +302,22 @@ class Session
     }
 }
 
-const json = (out) => { try { return JSON.parse(out.stdout); } catch { return null; } };
-const fetchFileOf = (out) => { const m = /Fetch next[^:]*:\s*(\S+)/.exec(out.stdout || ''); return m ? m[1] : null; };
+const json = (out: { stdout: string }) => { try { return JSON.parse(out.stdout); } catch { return null; } };
+const fetchFileOf = (out: { stdout: string }) => { const m = /Fetch next[^:]*:\s*(\S+)/.exec(out.stdout || ''); return m ? m[1] : null; };
 
 // ---- the four commands, as their text walks them ------------------------------------------------------------------------
 
-function common(s)
+function common(s: Session)
 {
     const tmp = s.bash('tmpdir.ts', '').stdout.trim();
-    const t = (f) => `${tmp}/${f}`.replace(/\\/g, '/');
+    const t = (f: string) => `${tmp}/${f}`.replace(/\\/g, '/');
     s.bash('inventory.ts', '--json', { '<tmp>': tmp });
     s.bash('table.ts', '<tmp>/inventory.json', { '<tmp>': tmp });
-    const q = json(s.bash('plan.ts', '--questions', { '<tmp>': tmp }));
+    const q = json(s.bash('plan.ts', '--questions', { '<tmp>': tmp })) as PlanQuestions;
     return { tmp, t, q };
 }
 
-function prereqAndApply(s, tmp, t, answers, q)
+function prereqAndApply(s: Session, tmp: string, t: (f: string) => string, answers: object, q: PlanQuestions)
 {
     s.write(t('answers.json'), JSON.stringify(answers, null, 2));
     s.bash('prereq.ts', '<tmp>/answers.json --audit', { '<tmp>': tmp });
@@ -252,13 +332,13 @@ function prereqAndApply(s, tmp, t, answers, q)
     s.skip('hud-statusline.js', '--check', 'claude-hud is not picked');
 }
 
-function install(s, ctx)
+function install(s: Session, ctx: HookCtx)
 {
     const { tmp, t, q } = common(s);
     // the pick: the one tool the seed left out
     const want = ctx.leftOut;
-    for (const call of q.pick || []) s.ask(call, (qq) => (qq.options.find((o) => o.label === want) || qq.options[qq.options.length - 1]).label);
-    if (q.static.settings) s.ask([q.static.settings], (qq) => (qq.options.find((o) => /^Set each/.test(o.label)) || qq.options[0]).label);
+    for (const call of q.pick || []) s.ask(call, (qq) => (qq.options.find((o) => o.label === want) || qq.options[qq.options.length - 1]!).label);
+    if (q.static.settings) s.ask([q.static.settings], (qq) => (qq.options.find((o) => /^Set each/.test(o.label)) || qq.options[0]!).label);
     s.write(t('picks.json'), JSON.stringify({ rows: [want], routes: {} }, null, 2));
     const per = json(s.bash('plan.ts', '--questions', { '<tmp>': tmp, extra: t('picks.json') }));
     const tool = per && per.tools && per.tools[want];
@@ -266,22 +346,22 @@ function install(s, ctx)
     prereqAndApply(s, tmp, t, { picks: { [want]: {} } }, q);
 }
 
-function configure(s, ctx)
+function configure(s: Session, ctx: HookCtx)
 {
     const { tmp, t, q } = common(s);
     if (q.static.menu) s.ask([q.static.menu]);
     const key = Object.values(q.change.keys).find((k) => k === `mcp:${ctx.liveName}~local`) || `mcp:${ctx.liveName}~local`;
     const label = Object.keys(q.change.keys).find((l) => q.change.keys[l] === key);
-    for (const call of q.change.calls || []) s.ask(call, (qq) => (qq.options.find((o) => o.label === label) || qq.options[0]).label);
+    for (const call of q.change.calls || []) s.ask(call, (qq) => (qq.options.find((o) => o.label === label) || qq.options[0]!).label);
     s.write(t('picks.json'), JSON.stringify({ targets: [key], routes: {} }, null, 2));
     const per = json(s.bash('plan.ts', '--questions', { '<tmp>': tmp, extra: t('picks.json') }));
     const target = per && per.targets && per.targets[key];
-    if (target && target.questions) s.ask(target.questions, (qq) => (/name/i.test(qq.header || qq.question) ? ctx.newName : qq.options[0].label));
+    if (target && target.questions) s.ask(target.questions, (qq) => (/name/i.test(qq.header || qq.question) ? ctx.newName : qq.options[0]!.label));
     prereqAndApply(s, tmp, t, { change: { [key]: { row: 'sentry', name: ctx.newName } } }, q);
     s.skip('apply.ts', '<tmp>/remove-plan.json', 'the remove path is not taken');
 }
 
-function fix(s)
+function fix(s: Session)
 {
     const found = s.bash('fix.ts', '--detect');
     if (/No known problem found/.test(found.stdout))
@@ -299,12 +379,12 @@ function fix(s)
     else s.skip('fetch.ts', '"<file>"', 'fix handed no fetch file on');
 }
 
-function update(s)
+function update(s: Session)
 {
     const check = s.bash('update.ts', '--check');
     if (/everything current/.test(check.stdout))
     {
-        for (const [script, start] of [['update.ts', '--questions'], ['update.ts', '--apply'], ['fetch.ts', '"<file>"']]) s.skip(script, start, 'everything current');
+        for (const [script, start] of [['update.ts', '--questions'], ['update.ts', '--apply'], ['fetch.ts', '"<file>"']] as [string, string][]) s.skip(script, start, 'everything current');
         return;
     }
     const q = json(s.bash('update.ts', '--questions --no-refresh'));
@@ -319,15 +399,15 @@ function update(s)
 
 // Every catalog server offered on this OS but one (install's pick), with its recommended settings and token routes
 // as ${VAR}; then registrations holding live-shaped values, which no command may copy into a file it names.
-function seed(b, folder, secrets)
+function seed(b: AlfredBuilt, folder: string, secrets: string[])
 {
     const catalog = catalogLib.load();
     const rows = catalog.tools.filter((r) => r.kind === 'mcp' && r.os.includes(process.platform));
-    const leftOut = rows.find((r) => r.id === 'atlassian') ? 'atlassian' : rows[rows.length - 1].id;
-    const picks = Object.fromEntries(rows.filter((r) => r.id !== leftOut).map((r) => [r.id, {}]));
+    const leftOut = rows.find((r) => r.id === 'atlassian') ? 'atlassian' : rows[rows.length - 1]!.id;
+    const picks = Object.fromEntries(rows.filter((r) => r.id !== leftOut).map((r): [string, object] => [r.id, {}]));
     const r = b.harness.run(folder, { picks, machine: { docker: true } });
     const problems = [...r.plan.errors, ...(r.report.failed ? [r.report.failed.detail] : [])];
-    const hex = (n) => crypto.randomBytes(n).toString('hex');
+    const hex = (n: number) => crypto.randomBytes(n).toString('hex');
     const v = { sentry: `sntryu_${hex(16)}`, ctx7: `ctx7sk-${hex(12)}`, api: `sk-live-${hex(16)}`, db: hex(8), camel: hex(8), pg: `pw${hex(8)}`, url: `p${hex(8)}` };
     secrets.push(...Object.values(v));
     const live = {
@@ -346,15 +426,15 @@ function seed(b, folder, secrets)
 
 // ---- main -------------------------------------------------------------------------------------------------------------
 
-function main(argv)
+function main(argv: string[])
 {
-    const val = (flag) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : undefined; };
-    const versions = val('--version') ? val('--version').split(',') : VERSIONS;
-    const only = val('--only') ? val('--only').split(',') : COMMANDS;
+    const val = (flag: string) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : undefined; };
+    const versions = val('--version') ? val('--version')!.split(',') : VERSIONS;
+    const only = val('--only') ? val('--only')!.split(',') : COMMANDS;
     // alfred-code's cross-project write guard allows the temp folder only when it does not hold the project, so a
     // project built inside the temp folder would see every Write to <tmp> blocked - a block no real project meets.
     const tmpReal = fs.realpathSync(os.tmpdir());
-    if (val('--scratch')) fs.mkdirSync(val('--scratch'), { recursive: true });
+    if (val('--scratch')) fs.mkdirSync(val('--scratch')!, { recursive: true });
     const scratch = fs.realpathSync(val('--scratch') || os.tmpdir());
     if (scratch === tmpReal || scratch.startsWith(tmpReal + path.sep))
     {
@@ -362,15 +442,15 @@ function main(argv)
         return 2;
     }
     const S = fs.realpathSync(fs.mkdtempSync(path.join(scratch, 'pt-alfred-hooks-')));
-    const secrets = [];
+    const secrets: string[] = [];
     let findings = 0;
-    const clean = (text) =>
+    const clean = (text: unknown) =>
     {
         let out = String(text).split(S).join('<S>').split(S.replace(/\\/g, '/')).join('<S>').split(REPO).join('<repo>').split(tmpReal).join('<tmp>');
         for (const s of secrets) out = out.split(s).join('<seed>');
         return out.replace(/\s+/g, ' ').trim();
     };
-    const emit = (version, folder) => (verdict, where, detail) =>
+    const emit = (version: string, folder: string): Emit => (verdict, where, detail) =>
     {
         if (verdict === 'FINDING') findings++;
         console.log(clean(`${verdict} ${version} ${folder} ${where}${detail ? ` - ${detail}` : ''}`).slice(0, verdict === 'PASS' ? 300 : 1500));
@@ -379,21 +459,21 @@ function main(argv)
     {
         for (const version of versions)
         {
-            const b = buildAlfred(S, { alfredDir: val('--alfred'), version, claude: val('--claude'), workspace: newer(version, WORKSPACE_FROM) });
+            const b = buildAlfred(S, { alfredDir: val('--alfred'), version, claude: val('--claude'), workspace: newer(version, WORKSPACE_FROM) }) as AlfredBuilt & { notRun?: string | undefined };
             if (b.notRun) { console.log(clean(`NOT RUN - ${version}: ${b.notRun}`)); continue; }
             if (b.workspaceNotRun) console.log(clean(`NOT RUN - ${version} root and child: ${b.workspaceNotRun}`));
             const hooks = hooksOf(b.alfred);
             for (const [folderName, folder] of Object.entries(b.folders))
             {
-                const ctx = { b, hooks, folderName, emit: emit(version, folderName) };
+                const ctx = { b, hooks, folderName, emit: emit(version, folderName) } as HookCtx;
                 const sd = seed(b, folder, secrets);
                 for (const p of sd.problems) ctx.emit('NOT RUN', 'seed', p);
                 Object.assign(ctx, sd);
                 for (const command of only)
                 {
                     const s = new Session(ctx, folder, command);
-                    try { s.start(); ({ install, configure, fix, update })[command](s, ctx); }
-                    catch (e) { ctx.emit('NOT RUN', command, `the replay stopped: ${e.message}`); }
+                    try { s.start(); ({ install, configure, fix, update } as Record<string, (s: Session, ctx: HookCtx) => void>)[command]!(s, ctx); }
+                    catch (caught) { const e = caught as Error; ctx.emit('NOT RUN', command, `the replay stopped: ${e.message}`); }
                     s.end();
                 }
             }

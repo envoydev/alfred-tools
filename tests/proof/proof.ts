@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 12
 // The proof that nothing changed (docs/superpowers/specs, Proof 1-4): record a tree's base, then compare a later tree
 // against it.
 //   node tests/proof/proof.ts --record <dir>         the golden, test names, copied hashes, lint and validate results
@@ -11,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import type { SpawnSyncReturns } from 'node:child_process';
 import * as golden from './golden.ts';
 import * as testNames from './test-names.ts';
 import { copiedHashes } from './copied-hash.ts';
@@ -19,23 +19,23 @@ const TREE = golden.TREE;
 const ALLOWED = path.join(import.meta.dirname, 'allowed.json');
 const USAGE = 'usage: proof.js --record <dir> | --compare <dir> [--matrix-only]';
 
-const testsFile = (name) => [`${name}.ts`, `${name}.js`].map((f) => path.join(TREE, 'tests', f)).find((f) => fs.existsSync(f));
-const node = (file, args = [], opts = {}) => spawnSync(process.execPath, [file, ...args], { cwd: TREE, encoding: 'utf8', ...opts });
-const writeJson = (file, v) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `${JSON.stringify(v, null, 2)}\n`); };
-const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
-const normOut = (r) => golden.normalise(`${r.stdout || ''}${r.stderr || ''}`, { tree: TREE })
+const testsFile = (name: string) => [`${name}.ts`, `${name}.js`].map((f) => path.join(TREE, 'tests', f)).find((f) => fs.existsSync(f));
+const node = (file: string, args: string[] = [], opts = {}) => spawnSync(process.execPath, [file, ...args], { cwd: TREE, encoding: 'utf8', ...opts });
+const writeJson = (file: string, v: unknown) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `${JSON.stringify(v, null, 2)}\n`); };
+const readJson = (file: string) => JSON.parse(fs.readFileSync(file, 'utf8'));
+const normOut = (r: SpawnSyncReturns<string>) => golden.normalise(`${r.stdout || ''}${r.stderr || ''}`, { tree: TREE })
     .replace(/[^\s]*preferred-tools-validate-XXXXXX/g, '<VALIDATE>');
 
 // A check's result as the record keeps it: its exit code and normalised output.
-const check = (r) => ({ code: r.status, out: normOut(r) });
-const lint = () => check(node(testsFile('lint')));
-const validate = () => check(node(testsFile('validate-plugin')));
+const check = (r: SpawnSyncReturns<string>) => ({ code: r.status, out: normOut(r) });
+const lint = () => check(node(testsFile('lint')!));
+const validate = () => check(node(testsFile('validate-plugin')!));
 
 // lint and validate pass when they exit 0, or fail exactly as the base did (validate fails on an untracked file the
 // owner keeps beside the tree, which this run must not touch).
-export const sameCheck = (base, now) => now.code === 0 || (base && now.code === base.code && now.out === base.out);
+export const sameCheck = (base: { code: number | null; out: string } | undefined, now: { code: number | null; out: string }) => now.code === 0 || (base && now.code === base.code && now.out === base.out);
 
-async function record(dir)
+async function record(dir: string)
 {
     fs.mkdirSync(dir, { recursive: true });
     const suite = await testNames.run(TREE);
@@ -47,11 +47,11 @@ async function record(dir)
     return 0;
 }
 
-async function compare(dir)
+async function compare(dir: string)
 {
-    const parts = [];
+    const parts: string[] = [];
     let ok = true;
-    const say = (good, text) => { parts.push(text); if (!good) ok = false; };
+    const say = (good: unknown, text: string) => { parts.push(text); if (!good) ok = false; };
     const checks = fs.existsSync(path.join(dir, 'checks.json')) ? readJson(path.join(dir, 'checks.json')) : {};
 
     const suite = await testNames.run(TREE);
@@ -87,16 +87,16 @@ async function compare(dir)
     say(!changed.length, changed.length ? `copied CHANGED: ${changed.join(', ')}` : 'copied ok');
 
     const slow = golden.slower(base, rec);
-    say(!slow.length, `slower: ${slow.length ? slow.map((e) => `${e} ${base.ms[e]} -> ${rec.ms[e]} ms`).join(', ') : 'none'}`);
+    say(!slow.length, `slower: ${slow.length ? slow.map((e) => `${e} ${base.ms[e]} -> ${rec.ms![e]} ms`).join(', ') : 'none'}`);
     console.log(`proof: ${parts.join(' | ')}`);
     return ok ? 0 : 1;
 }
 
 // Every file below a folder, keyed by its relative path in '/'.
-function filesBelow(dir)
+function filesBelow(dir: string)
 {
-    const out = {};
-    const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else out[path.relative(dir, f).split(path.sep).join('/')] = fs.readFileSync(f, 'utf8'); } };
+    const out: Record<string, string> = {};
+    const walk = (d: string): void => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else out[path.relative(dir, f).split(path.sep).join('/')] = fs.readFileSync(f, 'utf8'); } };
     if (fs.existsSync(dir)) walk(dir);
     return out;
 }
@@ -112,14 +112,14 @@ function alfredEnv()
     return alfred && fs.existsSync(alfred) ? { PREFERRED_TOOLS_ALFRED: alfred } : {};
 }
 
-function matrixOnly(dir)
+function matrixOnly(dir: string)
 {
     const keep = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-matrix-proof-'));
     const files = fs.readdirSync(path.join(TREE, 'tests', 'matrix')).filter((f) => /\.test\.(?:js|ts)$/.test(f)).sort().map((f) => path.join('tests', 'matrix', f));
     const r = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...files], { cwd: TREE, encoding: 'utf8', env: { ...process.env, ...alfredEnv(), PT_PROOF_DIR: keep }, maxBuffer: 1 << 28 });
     const base = filesBelow(path.join(dir, 'matrix'));
     const now = filesBelow(path.join(keep, 'matrix'));
-    const diffs = [];
+    const diffs: string[] = [];
     for (const f of new Set([...Object.keys(base), ...Object.keys(now)]))
     {
         if (!(f in now)) diffs.push(`${f} gone`);
@@ -133,15 +133,15 @@ function matrixOnly(dir)
     return ok ? 0 : 1;
 }
 
-export async function main(argv)
+export async function main(argv: string[])
 {
-    const at = (flag) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : null; };
+    const at = (flag: string) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : null; };
     const known = new Set(['--record', '--compare', '--matrix-only']);
     const unknown = argv.filter((a) => a.startsWith('--') && !known.has(a));
     if (unknown.length) { console.error(`proof.js: unknown flag ${unknown[0]}\n${USAGE}`); return 2; }
-    if (at('--record')) return record(path.resolve(at('--record')));
-    if (at('--compare') && argv.includes('--matrix-only')) return matrixOnly(path.resolve(at('--compare')));
-    if (at('--compare')) return compare(path.resolve(at('--compare')));
+    if (at('--record')) return record(path.resolve(at('--record')!));
+    if (at('--compare') && argv.includes('--matrix-only')) return matrixOnly(path.resolve(at('--compare')!));
+    if (at('--compare')) return compare(path.resolve(at('--compare')!));
     console.error(USAGE);
     return 2;
 }

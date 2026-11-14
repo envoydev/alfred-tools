@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // Servers already set up (spec D6, F4): a matching registration, a plugin's server and a claude.ai connector. One the user
 // leaves on its own is recorded in the root's preferred-tools.json; a managed one has no record.
 import test from 'node:test';
@@ -13,18 +12,22 @@ import { plan } from '../scripts/plan/plan.ts';
 import { apply } from '../scripts/apply/run.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
 import { helperSource } from '../scripts/roots/roots.ts';
+import type { Inventory, InvRegistration } from '../scripts/inventory/types.ts';
+import type { ServerEntry } from '../scripts/core/types.ts';
+import type { World } from './types.ts';
 const catalog = load();
+type Located = { file?: string; path?: string; root?: string };
 
 const GH = { type: 'http', url: 'https://api.githubcopilot.com/mcp/' };
 const C7 = { type: 'http', url: 'https://mcp.context7.com/mcp' };
 const HOME = '/Users/me';
 const ctx = { home: HOME, exists: () => false };
-const invOf = (extra = {}) => ({
+const invOf = (extra: Partial<Inventory> = {}) => ({
     version: 1, project: '/work/shop', os: 'darwin', arch: 'arm64', registrations: [], plugins: [], pluginServers: [],
     lists: { project: null, global: null }, roots: { map: { version: 1, global: null, projects: {} } }, ...extra,
-});
-const regOf = (name, scope, entry, rowId, route, extra = {}) => ({ name, scope, entry, rowId, route, own: !rowId, alfredRetired: false, choice: null, ...extra });
-const register = (w, name, entry, scope) => assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
+}) as Inventory;
+const regOf = (name: string, scope: string, entry: ServerEntry, rowId: string | null, route: string | null, extra: Partial<InvRegistration> = {}): InvRegistration => ({ name, scope, entry, rowId, route, own: !rowId, alfredRetired: false, choice: null, ...extra });
+const register = (w: World, name: string, entry: ServerEntry, scope: string) => assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
 
 test('connector names match a hosted row by prefix', () => {
     assert.deepStrictEqual(X.HOSTED_ROWS, ['context7', 'github', 'gitlab', 'atlassian', 'sentry']);
@@ -115,7 +118,7 @@ test('own round-trips: a server left on its own is listed in its family root\'s 
         assert.deepStrictEqual(p.errors, []);
         const proot = path.join(w.project, '.preferred-tools');
         const groot = path.join(w.home, '.preferred-tools');
-        assert.deepStrictEqual(p.steps.map((s) => [s.op, s.file || s.path || s.root]), [
+        assert.deepStrictEqual(p.steps.map((s) => [s.op, (s as Located).file || (s as Located).path || (s as Located).root]), [
             ['root-ignore', groot], ['list-write', path.join(groot, 'mcps.json')], ['record-root', groot],
         ]);
         const r = apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {}, data });
@@ -135,7 +138,7 @@ test('own round-trips: a server left on its own is listed in its family root\'s 
         assert.strictEqual(cli.run(['mcp', 'remove', 'github', '-s', 'user'], { cwd: w.project, env: w.env }).status, 0);
         register(w, 'github', { command: 'docker', args: ['run', '-i', '--rm', 'ghcr.io/github/github-mcp-server'] }, 'user');
         inv = inventory.buildInventory({ project: w.project, env: w.env, data });
-        assert.strictEqual(inv.registrations.find((x) => x.name === 'github').choice, null);
+        assert.strictEqual(inv.registrations.find((x) => x.name === 'github')!.choice, null);
     }
     finally { w.clean(); }
 });
@@ -148,11 +151,11 @@ test('a 0.4.x record in a named root no registration points into is found throug
         const named = path.join(w.home, 'my-keys');
         writeJson(path.join(named, 'preferred-tools.json'), { version: 1, servers: [{ name: 'github', scope: 'user', fingerprint: 'url:api.githubcopilot.com/mcp', choice: 'own' }] });
         register(w, 'github', GH, 'user');
-        assert.strictEqual(inventory.buildInventory({ project: w.project, env: w.env, data }).registrations[0].choice, null, 'no map: not found');
+        assert.strictEqual(inventory.buildInventory({ project: w.project, env: w.env, data }).registrations[0]!.choice, null, 'no map: not found');
         writeJson(path.join(data, 'roots.json'), { version: 1, global: named, projects: {} });
         const inv = inventory.buildInventory({ project: w.project, env: w.env, data });
-        assert.strictEqual(inv.registrations[0].choice, 'own');
-        assert.deepStrictEqual([inv.lists.global.file, inv.lists.global.old], [path.join(named, 'mcps.json'), path.join(named, 'preferred-tools.json')]);
+        assert.strictEqual(inv.registrations[0]!.choice, 'own');
+        assert.deepStrictEqual([inv.lists!.global!.file, inv.lists!.global!.old], [path.join(named, 'mcps.json'), path.join(named, 'preferred-tools.json')]);
     }
     finally { w.clean(); }
 });

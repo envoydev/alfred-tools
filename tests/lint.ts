@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 12
 // JSON shape checks that need no test runner: every shipped JSON file parses, the manifest has the one version and the
 // id that must never change, and no component path in a command or skill points outside ${CLAUDE_PLUGIN_ROOT}.
 import fs from 'node:fs';
@@ -10,17 +9,17 @@ import { parseAskBlocks, problemsOf } from './ask-blocks.ts';
 import { sendsToOther, walkTexts } from './ask-texts.ts';
 
 const root = path.resolve(import.meta.dirname, '..');
-const problems = [];
-const need = (cond, msg) => { if (!cond) problems.push(msg); };
+const problems: string[] = [];
+const need = (cond: unknown, msg: string) => { if (!cond) problems.push(msg); };
 // The copied files stay CommonJS, so they load through a require; an ES module loads by its file URL.
 const requireCopied = createRequire(import.meta.url);
 
 const jsonFiles = ['.claude-plugin/plugin.json', 'catalog/tools.json', 'catalog/fixes.json', 'catalog/reserved-names.json', 'package.json'];
-const docs = {};
+const docs: Record<string, { name?: string; version?: string } | undefined> = {};
 for (const rel of jsonFiles)
 {
     try { docs[rel] = JSON.parse(fs.readFileSync(path.join(root, rel), 'utf8')); }
-    catch (err) { problems.push(`${rel}: ${err.message}`); }
+    catch (caught) { const err = caught as Error; problems.push(`${rel}: ${err.message}`); }
 }
 
 const manifest = docs['.claude-plugin/plugin.json'] || {};
@@ -30,10 +29,10 @@ need(!('dependencies' in manifest), 'plugin.json must not declare dependencies (
 need(manifest.version === (docs['package.json'] || {}).version, 'package.json version must equal plugin.json version');
 
 // Script paths in commands and skills: only through the plugin root.
-const textFiles = [];
+const textFiles: string[] = [];
 for (const dir of ['commands', 'skills'])
 {
-    const walk = (d) => fs.existsSync(d) && fs.readdirSync(d, { withFileTypes: true }).forEach((e) => {
+    const walk = (d: string) => fs.existsSync(d) && fs.readdirSync(d, { withFileTypes: true }).forEach((e) => {
         const p = path.join(d, e.name);
         if (e.isDirectory()) walk(p); else if (p.endsWith('.md')) textFiles.push(p);
     });
@@ -57,7 +56,7 @@ const WRITES = /scripts\/(?:apply|fetch)\.ts|cursor-mcp\.ts|scripts\/(?:fix|upda
 for (const file of textFiles)
 {
     const m = /^allowed-tools:\s*(.+)$/m.exec(fs.readFileSync(file, 'utf8'));
-    if (m && WRITES.test(m[1])) problems.push(`${path.relative(root, file)}: allowed-tools pre-approves a script that writes (list only --detect, --questions, --check)`);
+    if (m && WRITES.test(m[1]!)) problems.push(`${path.relative(root, file)}: allowed-tools pre-approves a script that writes (list only --detect, --questions, --check)`);
 }
 
 // Ask blocks: 2 to 4 options, one '(Recommended)' and it first, labels equal to asks.STATIC (tests/ask-blocks.ts).
@@ -77,8 +76,8 @@ for (const file of textFiles)
         for (const m of line.matchAll(CALL))
         {
             const at = `${path.relative(root, file)}:${i + 1}`;
-            if (!m[2].includes(DATA)) problems.push(`${at}: ${m[1]}.ts call without ${DATA}`);
-            const ro = /--(?:detect|questions|check)\b/.exec(m[2]);
+            if (!m[2]!.includes(DATA)) problems.push(`${at}: ${m[1]}.ts call without ${DATA}`);
+            const ro = /--(?:detect|questions|check)\b/.exec(m[2]!);
             if (ro && ro.index !== 0) problems.push(`${at}: ${m[1]}.ts call - ${ro[0]} must be its first argument`);
         }
     });
@@ -103,7 +102,7 @@ for (const file of fs.readdirSync(path.join(root, 'commands')).filter((f) => f.e
     const text = fs.readFileSync(path.join(root, rel), 'utf8');
     if (/^## .*already set up/m.test(text) || text.includes('existing.calls')) problems.push(`${rel}: no step asks about servers already set up (spec F4) - no 'already set up' heading, no existing.calls`);
     const prereq = /^## \d+\. Prerequisites\n([\s\S]*?)(?=^## )/m.exec(text);
-    if (!prereq || !/one tool per call/.test(prereq[1].replace(/\s+/g, ' '))) problems.push(`${rel}: the Prerequisites step asks a missing prerequisite one tool per call`);
+    if (!prereq || !/one tool per call/.test(prereq[1]!.replace(/\s+/g, ' '))) problems.push(`${rel}: the Prerequisites step asks a missing prerequisite one tool per call`);
 }
 
 // No text sends the user to the Other field (spec D8): every question the walk can put (tests/ask-texts.ts, Task 4's
@@ -116,7 +115,7 @@ for (const file of textFiles)
 
 // The header helper is copied into the user's root and compared by digest (write-helper, helper-stale): its bytes are pinned
 // per version, its first line carries that version, and it needs nothing but Node.
-const HELPER_SHA256 = {
+const HELPER_SHA256: Record<number, string> = {
     1: '958abe0bf59ab7ef2551573e3105ab7766036c31fc21d19bb0fcf58675e87719', // 0.2.0
     2: '184d9162cd9d506266eb989704a743fd3608728b0601e8f21a398bbc8b8566de', // prints only when Claude Code runs it
     3: '388dc7ad5ad0093e2340ccadde11ca8b92929f6c3598a306dbebda5b60b798ac', // Basic: email:api_token sent base64-encoded
@@ -126,7 +125,7 @@ const HELPER_SHA256 = {
     const rel = path.join('scripts', 'copied', 'mcp-headers.js');
     const text = fs.readFileSync(path.join(root, rel), 'utf8');
     const helper = requireCopied(path.join(root, rel));
-    const first = /^\/\/ preferred-tools mcp-headers (\d+)\r?$/m.exec(text.split('\n')[0]);
+    const first = /^\/\/ preferred-tools mcp-headers (\d+)\r?$/m.exec(text.split('\n')[0]!);
     need(first, `${rel}: the first line must be '// preferred-tools mcp-headers <version>'`);
     if (first)
     {
@@ -136,19 +135,19 @@ const HELPER_SHA256 = {
         need(digest === HELPER_SHA256[version], `${rel}: SHA-256 ${digest} is not HELPER_SHA256[${version}] in tests/lint.ts - a changed helper bumps its version`);
     }
     for (const m of text.matchAll(/\brequire\(\s*(['"])([^'"]+)\1\s*\)/g))
-        need(m[2].startsWith('node:'), `${rel}: require('${m[2]}') - the helper runs outside the plugin, so node: modules only`);
+        need(m[2]!.startsWith('node:'), `${rel}: require('${m[2]}') - the helper runs outside the plugin, so node: modules only`);
 }
 
 // mcp-bridge.js is copied into a root folder the same way (0.4.0): the same first-line and digest rule, node: modules and
 // ./mcp-headers.js only, and its CREDENTIAL is keys.js credentialName's test.
-const BRIDGE_SHA256 = {
+const BRIDGE_SHA256: Record<number, string> = {
     1: '8aff5de859ba6b69c3f40d20d35c2d36738d6c35c791a821614f53a48bc29635', // 0.4.0
 };
 {
     const rel = path.join('scripts', 'copied', 'mcp-bridge.js');
     const text = fs.readFileSync(path.join(root, rel), 'utf8');
     const bridge = requireCopied(path.join(root, rel));
-    const first = /^\/\/ preferred-tools mcp-bridge (\d+)\r?$/m.exec(text.split('\n')[0]);
+    const first = /^\/\/ preferred-tools mcp-bridge (\d+)\r?$/m.exec(text.split('\n')[0]!);
     need(first, `${rel}: the first line must be '// preferred-tools mcp-bridge <version>'`);
     if (first)
     {
@@ -158,20 +157,20 @@ const BRIDGE_SHA256 = {
         need(digest === BRIDGE_SHA256[version], `${rel}: SHA-256 ${digest} is not BRIDGE_SHA256[${version}] in tests/lint.ts - a changed bridge bumps its version`);
     }
     for (const m of text.matchAll(/\brequire\(\s*(['"])([^'"]+)\1\s*\)/g))
-        need(m[2].startsWith('node:') || m[2] === './mcp-headers.js', `${rel}: require('${m[2]}') - the bridge runs outside the plugin, so node: modules and ./mcp-headers.js only`);
+        need(m[2]!.startsWith('node:') || m[2] === './mcp-headers.js', `${rel}: require('${m[2]}') - the bridge runs outside the plugin, so node: modules and ./mcp-headers.js only`);
     const keysSrc = fs.readFileSync(path.join(root, 'scripts', 'keys', 'keys.ts'), 'utf8');
     const pattern = /const credentialName = \(n(?::\s*\w+)?\)(?::\s*\w+)? => (\/[^/]+\/[a-z]*)\.test/.exec(keysSrc);
     need(pattern && String(bridge.CREDENTIAL) === pattern[1], `${rel}: CREDENTIAL is not keys.js credentialName's pattern`);
 }
 
 // serena's context file (0.5.0, D7): its number on the first line, and each number's bytes pinned like the helper's
-const SERENA_CONTEXT_SHA256 = {
+const SERENA_CONTEXT_SHA256: Record<number, string> = {
     1: '5bd9211269e4440ac32b1240b5aa66a277ba16cd84f754adedd58f278ccf5321', // 0.5.0
 };
 {
     const rel = path.join('scripts', 'copied', 'serena-context.yml');
     const text = fs.readFileSync(path.join(root, rel), 'utf8');
-    const first = /^# preferred-tools serena-context (\d+)\r?$/.exec(text.split('\n')[0]);
+    const first = /^# preferred-tools serena-context (\d+)\r?$/.exec(text.split('\n')[0]!);
     need(first, `${rel}: the first line must be '# preferred-tools serena-context <version>'`);
     if (first)
     {
@@ -184,7 +183,7 @@ const SERENA_CONTEXT_SHA256 = {
 }
 
 // Public repo: no absolute local path and no home directory in anything shipped.
-const scan = (rel) => {
+const scan = (rel: string): void => {
     const p = path.join(root, rel);
     for (const e of fs.readdirSync(p, { withFileTypes: true }))
     {

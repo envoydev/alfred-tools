@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // 0.4.0's bridge end to end: the REAL claude CLI in a throwaway home and account (tests/harness.ts), the real mcp-remote
 // from npm in the throwaway npm cache, and a stub HTTP MCP server on 127.0.0.1 (tests/fake-mcp-http.ts) standing in for
 // Sentry. Every result is read back from what the CLI wrote and what the stub saw.
@@ -52,7 +51,7 @@ test('B1 - the bridge starts for real, follows a changed slug after a restart, a
         // fetch.js as the command runs it: mcp-remote into the throwaway npm cache, the bridge never started
         assert.ok(r.report.fetchFile, `apply wrote no fetch file:\n${r.text}`);
         const f = await h.fetch(r.report.fetchFile);
-        if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0].slice(0, 160)})`);
+        if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0]!.slice(0, 160)})`);
         assert.deepStrictEqual(f.warnings, [], f.text);
         assert.deepStrictEqual(f.skipped, ["'sentry' not started: a bridge has no first-run work beyond its package"]);
 
@@ -62,7 +61,7 @@ test('B1 - the bridge starts for real, follows a changed slug after a restart, a
         fake.fill(secrets, 'SENTRY_PROJECT', 'web');
 
         // what one `claude mcp get sentry` in `cwd` reached: the path and auth of each initialize, its Status line
-        const get = async (cwd) =>
+        const get = async (cwd: string) =>
         {
             const s0 = s.seen.length;
             const res = await fake.claude(cwd, ['mcp', 'get', 'sentry'], h.env, 180000);

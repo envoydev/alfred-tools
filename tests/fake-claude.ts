@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 12
 // A FAKE `claude` for the tests. It records every call's argv (FAKE_CLAUDE_LOG, JSON lines) and emulates what the real
 // CLI was MEASURED doing (Claude Code 2.1.311, docs/sources.md): `mcp add-json` / `remove` write .mcp.json or the
 // account file; `plugin install` over an installed plugin is a no-op at the same scope, flips a disabled row on, and adds
@@ -19,41 +18,46 @@ const state = process.env.FAKE_CLAUDE_STATE || path.join(os.tmpdir(), 'fake-clau
 fs.mkdirSync(state, { recursive: true });
 if (process.env.FAKE_CLAUDE_LOG) fs.appendFileSync(process.env.FAKE_CLAUDE_LOG, `${JSON.stringify({ argv, cwd })}\n`);
 
-const say = (s) => process.stdout.write(`${s}\n`);
-const die = (s, code = 1) => { process.stderr.write(`${s}\n`); process.exit(code); };
+type Servers = Record<string, { type?: string }>;
+type Doc = { mcpServers?: Servers; projects?: Record<string, { allowedTools?: string[]; mcpServers?: Servers }>; enabledPlugins?: Record<string, boolean> };
+type Row = { id: string; version: string; scope: string; enabled: boolean; installPath: string; projectPath?: string };
+type PlugState = { installed: Row[]; marketplaces: { name: string; repo: string; installLocation: string }[] };
+
+const say = (s: string) => process.stdout.write(`${s}\n`);
+const die: (s: string, code?: number) => never = (s: string, code = 1) => { process.stderr.write(`${s}\n`); process.exit(code); };
 const home = () => process.env.HOME || os.homedir();
 const configDir = () => process.env.CLAUDE_CONFIG_DIR || path.join(home(), '.claude');
 const accountFile = () => (process.env.CLAUDE_CONFIG_DIR ? path.join(process.env.CLAUDE_CONFIG_DIR, '.claude.json') : path.join(home(), '.claude.json'));
-const readJson = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code === 'ENOENT') return d; throw e; } };
-const writeJson = (f, v) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, `${JSON.stringify(v, null, 2)}\n`); };
-const real = (p) => { try { return fs.realpathSync.native(p); } catch { return path.resolve(p); } };
+const readJson = (f: string, d?: unknown) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (caught) { const e = caught as NodeJS.ErrnoException; if (e.code === 'ENOENT') return d; throw e; } };
+const writeJson = (f: string, v: unknown) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, `${JSON.stringify(v, null, 2)}\n`); };
+const real = (p: string) => { try { return fs.realpathSync.native(p); } catch { return path.resolve(p); } };
 // the account `projects` key: the real path, or on Windows the cwd as typed, in `/` - of the git root when the cwd is
 // inside a repository (docs/sources.md, M4)
-const gitRoot = (p) => { const r = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: p, encoding: 'utf8' }); return r.status === 0 && r.stdout.trim() ? path.resolve(r.stdout.trim()) : p; };
-const accountKey = (p) => { const at = fs.existsSync(path.join(p, '.git')) ? p : gitRoot(p); return process.platform === 'win32' ? path.resolve(at).replace(/\\/g, '/') : real(at); };
+const gitRoot = (p: string) => { const r = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: p, encoding: 'utf8' }); return r.status === 0 && r.stdout.trim() ? path.resolve(r.stdout.trim()) : p; };
+const accountKey = (p: string) => { const at = fs.existsSync(path.join(p, '.git')) ? p : gitRoot(p); return process.platform === 'win32' ? path.resolve(at).replace(/\\/g, '/') : real(at); };
 
 const failList = (process.env.FAKE_CLAUDE_FAIL || '').split(',').filter(Boolean);
 if (failList.some((f) => argv.join(' ').includes(f))) die(`fake claude: injected failure for ${argv.join(' ')}`);
 
-function scopeOf(args)
+function scopeOf(args: string[])
 {
     const i = args.findIndex((a) => a === '-s' || a === '--scope');
     return i >= 0 ? args[i + 1] : undefined;
 }
-const positional = (args) => args.filter((a, i) => !a.startsWith('-') && !(i > 0 && (args[i - 1] === '-s' || args[i - 1] === '--scope')));
+const positional = (args: string[]) => args.filter((a: string, i: number) => !a.startsWith('-') && !(i > 0 && (args[i - 1] === '-s' || args[i - 1] === '--scope'))) as [string, string];
 
-function serversRef(scope)
+function serversRef(scope?: string)
 {
     if (scope === 'project')
     {
         const f = path.join(cwd, '.mcp.json');
-        let doc;
+        let doc: Doc;
         try { doc = readJson(f, { mcpServers: {} }); } catch { die(`Failed to parse ${f}`); }
         doc.mcpServers = doc.mcpServers || {};
         return { doc, servers: doc.mcpServers, save: () => writeJson(f, doc) };
     }
     const f = accountFile();
-    let doc;
+    let doc: Doc;
     try { doc = readJson(f, {}); } catch { die(`Failed to parse ${f}`); }
     if (scope === 'user')
     {
@@ -67,18 +71,18 @@ function serversRef(scope)
     return { doc, servers: doc.projects[key].mcpServers, save: () => writeJson(f, doc) };
 }
 
-const plugState = () => readJson(path.join(state, 'plugins.json'), { installed: [], marketplaces: [] });
-const savePlug = (s) => writeJson(path.join(state, 'plugins.json'), s);
-const settingsFile = (scope) => (scope === 'user' ? path.join(configDir(), 'settings.json') : path.join(cwd, '.claude', scope === 'local' ? 'settings.local.json' : 'settings.json'));
-function setEnabled(scope, id, value)
+const plugState = (): PlugState => readJson(path.join(state, 'plugins.json'), { installed: [], marketplaces: [] });
+const savePlug = (s: PlugState) => writeJson(path.join(state, 'plugins.json'), s);
+const settingsFile = (scope?: string) => (scope === 'user' ? path.join(configDir(), 'settings.json') : path.join(cwd, '.claude', scope === 'local' ? 'settings.local.json' : 'settings.json'));
+function setEnabled(scope: string | undefined, id: string, value: boolean)
 {
     const f = settingsFile(scope);
     const doc = readJson(f, {});
     doc.enabledPlugins = { ...(doc.enabledPlugins || {}), [id]: value };
     writeJson(f, doc);
 }
-const versionFor = (id) => JSON.parse(process.env.FAKE_CLAUDE_VERSIONS || '{}')[id] || '1.0.0';
-const enabledAt = (scope, id) => { const d = readJson(settingsFile(scope), {}); return d.enabledPlugins ? d.enabledPlugins[id] : undefined; };
+const versionFor = (id: string) => JSON.parse(process.env.FAKE_CLAUDE_VERSIONS || '{}')[id] || '1.0.0';
+const enabledAt = (scope: string | undefined, id: string) => { const d = readJson(settingsFile(scope), {}); return d.enabledPlugins ? d.enabledPlugins[id] : undefined; };
 
 const [a, b, c] = argv;
 if (a === '--version') { say('2.1.311 (Claude Code)'); process.exit(0); }
@@ -131,7 +135,7 @@ if (a === 'plugin' || a === 'plugins')
     const s = plugState();
     if (b === 'list')
     {
-        say(JSON.stringify(s.installed.map((r) => ({ ...r })), null, 2));
+        say(JSON.stringify(s.installed.map((r: Row) => ({ ...r })), null, 2));
         process.exit(0);
     }
     if (b === 'marketplace')
@@ -141,8 +145,8 @@ if (a === 'plugin' || a === 'plugins')
         if (c === 'add')
         {
             const [src] = positional(rest);
-            const name = (process.env.FAKE_CLAUDE_MARKET_NAMES ? JSON.parse(process.env.FAKE_CLAUDE_MARKET_NAMES)[src] : null) || src.split('/').pop();
-            if (!s.marketplaces.some((m) => m.name === name)) s.marketplaces.push({ name, repo: src, installLocation: path.join(state, 'marketplaces', name) });
+            const name = (process.env.FAKE_CLAUDE_MARKET_NAMES ? JSON.parse(process.env.FAKE_CLAUDE_MARKET_NAMES)[src] : null) || src.split('/').pop() as string;
+            if (!s.marketplaces.some((m: { name: string }) => m.name === name)) s.marketplaces.push({ name, repo: src, installLocation: path.join(state, 'marketplaces', name) });
             savePlug(s);
             say(`✔ Successfully added marketplace: ${name} (declared in user settings)`);
             process.exit(0);
@@ -153,19 +157,19 @@ if (a === 'plugin' || a === 'plugins')
     const rest = argv.slice(2);
     const [spec] = positional(rest);
     const scope = scopeOf(rest) || (b === 'install' ? 'user' : undefined);
-    const at = (sc) => s.installed.findIndex((r) => r.id === spec && r.scope === sc && (sc === 'user' || r.projectPath === real(cwd)));
+    const at = (sc?: string) => s.installed.findIndex((r) => r.id === spec && r.scope === sc && (sc === 'user' || r.projectPath === real(cwd)));
     if (b === 'install' || b === 'i')
     {
         const market = spec.split('@')[1];
-        if (!market || !s.marketplaces.some((m) => m.name === market)) die(`Marketplace "${market}" not found`);
+        if (!market || !s.marketplaces.some((m: { name: string }) => m.name === market)) die(`Marketplace "${market}" not found`);
         const i = at(scope);
         if (i >= 0)
         {
-            if (enabledAt(scope, spec) === false) { setEnabled(scope, spec, true); s.installed[i].enabled = true; savePlug(s); say(`✔ Successfully installed plugin: ${spec} (scope: ${scope})`); }
+            if (enabledAt(scope, spec) === false) { setEnabled(scope, spec, true); s.installed[i]!.enabled = true; savePlug(s); say(`✔ Successfully installed plugin: ${spec} (scope: ${scope})`); }
             else say(`✔ Plugin "${spec}" is already installed (scope: ${scope})`);
             process.exit(0);
         }
-        const row = { id: spec, version: versionFor(spec), scope, enabled: true, installPath: path.join(state, 'cache', spec) };
+        const row: Row = { id: spec, version: versionFor(spec), scope: scope as string, enabled: true, installPath: path.join(state, 'cache', spec) };
         if (scope !== 'user') row.projectPath = real(cwd);
         s.installed.push(row);
         setEnabled(scope, spec, true);
@@ -192,8 +196,8 @@ if (a === 'plugin' || a === 'plugins')
         const i = sc ? at(sc) : -1;
         if (i < 0) die(`Plugin "${spec}" is not installed`);
         const next = versionFor(spec);
-        if (s.installed[i].version === next) { say(`${spec} is already at the latest version (${next}).`); process.exit(0); }
-        s.installed[i].version = next;
+        if (s.installed[i]!.version === next) { say(`${spec} is already at the latest version (${next}).`); process.exit(0); }
+        s.installed[i]!.version = next;
         savePlug(s);
         say(`✔ Plugin "${spec}" updated to version ${next} (scope: ${sc})`);
         process.exit(0);
@@ -206,7 +210,7 @@ if (a === 'plugin' || a === 'plugins')
         const want = b === 'enable';
         if (enabledAt(sc, spec) === want) die(`Plugin "${spec}" is already ${want ? 'enabled' : 'disabled'} at ${sc} scope`);
         setEnabled(sc, spec, want);
-        s.installed[i].enabled = want;
+        s.installed[i]!.enabled = want;
         savePlug(s);
         say(`✔ Successfully ${b}d plugin: ${spec} (scope: ${sc})`);
         process.exit(0);

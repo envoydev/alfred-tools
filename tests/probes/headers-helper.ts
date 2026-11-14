@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 12
 // THE HEADER HELPER - where does Claude Code run an MCP server's `headersHelper`, and what reaches the server? A stub
 // HTTP MCP server on 127.0.0.1 (in this process) records, per request, the path, the JSON-RPC method and whether the
 // `Authorization` header equals the expected value - never the value. The real `claude` CLI registers servers whose
@@ -30,14 +29,14 @@ import * as fake from '../fake-mcp-http.ts';
 const FAKE = ['probe', 'fake', 'value', '123'].join('-');
 const EXPECTED = `Bearer ${FAKE}`;
 
-function args(argv)
+function args(argv: string[])
 {
-    const out = { helper: null, keep: false, scratch: null };
+    const out: { helper: string | null; keep: boolean; scratch: string | null } = { helper: null, keep: false, scratch: null };
     for (let i = 0; i < argv.length; i++)
     {
-        if (argv[i] === '--helper') out.helper = path.resolve(argv[++i]);
+        if (argv[i] === '--helper') out.helper = path.resolve(argv[++i]!);
         else if (argv[i] === '--keep') out.keep = true;
-        else if (argv[i] === '--scratch') out.scratch = argv[++i];
+        else if (argv[i] === '--scratch') out.scratch = argv[++i]!;
         else throw new Error(`unknown argument ${argv[i]}`);
     }
     return out;
@@ -72,8 +71,8 @@ else
 }
 `;
 
-const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
-const writeJson = (f, v) => fs.writeFileSync(f, JSON.stringify(v, null, 2));
+const readJson = (f: string) => JSON.parse(fs.readFileSync(f, 'utf8'));
+const writeJson = (f: string, v: unknown) => fs.writeFileSync(f, JSON.stringify(v, null, 2));
 
 async function main()
 {
@@ -101,10 +100,10 @@ async function main()
     const acctFile = path.join(account, '.claude.json');
     writeJson(acctFile, { projects: { [proj]: { hasTrustDialogAccepted: true } } });
     writeJson(path.join(account, 'settings.json'), { enableAllProjectMcpServers: true });
-    const setTrust = (dir, on) => { const doc = readJson(acctFile); doc.projects = doc.projects || {}; doc.projects[dir] = { ...(doc.projects[dir] || {}), hasTrustDialogAccepted: on }; writeJson(acctFile, doc); };
+    const setTrust = (dir: string, on: boolean) => { const doc = readJson(acctFile); doc.projects = doc.projects || {}; doc.projects[dir] = { ...(doc.projects[dir] || {}), hasTrustDialogAccepted: on }; writeJson(acctFile, doc); };
 
     const { server, port, seen } = await fake.stub({ expected: EXPECTED });
-    const url = (p) => `http://127.0.0.1:${port}/${p}`;
+    const url = (p: string) => `http://127.0.0.1:${port}/${p}`;
     const abs = path.join(proj, '.preferred-tools', 'mcp-headers.js');
     const quoted = abs.includes(' ') ? `"${abs}"` : abs;
     const regs = [
@@ -115,8 +114,8 @@ async function main()
         { cwd: proj, name: 'hh-project-abs', scope: 'project', entry: { type: 'http', url: url('a'), headersHelper: `node ${quoted} PROBE_VALUE Bearer` } },
         { cwd: proj2, name: 'hh-untrusted', scope: 'project', entry: { type: 'http', url: url('n'), headersHelper: 'node .preferred-tools/mcp-headers.js PROBE_VALUE Bearer' } },
     ];
-    const results = [];
-    const report = (id, pass, detail) => { results.push(pass); console.log(`RESULT ${id} ${pass ? 'pass' : 'fail'} ${detail}`); };
+    const results: boolean[] = [];
+    const report = (id: string, pass: boolean, detail: string) => { results.push(pass); console.log(`RESULT ${id} ${pass ? 'pass' : 'fail'} ${detail}`); };
     try
     {
         for (const r of regs)
@@ -129,17 +128,17 @@ async function main()
         const local = ((doc.projects || {})[proj] || {}).mcpServers || {};
         const mcpFile = path.join(proj, '.mcp.json');
         const shared = fs.existsSync(mcpFile) ? readJson(mcpFile).mcpServers || {} : {};
-        const stored = { project: shared['hh-project'], local: local['hh-local'], user: (doc.mcpServers || {})['hh-user'] };
+        const stored: Record<string, { headersHelper?: string } | undefined> = { project: shared['hh-project'], local: local['hh-local'], user: (doc.mcpServers || {})['hh-user'] };
         for (const s of ['project', 'local', 'user'])
         {
-            const want = regs.find((r) => r.name === `hh-${s}`).entry.headersHelper;
-            const got = stored[s] && stored[s].headersHelper;
+            const want = regs.find((r) => r.name === `hh-${s}`)!.entry.headersHelper;
+            const got = stored[s] && stored[s]!.headersHelper;
             report(`stored-${s}`, got === want, got === undefined ? 'not stored' : got === want ? 'headersHelper unchanged' : 'headersHelper changed');
         }
-        const runsFile = (d) => path.join(d, '.preferred-tools', 'helper-runs.log');
-        const runs = (d) => (fs.existsSync(runsFile(d)) ? fs.readFileSync(runsFile(d), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+        const runsFile = (d: string) => path.join(d, '.preferred-tools', 'helper-runs.log');
+        const runs = (d: string) => (fs.existsSync(runsFile(d)) ? fs.readFileSync(runsFile(d), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
         // one `claude mcp get`: what the stub saw on initialize, and which helper runs it logged
-        const get = async (cwd, name, dir) =>
+        const get = async (cwd: string, name: string, dir: string) =>
         {
             const s0 = seen.length;
             const h0 = runs(dir).length;
@@ -148,20 +147,20 @@ async function main()
             const status = (res.out.split('\n').find((l) => /Status:/.test(l)) || '').trim();
             return { auth: init ? init.auth : 'no request', status, runs: runs(dir).slice(h0).filter((x) => x.server === name) };
         };
-        const real = (p) => fs.realpathSync(p);
+        const real = (p: string) => fs.realpathSync(p);
         for (const s of ['project', 'local', 'user'])
         {
             const g = await get(proj, `hh-${s}`, proj);
             report(`header-${s}`, g.auth === 'expected', `initialize auth: ${g.auth}`);
             const want = s === 'user' ? real(account) : real(proj);
             const ran = g.runs.map((x) => real(x.cwd));
-            report(`cwd-${s}`, ran.length > 0 && ran.every((d) => d === want), ran.length ? `ran in ${path.relative(P, ran[0]) || '.'}` : 'helper did not run');
+            report(`cwd-${s}`, ran.length > 0 && ran.every((d) => d === want), ran.length ? `ran in ${path.relative(P, ran[0]!) || '.'}` : 'helper did not run');
         }
         const missing = await get(proj, 'hh-missing', proj);
         report('missing-helper', missing.auth === 'none', `initialize auth: ${missing.auth}; ${missing.status || 'no status line'}`);
         const untrusted = await get(proj2, 'hh-untrusted', proj2);
         report('untrusted', untrusted.auth === 'none' && untrusted.runs.length === 0, `initialize auth: ${untrusted.auth}; helper runs: ${untrusted.runs.length}`);
-        const childCase = async (id) =>
+        const childCase = async (id: string) =>
         {
             const g = await get(child, 'hh-project', proj);
             report(id, g.auth !== 'expected' && g.runs.length === 0, `initialize auth: ${g.auth}; helper runs: ${g.runs.length}`);

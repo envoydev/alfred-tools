@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -23,20 +22,26 @@ import { tmpdir } from 'node:os';
 import { rootIgnoreLines, rootIgnore, denyRead, listWrite } from '../scripts/apply/file-steps.ts';
 import { readList } from '../scripts/mcps-list/mcps-list.ts';
 import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
+import type { World } from './types.ts';
+import type { Answers, PlanOptions, PlanStep, McpAddStep, ListWriteStep, Reconnect } from '../scripts/plan/types.ts';
+import type { ApplyCtx, ApplyOptions, ApplyPlan } from '../scripts/apply/types.ts';
+import type { CliOptions, CliResult } from '../scripts/core/types.ts';
+import type { Inventory } from '../scripts/inventory/types.ts';
+import type { RecordEntry } from '../scripts/roots/types.ts';
 
 // the whole chain, as the walk runs it: inventory -> plan -> apply, against the fake claude on the world's PATH
-function walk(w, answers, { fail, planOpts = {} } = {})
+function walk(w: World, answers: Answers, { fail, planOpts = {} }: { fail?: string; planOpts?: PlanOptions } = {})
 {
     const env = { ...w.env };
     if (fail) env.FAKE_CLAUDE_FAIL = fail;
     const inv = inventory.buildInventory({ project: w.project, env });
     const p = plan(inv, answers, { home: w.home, env, ...planOpts });
-    const lines = [];
+    const lines: string[] = [];
     const report = apply(p, { env, tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
     return { inv, p, report, lines, text: lines.join('\n'), env };
 }
-const accountDoc = (w) => readJson(account.accountFile(w.env));
-const mcpJson = (w) => readJson(path.join(w.project, '.mcp.json'));
+const accountDoc = (w: World) => readJson(account.accountFile(w.env));
+const mcpJson = (w: World) => readJson(path.join(w.project, '.mcp.json'));
 
 test('an apply from a subfolder reads back where the CLI wrote (M4)', () => {
     const w = world();
@@ -49,7 +54,7 @@ test('an apply from a subfolder reads back where the CLI wrote (M4)', () => {
         const inv = inventory.buildInventory({ project: sub, env });
         const p = plan(inv, { picks: { serena: { scope: 'local' }, context7: { route: 'remote', scope: 'project' } } }, { home: w.home, env });
         assert.deepStrictEqual(p.errors, []);
-        const lines = [];
+        const lines: string[] = [];
         const report = apply(p, { env, tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
         assert.strictEqual(report.failed, null, lines.join('\n'));
         assert.deepStrictEqual(Object.keys(accountDoc(w).projects[accountKey(w.project)].mcpServers), ['serena'], 'local scope: keyed on the repo root');
@@ -85,8 +90,8 @@ test('a fresh install writes through the CLI at each scope, and every add is rea
         // each root got its .gitignore first (R13): the project root for serena, the global root for playwright-chrome
         for (const root of [path.join(w.project, '.preferred-tools'), path.join(w.home, '.preferred-tools')]) assert.strictEqual(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), GITIGNORE, root);
         assert.match(r.text, /Fetch next, in the background \(a first download can take minutes\): .*fetch\.json/);
-        const job = readJson(r.report.fetchFile);
-        assert.deepStrictEqual(job.fetch.map((s) => s.name), ['serena', 'playwright-chrome']);
+        const job = readJson(r.report.fetchFile!);
+        assert.deepStrictEqual(job.fetch.map((s: { name: string }) => s.name), ['serena', 'playwright-chrome']);
         assert.deepStrictEqual(job.check, ['serena', 'playwright-chrome', 'context7'], 'every server written, the hosted one too');
         assert.match(r.text, /Restart Claude Code/);
         // the data folders got a .gitignore holding *: local scope in the project root, user scope in the global root
@@ -126,13 +131,13 @@ test('a step that throws is a failed step: the list takes Cursor off the entry i
     try
     {
         fs.writeFileSync(path.join(w.project, '.cursor'), 'a file where Cursor\'s folder goes\n');
-        let r;
+        let r!: ReturnType<typeof walk>;
         assert.doesNotThrow(() => { r = walk(w, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'local' } } }); });
         assert.ok(r.report.failed, r.text);
-        assert.strictEqual(r.report.failed.op, 'cursor-write');
+        assert.strictEqual(r.report.failed!.op, 'cursor-write');
         assert.match(r.text, /FAILED/);
         const list = readJson(path.join(w.project, '.preferred-tools', 'mcps.json'));
-        assert.deepStrictEqual(list.servers.find((s) => s.name === 'serena').clients, ['claude'], 'Cursor taken off the entry');
+        assert.deepStrictEqual(list.servers.find((s: { name: string }) => s.name === 'serena').clients, ['claude'], 'Cursor taken off the entry');
     }
     finally { w.clean(); }
 });
@@ -143,13 +148,13 @@ test('a failure mid-apply stops there, leaves the earlier steps in place and nam
     {
         const r = walk(w, { picks: { context7: { route: 'remote', scope: 'project', token: false }, gitlab: { scope: 'project', token: false }, atlassian: { scope: 'project', token: false } } }, { fail: 'add-json gitlab' });
         assert.ok(r.report.failed);
-        assert.strictEqual(r.report.failed.op, 'mcp-add');
+        assert.strictEqual(r.report.failed!.op, 'mcp-add');
         assert.deepStrictEqual(Object.keys(mcpJson(w).mcpServers), ['context7'], 'the first add stays, the failed one and the one after it are absent');
         assert.match(r.text, /Stopped at step 3\. Already applied and left in place: 1 \(wrote .*\.gitignore .*\); 2 \(added 'context7' at project scope\)/);
         assert.match(r.text, /Not run: 4 mcp-add, 5 list-write/);
         // the list holds what was applied before the stop, and nothing after it
         assert.match(r.text, /^ {3}list: wrote .*mcps\.json \(1 server\)$/m);
-        assert.deepStrictEqual(readJson(path.join(w.project, '.preferred-tools', 'mcps.json')).servers.map((s) => s.name), ['context7']);
+        assert.deepStrictEqual(readJson(path.join(w.project, '.preferred-tools', 'mcps.json')).servers.map((s: { name: string }) => s.name), ['context7']);
         assert.ok(!w.calls().some((a) => a.includes('atlassian') && a[1] === 'add-json'), 'nothing after the failure ran');
     }
     finally { w.clean(); }
@@ -160,9 +165,9 @@ test('the fetch file holds only what was written: a failed add hands nothing of 
     try
     {
         const r = walk(w, { picks: { serena: { scope: 'local' }, 'playwright-chrome': { scope: 'local' } } }, { fail: 'add-json playwright-chrome' });
-        assert.strictEqual(r.report.failed.op, 'mcp-add');
-        const job = readJson(r.report.fetchFile);
-        assert.deepStrictEqual([job.fetch.map((s) => s.name), job.check], [['serena'], ['serena']]);
+        assert.strictEqual(r.report.failed!.op, 'mcp-add');
+        const job = readJson(r.report.fetchFile!);
+        assert.deepStrictEqual([job.fetch.map((s: { name: string }) => s.name), job.check], [['serena'], ['serena']]);
         // nothing written at all: no fetch file
         const none = walk(w, { picks: { 'playwright-firefox': { scope: 'local' } } }, { fail: 'add-json playwright-firefox' });
         assert.ok(none.report.failed);
@@ -183,8 +188,8 @@ test('a same-name rewrite saves the old JSON first and re-adds it when the add f
         const r = walk(w, { change: { 'mcp:playwright-chrome~user': { location: { side: 'account' } } } }, { fail: JSON.stringify(w.home).slice(1, -1) });
         // every add-json carrying the new location (under the account home) fails; the old one is under the project and succeeds
         assert.ok(r.report.failed, r.text);
-        assert.strictEqual(r.report.failed.op, 'mcp-replace');
-        assert.match(r.report.failed.detail, /the old entry was re-added/);
+        assert.strictEqual(r.report.failed!.op, 'mcp-replace');
+        assert.match(r.report.failed!.detail, /the old entry was re-added/);
         assert.deepStrictEqual(accountDoc(w).mcpServers['playwright-chrome'], old, 'the server is back as it was');
         const rollback = readJson(path.join(w.dir, 'tmp', 'rollback.json'));
         assert.deepStrictEqual(rollback.entry, old);
@@ -200,8 +205,8 @@ test('when the re-add also fails the report prints the line that restores it by 
         walk(w, { picks: { appium: { scope: 'user', location: { side: 'project' } } } });
         const old = accountDoc(w).mcpServers['appium-mcp'];
         const r = walk(w, { change: { 'mcp:appium-mcp~user': { location: { side: 'account' } } } }, { fail: 'add-json appium-mcp' });
-        assert.match(r.report.failed.detail, /RESTORE BY HAND: claude mcp add-json appium-mcp '/);
-        assert.ok(r.report.failed.detail.includes(JSON.stringify(old).slice(0, 40)));
+        assert.match(r.report.failed!.detail, /RESTORE BY HAND: claude mcp add-json appium-mcp '/);
+        assert.ok(r.report.failed!.detail.includes(JSON.stringify(old).slice(0, 40)));
         assert.strictEqual(accountDoc(w).mcpServers['appium-mcp'], undefined);
     }
     finally { w.clean(); }
@@ -247,7 +252,7 @@ test('a malformed .mcp.json: the CLI refuses, nothing is written there, and the 
         fs.writeFileSync(path.join(w.project, '.mcp.json'), '{ "mcpServers": ');
         const inv = inventory.buildInventory({ project: w.project, env: w.env });
         const p = plan(inv, { picks: { context7: { route: 'remote', scope: 'project' } } }, { home: w.home, env: w.env });
-        assert.match(p.errors[0], /project scope is unreadable/);
+        assert.match(p.errors[0]!, /project scope is unreadable/);
         assert.strictEqual(p.steps.length, 0);
         assert.strictEqual(fs.readFileSync(path.join(w.project, '.mcp.json'), 'utf8'), '{ "mcpServers": ');
         assert.deepStrictEqual(w.writes(), []);
@@ -310,8 +315,8 @@ test('no token value reaches any file the install wrote', () => {
         const p = plan(inv, answers, { home: w.home, env });
         const report = apply(p, { env, tmp: path.join(w.dir, 'tmp'), log: () => {} });
         assert.strictEqual(report.failed, null);
-        const files = [];
-        const walkDir = (d) => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => (e.isDirectory() ? walkDir(path.join(d, e.name)) : files.push(path.join(d, e.name))));
+        const files: string[] = [];
+        const walkDir = (d: string): void => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => (e.isDirectory() ? walkDir(path.join(d, e.name)) : files.push(path.join(d, e.name))));
         walkDir(w.dir);
         assert.ok(files.length > 3);
         for (const f of files)
@@ -349,17 +354,17 @@ test('the CLI form applies a written plan and exits 1 on a failure', () => {
 
 // ---- live values and the temp folder (no live credential in a file a command line names) -------------------------------
 
-const hex = (n) => crypto.randomBytes(n).toString('hex');
-const register = (w, name, entry, scope = 'local') => assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
+const hex = (n: number) => crypto.randomBytes(n).toString('hex');
+const register = (w: World, name: string, entry: unknown, scope = 'local') => assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
 // the walk as the commands run it: the inventory as inventory.js writes it (every credential value kept), the plan from
 // it, then the apply, which puts the real values back from the registrations it reads
-function keptWalk(w, answers, { fail } = {})
+function keptWalk(w: World, answers: Answers, { fail }: { fail?: string } = {})
 {
     const env = { ...w.env };
     if (fail) env.FAKE_CLAUDE_FAIL = fail;
     const inv = inventory.keptOf(inventory.buildInventory({ project: w.project, env }));
     const p = plan(inv, answers, { home: w.home, env });
-    const lines = [];
+    const lines: string[] = [];
     const report = apply(p, { env, tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
     return { p, report, text: lines.join('\n') };
 }
@@ -404,10 +409,10 @@ test('a failed replace prints a restore line with the marker, never the value', 
         const key = `ctx7sk-${hex(8)}-${hex(8)}`;
         register(w, 'context7', { type: 'http', url: 'https://mcp.context7.com/mcp', headers: { 'X-API-Key': key } });
         const r = keptWalk(w, { change: { 'mcp:context7~local': { token: true } } }, { fail: 'add-json context7' });
-        assert.strictEqual(r.report.failed.op, 'mcp-replace');
-        assert.match(r.report.failed.detail, /RESTORE BY HAND: claude mcp add-json context7 '.*"X-API-Key":"\$\{PREFERRED_TOOLS_KEPT\}".*' -s local/);
-        assert.match(r.report.failed.detail, /put the real value back in place of \$\{PREFERRED_TOOLS_KEPT\}/);
-        assert.ok(!r.text.includes(key) && !r.report.failed.detail.includes(key));
+        assert.strictEqual(r.report.failed!.op, 'mcp-replace');
+        assert.match(r.report.failed!.detail, /RESTORE BY HAND: claude mcp add-json context7 '.*"X-API-Key":"\$\{PREFERRED_TOOLS_KEPT\}".*' -s local/);
+        assert.match(r.report.failed!.detail, /put the real value back in place of \$\{PREFERRED_TOOLS_KEPT\}/);
+        assert.ok(!r.text.includes(key) && !r.report.failed!.detail.includes(key));
         for (const f of files(path.join(w.dir, 'tmp'))) assert.ok(!fs.readFileSync(f, 'utf8').includes(key));
     }
     finally { w.clean(); }
@@ -425,7 +430,7 @@ test('a registration changed since it was read is not written over', () => {
         register(w, 'context7', { type: 'http', url: 'https://mcp.context7.com/mcp', headers: { 'X-API-Key': '${CONTEXT7_API_KEY}' } });
         const before = w.writes().length;
         const report = apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} });
-        assert.match(report.failed.detail, /'context7' changed since it was read - run the command again/);
+        assert.match(report.failed!.detail, /'context7' changed since it was read - run the command again/);
         assert.strictEqual(w.writes().length, before, 'no CLI write');
     }
     finally { w.clean(); }
@@ -437,7 +442,7 @@ test('apply removes <tmp> when no fetch follows', () => {
     {
         const t = tempOf(w);
         const script = path.join(import.meta.dirname, '..', 'scripts', 'apply.ts');
-        const run = (picks) =>
+        const run = (picks: NonNullable<Answers['picks']>) =>
         {
             const dir = t.made();
             const p = plan(inventory.buildInventory({ project: w.project, env: w.env }), { picks }, { home: w.home, env: w.env });
@@ -462,7 +467,7 @@ test('apply never removes a --tmp it did not make', () => {
         const t = tempOf(w);
         const script = path.join(import.meta.dirname, '..', 'scripts', 'apply.ts');
         // beside the temp folder, and in it under another name
-        for (const [dir, tool] of [[path.join(w.dir, 'mine'), 'atlassian'], [t.made('other-'), 'gitlab']])
+        for (const [dir, tool] of [[path.join(w.dir, 'mine'), 'atlassian'], [t.made('other-'), 'gitlab']] as [string, string][])
         {
             const p = plan(inventory.buildInventory({ project: w.project, env: w.env }), { picks: { [tool]: { scope: 'project' } } }, { home: w.home, env: w.env });
             fs.mkdirSync(dir, { recursive: true });
@@ -504,12 +509,12 @@ test('tmpdir sweeps only its own folders older than 24 hours', () => {
 const S = 'SENTRY_ACCESS_TOKEN';
 const G = 'GITHUB_PERSONAL_ACCESS_TOKEN';
 // alfred-code enabled for every project, as `claude plugin list` and the user settings report it
-function alfredOn(w)
+function alfredOn(w: World)
 {
     writeJson(path.join(w.dir, 'state', 'plugins.json'), { marketplaces: [], installed: [{ id: 'alfred-code@envoydev', version: '3.2.1', scope: 'user', enabled: true, installPath: '/c' }] });
     writeJson(path.join(w.account, 'settings.json'), { enabledPlugins: { 'alfred-code@envoydev': true } });
 }
-const noValueIn = (w, r, values) =>
+const noValueIn = (w: World, r: { text: string; p: unknown }, values: string[]) =>
 {
     for (const f of files(path.join(w.dir, 'tmp'))) for (const v of values) assert.ok(!fs.readFileSync(f, 'utf8').includes(v), `a key value in ${path.basename(f)}`);
     for (const v of values) assert.ok(!r.text.includes(v) && !JSON.stringify(r.p).includes(v), 'no key value printed or in the plan');
@@ -536,7 +541,7 @@ test('a configure move local -> project of a github remote re-adds its helper wi
     const w = world();
     try
     {
-        const helper = (p) => helperCmd(p, G, 'Bearer');
+        const helper = (p: string) => helperCmd(p, G, 'Bearer');
         register(w, 'github', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: helper(path.join(w.project, '.preferred-tools', 'mcp-headers.js')) });
         const r = keptWalk(w, { change: { 'mcp:github~local': { scope: 'project' } } });
         assert.deepStrictEqual(r.p.errors, []);
@@ -565,9 +570,9 @@ test('a configure move to project scope is refused while the entry holds a crede
         register(w, 'gitlab', { type: 'http', url: `https://dev:${u}@gitlab.com/api/v4/mcp` });
         const r = keptWalk(w, { change: { 'mcp:context7~local': { scope: 'project' }, 'mcp:ctx-x~local': { scope: 'project' }, 'mcp:gitlab~local': { scope: 'project' } } });
         assert.strictEqual(r.p.errors.length, 3, r.p.errors.join('\n'));
-        assert.match(r.p.errors[0], /context7: 'context7' holds a credential in headers\.CONTEXT7_API_KEY, which the committed \.mcp\.json must not carry/);
-        assert.match(r.p.errors[1], /context7: 'ctx-x' holds a credential in headers\.X-API-Key/);
-        assert.match(r.p.errors[2], /gitlab: 'gitlab' holds a credential in url, which the committed \.mcp\.json must not carry - keep it at local scope, or take it out of url first/);
+        assert.match(r.p.errors[0]!, /context7: 'context7' holds a credential in headers\.CONTEXT7_API_KEY, which the committed \.mcp\.json must not carry/);
+        assert.match(r.p.errors[1]!, /context7: 'ctx-x' holds a credential in headers\.X-API-Key/);
+        assert.match(r.p.errors[2]!, /gitlab: 'gitlab' holds a credential in url, which the committed \.mcp\.json must not carry - keep it at local scope, or take it out of url first/);
         assert.ok(!r.p.errors.some((e) => /\$\{VAR\}/.test(e)), 'a key never becomes a ${VAR} in the committed file');
         assert.ok(!fs.existsSync(path.join(w.project, '.mcp.json')) || ![k, x, u].some((v) => fs.readFileSync(path.join(w.project, '.mcp.json'), 'utf8').includes(v)));
         const local = accountDoc(w).projects[accountKey(w.project)].mcpServers;
@@ -597,11 +602,11 @@ test('a failed add prints a key the apply wrote in as the marker, never the valu
         const s = `s%^"\\${hex(12)}`;
         mcps(path.join(w.project, '.preferred-tools'), { [S]: s });
         const r = walk(w, { picks: { sentry: { route: 'local', scope: 'local' } } }, { fail: 'add-json sentry' });
-        assert.strictEqual(r.report.failed.op, 'mcp-add');
-        assert.match(r.report.failed.detail, /injected failure/, 'the CLI output is still shown');
-        assert.ok(r.report.failed.detail.includes(MARKER), r.report.failed.detail);
+        assert.strictEqual(r.report.failed!.op, 'mcp-add');
+        assert.match(r.report.failed!.detail, /injected failure/, 'the CLI output is still shown');
+        assert.ok(r.report.failed!.detail.includes(MARKER), r.report.failed!.detail);
         noValueIn(w, r, [s, JSON.stringify(s).slice(1, -1)]);
-        assert.ok(!r.report.failed.detail.includes(s) && !r.report.failed.detail.includes(JSON.stringify(s).slice(1, -1)));
+        assert.ok(!r.report.failed!.detail.includes(s) && !r.report.failed!.detail.includes(JSON.stringify(s).slice(1, -1)));
     }
     finally { w.clean(); }
 });
@@ -642,11 +647,11 @@ test('a configure of a filled global registration reads only the global root\'s 
 });
 
 // ---- 0.2.0: the key's name, the stdio chain and the server's settings (spec D9, plan R1 and R7) ----------------------
-const mcps = (dir, pairs) => { fs.mkdirSync(dir, { recursive: true }); fs.appendFileSync(path.join(dir, '.mcps-secrets'), Object.entries(pairs).map(([k, v]) => `${k}=${v}\n`).join('')); };
+const mcps = (dir: string, pairs: Record<string, string>) => { fs.mkdirSync(dir, { recursive: true }); fs.appendFileSync(path.join(dir, '.mcps-secrets'), Object.entries(pairs).map(([k, v]) => `${k}=${v}\n`).join('')); };
 const DOCKER = { command: 'docker', args: ['run', '-i', '--rm', '-e', G, 'ghcr.io/github/github-mcp-server:v2.1.0', 'stdio'] };
 // the fake CLI's calls.jsonl stands in for the claude process: it records the argv, and a key reaches the account file
 // only through add-json's argument (the CLI is the only writer)
-const onlyIn = (w, value, allowed) =>
+const onlyIn = (w: World, value: string, allowed: string[]) =>
 {
     const hits = files(w.dir).filter((f) => path.basename(f) !== 'calls.jsonl' && fs.readFileSync(f, 'utf8').includes(value));
     assert.deepStrictEqual(hits.sort(), allowed.sort(), 'the value is only where it belongs');
@@ -664,11 +669,11 @@ test('configure recommends the name the registration uses', () => {
         const inv = inventory.keptOf(inventory.buildInventory({ project: w.project, env: w.env }));
         assert.ok(!JSON.stringify(inv).includes(live), 'the inventory is masked');
         const q = all(inv, { targets: ['mcp:github~local', 'mcp:gh-docker~local'] }, load(), { env: w.env, home: w.home });
-        assert.strictEqual(q.keyNames['mcp:github~local'].question.options[0].label, 'ACME_GITHUB_TOKEN (Recommended)', 'the helper\'s argument');
-        assert.strictEqual(q.keyNames['mcp:gh-docker~local'].question.options[0].label, 'MY_GITHUB_TOKEN (Recommended)', 'the name whose value equals the written-in key');
+        assert.strictEqual(q.keyNames!['mcp:github~local']!.question.options[0]!.label, 'ACME_GITHUB_TOKEN (Recommended)', 'the helper\'s argument');
+        assert.strictEqual(q.keyNames!['mcp:gh-docker~local']!.question.options[0]!.label, 'MY_GITHUB_TOKEN (Recommended)', 'the name whose value equals the written-in key');
         assert.ok(!JSON.stringify(q).includes(live));
-        assert.strictEqual(q.settings['mcp:gh-docker~local'].question.options[0].label, 'No settings (Recommended)');
-        assert.strictEqual(q.settings['mcp:github~local'], undefined, 'a hosted route takes no settings');
+        assert.strictEqual(q.settings!['mcp:gh-docker~local']!.question.options[0]!.label, 'No settings (Recommended)');
+        assert.strictEqual(q.settings!['mcp:github~local'], undefined, 'a hosted route takes no settings');
     }
     finally { w.clean(); }
 });
@@ -686,7 +691,7 @@ test('unfilled at install, filled later, configure keeping the name writes the k
         mcps(path.dirname(file), { ACME_GITHUB_TOKEN: value });
         const answers = { change: { 'mcp:github~local': {} }, keyNames: { 'mcp:github~local': 'ACME_GITHUB_TOKEN' } };
         const r = keptWalk(w, answers);
-        assert.deepStrictEqual(r.p.steps.filter((s) => s.op.startsWith('mcp-')).map((s) => [s.op, s.key]), [['mcp-replace', { name: 'ACME_GITHUB_TOKEN', files: [file, path.join(w.home, '.preferred-tools', '.mcps-secrets')] }]]);
+        assert.deepStrictEqual(r.p.steps.filter((s) => s.op.startsWith('mcp-')).map((s) => [s.op, (s as McpAddStep).key]), [['mcp-replace', { name: 'ACME_GITHUB_TOKEN', files: [file, path.join(w.home, '.preferred-tools', '.mcps-secrets')] }]]);
         assert.strictEqual(r.report.failed, null, r.text);
         assert.strictEqual(accountDoc(w).projects[accountKey(w.project)].mcpServers.github.env[G], value);
         noValueIn(w, r, [value]);
@@ -750,13 +755,13 @@ test('a replace or a move keeps the stdio key the registration holds when the ch
 // ---- 0.2.0: the apply's file steps (spec D2-D4, D6, D8; plan R8, R13) -------------------------------------------------
 const HELPER_SRC = path.join(import.meta.dirname, '..', 'scripts', 'copied', 'mcp-headers.js');
 const KEY_HEAD = '# preferred-tools MCP keys - fill in each value; this file is never committed';
-function runSteps(w, list, opts = {})
+function runSteps(w: World, list: unknown[], opts: ApplyOptions = {})
 {
-    const lines = [];
-    const report = apply({ version: 1, project: w.project, steps: list, errors: [] }, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')), ...opts });
+    const lines: string[] = [];
+    const report = apply({ version: 1, project: w.project, steps: list as PlanStep[], errors: [] } as ApplyPlan, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')), ...opts });
     return { report, text: lines.join('\n') };
 }
-const git = (dir, ...args) => spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
+const git = (dir: string, ...args: string[]) => spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
 
 test('write-helper: absent is written; a lower number is rewritten; the same number is left; a higher number is left with the note', () => {
     const w = world();
@@ -828,8 +833,8 @@ test('ensure-key-name: names appended, existing lines byte-identical, no value w
         assert.strictEqual(git(w.project, 'init', '-q').status, 0);
         const loose = path.join(w.project, 'keys', '.mcps-secrets');
         r = runSteps(w, [{ op: 'ensure-key-name', file: loose, names: [G] }]);
-        assert.strictEqual(r.report.failed.op, 'ensure-key-name');
-        assert.ok(r.report.failed.detail.includes(`git would commit ${loose} - not written`), r.report.failed.detail);
+        assert.strictEqual(r.report.failed!.op, 'ensure-key-name');
+        assert.ok(r.report.failed!.detail.includes(`git would commit ${loose} - not written`), r.report.failed!.detail);
         assert.ok(!fs.existsSync(loose));
         // the root's .gitignore makes git ignore it
         r = runSteps(w, [{ op: 'root-ignore', path: root }, { op: 'ensure-key-name', file, names: ['NEW_GITHUB_TOKEN'] }]);
@@ -929,7 +934,7 @@ test('list-write keeps the own entries record-clean kept: those live still has, 
         const x = { name: 'x', scope: 'project', fingerprint: { pkg: 'q' }, choice: 'own' };
         runSteps(w, [{ op: 'list-write', file, family: 'project', upserts: [], drops: [], own: { entries: [a], keep: [x, { ...a, fingerprint: { pkg: 'stale' } }], live: live } }]);
         assert.deepStrictEqual(readJson(file).own, [x, a]);
-        assert.deepStrictEqual([roots.recordKey(a), roots.recordKey(plug), roots.recordKey(conn), roots.recordKey({ x: 1 })], ['mcp:a~local', 'plugin-mcp:p@m/s', 'connector:Notion', null]);
+        assert.deepStrictEqual([roots.recordKey(a), roots.recordKey(plug), roots.recordKey(conn), roots.recordKey({ x: 1 } as unknown as RecordEntry)], ['mcp:a~local', 'plugin-mcp:p@m/s', 'connector:Notion', null]);
     }
     finally { w.clean(); }
 });
@@ -1081,7 +1086,7 @@ test('a new root gets root-ignore with GITIGNORE before any other step', () => {
     {
         const r = walk(w, { picks: { github: { route: 'remote', scope: 'local' } } });
         assert.strictEqual(r.report.failed, null, r.text);
-        assert.strictEqual(r.p.steps[0].op, 'root-ignore');
+        assert.strictEqual(r.p.steps[0]!.op, 'root-ignore');
         const root = path.join(w.project, '.preferred-tools');
         assert.strictEqual(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), GITIGNORE);
         assert.match(r.text, /^1\. ok {5}wrote .*\.gitignore \(\*, !\.gitignore, !mcp-headers\.js, !mcp-bridge\.js, !serena-context\.yml\)$/m);
@@ -1099,10 +1104,10 @@ test('a re-run after a failed add writes no file again', () => {
         const data = path.join(w.dir, 'data');
         const root = path.join(w.project, '.preferred-tools');
         const first = apply(p, { env: { ...w.env, FAKE_CLAUDE_FAIL: 'add-json github' }, tmp: path.join(w.dir, 'tmp'), log: () => {}, data });
-        assert.strictEqual(first.failed.op, 'mcp-add');
+        assert.strictEqual(first.failed!.op, 'mcp-add');
         const snap = () => ['.gitignore', 'mcp-headers.js', '.mcps-secrets'].map((f) => [f, fs.readFileSync(path.join(root, f), 'utf8'), fs.statSync(path.join(root, f)).mtimeMs]);
         const before = snap();
-        const lines = [];
+        const lines: string[] = [];
         const second = apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')), data });
         assert.strictEqual(second.failed, null, lines.join('\n'));
         assert.deepStrictEqual(snap(), before, 'byte-identical and untouched');
@@ -1119,38 +1124,38 @@ test('the apply repeats the reconnect lines after the read-back, and names a ref
     const ISSUE = 'Issue: Server rejected the Authorization header minted by the configured headersHelper (HTTP 401). Check that the helper command returns a valid credential for this MCP endpoint — OAuth fallback is disabled when the helper supplies Authorization. Error detail: Error POSTing to endpoint:';
     assert.match(ISSUE, REFUSED);
     for (const other of ['Issue: ECONNREFUSED: Unable to connect. Is the computer able to access the url?', 'Issue: HTTP 500: Error POSTing to endpoint:', 'Issue: Dynamic Client Registration rejected (HTTP 401):']) assert.doesNotMatch(other, REFUSED);
-    assert.strictEqual(refusedLine({ name: 'x', variable: 'V' }), 'x: the server refused the key in V - check the value');
+    assert.strictEqual(refusedLine({ name: 'x', variable: 'V' } as Pick<Reconnect, 'name' | 'variable' | 'hint'>), 'x: the server refused the key in V - check the value');
     const w = world();
     try
     {
         const file = path.join(w.home, '.preferred-tools', '.mcps-secrets');
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, 'ATLASSIAN_API_TOKEN=a@b.example:x-not-printed\nSENTRY_ACCESS_TOKEN=s-not-printed\n');
-        const gets = [];
-        const runCli = (argv, o) =>
+        const gets: string[] = [];
+        const runCli = (argv: string[], o?: CliOptions) =>
         {
             if (argv[0] !== 'mcp' || argv[1] !== 'get') return cli.run(argv, o);
-            gets.push(argv[2]);
-            return { status: 0, stdout: `${argv[2]}:\n  Status: ✘ Failed to connect\n  ${ISSUE}\n`, stderr: '' };
+            gets.push(argv[2]!);
+            return { status: 0, stdout: `${argv[2]}:\n  Status: ✘ Failed to connect\n  ${ISSUE}\n`, stderr: '' } as CliResult;
         };
-        const run = (answers, extra = {}) =>
+        const run = (answers: Answers, extra: Partial<Inventory> = {}) =>
         {
             const p = plan({ ...inventory.buildInventory({ project: w.project, env: w.env }), ...extra }, answers, { home: w.home, env: w.env });
             assert.deepStrictEqual(p.errors, []);
-            const lines = [];
+            const lines: string[] = [];
             const report = apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), runCli, log: (...a) => lines.push(a.join(' ')) });
             assert.strictEqual(report.failed, null, lines.join('\n'));
             return { p, report, text: lines.join('\n') };
         };
-        const a = load().byId.get('atlassian');
+        const a = load().byId.get('atlassian')!;
         const r = run({ picks: { atlassian: { scope: 'user', token: true }, sentry: { route: 'remote', scope: 'user', token: true }, serena: { scope: 'local' } } });
         const tail = r.text.slice(r.text.indexOf('Read back:'));
         assert.ok(tail.includes(`${a.name}: connects with its key at the next session start; in a session already running, /mcp -> ${a.name} -> Reconnect`), r.text);
-        assert.ok(tail.includes(`${a.name}: the server refused the key in ATLASSIAN_API_TOKEN - ${a.routes.remote.helper.hint}`), r.text);
+        assert.ok(tail.includes(`${a.name}: the server refused the key in ATLASSIAN_API_TOKEN - ${a.routes.remote!.helper!.hint}`), r.text);
         assert.ok(tail.includes('sentry: the server refused the key in SENTRY_ACCESS_TOKEN - check the value'), r.text);
         // the hosted names are asked now; serena's package goes to the fetch job, which checks only it
         assert.deepStrictEqual(gets.sort(), [a.name, 'sentry'].sort());
-        assert.deepStrictEqual(r.report.fetch.check, ['serena']);
+        assert.deepStrictEqual(r.report.fetch!.check, ['serena']);
         assert.ok(!r.text.includes('not-printed'));
         // an untrusted folder: the key never left the file, so the line is the trust one
         const u = run({ picks: { atlassian: { scope: 'local', token: true } } }, { trusted: false });
@@ -1225,7 +1230,7 @@ test('a bridge step with filled: false is left out of the fetch job\'s check; fi
     const w = world();
     try
     {
-        const entry = (n) => ({ command: 'node', args: [path.join(w.project, '.preferred-tools', 'mcp-bridge.js'), 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}', 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'], env: { npm_config_before: '2026-11-11T23:59:59Z' } });
+        const entry = (_n?: string) => ({ command: 'node', args: [path.join(w.project, '.preferred-tools', 'mcp-bridge.js'), 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}', 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'], env: { npm_config_before: '2026-11-11T23:59:59Z' } });
         const steps = [
             { op: 'mcp-add', name: 'sentry', scope: 'local', entry: entry(), row: 'sentry', route: 'bridge', filled: false, why: 'x' },
             fetchStep('sentry', entry(), 'sentry'),
@@ -1235,7 +1240,7 @@ test('a bridge step with filled: false is left out of the fetch job\'s check; fi
         const fetchFile = path.join(w.dir, 'fetch.json');
         const { report } = runSteps(w, steps, { fetchFile });
         assert.strictEqual(report.failed, null);
-        assert.deepStrictEqual(report.fetch.check, ['sentry2']);
+        assert.deepStrictEqual(report.fetch!.check, ['sentry2']);
         assert.deepStrictEqual(JSON.parse(fs.readFileSync(fetchFile, 'utf8')).check, ['sentry2']);
     }
     finally { w.clean(); }
@@ -1255,9 +1260,9 @@ test('rootIgnoreLines puts mcps.json in a user-files root\'s short list', () => 
 
 // ---- list-write (0.5.0, spec D1) -------------------------------------------------------------------------------------
 
-const listOf = (file) => readList(file);
-const memEntry = (pkg) => ({ type: 'stdio', command: 'uvx', args: [pkg], env: {} });
-const upsert = (name, scope, extra = {}) => ({ server: { name, scope, row: 'memory', route: 'local', clients: ['claude'], entry: null, key: null, ...extra }, after: `mcp:${name}~${scope}`, cursorFile: null });
+const listOf = (file: string) => readList(file);
+const memEntry = (pkg: string) => ({ type: 'stdio', command: 'uvx', args: [pkg], env: {} });
+const upsert = (name: string, scope: string, extra = {}) => ({ server: { name, scope, row: 'memory', route: 'local', clients: ['claude'], entry: null, key: null, ...extra }, after: `mcp:${name}~${scope}`, cursorFile: null });
 
 test('list-write records an upsert only after its registration step succeeded', () => {
     const w = world();
@@ -1269,8 +1274,8 @@ test('list-write records an upsert only after its registration step succeeded', 
             { op: 'mcp-add', name: 'b', scope: 'local', entry: memEntry('mcp-memory-service'), row: 'memory', route: 'local' },
             { op: 'list-write', file, family: 'project', upserts: [upsert('a', 'local'), upsert('b', 'local')], drops: [], own: null },
         ], { env: { ...w.env, FAKE_CLAUDE_FAIL: 'add-json b' } });
-        assert.strictEqual(r.report.failed.op, 'mcp-add', r.text);
-        assert.deepStrictEqual(listOf(file).servers.map((s) => s.name), ['a'], r.text);
+        assert.strictEqual(r.report.failed!.op, 'mcp-add', r.text);
+        assert.deepStrictEqual(listOf(file)!.servers.map((s) => s.name), ['a'], r.text);
         assert.match(r.text, /list: wrote .*mcps\.json/);
     }
     finally { w.clean(); }
@@ -1286,7 +1291,7 @@ test('list-write takes the entry from the registration as read back', () => {
             { op: 'list-write', file, family: 'project', upserts: [upsert('a', 'local', { entry: { command: 'stale' } })], drops: [], own: null },
         ]);
         assert.strictEqual(r.report.failed, null, r.text);
-        const s = listOf(file).servers[0];
+        const s = listOf(file)!.servers[0]!;
         assert.deepStrictEqual(s.entry.args, ['mcp-memory-service']);
         assert.strictEqual(s.entry.command, 'uvx');
     }
@@ -1307,8 +1312,8 @@ test('a failed cursor-write leaves no list entry naming cursor for that file', {
             { op: 'list-write', file, family: 'project', upserts: [{ ...upsert('a', 'local', { clients: ['claude', 'cursor'] }), cursorFile }], drops: [], own: null },
             { op: 'cursor-write', file: cursorFile, family: 'project', lists: [{ file, scopes: ['local', 'project'] }], before: [], skip: [], replace: [] },
         ]);
-        assert.strictEqual(r.report.failed.op, 'cursor-write', r.text);
-        assert.deepStrictEqual(listOf(file).servers[0].clients, ['claude']);
+        assert.strictEqual(r.report.failed!.op, 'cursor-write', r.text);
+        assert.deepStrictEqual(listOf(file)!.servers[0]!.clients, ['claude']);
     }
     finally { w.clean(); }
 });
@@ -1322,7 +1327,7 @@ test('a remove drops the list entry once the removal succeeded', () => {
             { op: 'mcp-add', name: 'a', scope: 'local', entry: memEntry('mcp-memory-service'), row: 'memory', route: 'local' },
             { op: 'list-write', file, family: 'project', upserts: [upsert('a', 'local')], drops: [], own: null },
         ]);
-        assert.strictEqual(listOf(file).servers.length, 1);
+        assert.strictEqual(listOf(file)!.servers.length, 1);
         const r = runSteps(w, [
             { op: 'mcp-remove', name: 'a', scope: 'local' },
             { op: 'list-write', file, family: 'project', upserts: [], drops: [{ key: 'mcp:a~local', after: 'mcp:a~local' }], own: null },
@@ -1346,7 +1351,7 @@ test('cursor-write runs after the registration steps and before order-mcp-json',
             { op: 'order-mcp-json', file: path.join(w.project, '.mcp.json'), own: [] },
         ]);
         assert.strictEqual(r.report.failed, null, r.text);
-        const at = (re) => r.text.split('\n').findIndex((l) => re.test(l));
+        const at = (re: RegExp) => r.text.split('\n').findIndex((l) => re.test(l));
         assert.ok(at(/added 'a'/) < at(/wrote .*\.cursor.mcp\.json/) && at(/wrote .*\.cursor.mcp\.json/) < at(/\.mcp\.json: not there/), r.text);
         assert.deepStrictEqual(readJson(cursorFile).mcpServers.a, memEntry('mcp-memory-service'));
         assert.deepStrictEqual(readJson(file).servers[0].clients, ['claude', 'cursor'], 'the cursor-write applied: cursor stays');
@@ -1420,24 +1425,24 @@ test('a Claude-side rewrite keeps Cursor\'s moved pin and its added env pair', (
     try
     {
         const file = path.join(dir, 'mcps.json');
-        const helper = (root) => ({ type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: `node ${root}/mcp-headers.js CONTEXT7_API_KEY Bearer` });
+        const helper = (root: string) => ({ type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: `node ${root}/mcp-headers.js CONTEXT7_API_KEY Bearer` });
         const moved = { command: 'node', args: [path.join(dir, 'mcp-bridge.js'), 'https://mcp.context7.com/mcp', 'CONTEXT7_API_KEY', 'Bearer', 'mcp-remote@0.17.0'], env: { npm_config_before: '2026-12-01T00:00:00Z', MINE: '1' } };
-        const ctx = { report: { appliedKeys: new Set(), cursorFiles: new Set() } };
+        const ctx = { report: { appliedKeys: new Set(), cursorFiles: new Set() } } as unknown as ApplyCtx;
         // a new two-form entry: the catalog's pin
-        let r = listWrite({ op: 'list-write', file, family: 'global', upserts: [{ server: { name: 'context7', scope: 'user', row: 'context7', route: 'remote', clients: ['claude', 'cursor'], entry: helper(dir), key: null, form: 'two' }, after: null, cursorFile: null }], drops: [], own: null }, ctx);
+        let r = listWrite({ op: 'list-write', file, family: 'global', upserts: [{ server: { name: 'context7', scope: 'user', row: 'context7', route: 'remote', clients: ['claude', 'cursor'], entry: helper(dir), key: null, form: 'two' }, after: null, cursorFile: null }], drops: [], own: null } as unknown as ListWriteStep, ctx);
         assert.strictEqual(r.ok, true, r.detail);
         let s = JSON.parse(fs.readFileSync(file, 'utf8')).servers[0];
         assert.deepStrictEqual(s.cursorEntry, cursorMcp.bridgeFormOf(helper(dir), load()));
         assert.ok(!('form' in s), 'the form is a plan field, never stored');
         // a rename carries the prior cursorEntry (its pin moved, an env pair added): kept
         const other = path.join(dir, 'other');
-        r = listWrite({ op: 'list-write', file, family: 'global', upserts: [{ server: { name: 'docs', scope: 'user', row: 'context7', route: 'remote', clients: ['claude', 'cursor'], entry: helper(other), cursorEntry: moved, key: null, form: 'two' }, after: null, cursorFile: null }], drops: [{ key: 'mcp:context7~user', after: null }], own: null }, ctx);
-        s = JSON.parse(fs.readFileSync(file, 'utf8')).servers.find((x) => x.name === 'docs');
+        r = listWrite({ op: 'list-write', file, family: 'global', upserts: [{ server: { name: 'docs', scope: 'user', row: 'context7', route: 'remote', clients: ['claude', 'cursor'], entry: helper(other), cursorEntry: moved, key: null, form: 'two' }, after: null, cursorFile: null }], drops: [{ key: 'mcp:context7~user', after: null }], own: null } as unknown as ListWriteStep, ctx);
+        s = JSON.parse(fs.readFileSync(file, 'utf8')).servers.find((x: { name: string }) => x.name === 'docs');
         assert.deepStrictEqual(s.cursorEntry.args, [path.join(other, 'mcp-bridge.js'), 'https://mcp.context7.com/mcp', 'CONTEXT7_API_KEY', 'Bearer', 'mcp-remote@0.17.0']);
         assert.deepStrictEqual(s.cursorEntry.env, { npm_config_before: '2026-12-01T00:00:00Z', MINE: '1' });
         // Cursor taken off: no cursorEntry
-        r = listWrite({ op: 'list-write', file, family: 'global', upserts: [{ server: { ...s, clients: ['claude'], form: 'two' }, after: null, cursorFile: null }], drops: [], own: null }, ctx);
-        assert.ok(!('cursorEntry' in JSON.parse(fs.readFileSync(file, 'utf8')).servers.find((x) => x.name === 'docs')));
+        r = listWrite({ op: 'list-write', file, family: 'global', upserts: [{ server: { ...s, clients: ['claude'], form: 'two' }, after: null, cursorFile: null }], drops: [], own: null } as unknown as ListWriteStep, ctx);
+        assert.ok(!('cursorEntry' in JSON.parse(fs.readFileSync(file, 'utf8')).servers.find((x: { name: string }) => x.name === 'docs')));
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 12
 // THE TEMP-PROJECT HARNESS - runs the plugin's scripts against the REAL `claude` CLI in a throwaway world, with no model
 // in the loop. The walk's asks are stood in for by an answers object fed to plan.js and apply.js, so every matrix case is
 // a script run.
@@ -22,7 +21,23 @@ import { apply } from '../scripts/apply/run.ts';
 import { run } from '../scripts/apply/fetch.ts';
 import * as account from '../scripts/core/account.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
+import type { Answers, Plan, PlanOptions } from '../scripts/plan/types.ts';
+import type { ApplyReport, FetchRun } from '../scripts/apply/types.ts';
+import type { Inventory } from '../scripts/inventory/types.ts';
+import type { Catalog } from '../scripts/catalog/types.ts';
+import type { CliResult } from '../scripts/core/types.ts';
 import { TOKEN_VARS } from './helpers.ts';
+
+// what Harness.run hands back: the apply's report, or a stand-in marked skipped when the plan held errors
+export type RunReport = ApplyReport & { skipped?: boolean };
+export interface HarnessRun
+{
+    inv: Inventory;
+    plan: Plan;
+    report: RunReport;
+    text: string;
+    rendered: string;
+}
 
 // the REAL home, taken from the OS (not from HOME, which the harness overrides for its children)
 export const REAL_HOME = os.userInfo().homedir;
@@ -36,12 +51,12 @@ const REAL_FILES = [
 // plugin's settings step could touch are watched.
 const HUD_DIR = path.join(REAL_HOME, '.claude', 'plugins', 'claude-hud');
 REAL_FILES.push(path.join(HUD_DIR, 'config.json'), path.join(HUD_DIR, 'previous-statusline.txt'));
-const REAL_TREES = [];
+const REAL_TREES: string[] = [];
 
-export function hashTree(p)
+export function hashTree(p: string)
 {
     const h = crypto.createHash('sha256');
-    const walk = (d) =>
+    const walk = (d: string): void =>
     {
         let entries;
         try { entries = fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)); } catch { h.update(`missing:${d}`); return; }
@@ -56,7 +71,7 @@ export function hashTree(p)
     return h.digest('hex');
 }
 
-function hashFile(f)
+function hashFile(f: string)
 {
     try { return crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex'); } catch { return 'missing'; }
 }
@@ -65,7 +80,15 @@ export const snapshot = () => Object.fromEntries([...REAL_FILES.map((f) => [f, h
 
 export class Harness
 {
-    constructor({ root })
+    declare root: string;
+    declare home: string;
+    declare account: string;
+    declare projects: string;
+    declare data: string;
+    declare env: NodeJS.ProcessEnv;
+    declare before: Record<string, string>;
+
+    constructor({ root }: { root: string })
     {
         fs.mkdirSync(root, { recursive: true });
         this.root = fs.realpathSync(root);
@@ -84,15 +107,15 @@ export class Harness
 
     // fetch.js on the file an apply wrote, with the real runtimes and the real CLI in the throwaway world. The
     // registration cases leave it out (they prove what is written); tests/matrix/starts.test.ts runs it before each start.
-    async fetch(file)
+    async fetch(file: string): Promise<FetchRun & { text: string }>
     {
-        const lines = [];
+        const lines: string[] = [];
         const res = await run(JSON.parse(fs.readFileSync(file, 'utf8')), { env: this.env, log: (...a) => lines.push(a.join(' ')) });
         return { ...res, text: lines.join('\n') };
     }
 
     // a throwaway project (git init, as a real project would be)
-    project(name)
+    project(name: string)
     {
         const dir = path.join(this.projects, name);
         fs.mkdirSync(dir, { recursive: true });
@@ -100,21 +123,21 @@ export class Harness
         return fs.realpathSync(dir);
     }
 
-    claude(project, args) { return cli.run(args, { cwd: project, env: this.env }); }
+    claude(project: string, args: string[]): CliResult { return cli.run(args, { cwd: project, env: this.env }); }
 
     // `catalog`: a case's own copy (a hosted route pointed at a stub), used by the inventory's matching as by the plan
-    inventory(project, { catalog } = {}) { return inventory.buildInventory({ project, env: this.env, data: this.data, ...(catalog ? { catalog } : {}) }); }
+    inventory(project: string, { catalog }: { catalog?: Catalog | undefined } = {}) { return inventory.buildInventory({ project, env: this.env, data: this.data, ...(catalog ? { catalog } : {}) }); }
 
     // inventory -> plan -> apply, in-process, against the real CLI in the throwaway world. The plan reads the inventory
     // as inventory.js writes it - every credential value kept - so the apply puts each one back from the registration it
     // reads, as the commands do.
-    run(project, answers, { planOpts = {}, tmp, catalog } = {})
+    run(project: string, answers: Answers, { planOpts = {}, tmp, catalog }: { planOpts?: PlanOptions; tmp?: string | undefined; catalog?: Catalog | undefined } = {}): HarnessRun
     {
         const inv = inventory.keptOf(this.inventory(project, { catalog }));
         const p = plan(inv, answers, { home: this.home, env: this.env, ...(catalog ? { catalog } : {}), ...planOpts });
-        const lines = [];
-        const report = p.errors.length
-            ? { applied: [], failed: null, notRun: [], readback: [], noop: false, skipped: true }
+        const lines: string[] = [];
+        const report: RunReport = p.errors.length
+            ? { applied: [], failed: null, notRun: [], readback: [], noop: false, skipped: true } as unknown as RunReport
             : apply(p, { env: this.env, tmp: tmp || path.join(this.root, 'tmp'), data: this.data, log: (...a) => lines.push(a.join(' ')) });
         return { inv, plan: p, report, text: lines.join('\n'), rendered: render(p) };
     }
@@ -129,15 +152,15 @@ export class Harness
     // every file under the root (for token scans)
     files()
     {
-        const out = [];
-        const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : out.push(path.join(d, e.name))));
+        const out: string[] = [];
+        const walk = (d: string): void => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : out.push(path.join(d, e.name))));
         walk(this.root);
         return out;
     }
 }
 
 // Proves the isolation before any case runs. Returns { ok, lines }.
-export function isolationCheck(h)
+export function isolationCheck(h: Harness)
 {
     const lines = [];
     const project = h.project('isolation');
@@ -156,10 +179,10 @@ export function isolationCheck(h)
     return { ok: a.status === 0 && wrote && real.ok && r.report.noop && real2.ok, lines };
 }
 
-function main(argv)
+function main(argv: string[])
 {
     const at = argv.indexOf('--root');
-    const root = at >= 0 ? argv[at + 1] : path.join(os.tmpdir(), `preferred-tools-harness-${Date.now()}`);
+    const root = at >= 0 ? argv[at + 1]! : path.join(os.tmpdir(), `preferred-tools-harness-${Date.now()}`);
     const h = new Harness({ root });
     const r = isolationCheck(h);
     console.log(r.lines.join('\n'));

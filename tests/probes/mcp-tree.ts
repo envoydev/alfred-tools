@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 12
 // THE .mcp.json WALK - which project files Claude Code loads from a folder, its parents and its subfolders, which one
 // wins a name clash, where a subfolder session writes, and what approves a project server. The real CLI in a throwaway
 // home and account, logged out, no model.
@@ -40,15 +39,51 @@ const FOLDERS = ['ws', 'ws/api', 'ws/api/src', 'ws/web'];
 const KEEP = new Set(['PATH', 'PATHEXT', 'SYSTEMROOT', 'SYSTEMDRIVE', 'COMSPEC', 'WINDIR', 'PROGRAMFILES', 'PROGRAMDATA', 'TEMP', 'TMP', 'TMPDIR', 'LANG', 'TERM']);
 const DUP_TAGS = new Set(['ws', 'api', 'local']);
 
-const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-const writeJson = (file, doc) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `${JSON.stringify(doc, null, 2)}\n`); };
-const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
-const entry = (tag) => ({ command: process.execPath, args: [FAKE, 'answer', '--log', '${PT_PROBE_LOG}', '--tag', tag] });
-const servers = (map) => ({ mcpServers: Object.fromEntries(Object.entries(map).map(([name, tag]) => [name, entry(tag)])) });
-const nameOf = (tag) => (DUP_TAGS.has(tag) ? 'dup' : tag);
-const list = (items) => `[${[...items].join(', ')}]`;
+// one throwaway world of the probe: its folders, its environment and the count of CLI calls made in it
+export interface TreeWorld
+{
+    name: string;
+    root: string;
+    home: string;
+    ws: string;
+    account: string;
+    logs: string;
+    api: string;
+    src: string;
+    web: string;
+    webSub: string;
+    notes: string;
+    link: string;
+    env: NodeJS.ProcessEnv;
+    seq: number;
+}
+// one CLI call: its exit, its output and the servers it started
+export interface Called
+{
+    status: number | null;
+    out: string;
+    started: { tag: string; cwd: string }[];
+}
+// one measurement's findings, by the number the probe gives it
+interface Measured
+{
+    m1?: Record<string, { list: Record<string, string>; started: string[] }>;
+    m2?: { inApi: string[]; inSrc: string[]; tag: string };
+    m3?: { started: string[]; inherited: boolean };
+    m4?: Record<string, { project: string[]; local: string[]; readHere: string; readAtRoot: string }>;
+    m5?: { local: string[] };
+    m7?: string[];
+}
 
-export function world(S, name, claudeDir)
+const sleep = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const writeJson = (file: string, doc: unknown) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `${JSON.stringify(doc, null, 2)}\n`); };
+const readJson = (file: string) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
+const entry = (tag: string) => ({ command: process.execPath, args: [FAKE, 'answer', '--log', '${PT_PROBE_LOG}', '--tag', tag] });
+const servers = (map: Record<string, string>) => ({ mcpServers: Object.fromEntries(Object.entries(map).map(([name, tag]) => [name, entry(tag)])) });
+const nameOf = (tag: string) => (DUP_TAGS.has(tag) ? 'dup' : tag);
+const list = (items: Iterable<string>) => `[${[...items].join(', ')}]`;
+
+export function world(S: string, name: string, claudeDir?: string | null)
 {
     const root = path.join(S, name);
     const home = path.join(root, 'home');
@@ -63,7 +98,7 @@ export function world(S, name, claudeDir)
         webSub: path.join(ws, 'web', 'sub'),
         notes: path.join(ws, 'notes'),
         link: path.join(root, 'link'),
-    };
+    } as TreeWorld;
     for (const dir of [d.account, d.logs, d.src, d.webSub, d.notes, path.join(home, 'AppData', 'Roaming'), path.join(home, 'AppData', 'Local')]) fs.mkdirSync(dir, { recursive: true });
     writeJson(path.join(root, '.mcp.json'), servers({ 'p-above': 'p-above' }));
     writeJson(path.join(home, '.mcp.json'), servers({ 'p-home': 'p-home' }));
@@ -84,55 +119,55 @@ export function world(S, name, claudeDir)
 }
 
 // One CLI call with its own start log. -> { status, out, started: [{ tag, cwd }] }
-export function call(d, cwd, args, timeout = 90000)
+export function call(d: TreeWorld, cwd: string, args: string[], timeout = 90000): Called
 {
     const log = path.join(d.logs, `${String(++d.seq).padStart(3, '0')}.log`);
     const r = cli.run(args, { cwd, env: { ...d.env, PT_PROBE_LOG: log }, timeout });
     sleep(300);
-    let started = [];
+    let started: Called['started'] = [];
     try { started = fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)); }
     catch { /* nothing started */ }
     return { status: r.status, out: `${r.stdout}${r.stderr}${r.error ? r.error.message : ''}`, started };
 }
 
-const at = (d, rel) => path.join(d.home, ...rel.split('/'));
+const at = (d: TreeWorld, rel: string) => path.join(d.home, ...rel.split('/'));
 // a path relative to home, `/`-separated (a Windows account key is already `/`-separated)
-const rel = (d, p) => path.relative(d.home, path.resolve(String(p))).split(path.sep).join('/') || '.';
-const tagsOf = (r) => [...new Set(r.started.map((s) => s.tag))].sort();
-const cwdsOf = (d, r) => [...new Set(r.started.map((s) => rel(d, s.cwd)))].sort();
+const rel = (d: TreeWorld, p: string) => path.relative(d.home, path.resolve(String(p))).split(path.sep).join('/') || '.';
+const tagsOf = (r: Called) => [...new Set(r.started.map((s) => s.tag))].sort();
+const cwdsOf = (d: TreeWorld, r: Called) => [...new Set(r.started.map((s) => rel(d, s.cwd)))].sort();
 
 // `claude mcp list` -> { name: connected | pending | rejected | failed | <text> }
-const word = (s) => (/Connected/.test(s) ? 'connected' : /Pending/.test(s) ? 'pending' : /Rejected/.test(s) ? 'rejected' : /Failed/i.test(s) ? 'failed' : s.trim());
-export function listed(out)
+const word = (s: string) => (/Connected/.test(s) ? 'connected' : /Pending/.test(s) ? 'pending' : /Rejected/.test(s) ? 'rejected' : /Failed/i.test(s) ? 'failed' : s.trim());
+export function listed(out: string)
 {
-    const map = {};
+    const map: Record<string, string> = {};
     for (const line of out.split(/\r?\n/))
     {
         const m = /^([\w.-]+): .* - (.+)$/.exec(line.trim());
-        if (m) map[m[1]] = word(m[2]);
+        if (m) map[m[1]!] = word(m[2]!);
     }
     return map;
 }
 // a server `claude mcp list` leaves out (it does so for a rejected one): its status as `claude mcp get` gives it
-function statusOf(d, cwd, name)
+function statusOf(d: TreeWorld, cwd: string, name: string)
 {
     const fromList = listed(call(d, cwd, ['mcp', 'list']).out)[name];
     if (fromList) return fromList;
     const m = /Status: (.+)/.exec(call(d, cwd, ['mcp', 'get', name]).out);
-    return m ? `${word(m[1])} (left out of mcp list; mcp get)` : 'not listed';
+    return m ? `${word(m[1]!)} (left out of mcp list; mcp get)` : 'not listed';
 }
-const showList = (map) => list(Object.keys(map).sort().map((n) => `${n} ${map[n]}`));
+const showList = (map: Record<string, string>) => list(Object.keys(map).sort().map((n) => `${n} ${map[n]}`));
 
 // the account file's `projects` keys whose local servers hold `name`
-const localKeys = (d, name) => Object.entries((readJson(path.join(d.account, '.claude.json')) || {}).projects || {})
+const localKeys = (d: TreeWorld, name: string) => Object.entries(((readJson(path.join(d.account, '.claude.json')) || {}).projects || {}) as Record<string, { mcpServers?: object } | undefined>)
     .filter(([, v]) => v && v.mcpServers && Object.hasOwn(v.mcpServers, name)).map(([k]) => rel(d, k));
 // which .mcp.json files under home hold `name`
-const projectFiles = (d, name, folders) => folders.filter((f) => Object.hasOwn((readJson(path.join(at(d, f), '.mcp.json')) || {}).mcpServers || {}, name));
+const projectFiles = (d: TreeWorld, name: string, folders: string[]) => folders.filter((f) => Object.hasOwn((readJson(path.join(at(d, f), '.mcp.json')) || {}).mcpServers || {}, name));
 // the trust key Claude Code reads for a folder: the real path; on Windows the cwd as typed, `\` written as `/`
-const trustKey = (dir) => (WIN ? dir.replace(/\\/g, '/') : fs.realpathSync.native(dir));
+const trustKey = (dir: string) => (WIN ? dir.replace(/\\/g, '/') : fs.realpathSync.native(dir));
 
 // merges `fields` into the throwaway account file's entry for a folder; a field set to undefined is dropped
-function setEntry(d, dir, fields)
+function setEntry(d: TreeWorld, dir: string, fields: Record<string, unknown>)
 {
     const file = path.join(d.account, '.claude.json');
     const doc = readJson(file) || {};
@@ -142,12 +177,12 @@ function setEntry(d, dir, fields)
     writeJson(file, doc);
 }
 
-function measure(only, S, claudeDir, print)
+function measure(only: string[], S: string, claudeDir: string | null, print: (line: string) => void): { notRun?: string; res?: Measured }
 {
-    const res = {};
+    const res: Measured = {};
     const A = world(S, 'A', claudeDir);
     const B = only.includes('M1') || only.includes('M4') ? world(S, 'B', claudeDir) : null;
-    for (const d of [A, B].filter(Boolean))
+    for (const d of [A, B].filter(Boolean) as TreeWorld[])
     {
         const auth = call(d, d.home, ['auth', 'status']);
         if (!/"loggedIn":\s*false/.test(auth.out)) return { notRun: `the throwaway account ${d.name} is not reported logged out (claude auth status exit ${auth.status})` };
@@ -159,7 +194,7 @@ function measure(only, S, claudeDir, print)
     if (only.includes('M1'))
     {
         res.m1 = {};
-        for (const d of [A, B]) for (const f of FOLDERS)
+        for (const d of [A, B!]) for (const f of FOLDERS)
         {
             const l = listed(call(d, at(d, f), ['mcp', 'list']).out);
             const s = call(d, at(d, f), ['-p', 'hi']);
@@ -189,7 +224,7 @@ function measure(only, S, claudeDir, print)
         const s = call(A, A.web, ['-p', 'hi']);
         const l = listed(call(A, A.web, ['mcp', 'list']).out);
         call(A, A.web, ['mcp', 'remove', 'dup', '-s', 'local']);
-        res.m3 = { started: tagsOf(s).filter((t) => DUP_TAGS.has(t)), inherited: Object.hasOwn(res.m1 ? res.m1['A ws/web'].list : {}, 'dup') };
+        res.m3 = { started: tagsOf(s).filter((t) => DUP_TAGS.has(t)), inherited: Object.hasOwn(res.m1 ? res.m1['A ws/web']!.list : {}, 'dup') };
         print(`RESULT M3: add-json -s local dup in ws/web exit ${add.status}; dup started there ${list(res.m3.started)}; list ${showList(l)}`);
     }
 
@@ -199,7 +234,7 @@ function measure(only, S, claudeDir, print)
         // local entry back; from ws/notes, inside ws's repo in A and in no repo in B
         const files = ['ws', 'ws/notes', 'ws/api', 'ws/api/src', 'ws/web', 'ws/web/sub'];
         res.m4 = {};
-        for (const [d, from, root] of [[A, 'ws/api/src', 'ws/api'], [A, 'ws/web/sub', 'ws/web'], [A, 'ws/notes', 'ws'], [B, 'ws/notes', 'ws']])
+        for (const [d, from, root] of [[A, 'ws/api/src', 'ws/api'], [A, 'ws/web/sub', 'ws/web'], [A, 'ws/notes', 'ws'], [B!, 'ws/notes', 'ws']] as [TreeWorld, string, string][])
         {
             const cwd = at(d, from);
             const tag = `m4-${d.name}-${from.replace(/\W/g, '')}`;
@@ -242,12 +277,12 @@ function measure(only, S, claudeDir, print)
     if (only.includes('M7'))
     {
         // the parent's server as a subfolder sees it; with no walk, the folder's own server in its own folder
-        const walks = !res.m1 || Object.hasOwn(res.m1['A ws/web'].list, 'p-ws');
+        const walks = !res.m1 || Object.hasOwn(res.m1['A ws/web']!.list, 'p-ws');
         const [dir, server, parent] = walks ? [A.web, 'p-ws', A.ws] : [A.api, 'p-api', A.ws];
         const childLocal = path.join(dir, '.claude', 'settings.local.json');
         const parentLocal = path.join(parent, '.claude', 'settings.local.json');
         const user = path.join(A.account, 'settings.json');
-        const states = [
+        const states: [string, () => unknown][] = [
             ['nothing set', () => {}],
             [`enabledMcpjsonServers in the account file's ${rel(A, dir)} entry`, () => setEntry(A, dir, { enabledMcpjsonServers: [server] })],
             [`disabledMcpjsonServers in the account file's ${rel(A, dir)} entry`, () => setEntry(A, dir, { disabledMcpjsonServers: [server] })],
@@ -276,13 +311,13 @@ function measure(only, S, claudeDir, print)
 }
 
 // The fact block Task 5 encodes. A value outside the named set is printed as `other (...)`: the plan's stop.
-export function facts(res)
+export function facts(res: Measured)
 {
-    const out = [];
+    const out: string[] = [];
     if (res.m1)
     {
-        const a = res.m1['A ws/api'].started;
-        const b = res.m1['B ws/api'].started;
+        const a = res.m1['A ws/api']!.started;
+        const b = res.m1['B ws/api']!.started;
         const walk = a.includes('p-above') ? 'filesystem-root'
             : a.includes('p-home') ? 'home'
             : a.includes('p-ws') && !b.includes('p-ws') ? 'git-root-of-parent'
@@ -295,32 +330,32 @@ export function facts(res)
     if (res.m5) out.push(`symlink: ${res.m5.local.join() === 'ws/api' ? 'real' : res.m5.local.join() === '../link' ? 'logical' : `other (${list(res.m5.local)})`}`);
     if (res.m4)
     {
-        const src = res.m4['A ws/api/src'];
-        const sub = res.m4['A ws/web/sub'];
+        const src = res.m4['A ws/api/src']!;
+        const sub = res.m4['A ws/web/sub']!;
         const p = src.project.join();
         const w = sub.project.join();
         out.push(`subfolder-project-file: ${p === 'ws/api/src' ? 'cwd' : p === 'ws/api' && w === 'ws/web' ? 'git-root' : p === 'ws/api' && w === 'ws' ? 'nearest' : `other (src -> ${p}, web/sub -> ${w})`}`);
         const l = src.local.join();
         out.push(`subfolder-local-key: ${l === 'ws/api/src' ? 'cwd' : l === 'ws/api' ? 'git-root' : `other (${list(src.local)})`}`);
-        const plain = res.m4['B ws/notes'].local.join();
-        out.push(`subfolder-local-key, no repo: ${plain === 'ws/notes' ? 'cwd' : `other (${list(res.m4['B ws/notes'].local)})`}`);
+        const plain = res.m4['B ws/notes']!.local.join();
+        out.push(`subfolder-local-key, no repo: ${plain === 'ws/notes' ? 'cwd' : `other (${list(res.m4['B ws/notes']!.local)})`}`);
     }
     if (res.m7) for (const line of res.m7) out.push(`approval: ${line}`);
     return out;
 }
 
-function main(argv)
+function main(argv: string[])
 {
-    const val = (flag) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : undefined; };
-    const only = val('--only') ? val('--only').split(',').map((s) => s.trim().toUpperCase()) : ALL;
-    const claudeDir = val('--claude') ? path.dirname(path.resolve(val('--claude'))) : null;
+    const val = (flag: string) => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : undefined; };
+    const only = val('--only') ? val('--only')!.split(',').map((s) => s.trim().toUpperCase()) : ALL;
+    const claudeDir = val('--claude') ? path.dirname(path.resolve(val('--claude')!)) : null;
     // a --scratch folder that is not there yet is made before its real path is read
-    const wanted = val('--scratch') ? path.resolve(val('--scratch')) : os.tmpdir();
+    const wanted = val('--scratch') ? path.resolve(val('--scratch')!) : os.tmpdir();
     fs.mkdirSync(wanted, { recursive: true });
     const base = fs.realpathSync.native(wanted);
     const S = fs.mkdtempSync(path.join(base, 'preferred-tools-mcp-tree-'));
-    const clean = (text) => String(text).split(S).join('<S>').split(S.replace(/\\/g, '/')).join('<S>');
-    const print = (line) => console.log(clean(line));
+    const clean = (text: unknown) => String(text).split(S).join('<S>').split(S.replace(/\\/g, '/')).join('<S>');
+    const print = (line: string) => console.log(clean(line));
     let code = 1;
     try
     {
@@ -335,7 +370,7 @@ function main(argv)
             for (const m of only) print(`NOT RUN - ${m}: ${r.notRun}`);
             return 1;
         }
-        for (const line of facts(r.res)) print(`FACT ${line}`);
+        for (const line of facts(r.res!)) print(`FACT ${line}`);
         print(`claude ${(cli.run(['--version'], {}).stdout || '').trim()}, ${process.platform} ${process.arch}`);
         code = 0;
         return code;

@@ -22,7 +22,7 @@ export function nameProblem(name: string, { catalog, taken = [], self = null }: 
 // exactly what it launches - same pin, same cut-off, from its env - into the runtime's cache. -> a plan step, or null for a
 // launch with nothing to fetch (a hosted URL, a binary) or, given the entry it replaces, one that fetches the same thing.
 const UVX_VALUE = new Set(['--python', '-p', '--exclude-newer', '--from', '--with', '--with-requirements', '--with-editable', '--index', '--index-url', '--extra-index-url']);
-export function fetchStep(name: string, entry: ServerEntry | null | undefined, rowId: string | null | undefined, old?: ServerEntry | null): FetchStep | null
+export function fetchStep(name: string, entry: ServerEntry | null | undefined, rowId?: string | null | undefined, old?: ServerEntry | null): FetchStep | null
 {
     const step = fetchOf(name, entry, rowId);
     const was = old ? fetchOf(name, old, rowId) : null;

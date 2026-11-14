@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // claude-cli.js: the cmd.exe route npm's claude.cmd takes on Windows. Every argument must reach the CLI as written - a
 // JSON quote, %VAR%, carets, & and |, backslashes before a quote or the end, an empty argument.
 import test from 'node:test';

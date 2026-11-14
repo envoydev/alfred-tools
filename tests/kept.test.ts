@@ -1,14 +1,17 @@
-// @ts-nocheck - typed in Task 12
 import test from 'node:test';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
 import { MARKER, keep, restore } from '../scripts/core/kept.ts';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
+import type { CatalogRow } from '../scripts/catalog/types.ts';
+import type { ServerEntry } from '../scripts/core/types.ts';
 
 // live-shaped values are made per run, so no file here holds one a guard would read as a credential
-const hex = (n) => crypto.randomBytes(n).toString('hex');
-const rowOf = (id) => catalogLib.load().byId.get(id);
-const clone = (o) => JSON.parse(JSON.stringify(o));
+const hex = (n: number) => crypto.randomBytes(n).toString('hex');
+const rowOf = (id: string) => catalogLib.load().byId.get(id);
+const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o));
+
+type Live = ServerEntry & { args: string[]; env: Record<string, string> & { API_KEY?: string; NEW?: string }; headers: Record<string, string>; options: { nested: { userPass: string; auth: { secret: string } } } };
 
 function liveEntry()
 {
@@ -17,7 +20,7 @@ function liveEntry()
         custom: `Token ${hex(12)}`, sentry: `sntryu_${hex(16)}`, ctx: `ctx7sk-${hex(8)}-${hex(8)}`,
         pem: `-----BEGIN RSA PRIVATE KEY-----\n${hex(24)}\n-----END RSA PRIVATE KEY-----`,
     };
-    const entry = {
+    const entry: Live = {
         command: 'npx',
         args: ['-y', 'some-server@1.0.0', '--api-key', v.flag, `--note=${v.sentry}`],
         env: { API_KEY: v.api, DB_PASS: v.db, requirepass: v.req, OTHER: 'plain', GH_TOKEN: '${GH_TOKEN}', FALLBACK_TOKEN: '${A:-b}', CERT: v.pem },
@@ -37,7 +40,7 @@ test('keep masks every value under a key the guard\'s credKey names, at any dept
     assert.deepStrictEqual(kept.headers, { 'X-Custom': MARKER, Authorization: 'Bearer ${CONTEXT7_API_KEY}', 'X-API-Key': MARKER });
     assert.deepStrictEqual(kept.options, { nested: { userPass: MARKER, auth: { secret: MARKER } } });
     const text = JSON.stringify(kept);
-    for (const [k, value] of Object.entries(v)) assert.ok(!text.includes(value.split('\n')[0].slice(-12)), `${k} is not in the kept entry`);
+    for (const [k, value] of Object.entries(v)) assert.ok(!text.includes(value.split('\n')[0]!.slice(-12)), `${k} is not in the kept entry`);
 
     // a catalog row's location key is read by configure, so it stays as written whatever its value holds
     const memory = rowOf('memory');
@@ -68,8 +71,8 @@ test('restore puts the real values back from the source', () => {
     changed.env.NEW = 'x';
     changed.args.push('--verbose');
     const r = restore(changed, entry, null);
-    assert.deepStrictEqual(r.entry.env, { ...entry.env, NEW: 'x' });
-    assert.deepStrictEqual(r.entry.args, [...entry.args, '--verbose']);
+    assert.deepStrictEqual(r.entry!.env, { ...entry.env, NEW: 'x' });
+    assert.deepStrictEqual(r.entry!.args, [...entry.args, '--verbose']);
 });
 
 test('restore refuses when the source changed a kept field', () => {
@@ -77,13 +80,13 @@ test('restore refuses when the source changed a kept field', () => {
     const kept = keep(entry, null);
     const placeholder = clone(entry);
     placeholder.env.API_KEY = '${API_KEY}';
-    assert.match(restore(kept, placeholder, null).error, /env\.API_KEY/);
+    assert.match(restore(kept, placeholder, null).error!, /env\.API_KEY/);
     const gone = clone(entry);
     delete gone.headers['X-API-Key'];
-    assert.match(restore(kept, gone, null).error, /headers\.X-API-Key/);
+    assert.match(restore(kept, gone, null).error!, /headers\.X-API-Key/);
     const fewer = clone(entry);
     fewer.args.splice(2, 2);
-    assert.match(restore(kept, fewer, null).error, /args/);
+    assert.match(restore(kept, fewer, null).error!, /args/);
 });
 
 test('restore matches a kept arg a splice moved', () => {
@@ -102,7 +105,7 @@ test('an entry with nothing live is unchanged', () => {
         env: { SERENA_HOME: '/p/.preferred-tools/serena', SERENA_USAGE_REPORTING: 'false', SENTRY_ACCESS_TOKEN: '${SENTRY_ACCESS_TOKEN}' },
     };
     const remote = { type: 'http', url: 'https://mcp.context7.com/mcp', headers: { Authorization: 'Bearer ${CONTEXT7_API_KEY}' } };
-    for (const [entry, row] of [[serena, rowOf('serena')], [remote, rowOf('context7')], [{}, null]])
+    for (const [entry, row] of [[serena, rowOf('serena')], [remote, rowOf('context7')], [{}, null]] as [ServerEntry, CatalogRow | null | undefined][])
     {
         assert.deepStrictEqual(keep(entry, row), entry);
         assert.deepStrictEqual(restore(keep(entry, row), entry, row), { entry });

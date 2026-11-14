@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -7,20 +6,21 @@ import { spawnSync } from 'node:child_process';
 import { world, writeJson, tempOf } from './helpers.ts';
 import { fetchStep } from '../scripts/entries/names.ts';
 import { writeJob, job, run, realStart } from '../scripts/apply/fetch.ts';
+import type { CliResult } from '../scripts/core/types.ts';
 
 const SCRIPT = path.join(import.meta.dirname, '..', 'scripts', 'fetch.ts');
 const NPX = { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome', '--user-data-dir', '/p/a'] };
 const UVX = { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server', '--context', 'claude-code'] };
 
 test('a fetch step fetches exactly what the registration launches, and nothing for a launch with nothing to fetch', () => {
-    assert.deepStrictEqual(fetchStep('pw', NPX, 'playwright-chrome').argv, ['npm', 'exec', '--yes', '--package', '@playwright/mcp@0.0.83', '--', 'node', '-e', '0']);
-    const uvx = fetchStep('serena', UVX, 'serena');
+    assert.deepStrictEqual(fetchStep('pw', NPX, 'playwright-chrome')!.argv, ['npm', 'exec', '--yes', '--package', '@playwright/mcp@0.0.83', '--', 'node', '-e', '0']);
+    const uvx = fetchStep('serena', UVX, 'serena')!;
     assert.deepStrictEqual(uvx.argv, ['uvx', '--python', '3.13', '--exclude-newer', '2026-10-20', '--from', 'serena-agent@2.1.0', 'serena', '--help'], 'the same python, cut-off and pin; the tool runs nothing but --help');
     assert.strictEqual(uvx.what, 'serena-agent@2.1.0');
-    const docker = fetchStep('gh', { command: 'docker', args: ['run', '-i', '--rm', '-e', 'GITHUB_PERSONAL_ACCESS_TOKEN', 'ghcr.io/github/github-mcp-server:v1.2.3'], env: { GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}' } }, 'github');
+    const docker = fetchStep('gh', { command: 'docker', args: ['run', '-i', '--rm', '-e', 'GITHUB_PERSONAL_ACCESS_TOKEN', 'ghcr.io/github/github-mcp-server:v1.2.3'], env: { GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}' } }, 'github')!;
     assert.deepStrictEqual(docker.argv, ['docker', 'pull', 'ghcr.io/github/github-mcp-server:v1.2.3']);
     // Windows: cmd /c stays in front, so npx.cmd resolves the way the registration resolves it
-    assert.deepStrictEqual(fetchStep('pw', { command: 'cmd', args: ['/c', 'npx', ...NPX.args] }).argv.slice(0, 4), ['cmd', '/c', 'npm', 'exec']);
+    assert.deepStrictEqual(fetchStep('pw', { command: 'cmd', args: ['/c', 'npx', ...NPX.args] })!.argv.slice(0, 4), ['cmd', '/c', 'npm', 'exec']);
     assert.strictEqual(fetchStep('c7', { type: 'http', url: 'https://mcp.context7.com/mcp' }), null, 'a hosted URL');
     assert.strictEqual(fetchStep('ls', { command: 'csharp-ls' }), null, 'a binary');
 });
@@ -41,17 +41,17 @@ test('fetch.js fetches and then starts each server in turn, from its registratio
         const TOKEN = { command: 'npx', args: ['-y', '@sentry/mcp-server@0.42.0'], env: { SENTRY_ACCESS_TOKEN: '${PT_UNSET_TOKEN}' } };
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { pw: NPX, serena: UVX, sentry: TOKEN } });
         const steps = [
-            { ...fetchStep('pw', NPX, 'playwright-chrome'), scope: 'project' },
-            { ...fetchStep('serena', UVX, 'serena'), env: { UV_CACHE_DIR: '${PT_TEST_CACHE:-/fallback}' }, scope: 'project' },
-            { ...fetchStep('sentry', TOKEN, 'sentry'), scope: 'project' },
+            { ...fetchStep('pw', NPX, 'playwright-chrome')!, scope: 'project' },
+            { ...fetchStep('serena', UVX, 'serena')!, env: { UV_CACHE_DIR: '${PT_TEST_CACHE:-/fallback}' }, scope: 'project' },
+            { ...fetchStep('sentry', TOKEN, 'sentry')!, scope: 'project' },
         ];
         const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), job(w.project, steps, ['pw', 'serena', 'sentry', 'c7', 'pw']));
-        const order = [];
-        const env = { ...w.env, PT_TEST_CACHE: '/set' };
+        const order: unknown[][] = [];
+        const env: NodeJS.ProcessEnv = { ...w.env, PT_TEST_CACHE: '/set' };
         delete env.PT_UNSET_TOKEN;
         const res = await run(JSON.parse(fs.readFileSync(file, 'utf8')), {
             env,
-            runFetch: (argv, o) => { order.push(['fetch', argv[0], o.env.UV_CACHE_DIR, o.cwd]); return { status: 0 }; },
+            runFetch: (argv: string[], o: { cwd: string; env: NodeJS.ProcessEnv }) => { order.push(['fetch', argv[0], o.env.UV_CACHE_DIR, o.cwd]); return { status: 0 }; },
             start: async (entry, o) => { order.push(['start', entry.command, o.cwd]); return { ok: true, ms: 1200 }; },
             log: () => {},
         });
@@ -61,7 +61,7 @@ test('fetch.js fetches and then starts each server in turn, from its registratio
             ['fetch', 'npm', w.env.UV_CACHE_DIR, w.project],
         ], 'one at a time, each fetch then its start, ${VAR} expanded; a start that needs an unset variable is left out');
         assert.deepStrictEqual(res.started, ['pw', 'serena']);
-        assert.match(res.skipped[0], /'sentry' not started: \$\{PT_UNSET_TOKEN\} is not set/);
+        assert.match(res.skipped[0]!, /'sentry' not started: \$\{PT_UNSET_TOKEN\} is not set/);
         assert.deepStrictEqual(res.warnings, []);
         assert.deepStrictEqual(res.status.map((s) => s.name), ['pw', 'serena', 'sentry', 'c7'], 'each server once');
         assert.deepStrictEqual(w.calls().filter((a) => a[1] === 'get').map((a) => a[2]), ['pw', 'serena', 'sentry', 'c7']);
@@ -76,15 +76,15 @@ test('a step with `from` reads its registration from that folder\'s .mcp.json an
     {
         const parent = path.dirname(w.project);
         writeJson(path.join(parent, '.mcp.json'), { mcpServers: { pw: NPX } });
-        const step = { ...fetchStep('pw', NPX, 'playwright-chrome'), scope: 'project', from: parent };
+        const step = { ...fetchStep('pw', NPX, 'playwright-chrome')!, scope: 'project', from: parent };
         const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), job(w.project, [step], ['pw']));
         assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).fetch[0].from, parent, 'kept in the file');
-        const started = [];
+        const started: unknown[][] = [];
         const res = await run(JSON.parse(fs.readFileSync(file, 'utf8')), {
             env: w.env,
             runFetch: () => ({ status: 0 }),
-            start: async (entry, o) => { started.push([entry.args[1], o.cwd]); return { ok: true, ms: 900 }; },
-            runCli: () => ({ status: 0, stdout: 'Status: ✔ Connected\n' }),
+            start: async (entry, o) => { started.push([entry.args![1], o.cwd]); return { ok: true, ms: 900 }; },
+            runCli: () => ({ status: 0, stdout: 'Status: ✔ Connected\n' }) as CliResult,
             log: () => {},
         });
         assert.deepStrictEqual(started, [['@playwright/mcp@0.0.83', w.project]]);
@@ -97,10 +97,10 @@ test('the CLI form: a real first start is answered and stopped; a failed fetch o
     const w = world();
     try
     {
-        const server = (mode) => ({ command: process.execPath, args: [path.join(import.meta.dirname, 'fake-mcp-server.ts'), mode] });
+        const server = (mode: string) => ({ command: process.execPath, args: [path.join(import.meta.dirname, 'fake-mcp-server.ts'), mode] });
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { pw: server('answer'), bad: server('exit') } });
-        const pw = { ...fetchStep('pw', NPX, 'playwright-chrome'), scope: 'project' };
-        const bad = { ...fetchStep('bad', UVX, 'serena'), name: 'bad', scope: 'project' };
+        const pw = { ...fetchStep('pw', NPX, 'playwright-chrome')!, scope: 'project' };
+        const bad = { ...fetchStep('bad', UVX, 'serena')!, name: 'bad', scope: 'project' };
         const okFile = writeJob(path.join(w.dir, 'ok.json'), job(w.project, [pw], ['pw']));
         const ok = spawnSync(process.execPath, [SCRIPT, okFile], { encoding: 'utf8', env: w.env, timeout: 60000 });
         assert.strictEqual(ok.status, 0, `${ok.stdout}${ok.stderr}`);
@@ -133,7 +133,7 @@ test('a first start that never answers is stopped at its limit, with everything 
         const entry = { command: process.execPath, args: ['-e', `const c=require('child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});require('fs').writeFileSync(${JSON.stringify(marker)},String(c.pid));setInterval(()=>{},1000)`] };
         const s = await realStart(entry, { cwd: w.project, env: w.env, ms: 1500 });
         assert.strictEqual(s.ok, false);
-        assert.match(s.why, /no answer in 1\.5s/);
+        assert.match(s.why!, /no answer in 1\.5s/);
         const pid = Number(fs.readFileSync(marker, 'utf8'));
         const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
         for (let i = 0; i < 20 && alive(); i++) await new Promise((r) => setTimeout(r, 100));
@@ -184,14 +184,14 @@ test('writeJob with append adds to a fetch file already there: its steps stay as
     try
     {
         const file = path.join(w.dir, 'tmp', 'fetch.json');
-        const serena = { ...fetchStep('serena', UVX, 'serena'), scope: 'user' };
+        const serena = { ...fetchStep('serena', UVX, 'serena')!, scope: 'user' };
         writeJob(file, job(w.project, [serena], ['serena']));
         const first = JSON.parse(fs.readFileSync(file, 'utf8'));
-        const pw = { ...fetchStep('pw', NPX, 'playwright-chrome'), scope: 'project' };
+        const pw = { ...fetchStep('pw', NPX, 'playwright-chrome')!, scope: 'project' };
         assert.strictEqual(writeJob(file, job(w.project, [pw], ['pw', 'serena']), { append: true }), file);
         const both = JSON.parse(fs.readFileSync(file, 'utf8'));
         assert.deepStrictEqual(both.fetch[0], first.fetch[0], 'the step already there is not rewritten');
-        assert.deepStrictEqual(both.fetch.map((s) => [s.name, s.scope, s.what]), [['serena', 'user', 'serena-agent@2.1.0'], ['pw', 'project', '@playwright/mcp@0.0.83']]);
+        assert.deepStrictEqual(both.fetch.map((s: { name: string; scope: string; what: string }) => [s.name, s.scope, s.what]), [['serena', 'user', 'serena-agent@2.1.0'], ['pw', 'project', '@playwright/mcp@0.0.83']]);
         assert.deepStrictEqual(both.check, ['serena', 'pw']);
         // with no file there yet, append writes a new one
         const fresh = path.join(w.dir, 'tmp2', 'fetch.json');
@@ -204,11 +204,11 @@ test('writeJob with append adds to a fetch file already there: its steps stay as
 test('a bridge entry fetches its mcp-remote pin with its cut-off', () => {
     const env = { npm_config_before: '2026-11-11T23:59:59Z' };
     const tail = ['https://mcp.sentry.dev/mcp/{SENTRY_ORG}', 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'];
-    const posix = fetchStep('sentry', { command: 'node', args: ['/work/shop/.preferred-tools/mcp-bridge.js', ...tail], env }, 'sentry');
+    const posix = fetchStep('sentry', { command: 'node', args: ['/work/shop/.preferred-tools/mcp-bridge.js', ...tail], env }, 'sentry')!;
     assert.deepStrictEqual(posix.argv, ['npm', 'exec', '--yes', '--package', 'mcp-remote@0.16.0', '--', 'node', '-e', '0']);
     assert.strictEqual(posix.what, 'mcp-remote@0.16.0');
     assert.deepStrictEqual(posix.env, env);
-    const win = fetchStep('sentry', { command: 'node', args: ['C:\\work\\shop\\.preferred-tools\\mcp-bridge.js', ...tail], env }, 'sentry');
+    const win = fetchStep('sentry', { command: 'node', args: ['C:\\work\\shop\\.preferred-tools\\mcp-bridge.js', ...tail], env }, 'sentry')!;
     assert.deepStrictEqual(win.argv.slice(0, 4), ['cmd', '/c', 'npm', 'exec']);
 });
 
@@ -218,9 +218,9 @@ test('the fetch job fetches a bridge\'s mcp-remote but never starts the bridge',
     {
         const BRIDGE = { command: 'node', args: [path.join(w.project, '.preferred-tools', 'mcp-bridge.js'), 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}', 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'], env: { npm_config_before: '2026-11-11T23:59:59Z' } };
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { sentry: BRIDGE } });
-        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), job(w.project, [{ ...fetchStep('sentry', BRIDGE, 'sentry'), scope: 'project' }], []));
-        const started = [];
-        const lines = [];
+        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), job(w.project, [{ ...fetchStep('sentry', BRIDGE, 'sentry')!, scope: 'project' }], []));
+        const started: unknown[] = [];
+        const lines: string[] = [];
         const res = await run(JSON.parse(fs.readFileSync(file, 'utf8')), {
             env: w.env,
             runFetch: () => ({ status: 0 }),
@@ -240,10 +240,10 @@ test('fetch fetches mcp-remote for a shared sign-in entry and does not start it'
     {
         const SIGNIN = { type: 'stdio', command: 'npx', args: ['-y', 'mcp-remote@0.16.0', 'https://mcp.atlassian.com/v1/mcp'], env: { npm_config_before: '2026-11-11T23:59:59Z', MCP_REMOTE_CONFIG_DIR: path.join(w.project, '.preferred-tools') } };
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { atlassian: SIGNIN } });
-        const step = fetchStep('atlassian', SIGNIN, 'atlassian');
+        const step = fetchStep('atlassian', SIGNIN, 'atlassian')!;
         assert.strictEqual(step.what, 'mcp-remote@0.16.0');
         const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), job(w.project, [{ ...step, scope: 'project' }], []));
-        const started = [];
+        const started: unknown[] = [];
         const res = await run(JSON.parse(fs.readFileSync(file, 'utf8')), {
             env: w.env,
             runFetch: () => ({ status: 0 }),
@@ -264,13 +264,13 @@ test('fetch empties base_modes after serena\'s first start', async () => {
         const home = path.join(w.project, '.preferred-tools', 'serena');
         const S = { command: 'uvx', args: [...UVX.args], env: { SERENA_HOME: home } };
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { serena: S } });
-        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), job(w.project, [{ ...fetchStep('serena', S, 'serena'), scope: 'project' }], []));
-        const lines = [];
+        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), job(w.project, [{ ...fetchStep('serena', S, 'serena')!, scope: 'project' }], []));
+        const lines: string[] = [];
         const res = await run(JSON.parse(fs.readFileSync(file, 'utf8')), {
             env: w.env,
             runFetch: () => ({ status: 0 }),
             // serena writes its config at its first start
-            start: async (entry) => { fs.mkdirSync(entry.env.SERENA_HOME, { recursive: true }); fs.writeFileSync(path.join(entry.env.SERENA_HOME, 'serena_config.yml'), 'base_modes:\n- interactive\n- editing\nauth_secret: s3cr3t-fixture\n'); return { ok: true, ms: 1 }; },
+            start: async (entry) => { fs.mkdirSync(entry.env!.SERENA_HOME!, { recursive: true }); fs.writeFileSync(path.join(entry.env!.SERENA_HOME!, 'serena_config.yml'), 'base_modes:\n- interactive\n- editing\nauth_secret: s3cr3t-fixture\n'); return { ok: true, ms: 1 }; },
             log: (...a) => lines.push(a.join(' ')),
         });
         assert.deepStrictEqual(res.started, ['serena']);

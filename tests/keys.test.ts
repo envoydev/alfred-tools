@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // keys.js - the key files' grammar and chains (D3), and how a key is written into a stdio registration by scope.
 import test from 'node:test';
 import assert from 'node:assert';
@@ -11,12 +10,12 @@ import * as catalogLib from '../scripts/catalog/catalog.ts';
 import * as keys from '../scripts/keys/keys.ts';
 
 const catalog = catalogLib.load();
-const row = (id) => catalog.byId.get(id);
+const row = (id: string) => catalog.byId.get(id);
 const val = () => `v-${crypto.randomBytes(8).toString('hex')}`;
 const S = 'SENTRY_ACCESS_TOKEN';
 const G = 'GITHUB_PERSONAL_ACCESS_TOKEN';
-const put = (file, text) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
-const dotenv = (pairs) => `${Object.entries(pairs).map(([k, v]) => `${k}=${v}`).join('\n')}\n`;
+const put = (file: string, text: string | Buffer) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
+const dotenv = (pairs: Record<string, string>) => `${Object.entries(pairs).map(([k, v]) => `${k}=${v}`).join('\n')}\n`;
 
 test('the dotenv grammar: comments, export, quotes', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-keys-'));
@@ -42,7 +41,7 @@ test('fillKeys writes each token field a stdio route defines: the ${VAR} form at
     assert.deepStrictEqual(keys.fillKeys(docker, row('github'), 'local', 'local', { [G]: v }).env, { [G]: v });
     assert.deepStrictEqual(keys.fillKeys(docker, row('github'), 'local', 'user', {}), docker, 'a missing key keeps what the entry holds');
     const c7 = { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.4.4', '--api-key', '${CONTEXT7_API_KEY}'] };
-    assert.deepStrictEqual(keys.fillKeys(c7, row('context7'), 'local', 'local', { CONTEXT7_API_KEY: v }).args.slice(-2), ['--api-key', v]);
+    assert.deepStrictEqual(keys.fillKeys(c7, row('context7'), 'local', 'local', { CONTEXT7_API_KEY: v }).args!.slice(-2), ['--api-key', v]);
     const noToken = { type: 'http', url: 'https://mcp.context7.com/mcp' };
     assert.deepStrictEqual(keys.fillKeys(noToken, row('context7'), 'remote', 'local', { CONTEXT7_API_KEY: v }), noToken, 'an optional token not asked for is not added');
     const sentry = { command: 'npx', args: ['-y', '@sentry/mcp-server@0.42.0'], env: { [S]: 'old', OTHER: '1' } };
@@ -53,7 +52,7 @@ test('fillKeys writes each token field a stdio route defines: the ${VAR} form at
 
 // ---- .mcps-secrets chains (spec D3) ----------------------------------------------------------------------------------
 
-const sec = (dir) => path.join(dir, '.mcps-secrets');
+const sec = (dir: string) => path.join(dir, '.mcps-secrets');
 
 test('hosted chain per scope: the root beside the helper, the named global root at local scope only, then the two home files', () => {
     const p = path.join(path.sep, 'w', 'p', '.alfred');
@@ -98,9 +97,9 @@ test('valueIn: the first non-empty value wins, an empty value is missing, and th
         {
             const f = path.join(dir, name, '.mcps-secrets');
             put(f, bytes);
-            assert.strictEqual(keys.valueIn([f], 'A').value, keys.readDotenv(f).A, name);
+            assert.strictEqual(keys.valueIn([f], 'A')!.value, (keys.readDotenv(f) as Record<string, string> & { A?: string }).A, name);
         }
-        assert.strictEqual(keys.valueIn([path.join(dir, 'equals', '.mcps-secrets')], 'A').value, 'b=c');
+        assert.strictEqual(keys.valueIn([path.join(dir, 'equals', '.mcps-secrets')], 'A')!.value, 'b=c');
         assert.deepStrictEqual(keys.filledNames([a, b]), [{ file: a, names: [] }, { file: b, names: ['A'] }], 'names only');
         assert.ok(!JSON.stringify(keys.filledNames([a, b])).includes(v), 'no value in filledNames');
         assert.ok(keys.NAME_RULE.test('ACME_GITHUB_TOKEN') && !keys.NAME_RULE.test('1BAD') && !keys.NAME_RULE.test('A-B'));

@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // workspace.js - alfred-code's workspace record, read-only (spec D4a). The line-file fixtures follow the grammar in
 // alfred-code's stack/hooks/workspace-file.js (parseLegacy's header): `parent ..`, `parent none`, `role root`,
 // `child <path>`.
@@ -13,10 +12,10 @@ const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-ws-')));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 let n = 0;
 const world = () => { const d = path.join(tmp, `w${++n}`); fs.mkdirSync(d); return d; };
-const put = (file, text) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
-const rec = (folder, doc) => put(path.join(folder, '.alfred', 'workspace.json'), typeof doc === 'string' ? doc : JSON.stringify(doc));
-const line = (folder, text) => put(path.join(folder, '.alfred', 'workspace'), text);
-const dir = (p) => { fs.mkdirSync(p, { recursive: true }); return p; };
+const put = (file: string, text: string) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
+const rec = (folder: string, doc: unknown) => put(path.join(folder, '.alfred', 'workspace.json'), typeof doc === 'string' ? doc : JSON.stringify(doc));
+const line = (folder: string, text: string) => put(path.join(folder, '.alfred', 'workspace'), text);
+const dir = (p: string) => { fs.mkdirSync(p, { recursive: true }); return p; };
 
 test('workspace: a root with two joined children and an ignored one', () => {
     const root = world();

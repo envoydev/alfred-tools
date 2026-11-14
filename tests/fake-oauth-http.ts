@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // A stub OAuth vendor on 127.0.0.1, in the calling process, for the matrix's shared sign-in case (spec M3, D5, F13): the
 // protected-resource and authorization-server metadata, dynamic client registration, `/authorize` redirecting back
 // with a code, `/token` issuing an access token that lives `ttl` seconds and a refresh token, and an MCP endpoint at
@@ -8,21 +7,37 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import { catalogWith } from './fake-mcp-http.ts';
 
+export interface OauthStub
+{
+    port: number;
+    base: string;
+    hits: Record<string, number>;
+    grants: (string | null)[];
+    close: () => Promise<void>;
+}
+// the part of a JSON-RPC message the stub reads
+interface RpcMessage
+{
+    method?: string;
+    id?: unknown;
+    params?: { protocolVersion?: string };
+}
+
 export const MCP_PATH = '/v2/mcp';
 
 // -> Promise<{ port, base, hits: { [path]: n }, grants: [grant_type], close }>
-export function oauthStub({ ttl = 5 } = {})
+export function oauthStub({ ttl = 5 } = {}): Promise<OauthStub>
 {
-    const hits = {};
-    const grants = [];
+    const hits: Record<string, number> = {};
+    const grants: (string | null)[] = [];
     const codes = new Set();
     const refresh = new Set();
     const access = new Map(); // token -> expiry (ms)
     let clients = 0;
     let base = '';
-    const json = (res, status, body, headers = {}) => { res.writeHead(status, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(body)); };
+    const json = (res: http.ServerResponse, status: number, body: unknown, headers = {}) => { res.writeHead(status, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(body)); };
     const token = () => crypto.randomBytes(16).toString('hex');
-    const issue = (res) =>
+    const issue = (res: http.ServerResponse) =>
     {
         const a = token();
         const r = token();
@@ -36,7 +51,7 @@ export function oauthStub({ ttl = 5 } = {})
         req.on('data', (d) => (body += d));
         req.on('end', () =>
         {
-            const url = new URL(req.url, base);
+            const url = new URL(req.url!, base);
             const p = url.pathname;
             const key = p.startsWith('/.well-known/oauth-protected-resource') ? '/.well-known/oauth-protected-resource'
                 : p.startsWith('/.well-known/oauth-authorization-server') ? '/.well-known/oauth-authorization-server' : p;
@@ -62,7 +77,7 @@ export function oauthStub({ ttl = 5 } = {})
                 codes.add(code);
                 const to = new URL(redirect);
                 to.searchParams.set('code', code);
-                if (url.searchParams.get('state')) to.searchParams.set('state', url.searchParams.get('state'));
+                if (url.searchParams.get('state')) to.searchParams.set('state', url.searchParams.get('state')!);
                 res.writeHead(302, { location: to.toString() });
                 return res.end();
             }
@@ -85,10 +100,10 @@ export function oauthStub({ ttl = 5 } = {})
                     return res.end();
                 }
                 if (req.method !== 'POST') { res.writeHead(405); return res.end(); }
-                let m = {};
+                let m: RpcMessage = {};
                 try { m = JSON.parse(body); } catch { /* not JSON */ }
                 if (m.method && m.id === undefined) { res.writeHead(202); return res.end(); }
-                let result = {};
+                let result: Record<string, unknown> = {};
                 if (m.method === 'initialize') result = { protocolVersion: (m.params && m.params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'oauth-probe', version: '0.0.1' } };
                 if (m.method === 'tools/list') result = { tools: [{ name: 'probe_tool', description: 'a stub tool', inputSchema: { type: 'object', properties: {} } }] };
                 return json(res, 200, { jsonrpc: '2.0', id: m.id, result });
@@ -97,19 +112,19 @@ export function oauthStub({ ttl = 5 } = {})
             res.end();
         });
     });
-    return new Promise((resolve) => server.listen(0, '127.0.0.1', () =>
+    return new Promise<OauthStub>((resolve) => server.listen(0, '127.0.0.1', () =>
     {
-        const port = server.address().port;
+        const port = (server.address() as { port: number }).port;
         base = `http://127.0.0.1:${port}`;
-        resolve({ port, base, hits, grants, close: () => new Promise((r) => { server.closeAllConnections(); server.close(r); }) });
+        resolve({ port, base, hits, grants, close: () => new Promise<void>((r) => { server.closeAllConnections(); server.close(r as () => void); }) });
     }));
 }
 
 // The catalog with atlassian's hosted route pointed at the stub: its URL and the fingerprint the inventory matches it by,
 // so the shared sign-in form reads back as atlassian's `remote` route
-export const stubOAuthCatalog = (port) => catalogWith((raw) =>
+export const stubOAuthCatalog = (port: number) => catalogWith((raw) =>
 {
-    const remote = raw.tools.find((r) => r.id === 'atlassian').routes.remote;
+    const remote = raw.tools.find((r) => r.id === 'atlassian')!.routes.remote!;
     remote.url = `http://127.0.0.1:${port}${MCP_PATH}`;
     remote.fingerprints = [{ host: '127.0.0.1', pathPrefix: MCP_PATH }];
 });

@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // CURSOR AND CLAUDE CODE FROM ONE LIST (spec 2026-11-13). Real-CLI cases in a throwaway home and account, each reading
 // the written files, never the exit code alone.
 //
@@ -11,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
 import * as cli from '../../scripts/core/claude-cli.ts';
 import * as account from '../../scripts/core/account.ts';
@@ -18,6 +18,8 @@ import * as kept from '../../scripts/core/kept.ts';
 import * as catalogLib from '../../scripts/catalog/catalog.ts';
 import * as fake from '../fake-mcp-http.ts';
 import * as fakeOauth from '../fake-oauth-http.ts';
+import type { ServerEntry } from '../../scripts/core/types.ts';
+import type { McpsList } from '../../scripts/mcps-list/types.ts';
 import { Harness } from '../harness.ts';
 import { keepWritten } from '../proof/matrix-keep.ts';
 import { makeCtx, check } from '../../scripts/update/check.ts';
@@ -30,32 +32,44 @@ const h = new Harness({ root });
 const NETWORK = /could not resolve|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|ECONNRESET|fetch failed|network/i;
 const START_MS = 600000;
 
-const children = [];
-const stop = (child) =>
+const children: ChildProcess[] = [];
+const stop = (child: ChildProcess) =>
 {
     if (child.exitCode !== null || child.signalCode !== null) return;
     if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F']);
-    else try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ }
+    else try { process.kill(-child.pid!, 'SIGKILL'); } catch { /* already gone */ }
 };
 test.after(() => { children.forEach(stop); keepWritten(root, 'cursor'); fs.rmSync(root, { recursive: true, force: true }); });
 
-const which = (bin) => spawnSync(process.platform === 'win32' ? 'where' : 'which', [bin], { encoding: 'utf8' }).status === 0;
-const expand = (s, env) => s.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (_, k, d) => (env[k] !== undefined ? env[k] : d !== undefined ? d : ''));
+const which = (bin: string) => spawnSync(process.platform === 'win32' ? 'where' : 'which', [bin], { encoding: 'utf8' }).status === 0;
+const expand = (s: string, env: Record<string, string | undefined>) => s.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (_: string, k: string, d: string | undefined) => (env[k] !== undefined ? env[k]! : d !== undefined ? d : ''));
 
 // A minimal MCP client over stdio: initialize, then each request in turn. -> { ok, results?, why? }
-function session(entry, cwd, requests, base = h.env)
+// what a server's tools/list and tools/call answer, the parts read here
+interface McpResult
 {
-    return new Promise((resolve) =>
+    tools: { name: string }[];
+    content?: { text?: string }[];
+}
+interface Session
+{
+    ok: boolean;
+    results?: Record<number, McpResult>;
+    why?: string;
+}
+function session(entry: ServerEntry, cwd: string, requests: { method: string; params: unknown }[], base: NodeJS.ProcessEnv = h.env)
+{
+    return new Promise<Session>((resolve) =>
     {
         const env = { ...base };
         for (const [k, v] of Object.entries(entry.env || {})) env[k] = expand(v, base);
-        const child = spawn(expand(entry.command, base), (entry.args || []).map((a) => expand(a, base)), { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+        const child = spawn(expand(entry.command!, base), (entry.args || []).map((a) => expand(a, base)), { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
         children.push(child);
-        const results = {};
+        const results: Record<number, McpResult> = {};
         let out = '';
         let err = '';
-        const send = (msg) => child.stdin.write(`${JSON.stringify(msg)}\n`);
-        const done = (r) => { clearTimeout(timer); stop(child); resolve(r); };
+        const send = (msg: unknown) => child.stdin.write(`${JSON.stringify(msg)}\n`);
+        const done = (r: Session) => { clearTimeout(timer); stop(child); resolve(r); };
         const timer = setTimeout(() => done({ ok: false, why: `no answer in ${START_MS / 1000}s; stderr: ${err.slice(-400)}` }), START_MS);
         child.on('error', (e) => done({ ok: false, why: e.message }));
         child.on('exit', (code) => done({ ok: false, why: `exited ${code}; stderr: ${err.slice(-600)}` }));
@@ -65,7 +79,7 @@ function session(entry, cwd, requests, base = h.env)
         {
             out += d;
             const lines = out.split('\n');
-            out = lines.pop();
+            out = lines.pop()!;
             for (const line of lines)
             {
                 let msg;
@@ -83,21 +97,21 @@ function session(entry, cwd, requests, base = h.env)
     });
 }
 
-const readJson = (file) => (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null);
-const listOf = (root) => readJson(path.join(root, 'mcps.json')) || { servers: [] };
-const ROW = (id) => catalogLib.load().byId.get(id);
+const readJson = (file: string) => (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null);
+const listOf = (root: string): McpsList => readJson(path.join(root, 'mcps.json')) || { servers: [] };
+const ROW = (id: string) => catalogLib.load().byId.get(id);
 
 // Claude Code's entry for a list server, as the CLI wrote it
-function claudeEntry(hh, project, s)
+function claudeEntry(hh: Harness, project: string, s: { name: string; scope: string })
 {
     // account's reader keys a local entry the way Claude Code does on this platform (on Windows, the path with '/')
     return account.readRegistration(s.name, s.scope, project, hh.env);
 }
 // Cursor's entry for a list server: the project file for project and local scope, the home's for user scope
-const cursorFile = (hh, project, scope) => (scope === 'user' ? path.join(hh.home, '.cursor', 'mcp.json') : path.join(project, '.cursor', 'mcp.json'));
-const cursorEntry = (hh, project, s) => ((readJson(cursorFile(hh, project, s.scope)) || { mcpServers: {} }).mcpServers || {})[s.name];
+const cursorFile = (hh: Harness, project: string, scope: string) => (scope === 'user' ? path.join(hh.home, '.cursor', 'mcp.json') : path.join(project, '.cursor', 'mcp.json'));
+const cursorEntry = (hh: Harness, project: string, s: { name: string; scope: string }) => ((readJson(cursorFile(hh, project, s.scope)) || { mcpServers: {} }).mcpServers || {})[s.name];
 
-test('M1 install for both: each entry is the same in its app files and its list; context7 helper in Claude Code, bridge in Cursor; the local one in .cursor/mcp.json with the git note', { skip: skipAll, timeout: 300000 }, (t) =>
+test('M1 install for both: each entry is the same in its app files and its list; context7 helper in Claude Code, bridge in Cursor; the local one in .cursor/mcp.json with the git note', { skip: skipAll, timeout: 300000 }, (_t) =>
 {
     const hh = new Harness({ root: path.join(root, 'm1') });
     const p = hh.project('m1');
@@ -124,12 +138,12 @@ test('M1 install for both: each entry is the same in its app files and its list;
         const k = cursorEntry(hh, p, s);
         assert.ok(c, `${s.name}: in Claude Code at ${s.scope} scope`);
         assert.ok(k, `${s.name}: in ${cursorFile(hh, p, s.scope)}`);
-        assert.deepStrictEqual(kept.keep(c, ROW(s.row)), s.entry, `${s.name}: Claude Code's entry is the list's`);
-        assert.deepStrictEqual(kept.keep(k, ROW(s.row)), s.cursorEntry || s.entry, `${s.name}: Cursor's entry is the list's`);
+        assert.deepStrictEqual(kept.keep(c, ROW(s.row!)), s.entry, `${s.name}: Claude Code's entry is the list's`);
+        assert.deepStrictEqual(kept.keep(k, ROW(s.row!)), s.cursorEntry || s.entry, `${s.name}: Cursor's entry is the list's`);
     }
     const c7 = globalList.servers.find((s) => s.name === 'context7');
-    assert.ok(claudeEntry(hh, p, c7).headersHelper, 'context7 in Claude Code: the helper form');
-    const k7 = cursorEntry(hh, p, c7);
+    assert.ok(claudeEntry(hh, p, c7!)!.headersHelper, 'context7 in Claude Code: the helper form');
+    const k7 = cursorEntry(hh, p, c7!);
     assert.ok(!k7.headersHelper && k7.command === 'node' && path.basename(k7.args[0]) === 'mcp-bridge.js', `context7 in Cursor: the bridge form ${JSON.stringify(k7)}`);
     assert.ok(cursorEntry(hh, p, { name: 'playwright-chrome', scope: 'local' }), 'the local entry is in .cursor/mcp.json');
     assert.match(r.rendered, /\.cursor\/mcp\.json now holds this machine's local servers; add it to \.gitignore/);
@@ -161,7 +175,7 @@ test('M3 one sign-in for both apps: one /authorize for two starts, one refresh f
         if (r.report.fetchFile)
         {
             const f = await hh.fetch(r.report.fetchFile);
-            if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0].slice(0, 160)})`);
+            if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0]!.slice(0, 160)})`);
         }
         // the stand-in browser, first on PATH
         const bin = path.join(hh.root, 'browser-bin');
@@ -171,11 +185,11 @@ test('M3 one sign-in for both apps: one /authorize for two starts, one refresh f
         const env = { ...hh.env, PATH: `${bin}${path.delimiter}${hh.env.PATH}`, PT_BROWSER_LOG: browserLog };
         const LIST = [{ method: 'tools/list', params: {} }];
         const both = () => Promise.all([session(c, p, LIST, env), session(k, p, LIST, env)]);
-        const toolsOf = (g) => (g.ok ? g.results[1].tools.map((x) => x.name) : g.why);
+        const toolsOf = (g: Session) => (g.ok ? g.results![1]!.tools.map((x) => x.name) : g.why);
 
         // 1. both apps start together, signed out: one browser leg
         const first = await both();
-        if (first.some((g) => !g.ok && NETWORK.test(g.why) && !/127\.0\.0\.1/.test(g.why))) return t.skip(`NOT RUN: no network (${first.map((g) => g.why).join(' | ').slice(0, 200)})`);
+        if (first.some((g) => !g.ok && NETWORK.test(g.why!) && !/127\.0\.0\.1/.test(g.why!))) return t.skip(`NOT RUN: no network (${first.map((g) => g.why).join(' | ').slice(0, 200)})`);
         t.diagnostic(`first start: hits ${JSON.stringify(s.hits)}, grants ${JSON.stringify(s.grants)}; browser: ${fs.existsSync(browserLog) ? fs.readFileSync(browserLog, 'utf8').trim() : 'never opened'}`);
         assert.deepStrictEqual(first.map(toolsOf), [['probe_tool'], ['probe_tool']], 'both list tools');
         assert.strictEqual(s.hits['/authorize'], 1, 'one sign-in for the two starts');
@@ -184,7 +198,7 @@ test('M3 one sign-in for both apps: one /authorize for two starts, one refresh f
         const store = path.join(projRoot, 'mcp-remote-v1');
         const names = fs.readdirSync(store); // names only - never opened
         assert.ok(names.some((n) => n.endsWith('_tokens.json')), `a tokens file in ${store}: ${names.join(', ')}`);
-        const ignored = spawnSync('git', ['check-ignore', '-q', path.join(store, names.find((n) => n.endsWith('_tokens.json')))], { cwd: p });
+        const ignored = spawnSync('git', ['check-ignore', '-q', path.join(store, names.find((n) => n.endsWith('_tokens.json'))!)], { cwd: p });
         assert.strictEqual(ignored.status, 0, 'git ignores the token files');
         const settings = readJson(path.join(hh.account, 'settings.json')) || {};
         assert.ok(((settings.permissions || {}).deny || []).includes('Read(//**/mcp-remote-v1/**)'), `the deny rule: ${JSON.stringify(settings.permissions)}`);
@@ -234,16 +248,16 @@ test('M5 Windows: the shared sign-in entry starts through cmd /c npx and reaches
         if (r.report.fetchFile)
         {
             const f = await hh.fetch(r.report.fetchFile);
-            if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0].slice(0, 160)})`);
+            if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0]!.slice(0, 160)})`);
         }
         const started = session(c, p, [{ method: 'tools/list', params: {} }]);
-        const child = children[children.length - 1];
+        const child = children[children.length - 1]!;
         const deadline = Date.now() + 240000;
         while (!s.hits['/.well-known/oauth-authorization-server'] && Date.now() < deadline) await new Promise((res) => setTimeout(res, 500));
         stop(child);
         await started;
         t.diagnostic(`hits ${JSON.stringify(s.hits)}`);
-        assert.ok(s.hits['/.well-known/oauth-authorization-server'] >= 1, `mcp-remote reached the metadata: ${JSON.stringify(s.hits)}`);
+        assert.ok(s.hits['/.well-known/oauth-authorization-server']! >= 1, `mcp-remote reached the metadata: ${JSON.stringify(s.hits)}`);
     }
     finally { await s.close(); }
 });
@@ -262,9 +276,9 @@ function cursorAgent()
 const AGENT = cursorAgent();
 const noAgent = AGENT ? false : 'NOT RUN - Cursor CLI not found (set PT_CURSOR_AGENT or put cursor-agent on PATH)';
 // One `agent mcp ...` call in the case's throwaway home -> { status, out }
-const agent = (hh, cwd, args) =>
+const agent = (hh: Harness, cwd: string, args: string[]) =>
 {
-    const r = spawnSync(AGENT, ['mcp', ...args], { cwd, env: hh.env, encoding: 'utf8', timeout: START_MS });
+    const r = spawnSync(AGENT!, ['mcp', ...args], { cwd, env: hh.env, encoding: 'utf8', timeout: START_MS });
     return { status: r.status, out: `${r.stdout || ''}${r.stderr || ''}` };
 };
 const SIGNED_OUT = /log ?in|sign ?in|authenticat/i;
@@ -277,7 +291,7 @@ test('M2 Cursor CLI: each server enabled starts and lists its tools; serena list
     {
         const catalog = fake.catalogWith((raw) =>
         {
-            const remote = raw.tools.find((r) => r.id === 'context7').routes.remote;
+            const remote = raw.tools.find((r) => r.id === 'context7')!.routes.remote!;
             remote.url = `http://127.0.0.1:${s.port}/mcp`;
             remote.fingerprints = [{ host: '127.0.0.1', pathPrefix: '/mcp' }];
         });
@@ -290,7 +304,7 @@ test('M2 Cursor CLI: each server enabled starts and lists its tools; serena list
         if (r.report.fetchFile)
         {
             const f = await hh.fetch(r.report.fetchFile);
-            if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0].slice(0, 160)})`);
+            if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0]!.slice(0, 160)})`);
         }
         const files = [path.join(p, '.cursor', 'mcp.json'), path.join(hh.home, '.cursor', 'mcp.json')];
         const before = files.map((f) => fs.readFileSync(f, 'utf8'));
@@ -319,8 +333,8 @@ test('M2 Cursor CLI: each server enabled starts and lists its tools; serena list
 test('M7 a workspace under Cursor CLI: each child lists the root\'s serena, the root lists it once; a plain-folder member of a root repo lists the root\'s and gets the note', { skip: skipAll || noAgent, timeout: START_MS }, (t) =>
 {
     const hh = new Harness({ root: path.join(root, 'm7') });
-    const writeRecord = (dir, doc) => { fs.mkdirSync(path.join(dir, '.alfred'), { recursive: true }); fs.writeFileSync(path.join(dir, '.alfred', 'workspace.json'), JSON.stringify(doc)); };
-    const listed = (cwd) => agent(hh, cwd, ['list']).out.split('\n').filter((l) => /^\s*serena\b/.test(l)).length;
+    const writeRecord = (dir: string, doc: unknown) => { fs.mkdirSync(path.join(dir, '.alfred'), { recursive: true }); fs.writeFileSync(path.join(dir, '.alfred', 'workspace.json'), JSON.stringify(doc)); };
+    const listed = (cwd: string) => agent(hh, cwd, ['list']).out.split('\n').filter((l) => /^\s*serena\b/.test(l)).length;
     for (const rootInGit of [false, true])
     {
         const ws = path.join(hh.projects, rootInGit ? 'ws-git' : 'ws-plain');
@@ -368,7 +382,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     const archive = spawnSync('git', ['-C', repo, 'archive', '-o', tarball, V040], { encoding: 'utf8' });
     const unpack = archive.status === 0 ? spawnSync('tar', ['-xf', tarball, '-C', old], { encoding: 'utf8' }) : null;
     if (archive.status !== 0) return t.skip(`NOT RUN: 0.4.0 (${V040.slice(0, 7)}) is not in this checkout: ${String(archive.stderr || archive.error || '').trim().slice(0, 160)}`);
-    if (unpack.status !== 0) return t.skip(`NOT RUN: tar could not unpack 0.4.0: ${String(unpack.stderr || unpack.error || '').trim().slice(0, 160)}`);
+    if (unpack!.status !== 0) return t.skip(`NOT RUN: tar could not unpack 0.4.0: ${String(unpack!.stderr || unpack!.error || '').trim().slice(0, 160)}`);
     const { Harness: Harness040 } = createRequire(import.meta.url)(path.join(old, 'tests', 'harness.js')); // 0.4.0 is CommonJS
     const world = path.join(root, 'm6');
     const oh = new Harness040({ root: world });
@@ -389,11 +403,11 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     assert.ok(fs.existsSync(path.join(projRoot, '.mcps-secrets')), 'github\'s key file in the project root');
     // serena's first start under 0.4.0 (its own fetch.js) writes serena_config.yml with Serena's default base modes
     const config = path.join(serena040.env.SERENA_HOME, 'serena_config.yml');
-    let started = 'NOT RUN (the base modes only): uvx not on PATH';
+    let started: string | null = 'NOT RUN (the base modes only): uvx not on PATH';
     if (which('uvx') && first.report.fetchFile)
     {
         const f0 = await oh.fetch(first.report.fetchFile);
-        if (f0.warnings.some((w) => NETWORK.test(w))) started = `NOT RUN (the base modes only): no network (${f0.warnings[0].slice(0, 160)})`;
+        if (f0.warnings.some((w: string) => NETWORK.test(w))) started = `NOT RUN (the base modes only): no network (${f0.warnings[0].slice(0, 160)})`;
         else
         {
             assert.deepStrictEqual(f0.warnings, [], f0.text);
@@ -414,7 +428,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     const retired = found.offers.filter((o) => o.fix === 'retired-plugin').map((o) => `${o.name}~${o.scope}`).sort();
     assert.deepStrictEqual(retired, [`${HUD}~user`, `${TSL}~project`], 'two uninstall offers');
     assert.deepStrictEqual(found.cursorOffers.map((o) => o.root), [projRoot], 'Cursor offered once, for the project root');
-    const lines = [];
+    const lines: string[] = [];
     // 'Pick which' with claude-hud's uninstall left unpicked - the decline (commands/update.md); every other offer picked
     const picked = found.offers.filter((o) => !(o.fix === 'retired-plugin' && o.name === HUD)).map((o) => o.id);
     const res = applyUpdates(ctx, picked, found, { tmp: path.join(world, 'tmp'), log: (...a) => lines.push(a.join(' ')), input: { 'retired-declined': `${HUD}~user`, [`cursor-offer:${projRoot}`]: 'declined' } });
@@ -434,7 +448,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     assert.ok(fs.existsSync(path.join(projRoot, 'serena-context.yml')));
     // the plugins: typescript-lsp uninstalled, claude-hud kept and its decline recorded
     const plugins = JSON.parse(cli.run(['plugin', 'list', '--json'], { cwd: p, env: hh.env }).stdout || '[]');
-    const ids = plugins.map((x) => `${x.id}~${x.scope}`);
+    const ids: string[] = plugins.map((x: { id: string; scope: string }) => `${x.id}~${x.scope}`);
     assert.ok(ids.includes(`${HUD}~user`) && !ids.some((i) => i.startsWith(`${TSL}~`)), ids.join(', '));
     assert.deepStrictEqual(readJson(path.join(hh.data, 'retired-declined.json')).declined, [{ id: HUD, scope: 'user' }]);
     // Cursor untouched, the key-file deny rule added
@@ -470,25 +484,25 @@ test('M4 serena\'s manual names no tool outside the allow-list', { skip: skipAll
     assert.strictEqual(r.report.failed, null, r.text);
     const reg = h.inventory(p).registrations.find((x) => x.name === 'serena' && x.scope === 'local');
     assert.ok(reg, 'read back from the account file');
-    const a = reg.entry.args;
+    const a = reg.entry.args!;
     if (a[a.indexOf('--enable-web-dashboard') + 1] !== 'false') return t.skip('NOT RUN: the registration does not turn the web dashboard off, so starting it would open a browser');
-    const ctxFile = a[a.indexOf('--context') + 1];
+    const ctxFile = a[a.indexOf('--context') + 1]!;
     assert.ok(fs.existsSync(ctxFile) && ctxFile.endsWith('serena-context.yml'), `the context file the registration names is there: ${ctxFile}`);
     // fetch.js as the command runs it: the fetch, the first start (serena writes serena_config.yml), then base_modes: []
-    const f = await h.fetch(r.report.fetchFile);
-    if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0].slice(0, 160)})`);
+    const f = await h.fetch(r.report.fetchFile!);
+    if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0]!.slice(0, 160)})`);
     assert.deepStrictEqual(f.warnings, [], f.text);
-    const config = path.join(reg.entry.env.SERENA_HOME, 'serena_config.yml');
+    const config = path.join(reg.entry.env!.SERENA_HOME!, 'serena_config.yml');
     assert.ok(/^base_modes: \[\]\r?$/m.test(fs.readFileSync(config, 'utf8')), 'fetch.js set base_modes: [] (only the key is read here, never printed)');
 
     const got = await session(reg.entry, p, [
         { method: 'tools/list', params: {} },
         { method: 'tools/call', params: { name: 'initial_instructions', arguments: {} } },
     ]);
-    if (!got.ok && NETWORK.test(got.why)) return t.skip(`NOT RUN: no network (${got.why.slice(0, 160)})`);
+    if (!got.ok && NETWORK.test(got.why!)) return t.skip(`NOT RUN: no network (${got.why!.slice(0, 160)})`);
     assert.ok(got.ok, `serena did not answer: ${got.why}`);
-    assert.deepStrictEqual(got.results[1].tools.map((x) => x.name).sort(), [...ALLOWED].sort(), 'tools/list is exactly F7\'s six');
-    const manual = (got.results[2].content || []).map((c) => c.text || '').join('\n');
+    assert.deepStrictEqual(got.results![1]!.tools.map((x) => x.name).sort(), [...ALLOWED].sort(), 'tools/list is exactly F7\'s six');
+    const manual = (got.results![2]!.content || []).map((c) => c.text || '').join('\n');
     assert.ok(manual.length > 200, `the manual came back (${manual.length} characters)`);
     const named = OTHERS.filter((n) => new RegExp(`\\b${n}\\b`).test(manual));
     assert.deepStrictEqual(named, [], 'the manual names no tool outside the allow-list');

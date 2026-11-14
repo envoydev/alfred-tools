@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // Do the tools START? The other matrix files prove a registration is written right; this one launches it. Each local
 // row is installed through the real CLI in the throwaway world, its packages fetched by fetch.js as the command runs it,
 // read back from the file the CLI wrote, and started exactly as written - command, args and env, ${VAR} expanded as
@@ -15,11 +14,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import * as cli from '../../scripts/core/claude-cli.ts';
 import * as catalogLib from '../../scripts/catalog/catalog.ts';
 import { plan } from '../../scripts/plan/plan.ts';
 import * as roots from '../../scripts/roots/roots.ts';
 import { fill } from '../fake-mcp-http.ts';
+import type { McpAddStep } from '../../scripts/plan/types.ts';
+import type { Inventory } from '../../scripts/inventory/types.ts';
+import type { ServerEntry } from '../../scripts/core/types.ts';
 import { Harness } from '../harness.ts';
 import { TOKEN_VARS as TOKENS } from '../helpers.ts';
 import { keepWritten } from '../proof/matrix-keep.ts';
@@ -34,35 +37,43 @@ const START_MS = 600000;
 const CLAUDE_MS = 30000;
 const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'preferred-tools-matrix', version: '0' } } };
 
-const children = [];
-const stop = (child) =>
+const children: ChildProcess[] = [];
+const stop = (child: ChildProcess) =>
 {
     if (child.exitCode !== null || child.signalCode !== null) return;
     if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F']);
-    else try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ }
+    else try { process.kill(-child.pid!, 'SIGKILL'); } catch { /* already gone */ }
 };
 test.after(() => { children.forEach(stop); keepWritten(root, 'starts'); fs.rmSync(root, { recursive: true, force: true }); });
 
-const which = (bin) => spawnSync(process.platform === 'win32' ? 'where' : 'which', [bin], { encoding: 'utf8' }).status === 0;
+const which = (bin: string) => spawnSync(process.platform === 'win32' ? 'where' : 'which', [bin], { encoding: 'utf8' }).status === 0;
 // ${VAR} and ${VAR:-default}, as Claude Code expands them in an MCP entry
-const expand = (s, env) => s.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (_, k, d) => (env[k] !== undefined ? env[k] : d !== undefined ? d : ''));
+const expand = (s: string, env: Record<string, string | undefined>) => s.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (_: string, k: string, d: string | undefined) => (env[k] !== undefined ? env[k]! : d !== undefined ? d : ''));
 
 // -> { ok, info?, why?, ms }: the server's own answer to initialize, or what it printed before it gave up
-function initialize(entry, cwd)
+// what a server answered to initialize, and how long it took
+interface Started
 {
-    return new Promise((resolve) =>
+    ok: boolean;
+    info?: { name?: string; version?: string };
+    why?: string;
+    ms: number;
+}
+function initialize(entry: ServerEntry, cwd: string)
+{
+    return new Promise<Started>((resolve) =>
     {
         // the harness drops the key variables; a real-token case takes its own back from the shell
         const source = { ...h.env, ...Object.fromEntries(TOKENS.filter((k) => process.env[k]).map((k) => [k, process.env[k]])) };
         const env = { ...source };
         for (const [k, v] of Object.entries(entry.env || {})) env[k] = expand(v, source);
         const args = (entry.args || []).map((a) => expand(a, source));
-        const child = spawn(expand(entry.command, source), args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+        const child = spawn(expand(entry.command!, source), args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
         children.push(child);
         let out = '';
         let err = '';
         const t0 = Date.now();
-        const done = (r) => { clearTimeout(timer); stop(child); resolve({ ...r, ms: Date.now() - t0 }); };
+        const done = (r: Omit<Started, 'ms'>) => { clearTimeout(timer); stop(child); resolve({ ...r, ms: Date.now() - t0 }); };
         const timer = setTimeout(() => done({ ok: false, why: `no answer in ${START_MS / 1000}s; stderr: ${err.slice(-400)}` }), START_MS);
         child.on('error', (e) => done({ ok: false, why: e.message }));
         child.on('exit', (code) => done({ ok: false, why: `exited ${code} before answering; stderr: ${err.slice(-600)}` }));
@@ -97,7 +108,7 @@ const LOCAL = [
 
 for (const c of LOCAL)
 {
-    const row = catalog.byId.get(c.row);
+    const row = catalog.byId.get(c.row)!;
     test(`starts: ${c.row}${c.route ? ` (${c.route})` : ''} answers initialize, launched from its registration as read`, { skip: skipAll, timeout: START_MS + 120000 }, async (t) =>
     {
         if (!row.os.includes(process.platform)) return t.skip(`NOT RUN: ${c.row} is offered on ${row.os.join(', ')}, this is ${process.platform}`);
@@ -105,7 +116,7 @@ for (const c of LOCAL)
         if (missing.length) return t.skip(`NOT RUN: ${missing.join(', ')} not on PATH`);
         if (c.token && !process.env[c.token]) return t.skip(`NOT RUN: the route needs ${c.token}, which this shell does not set (a real token; the plugin writes none)`);
         // the shell's token goes where 0.2.0 reads a stdio key: the throwaway global root's .mcps-secrets, removed with the world
-        if (c.token) fill(path.join(h.home, '.preferred-tools', roots.FILES.secrets), c.token, process.env[c.token]);
+        if (c.token) fill(path.join(h.home, '.preferred-tools', roots.FILES.secrets), c.token, process.env[c.token]!);
 
         const p = h.project(`start-${c.row}`);
         const name = `start-${c.row}`;
@@ -117,23 +128,23 @@ for (const c of LOCAL)
         if (c.row === 'serena')
         {
             // never open a browser tab on the machine running the matrix (fetch.js starts it too)
-            const a = reg.entry.args;
+            const a = reg.entry.args!;
             if (a[a.indexOf('--enable-web-dashboard') + 1] !== 'false') return t.skip('NOT RUN: the registration does not turn the web dashboard off, so starting it would open a browser');
         }
         // fetch.js as the command runs it: the fetch, the first start with no 30-second limit, the status
         assert.ok(r.report.fetchFile, `apply wrote no fetch file:\n${r.text}`);
         const f = await h.fetch(r.report.fetchFile);
-        if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0].slice(0, 160)})`);
+        if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0]!.slice(0, 160)})`);
         // a desktop server in a session with no desktop (a service account, an SSH or prlctl session): fetched, never started
         if (f.warnings.some((w) => /No active interactive desktop/.test(w))) return t.skip('NOT RUN: no interactive desktop in this session (the fetch ran)');
         assert.deepStrictEqual(f.warnings, [], f.text);
         t.diagnostic(`${c.row}: ${f.text.split('\n').filter((l) => /ok |skip |: Status/.test(l)).map((l) => l.trim()).join('; ')}`);
-        assert.match(f.status[0].out, /Connected/, `claude mcp get after fetch.js: ${f.status[0].out}`);
+        assert.match(f.status[0]!.out, /Connected/, `claude mcp get after fetch.js: ${f.status[0]!.out}`);
         // then a start as the next session makes it, inside Claude Code's 30 seconds
         const got = await initialize(reg.entry, p);
-        if (!got.ok && NETWORK.test(got.why)) return t.skip(`NOT RUN: no network (${got.why.slice(0, 160)})`);
+        if (!got.ok && NETWORK.test(got.why!)) return t.skip(`NOT RUN: no network (${got.why!.slice(0, 160)})`);
         assert.ok(got.ok, `${c.row} did not start: ${got.why}`);
-        t.diagnostic(`${c.row} on ${process.platform}: ${`${got.info.name || '?'} ${got.info.version || ''}`.trim()}, answered in ${(got.ms / 1000).toFixed(1)}s after fetch.js`);
+        t.diagnostic(`${c.row} on ${process.platform}: ${`${got.info!.name || '?'} ${got.info!.version || ''}`.trim()}, answered in ${(got.ms / 1000).toFixed(1)}s after fetch.js`);
         assert.ok(got.ms <= CLAUDE_MS, `${c.row} answered in ${got.ms} ms, past Claude Code's ${CLAUDE_MS} ms, even after fetch.js`);
         h.claude(p, ['mcp', 'remove', name, '-s', 'local']);
     });
@@ -144,15 +155,15 @@ for (const id of catalog.tools.filter((r) => r.kind === 'mcp' && r.routes.remote
 {
     test(`answers: ${id} (remote) - the endpoint takes an MCP initialize`, { skip: skipAll, timeout: 60000 }, async (t) =>
     {
-        const pl = plan({ version: 1, os: process.platform, arch: process.arch, project: root, cli: { ok: true }, unreadable: [], registrations: [], plugins: [], marketplaces: [], alfredCodeEnabled: false, sources: {} }, { picks: { [id]: { route: 'remote', scope: 'local' } } }, { home: h.home, env: {} });
-        const add = pl.steps.find((s) => s.op === 'mcp-add');
+        const pl = plan({ version: 1, os: process.platform, arch: process.arch, project: root, cli: { ok: true }, unreadable: [], registrations: [], plugins: [], marketplaces: [], alfredCodeEnabled: false, sources: {} } as unknown as Inventory, { picks: { [id]: { route: 'remote', scope: 'local' } } }, { home: h.home, env: {} });
+        const add = pl.steps.find((s): s is McpAddStep => s.op === 'mcp-add');
         assert.ok(add && add.entry.url, JSON.stringify(pl.errors));
         let res;
         try
         {
             res = await fetch(add.entry.url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify(INIT), signal: AbortSignal.timeout(30000) });
         }
-        catch (e) { return t.skip(`NOT RUN: no network (${e.message})`); }
+        catch (caught) { const e = caught as Error; return t.skip(`NOT RUN: no network (${e.message})`); }
         assert.ok([200, 401, 403].includes(res.status), `${add.entry.url} answered HTTP ${res.status}`);
         t.diagnostic(`${id}: ${add.entry.url} -> HTTP ${res.status}${res.status === 200 ? '' : ' (sign-in required, as the route expects)'}`);
     });

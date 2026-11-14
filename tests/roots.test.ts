@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // roots.js - one root folder per scope family (spec D2): the options, the root in use, a named folder, the roots map and
 // the record file. Pure where a ctx stands in for the disk; the map and record tests use a throwaway folder.
 import test from 'node:test';
@@ -12,23 +11,28 @@ import * as asks from '../scripts/plan/asks-all.ts';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import { OTHER_RE } from './ask-texts.ts';
 import * as lists from '../scripts/mcps-list/mcps-list.ts';
+import type { Inventory, InvRegistration } from '../scripts/inventory/types.ts';
+import type { Machine } from '../scripts/entries/types.ts';
+import type { Picks } from '../scripts/plan/types.ts';
+import type { Family, RecordEntry } from '../scripts/roots/types.ts';
+import type { ServerEntry } from '../scripts/core/types.ts';
 import { BRIDGE_VERSION } from '../scripts/copied/mcp-bridge.js';
 // POSIX fixture paths (/work/shop): on a Windows host node's path module resolves them under a drive
 const POSIX_FIXTURE = process.platform === 'win32' && 'NOT RUN: POSIX fixture paths meet node\'s win32 path module on this host';
 
 const catalog = catalogLib.load();
 // alfred-code 3.9.2's pattern, cited where it lives
-const inv = (extra = {}) => ({ version: 1, project: '/work/shop', os: 'darwin', arch: 'arm64', cli: { ok: true }, unreadable: [], registrations: [], plugins: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, ...extra });
-const ctxOf = (present = [], extra = {}) => ({ project: '/work/shop', home: '/Users/me', platform: 'darwin', catalog, exists: (p) => present.includes(p), ...extra });
-const ids = (list) => list.map((o) => o.id);
-const reg = (name, scope, entry, rowId, route) => ({ name, scope, entry, rowId, route, own: !rowId, alfredRetired: false });
+const inv = (extra: Partial<Inventory> = {}) => ({ version: 1, project: '/work/shop', os: 'darwin', arch: 'arm64', cli: { ok: true }, unreadable: [], registrations: [], plugins: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, ...extra }) as Inventory;
+const ctxOf = (present: string[] = [], extra: Partial<Machine> = {}): Machine => ({ project: '/work/shop', home: '/Users/me', platform: 'darwin', catalog, exists: (p: string) => present.includes(p), ...extra });
+const ids = (list: { id: string }[]) => list.map((o) => o.id);
+const reg = (name: string, scope: string, entry: ServerEntry, rowId: string | null, route: string | null): InvRegistration => ({ name, scope, entry, rowId, route, own: !rowId, alfredRetired: false });
 const ALFRED_SET_UP = '/work/shop/.alfred/.gitignore';
 
 test('project root options: .alfred first where alfred-code is set up, else .preferred-tools; \'A folder you name\' last', () => {
     const set = roots.options(inv({ alfredCodeEnabled: true }), 'project', ctxOf([ALFRED_SET_UP]));
     assert.deepStrictEqual(ids(set), ['alfred', 'preferred-tools', 'named']);
     assert.deepStrictEqual(set.map((o) => o.root), ['/work/shop/.alfred', '/work/shop/.preferred-tools', null]);
-    assert.strictEqual(set[2].label, 'A folder you name');
+    assert.strictEqual(set[2]!.label, 'A folder you name');
     assert.deepStrictEqual(ids(roots.options(inv({ alfredCodeEnabled: false }), 'project', ctxOf([ALFRED_SET_UP]))), ['preferred-tools', 'named'], 'alfred-code not enabled');
     assert.deepStrictEqual(ids(roots.options(inv({ alfredCodeEnabled: true }), 'project', ctxOf([]))), ['preferred-tools', 'named'], 'no .alfred/.gitignore');
 });
@@ -66,14 +70,14 @@ test('a root in use is listed first and recommended: the map, else a managed reg
     // listed first and recommended in its place
     const mapped = roots.options(inv({ ...base, roots: { map } }), 'project', ctxOf(on));
     assert.deepStrictEqual(ids(mapped), ['in-use', 'alfred', 'preferred-tools', 'named']);
-    assert.strictEqual(mapped[0].root, named);
+    assert.strictEqual(mapped[0]!.root, named);
     const standard = roots.options(inv({ ...base, registrations: [data] }), 'project', ctxOf(on));
     assert.deepStrictEqual(ids(standard), ['preferred-tools', 'alfred', 'named'], 'a standard folder in use moves first');
 });
 
 test('a named project root must lie inside the project', () => {
     const ctx = ctxOf();
-    for (const [text, rule] of [['../x', /\.\./], ['/abs', /inside the project/], ['.git', /\.git/], ['.claude', /\.claude/], ['.claude/keys', /\.claude/], ['tools/../../x', /\.\./], ['', /folder/], ['.', /inside the project/]])
+    for (const [text, rule] of [['../x', /\.\./], ['/abs', /inside the project/], ['.git', /\.git/], ['.claude', /\.claude/], ['.claude/keys', /\.claude/], ['tools/../../x', /\.\./], ['', /folder/], ['.', /inside the project/]] as [string, RegExp][])
     {
         const r = roots.resolveNamed('project', text, ctx);
         assert.ok(r.error && !r.root, `${text}: ${JSON.stringify(r)}`);
@@ -83,30 +87,30 @@ test('a named project root must lie inside the project', () => {
     assert.deepStrictEqual(roots.resolveNamed('project', './tools/keys/', ctx), { root: '/work/shop/tools/keys' });
     const win = { project: 'C:\\ws', home: 'C:\\Users\\mac', platform: 'win32' };
     assert.deepStrictEqual(roots.resolveNamed('project', 'tools\\keys', win), { root: 'C:\\ws\\tools\\keys' });
-    assert.match(roots.resolveNamed('project', 'D:\\keys', win).error, /inside the project/);
+    assert.match(roots.resolveNamed('project', 'D:\\keys', win).error!, /inside the project/);
 });
 
 test('a named global root takes ~ and any absolute folder', () => {
     const ctx = ctxOf();
     assert.deepStrictEqual(roots.resolveNamed('global', '~/keys', ctx), { root: '/Users/me/keys' });
     assert.deepStrictEqual(roots.resolveNamed('global', '/srv/keys/', ctx), { root: '/srv/keys' });
-    assert.match(roots.resolveNamed('global', 'keys', ctx).error, /absolute|~/);
-    assert.match(roots.resolveNamed('global', '', ctx).error, /folder/);
+    assert.match(roots.resolveNamed('global', 'keys', ctx).error!, /absolute|~/);
+    assert.match(roots.resolveNamed('global', '', ctx).error!, /folder/);
     assert.deepStrictEqual(roots.resolveNamed('global', '~\\keys', { project: 'C:\\ws', home: 'C:\\Users\\mac', platform: 'win32' }), { root: 'C:\\Users\\mac\\keys' });
 });
 
 test('each option\'s description gives the exact folder on this machine; the global \'A folder you name\' adds that a project-scope helper does not read keys there', () => {
-    const win = { project: 'C:\\ws', home: 'C:\\Users\\mac', platform: 'win32', catalog, exists: (p) => ['C:\\ws\\.alfred\\.gitignore', 'C:\\Users\\mac\\.alfred'].includes(p) };
+    const win = { project: 'C:\\ws', home: 'C:\\Users\\mac', platform: 'win32', catalog, exists: (p: string) => ['C:\\ws\\.alfred\\.gitignore', 'C:\\Users\\mac\\.alfred'].includes(p) };
     const project = roots.options(inv({ project: 'C:\\ws', os: 'win32', alfredCodeEnabled: true }), 'project', win);
-    assert.match(project[0].description, /^C:\\ws\\\.alfred - kept out of git by alfred-code/);
-    assert.match(project[1].description, /^C:\\ws\\\.preferred-tools - /);
-    assert.match(project[2].description, /asked next/);
+    assert.match(project[0]!.description!, /^C:\\ws\\\.alfred - kept out of git by alfred-code/);
+    assert.match(project[1]!.description!, /^C:\\ws\\\.preferred-tools - /);
+    assert.match(project[2]!.description!, /asked next/);
     const global = roots.options(inv({ project: 'C:\\ws', os: 'win32' }), 'global', win);
-    assert.match(global[0].description, /^C:\\Users\\mac\\\.preferred-tools - one folder for every project on this machine/);
-    assert.match(global[1].description, /^C:\\Users\\mac\\\.alfred - /);
-    assert.match(global[2].description, /asked next/);
-    assert.match(global[2].description, /a project-scope helper does not read keys here/);
-    assert.doesNotMatch(project[2].description, /does not read keys/);
+    assert.match(global[0]!.description!, /^C:\\Users\\mac\\\.preferred-tools - one folder for every project on this machine/);
+    assert.match(global[1]!.description!, /^C:\\Users\\mac\\\.alfred - /);
+    assert.match(global[2]!.description!, /asked next/);
+    assert.match(global[2]!.description!, /a project-scope helper does not read keys here/);
+    assert.doesNotMatch(project[2]!.description!, /does not read keys/);
 });
 
 test('roots map: missing or malformed reads empty with a note; a second project goes beside the first; the key is the trust root', () => {
@@ -120,9 +124,9 @@ test('roots map: missing or malformed reads empty with a note; a second project 
         fs.writeFileSync(file, '{ not json');
         const bad = roots.readMap(dir);
         assert.deepStrictEqual([bad.global, bad.projects], [null, {}]);
-        assert.match(bad.note, /roots\.json/);
+        assert.match(bad.note!, /roots\.json/);
         fs.writeFileSync(file, JSON.stringify({ version: 2, global: '/x', projects: {} }));
-        assert.match(roots.readMap(dir).note, /version/);
+        assert.match(roots.readMap(dir).note!, /version/);
         fs.writeFileSync(file, '[]');
         assert.ok(roots.readMap(dir).note, 'an array is malformed');
 
@@ -152,9 +156,9 @@ test('a 0.4.x record file: missing is null, malformed or another version reads e
         const file = path.join(dir, roots.FILES.record);
         assert.strictEqual(lists.readOldRecord(file), null);
         fs.writeFileSync(file, 'nope');
-        assert.deepStrictEqual([lists.readOldRecord(file).servers, Boolean(lists.readOldRecord(file).note)], [[], true]);
+        assert.deepStrictEqual([lists.readOldRecord(file)!.servers, Boolean(lists.readOldRecord(file)!.note)], [[], true]);
         fs.writeFileSync(file, JSON.stringify({ version: 3, servers: [{ name: 'x' }] }));
-        assert.deepStrictEqual([lists.readOldRecord(file).servers, /version/.test(lists.readOldRecord(file).note)], [[], true]);
+        assert.deepStrictEqual([lists.readOldRecord(file)!.servers, /version/.test(lists.readOldRecord(file)!.note!)], [[], true]);
         const good = { version: 1, servers: [{ name: 'gh', scope: 'local', fingerprint: 'api.githubcopilot.com/mcp/', choice: 'own' }] };
         fs.writeFileSync(file, JSON.stringify(good));
         assert.deepStrictEqual(lists.readOldRecord(file), good);
@@ -170,32 +174,32 @@ test('a 0.4.x record file: missing is null, malformed or another version reads e
 test('no option text mentions Other', () => {
     const on = [ALFRED_SET_UP, '/Users/me/.alfred', '/work/shop/tools/keys'];
     const map = { version: 1, global: null, projects: { '/work/shop': '/work/shop/tools/keys' } };
-    const all = ['project', 'global'].flatMap((f) => [...roots.options(inv({ alfredCodeEnabled: true }), f, ctxOf(on)), ...roots.options(inv({ alfredCodeEnabled: true, roots: { map } }), f, ctxOf(on))]);
+    const all = (['project', 'global'] as Family[]).flatMap((f) => [...roots.options(inv({ alfredCodeEnabled: true }), f, ctxOf(on)), ...roots.options(inv({ alfredCodeEnabled: true, roots: { map } }), f, ctxOf(on))]);
     const q = asks.all(inv({ alfredCodeEnabled: true }), { rows: ['playwright-chrome', 'github'], scopes: { github: 'user' } }, catalog, { home: '/Users/me' });
-    assert.deepStrictEqual(q.roots.questions.map((x) => x.id), ['root-project', 'root-global']);
-    for (const text of [...all.flatMap((o) => [o.label, o.description]), ...q.roots.questions.flatMap((x) => [x.question, x.header, ...x.options.flatMap((o) => [o.label, o.description])])])
+    assert.deepStrictEqual(q.roots!.questions.map((x) => x.id), ['root-project', 'root-global']);
+    for (const text of [...all.flatMap((o) => [o.label, o.description]), ...q.roots!.questions.flatMap((x) => [x.question, x.header, ...x.options.flatMap((o) => [o.label, o.description])])])
     {
-        assert.doesNotMatch(text, OTHER_RE, text);
-        assert.doesNotMatch(text, /under Other/, text);
+        assert.doesNotMatch(text!, OTHER_RE, text);
+        assert.doesNotMatch(text!, /under Other/, text);
     }
 });
 
 test('a root is asked for a family only a pick records into', () => {
-    const qs = (picks) => asks.all(inv(), picks, catalog, { home: '/Users/me' }).roots;
+    const qs = (picks: Picks | null) => asks.all(inv(), picks, catalog, { home: '/Users/me' }).roots;
     // an answer about a server already set up asks no root: a server left on its own goes to the root in use (Ruling 3)
-    assert.deepStrictEqual(qs({ existing: { 'mcp:atlassian~user': 'own', 'connector:Atlassian': 'own', 'plugin-mcp:x@m/srv': 'add' } }).questions, []);
-    assert.deepStrictEqual(qs({ rows: ['playwright-chrome'] }).questions.map((x) => x.id), ['root-project'], 'a local route: local scope, the project family');
-    assert.deepStrictEqual(qs({ rows: ['playwright-chrome'], scopes: { 'playwright-chrome': 'user' } }).questions.map((x) => x.id), ['root-global']);
-    assert.deepStrictEqual(qs(null).questions, []);
+    assert.deepStrictEqual(qs({ existing: { 'mcp:atlassian~user': 'own', 'connector:Atlassian': 'own', 'plugin-mcp:x@m/srv': 'add' } })!.questions, []);
+    assert.deepStrictEqual(qs({ rows: ['playwright-chrome'] })!.questions.map((x) => x.id), ['root-project'], 'a local route: local scope, the project family');
+    assert.deepStrictEqual(qs({ rows: ['playwright-chrome'], scopes: { 'playwright-chrome': 'user' } })!.questions.map((x) => x.id), ['root-global']);
+    assert.deepStrictEqual(qs(null)!.questions, []);
     // one question per family, however many picks; the answers map each label to its root
     const r = qs({ rows: ['playwright-chrome', 'serena', 'memory'] });
-    assert.strictEqual(r.questions.length, 1);
-    const q = r.questions[0];
-    assert.ok(q.header.length <= 12, q.header);
-    assert.match(q.options[0].label, / \(Recommended\)$/);
-    assert.strictEqual(q.options.filter((o) => /\(Recommended\)/.test(o.label)).length, 1);
-    assert.deepStrictEqual(r.answers['root-project'][q.options[0].label], { family: 'project', id: 'preferred-tools', root: '/work/shop/.preferred-tools' });
-    assert.deepStrictEqual(r.answers['root-project']['A folder you name'], { family: 'project', id: 'named', root: null });
+    assert.strictEqual(r!.questions.length, 1);
+    const q = r!.questions[0];
+    assert.ok(q!.header.length <= 12, q!.header);
+    assert.match(q!.options[0]!.label, / \(Recommended\)$/);
+    assert.strictEqual(q!.options.filter((o) => /\(Recommended\)/.test(o.label)).length, 1);
+    assert.deepStrictEqual(r!.answers['root-project']![q!.options[0]!.label], { family: 'project', id: 'preferred-tools', root: '/work/shop/.preferred-tools' });
+    assert.deepStrictEqual(r!.answers['root-project']!['A folder you name'], { family: 'project', id: 'named', root: null });
 });
 
 // ---- 0.3.0: the record holds the servers left on their own, each in its scope family's root (spec F4) -----------------
@@ -206,7 +210,7 @@ test('recordFamily: user scope and a connector are global; project, local and a 
     assert.strictEqual(roots.recordFamily({ name: 'gh', scope: 'local', choice: 'own' }), 'project');
     assert.strictEqual(roots.recordFamily({ plugin: 'docs@m', server: 'c7', choice: 'own' }), 'project');
     const own = { name: 'a', scope: 'local', choice: 'own' };
-    assert.deepStrictEqual(roots.ownOnly([own, { ...own, name: 'b', choice: 'manage' }, { connector: 'X', choice: 'add' }, null]), [own]);
+    assert.deepStrictEqual(roots.ownOnly([own, { ...own, name: 'b', choice: 'manage' }, { connector: 'X', choice: 'add' }, null] as unknown as RecordEntry[]), [own]);
 });
 
 test('shippedState reads the bridge like the helper: absent, lower, same, edited, higher', () => {

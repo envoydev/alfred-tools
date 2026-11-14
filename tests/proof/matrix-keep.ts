@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // The matrix's written files, kept for the proof: with PT_PROOF_DIR set, a matrix file's test.after calls
 // keepWritten before it removes its root, and every file the golden keeps is copied, normalised, to
 // <PT_PROOF_DIR>/matrix/<label>/<relative path>. Without PT_PROOF_DIR it does nothing.
@@ -10,19 +9,19 @@ import * as golden from './golden.ts';
 // What changes from run to run beyond the golden's masks: a key a test generates (a hex run), the temp folder spelled
 // case-folded in a deny rule ([pP][rR]...), the update- folders update makes, and uv's cache, which is not ours.
 const TMP = [...new Set([os.tmpdir(), fs.realpathSync(os.tmpdir())])].map((p) => p.split(path.sep).join('/'));
-const unfold = (t) => t.replace(/\[([a-z])([A-Z])\]/g, (m, lower, upper) => (lower.toUpperCase() === upper ? lower : m));
-export function steady(text)
+const unfold = (t: string) => t.replace(/\[([a-z])([A-Z])\]/g, (m: string, lower: string, upper: string) => (lower.toUpperCase() === upper ? lower : m));
+export function steady(text: string)
 {
     let t = unfold(text);
     for (const tmp of TMP) t = t.split(tmp).join('<TMP>').split(tmp.toLowerCase()).join('<TMP>');
     return t.replace(/<TMP>\/[^/"\s)]+/g, '<TMP>/<TEMP>').replace(/update-[A-Za-z0-9]{6}/g, 'update-XXXXXX').replace(/[0-9a-f]{16,}/g, '<HEX>');
 }
 
-export function keepWritten(root, label, env = process.env)
+export function keepWritten(root: string, label: string, env = process.env)
 {
     const dir = env.PT_PROOF_DIR;
     if (!dir || !fs.existsSync(root)) return;
-    const norm = (t) => golden.normalise(t, { root, tree: golden.TREE });
+    const norm = (t: string) => golden.normalise(t, { root, tree: golden.TREE });
     const files = golden.collect(root, norm);
     for (const [rel, text] of Object.entries(files))
     {

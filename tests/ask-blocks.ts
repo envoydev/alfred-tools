@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // The fenced `ask` blocks in commands and skills, held to the AskUserQuestion limits and to scripts/plan/asks-other.ts STATIC.
 //
 //   ```ask <id>
@@ -10,25 +9,38 @@
 // <id> is a key of asks.STATIC, and the block's labels must equal that ask's labels in order, so the command's text and
 // the data the tests hold to the limits cannot drift apart. 2 to 4 options, exactly one '(Recommended)', and it is first.
 import { STATIC } from '../scripts/plan/asks-other.ts';
+import type { Question, QuestionOption } from '../scripts/plan/types.ts';
+
+// One fenced ask block as read: its id, line, question and options, the option lines not written to the form, and
+// whether it was closed.
+export interface AskBlock
+{
+    id: string | null;
+    line: number;
+    question: string;
+    options: { label: string; description: string }[];
+    bad: string[];
+    closed?: boolean;
+}
 
 const OPTION = /^- '(.+)' - (.+)$/;
 
-export function parseAskBlocks(text)
+export function parseAskBlocks(text: string): AskBlock[]
 {
-    const blocks = [];
+    const blocks: AskBlock[] = [];
     const lines = text.split(/\r?\n/);
     for (let i = 0; i < lines.length; i++)
     {
-        const open = /^```ask(?:\s+(\S+))?\s*$/.exec(lines[i]);
+        const open = /^```ask(?:\s+(\S+))?\s*$/.exec(lines[i]!);
         if (!open) continue;
-        const block = { id: open[1] || null, line: i + 1, question: '', options: [], bad: [] };
+        const block: AskBlock = { id: open[1] || null, line: i + 1, question: '', options: [], bad: [] };
         let j = i + 1;
-        for (; j < lines.length && !/^```\s*$/.test(lines[j]); j++)
+        for (; j < lines.length && !/^```\s*$/.test(lines[j]!); j++)
         {
-            const l = lines[j];
+            const l = lines[j]!;
             if (!l.trim()) continue;
             const m = OPTION.exec(l);
-            if (m) block.options.push({ label: m[1], description: m[2] });
+            if (m) block.options.push({ label: m[1]!, description: m[2]! });
             else if (l.startsWith('-')) block.bad.push(l);
             else block.question += (block.question ? ' ' : '') + l.trim();
         }
@@ -39,18 +51,18 @@ export function parseAskBlocks(text)
     return blocks;
 }
 
-export const staticAsk = (id) =>
+export const staticAsk = (id: string): { options: QuestionOption[] } | null =>
 {
-    const q = STATIC[id];
+    const q = (STATIC as unknown as Record<string, Question | ((...placeholders: string[]) => Question) & { placeholders?: string[] } | undefined>)[id];
     if (!q) return null;
     // a function that names its own placeholders gets them (cursor-name-taken: '<file>', '<name>'), else '<n>', '<m>', '<k>'
     return typeof q === 'function' ? q(...(q.placeholders || ['<n>', '<m>', '<k>'])) : q;
 }
 
 // -> problems as strings, empty when the block is sound
-export function problemsOf(block)
+export function problemsOf(block: AskBlock): string[]
 {
-    const out = [];
+    const out: string[] = [];
     const at = `ask block at line ${block.line}${block.id ? ` (${block.id})` : ''}`;
     if (!block.closed) out.push(`${at}: never closed`);
     if (!block.id) out.push(`${at}: no id after \`\`\`ask - name a key of asks.STATIC`);

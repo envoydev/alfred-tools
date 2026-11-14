@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 12
 // `claude plugin validate` on what an install receives: a scratch copy of the files git would ship (tracked,
 // plus untracked ones not ignored), never the folder on disk. The validator reads the folder as it is, so a file git
 // ignores - a Finder .DS_Store - would be reported although it never reaches an install. `--profile directory --strict`:

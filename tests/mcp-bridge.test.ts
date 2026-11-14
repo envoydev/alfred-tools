@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // mcp-bridge.js - the bridge a hosted route of runtime 'bridge' registers (0.4.0): it fills the URL template from
 // .mcps-secrets at each start and runs a pinned mcp-remote through npx, the key in mcp-remote's environment only.
 // Each process case copies the bridge and the helper into a throwaway root and runs it with PATH led by this file's own
@@ -23,9 +22,9 @@ const KEY = 'pt-key-7q';
 const K = 'SENTRY_ACCESS_TOKEN';
 const PKG = 'mcp-remote@0.16.0';
 const ARGS_TAIL = ['--header', 'Authorization:${PT_BRIDGE_AUTH}', '--transport', 'http-only'];
-const sha = (t) => crypto.createHash('sha256').update(t).digest('hex');
-const put = (file, text) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
-const sec = (dir) => path.join(dir, '.mcps-secrets');
+const sha = (t: string) => crypto.createHash('sha256').update(t).digest('hex');
+const put = (file: string, text: string) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
+const sec = (dir: string) => path.join(dir, '.mcps-secrets');
 
 const bridge = () => requireCopied(BRIDGE);
 const helper = () => requireCopied(HELPER);
@@ -46,9 +45,9 @@ function world()
     if (process.platform === 'win32') fs.writeFileSync(shim, `@echo off\r\nnode "${RUNTIME}" npx %*\r\n`);
     else { fs.writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "${RUNTIME}" npx "$@"\n`); fs.chmodSync(shim, 0o755); }
     const log = path.join(dir, 'npx.jsonl');
-    const env = (extra = {}) => ({ ...process.env, HOME: home, USERPROFILE: home, PATH: `${bin}${path.delimiter}${process.env.PATH}`, FAKE_RUNTIME_LOG: log, ...extra });
+    const env = (extra: NodeJS.ProcessEnv = {}) => ({ ...process.env, HOME: home, USERPROFILE: home, PATH: `${bin}${path.delimiter}${process.env.PATH}`, FAKE_RUNTIME_LOG: log, ...extra });
     const calls = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
-    const run = (argv, extra) => spawnSync(process.execPath, [path.join(root, 'mcp-bridge.js'), ...argv], { cwd: project, encoding: 'utf8', env: env(extra), input: '' });
+    const run = (argv: string[], extra?: NodeJS.ProcessEnv) => spawnSync(process.execPath, [path.join(root, 'mcp-bridge.js'), ...argv], { cwd: project, encoding: 'utf8', env: env(extra), input: '' });
     return { dir, project, root, global, home, log, env, calls, run, clean: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 
@@ -90,7 +89,7 @@ test('launch reads each name from the chain: the key from the global root, the s
         assert.strictEqual(r.command, 'npx');
         assert.deepStrictEqual(r.args, ['-y', PKG, r.url, ...ARGS_TAIL]);
         assert.strictEqual(r.childEnv.PT_BRIDGE_AUTH, `Sentry-Bearer ${KEY}`);
-        assert.ok(r.args.every((a) => !a.includes(KEY)), 'no arg holds the key');
+        assert.ok(r.args.every((a: string) => !a.includes(KEY)), 'no arg holds the key');
         const win = bridge().launch([T, K, 'Sentry-Bearer', PKG, w.global], { HOME: w.home, ComSpec: 'C:\\Windows\\system32\\cmd.exe' }, { dir: w.root, platform: 'win32' });
         assert.strictEqual(win.command, 'C:\\Windows\\system32\\cmd.exe');
         assert.deepStrictEqual(win.args, ['/d', '/c', 'npx', '-y', PKG, 'https://mcp.sentry.dev/mcp/acme', ...ARGS_TAIL]);
@@ -123,7 +122,7 @@ test('launch refuses http to a host that is not loopback', () => {
     try
     {
         put(sec(w.root), `SENTRY_ORG=acme\n${K}=${KEY}\n`);
-        const at = (t) => bridge().launch([t, K, 'Sentry-Bearer', PKG], { HOME: w.home }, { dir: w.root, platform: 'darwin' });
+        const at = (t: string) => bridge().launch([t, K, 'Sentry-Bearer', PKG], { HOME: w.home }, { dir: w.root, platform: 'darwin' });
         assert.ok(at('http://example.com/mcp/{SENTRY_ORG}').error, 'a remote host over http');
         assert.ok(at('http://[::1]/mcp/{SENTRY_ORG}').error, 'mcp-remote takes only 127.0.0.1 and localhost');
         const ok = at('http://127.0.0.1:9/mcp/{SENTRY_ORG}');
@@ -138,7 +137,7 @@ test('launch refuses a URL name that is the key or a credential name, before rea
     try
     {
         // no file at all: the refusal comes before any read
-        const at = (t) => bridge().launch([t, K, 'Sentry-Bearer', PKG], { HOME: w.home }, { dir: w.root, platform: 'darwin' });
+        const at = (t: string) => bridge().launch([t, K, 'Sentry-Bearer', PKG], { HOME: w.home }, { dir: w.root, platform: 'darwin' });
         assert.strictEqual(at(`https://mcp.sentry.dev/mcp/{${K}}`).error, `${K} in the URL template names a key - a key never goes in a URL`);
         assert.strictEqual(at('https://mcp.sentry.dev/mcp/{MY_API_KEY}').error, 'MY_API_KEY in the URL template names a key - a key never goes in a URL');
         assert.ok(!/names a key/.test(at('https://mcp.sentry.dev/mcp/{SENTRY_ORG}').error || ''), 'a plain name is not refused as a key');
@@ -171,7 +170,7 @@ test('a missing key exits 1 before npx starts, naming the files (Review Focus 2)
         assert.strictEqual(r.status, 1);
         const lines = r.stderr.trim().split('\n');
         assert.strictEqual(lines.length, 1, r.stderr);
-        assert.ok(lines[0].startsWith(`mcp-bridge: no value for ${K} in ${sec(w.root)}, `), lines[0]);
+        assert.ok(lines[0]!.startsWith(`mcp-bridge: no value for ${K} in ${sec(w.root)}, `), lines[0]);
         assert.deepStrictEqual(w.calls(), [], 'npx never ran');
     }
     finally { w.clean(); }
@@ -226,13 +225,13 @@ test('a URL value equal to the key exits 1 before npx, naming the variable and n
     finally { w.clean(); }
 });
 
-const waitFor = async (check, ms = 5000) =>
+const waitFor = async <T>(check: () => T, ms = 5000) =>
 {
     const end = Date.now() + ms;
     while (Date.now() < end) { const v = check(); if (v) return v; await new Promise((r) => setTimeout(r, 25)); }
     return null;
 };
-const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
 test('SIGTERM to the bridge, or its stdin closing, ends mcp-remote and the bridge', { skip: process.platform === 'win32' }, async () => {
     const w = world();
@@ -242,7 +241,7 @@ test('SIGTERM to the bridge, or its stdin closing, ends mcp-remote and the bridg
         const start = () =>
         {
             const p = spawn(process.execPath, [path.join(w.root, 'mcp-bridge.js'), LOCAL, K, 'Sentry-Bearer', PKG], { cwd: w.project, env: w.env({ FAKE_RUNTIME_WAIT: '1' }), stdio: ['pipe', 'ignore', 'ignore'] });
-            const exited = new Promise((resolve) => p.on('exit', (code, signal) => resolve({ code, signal, at: Date.now() })));
+            const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null; at: number }>((resolve) => p.on('exit', (code, signal) => resolve({ code, signal, at: Date.now() })));
             return { p, exited };
         };
         const a = start();
@@ -284,9 +283,9 @@ test('a root under a type-module package.json runs with its own commonjs package
 
 test('the bridge requires only node: modules and ./mcp-headers.js, and its CREDENTIAL equals keys.js', () => {
     const src = fs.readFileSync(BRIDGE, 'utf8');
-    assert.match(src.split(/\r?\n/)[0], /^\/\/ preferred-tools mcp-bridge 1$/, 'the first line, CRLF or LF (roots.js SHIPPED_LINE reads both)');
+    assert.match(src.split(/\r?\n/)[0]!, /^\/\/ preferred-tools mcp-bridge 1$/, 'the first line, CRLF or LF (roots.js SHIPPED_LINE reads both)');
     const reqs = [...src.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]);
-    assert.ok(reqs.length && reqs.every((r) => r.startsWith('node:') || r === './mcp-headers.js'), reqs.join(', '));
+    assert.ok(reqs.length && reqs.every((r) => r!.startsWith('node:') || r === './mcp-headers.js'), reqs.join(', '));
     const b = bridge();
     assert.strictEqual(b.BRIDGE_VERSION, 1);
     assert.strictEqual(b.NEEDS_HELPER, 4);

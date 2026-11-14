@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // Step 12: the temp-project matrix beyond a fresh install. Every case runs the REAL claude CLI in a throwaway home and
 // account (tests/harness.ts) and reads the result back from the files the CLI wrote - never from an exit code alone.
 //
@@ -12,7 +11,6 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import * as cli from '../../scripts/core/claude-cli.ts';
 import * as account from '../../scripts/core/account.ts';
 import * as catalogLib from '../../scripts/catalog/catalog.ts';
@@ -20,6 +18,9 @@ import { buildEntry } from '../../scripts/entries/entry.ts';
 import { makeCtx, detectAll, applyFixes, questions } from '../../scripts/fix/fix.ts';
 import { main } from '../../scripts/update/command.ts';
 import { pinnedVersion } from '../../scripts/fix/common.ts';
+import type { InvRegistration } from '../../scripts/inventory/types.ts';
+import type { ServerEntry } from '../../scripts/core/types.ts';
+import type { MachineProbe } from '../../scripts/fix/types.ts';
 import { Harness } from '../harness.ts';
 import { keepWritten } from '../proof/matrix-keep.ts';
 
@@ -28,13 +29,12 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-scn-'));
 test.after(() => { keepWritten(root, 'scenarios'); fs.rmSync(root, { recursive: true, force: true }); });
 const h = new Harness({ root });
 const catalog = catalogLib.load();
-const NETWORK = /could not resolve|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|network|clone|fetch|timed out|ECONNREFUSED/i;
 
-const regs = (project) => h.inventory(project).registrations;
-const reg = (project, name, scope) => regs(project).find((r) => r.name === name && (!scope || r.scope === scope));
-const mcpJsonPath = (project) => path.join(project, '.mcp.json');
+const regs = (project: string) => h.inventory(project).registrations;
+const reg = (project: string, name: string, scope?: string): InvRegistration => regs(project).find((r) => r.name === name && (!scope || r.scope === scope))!;
+const mcpJsonPath = (project: string) => path.join(project, '.mcp.json');
 const accountText = () => (fs.existsSync(account.accountFile(h.env)) ? fs.readFileSync(account.accountFile(h.env), 'utf8') : '');
-const add = (project, name, entry, scope = 'user') =>
+const add = (project: string, name: string, entry: ServerEntry, scope = 'user') =>
 {
     const r = h.claude(project, ['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope]);
     assert.strictEqual(r.status, 0, r.stdout + r.stderr);
@@ -65,7 +65,7 @@ test('a custom name, then a rename: the new name is added first, read back, the 
     assert.strictEqual(first.rowId, 'serena', 'matched by what it launches, not by the name');
 
     // past the catalog pin by an update, plus an arg of the user's
-    const mine = { ...first.entry, args: [...first.entry.args, '--my-flag'] };
+    const mine = { ...first.entry, args: [...first.entry.args!, '--my-flag'] };
     h.claude(p, ['mcp', 'remove', 'code-nav', '-s', 'local']);
     add(p, 'code-nav', mine, 'local');
     const newer = bumped(mine, 'serena-agent', '9.9.9');
@@ -79,7 +79,7 @@ test('a custom name, then a rename: the new name is added first, read back, the 
     assert.strictEqual(reg(p, 'code-nav'), undefined, 'the old name is gone');
     const now = reg(p, 'nav2', 'local');
     assert.strictEqual(pinnedVersion(now.entry, 'serena-agent'), '9.9.9', 'an updated pin is never downgraded to the catalog pin');
-    assert.ok(now.entry.args.includes('--my-flag'), 'the user\'s arg is kept');
+    assert.ok(now.entry.args!.includes('--my-flag'), 'the user\'s arg is kept');
     const g = h.claude(p, ['mcp', 'get', 'nav2']);
     assert.strictEqual(g.status, 0, g.stdout + g.stderr);
 });
@@ -115,15 +115,15 @@ test('install beside a copy for every project: this project gets its own registr
     assert.ok(!r.plan.steps.some((s) => /remove|move|replace/.test(s.op)), 'nothing is removed or moved');
     const mine = reg(p, 'copy-mem', 'local');
     assert.ok(mine, 'this project\'s copy, at local scope');
-    assert.strictEqual(path.resolve(mine.entry.env.MCP_MEMORY_SQLITE_PATH), path.join(p, '.preferred-tools', 'copy-mem', 'memory.db'), 'its own data');
+    assert.strictEqual(path.resolve((mine.entry.env as Record<string, string> & { MCP_MEMORY_SQLITE_PATH: string }).MCP_MEMORY_SQLITE_PATH), path.join(p, '.preferred-tools', 'copy-mem', 'memory.db'), 'its own data');
     assert.strictEqual(JSON.stringify(reg(p, 'copy-mem', 'user').entry), before, 'the copy for every project is untouched');
     for (const scope of ['local', 'user']) h.claude(p, ['mcp', 'remove', 'copy-mem', '-s', scope]);
 });
 
-function bumped(entry, pkg, version)
+function bumped(entry: ServerEntry, pkg: string, version: string)
 {
-    const from = pinnedVersion(entry, pkg);
-    return { ...entry, args: entry.args.map((a) => (a.endsWith(`@${from}`) || a.endsWith(`==${from}`) ? a.slice(0, a.length - from.length) + version : a)) };
+    const from = pinnedVersion(entry, pkg)!;
+    return { ...entry, args: entry.args!.map((a) => (a.endsWith(`@${from}`) || a.endsWith(`==${from}`) ? a.slice(0, a.length - from.length) + version : a)) };
 }
 
 test('an update with a stale pin: the registry\'s newer, old-enough release is written under the same name and scope, and read back', T, async () =>
@@ -138,14 +138,14 @@ test('an update with a stale pin: the registry\'s newer, old-enough release is w
     const DAY = 86400000;
     const now = Date.parse('2026-10-27T12:00:00Z');
     const registry = { versionsOf: async () => [{ version: '1.0.0', time: now - 90 * DAY }, { version: '1.5.0', time: now - 30 * DAY }, { version: '1.6.0', time: now - 2 * DAY }] };
-    const lines = [];
+    const lines: string[] = [];
     // a fetch file is handed on, so update keeps its <tmp>: under the root, which test.after removes
     const tmp = fs.mkdtempSync(path.join(root, 'update-'));
-    const code = await main(['--apply', 'mcp:serena~user', '--no-refresh', '--tmp', tmp, '--project', p], { env: h.env, out: (s) => lines.push(s), registry, now, machine: { which: () => null, run: () => ({ status: 1 }), nodeVersion: process.versions.node } });
+    const code = await main(['--apply', 'mcp:serena~user', '--no-refresh', '--tmp', tmp, '--project', p], { env: h.env, out: (s) => lines.push(s), registry, now, machine: { which: () => null, run: () => ({ status: 1 }), nodeVersion: process.versions.node } as unknown as MachineProbe });
     assert.strictEqual(code, 0, lines.join('\n'));
     const got = reg(p, 'serena', 'user');
     assert.strictEqual(pinnedVersion(got.entry, 'serena-agent'), '1.5.0', 'the 2-day-old 1.6.0 is held back');
-    assert.strictEqual(got.entry.args[got.entry.args.indexOf('--exclude-newer') + 1], '2026-10-27T23:59:59Z');
+    assert.strictEqual(got.entry.args![got.entry.args!.indexOf('--exclude-newer') + 1], '2026-10-27T23:59:59Z');
     assert.deepStrictEqual(got.entry.env, cur.entry.env);
 });
 
@@ -161,7 +161,7 @@ test('four Playwright engines in one project: four entries under their own names
     const dirs = names.map((n) =>
     {
         const e = reg(p, n, 'local').entry;
-        return e.args[e.args.indexOf('--user-data-dir') + 1];
+        return e.args![e.args!.indexOf('--user-data-dir') + 1];
     });
     assert.strictEqual(new Set(dirs).size, 4, dirs.join(' | '));
     assert.strictEqual(regs(p).filter((x) => x.rowId && x.rowId.startsWith('playwright-')).length, 4);
@@ -187,7 +187,7 @@ test('.mcp.json missing, empty, {} and malformed: the first three install at pro
 {
     // no key: since 0.3.0 a key is recommended for every hosted route, and this case is about the file's shapes
     const answers = { picks: { context7: { route: 'remote', scope: 'project', token: false } } };
-    for (const [label, content] of [['missing', null], ['empty', ''], ['whitespace', '  \n'], ['braces', '{}']])
+    for (const [label, content] of [['missing', null], ['empty', ''], ['whitespace', '  \n'], ['braces', '{}']] as [string, string | null][])
     {
         const p = h.project(`mcpjson-${label}`);
         if (content !== null) fs.writeFileSync(mcpJsonPath(p), content);
@@ -225,7 +225,7 @@ test('a remove: the registration is gone from its file, the data folder stays, a
     const global = reg(p, 'serena', 'user');
     assert.strictEqual(h.run(p, { picks: { serena: { scope: 'local' }, context7: { route: 'remote', scope: 'project' } } }).report.failed, null);
     // the folder the registration names: <project>/.preferred-tools/serena, or on Windows serena's absolute home
-    const data = reg(p, 'serena', 'local').entry.env.SERENA_HOME;
+    const data = reg(p, 'serena', 'local').entry.env!.SERENA_HOME!;
     if (process.platform !== 'win32') assert.strictEqual(data, path.join(p, '.preferred-tools', 'serena'));
     assert.ok(fs.existsSync(data));
     const r = h.run(p, { picks: {}, remove: [{ kind: 'mcp', name: 'serena', scope: 'local' }] });
@@ -242,20 +242,31 @@ test('a remove: the registration is gone from its file, the data folder stays, a
 // ---- the fixes, on seeded entries, through the real CLI ------------------------------------------------------------
 
 // the entry as the catalog builds it for a platform, then broken by `breakIt`
-function freshEntry(rowId, platform, arch = 'x64', scope = 'user')
+function freshEntry(rowId: string, platform: string, arch = 'x64', scope = 'user')
 {
-    const r = catalog.byId.get(rowId);
+    const r = catalog.byId.get(rowId)!;
     const win = platform === 'win32';
     const rootStr = r.locations ? (win ? 'C:\\Users\\dev\\.pt\\x' : '/Users/dev/.pt/x') : undefined;
     const ctx = { platform, arch, env: {}, home: win ? 'C:\\Users\\dev' : '/Users/dev', project: win ? 'C:\\proj' : '/proj' };
     return buildEntry(r, 'local', { rootStr, scope, token: false }, ctx, catalog.rules);
 }
-const withoutArgs = (entry, from, count) => { const a = entry.args.slice(); a.splice(a.indexOf(from), count); return { ...entry, args: a }; };
+const withoutArgs = (entry: ServerEntry, from: string, count: number) => { const a = entry.args!.slice(); a.splice(a.indexOf(from), count); return { ...entry, args: a }; };
 
-const FIXES = [
+// one fix case: the entry to seed, the platform the detectors read, and what the machine has
+interface FixCase
+{
+    id: string;
+    row: string;
+    platform: string;
+    arch?: string;
+    seed: () => ServerEntry;
+    env?: Record<string, string>;
+    machine?: Partial<MachineProbe>;
+}
+const FIXES: FixCase[] = [
     { id: 'serena-telemetry', row: 'serena', platform: 'darwin', seed: () => { const e = freshEntry('serena', 'darwin'); const env = { ...e.env }; delete env.SERENA_USAGE_REPORTING; return { ...e, env }; } },
     { id: 'uvx-python', row: 'memory', platform: 'darwin', seed: () => withoutArgs(freshEntry('memory', 'darwin'), '--python', 2) },
-    { id: 'windows-arm-python', row: 'memory', platform: 'win32', arch: 'arm64', seed: () => { const e = freshEntry('memory', 'win32'); e.args[e.args.indexOf('--python') + 1] = '3.13'; return e; } },
+    { id: 'windows-arm-python', row: 'memory', platform: 'win32', arch: 'arm64', seed: () => { const e = freshEntry('memory', 'win32'); e.args![e.args!.indexOf('--python') + 1] = '3.13'; return e; } },
     { id: 'windows-npx-cmd', row: 'context7', platform: 'win32', seed: () => ({ command: 'npx', args: ['-y', '@upstash/context7-mcp@4.4.4'], env: { npm_config_before: '2026-10-20T23:59:59Z' } }) },
     { id: 'serena-windows-home', row: 'serena', platform: 'win32', seed: () => { const e = freshEntry('serena', 'win32'); return { ...e, env: { ...e.env, SERENA_HOME: 'C:/Users/dev/.serena' } }; } },
     { id: 'playwright-webmcp', row: 'playwright-chrome', platform: 'darwin', seed: () => withoutArgs(freshEntry('playwright-chrome', 'darwin'), '--no-webmcp', 1) },
@@ -276,13 +287,13 @@ for (const f of FIXES)
         });
         const found = detectAll(mk(), { only: name }).found.filter((x) => x.id === f.id);
         assert.strictEqual(found.length, 1, `${f.id} not found on ${JSON.stringify(seeded)}`);
-        assert.ok(!found[0].blocked, found[0].blocked);
-        const lines = [];
+        assert.ok(!found[0]!.blocked, found[0]!.blocked);
+        const lines: string[] = [];
         const res = applyFixes(mk(), [f.id], { only: name, tmp: path.join(root, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
         assert.ok(!res.failed, lines.join('\n'));
         const after = reg(p, name, 'local');
         assert.notDeepStrictEqual(after.entry, seeded, 'the entry changed');
-        assert.strictEqual(after.rowId, catalog.byId.get(f.row).id, 'still matched by what it launches');
+        assert.strictEqual(after.rowId, catalog.byId.get(f.row)!.id, 'still matched by what it launches');
         assert.deepStrictEqual(detectAll(mk(), { only: name }).found.filter((x) => x.id === f.id), [], 'read back: the detector finds nothing now');
         // the real file holds what the CLI wrote
         assert.deepStrictEqual(account.readAccount(h.env, p).local[name], after.entry);
@@ -304,12 +315,12 @@ test('fix windows-mcp-one-per-desktop: two real registrations on a simulated win
         const detected = detectAll(mk(), { only });
         assert.strictEqual(detected.found.length, 1, JSON.stringify(detected.found));
         // the shared account may hold other cases' windows-mcp entries: these two are named, the count is not asserted
-        assert.match(detected.found[0].found, /wd-a \(local\)/);
-        assert.match(detected.found[0].found, /wd-b \(user\)/);
-        assert.match(detected.found[0].blocked, /^keep one per Windows desktop - /);
+        assert.match(detected.found[0]!.found, /wd-a \(local\)/);
+        assert.match(detected.found[0]!.found, /wd-b \(user\)/);
+        assert.match(detected.found[0]!.blocked!, /^keep one per Windows desktop - /);
         assert.deepStrictEqual(questions(detected), { choose: null, pick: [], drift: [] });
         const before = accountText();
-        const lines = [];
+        const lines: string[] = [];
         const res = applyFixes(mk(), [only], { only, tmp: path.join(root, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
         assert.ok(!res.failed, lines.join('\n'));
         assert.match(lines.join('\n'), /skipped windows-mcp-one-per-desktop/);

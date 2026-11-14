@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // Step 10 check: a fresh install for every catalog row and route, from an answers file, through the REAL claude CLI in
 // the throwaway world (tests/harness.ts), then read back from the files the CLI wrote - never from an exit code.
 //
@@ -11,11 +10,11 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import * as cli from '../../scripts/core/claude-cli.ts';
 import * as account from '../../scripts/core/account.ts';
 import { load } from '../../scripts/catalog/catalog.ts';
 import * as keys from '../../scripts/keys/keys.ts';
+import type { McpAddStep } from '../../scripts/plan/types.ts';
 import { Harness } from '../harness.ts';
 import { keepWritten } from '../proof/matrix-keep.ts';
 const catalog = load();
@@ -29,7 +28,7 @@ const h = new Harness({ root });
 // fake key values, built at run time, in the throwaway global root's .mcps-secrets - the one file 0.2.0 reads a key from
 // (spec D3): it serves Global scope and comes second in the Local chain. A local route's key is written into its
 // registration at Local and Global scope (D5); the last test searches every other config file for the values.
-const FAKE = {
+const FAKE: Record<string, string> = {
     GITHUB_PERSONAL_ACCESS_TOKEN: ['fake', 'github', 'value', 'a1b2c3d4e5f6'].join('-'),
     SENTRY_ACCESS_TOKEN: ['fake', 'sentry', 'value', 'a1b2c3d4e5f6'].join('-'),
     CONTEXT7_API_KEY: ['fake', 'context7', 'value', 'a1b2c3d4e5f6'].join('-'),
@@ -38,7 +37,7 @@ const globalRoot = path.join(h.home, '.preferred-tools');
 fs.mkdirSync(globalRoot, { recursive: true });
 fs.writeFileSync(path.join(globalRoot, keys.SECRETS), Object.entries(FAKE).map(([k, v]) => `${k}=${v}\n`).join(''));
 // the registrations a key was written into: { scope, name, project }
-const writtenIn = [];
+const writtenIn: { scope: string; name: string; project: string }[] = [];
 
 const NETWORK = /could not resolve|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|network|clone|fetch|timed out|ECONNREFUSED/i;
 
@@ -57,13 +56,13 @@ for (const c of spec.cases)
         const inv = h.inventory(project);
         if (c.expect.kind === 'mcp')
         {
-            const step = r.plan.steps.find((s) => s.op === 'mcp-add');
+            const step = r.plan.steps.find((s): s is McpAddStep => s.op === 'mcp-add')!;
             const got = inv.registrations.find((x) => x.rowId === c.row && x.scope === c.expect.scope && x.route === c.expect.route);
             assert.ok(got, `${c.row}: no ${c.expect.route}-route registration at ${c.expect.scope} scope read back\n${r.text}`);
             assert.strictEqual(got.name, step.name);
             // a local route's key, written in by the apply from .mcps-secrets (D5); a hosted route's entry holds none
-            const route = catalog.byId.get(c.row).routes[step.route];
-            const want = step.key ? keys.fillKeys(step.entry, catalog.byId.get(c.row), step.route, step.scope, { [route.tokenVar]: FAKE[step.key.name] }) : step.entry;
+            const route = catalog.byId.get(c.row)!.routes[step.route!]!;
+            const want = step.key ? keys.fillKeys(step.entry, catalog.byId.get(c.row), step.route!, step.scope, { [route.tokenVar!]: FAKE[step.key.name]! }) : step.entry;
             if (step.key) writtenIn.push({ scope: step.scope, name: step.name, project });
             assert.deepStrictEqual(got.entry, want, 'what the CLI stored is what the plan built, with the key written in');
             // read from the file that scope lives in, not from the inventory alone
@@ -100,7 +99,7 @@ test('no config file holds a key value outside a local route written in at Local
             const doc = JSON.parse(text);
             for (const w of writtenIn)
             {
-                const servers = w.scope === 'user' ? doc.mcpServers : account.projectEntry(doc.projects, w.project).mcpServers;
+                const servers = w.scope === 'user' ? doc.mcpServers : account.projectEntry(doc.projects, w.project)!.mcpServers;
                 assert.ok(Object.values(FAKE).some((v) => JSON.stringify(servers[w.name]).includes(v)), `${w.name} (${w.scope}) holds its key`);
                 delete servers[w.name];
             }

@@ -99,7 +99,7 @@ export function mergeList(list: Omit<McpsList, 'version'> | null | undefined, { 
 const same = deepEqual;
 
 // Writes `doc` over `file`, `read` being readList(file) as the plan or apply found it. -> { ok, detail }
-export function writeList(file: string, doc: { servers?: ListServer[] | undefined; own?: OwnEntry[] | undefined; cursorOffer?: string | undefined }, read: ListRead | null | undefined): Outcome
+export function writeList(file: string, doc: { version?: number | undefined; servers?: ListServer[] | undefined; own?: OwnEntry[] | undefined; cursorOffer?: string | undefined }, read: ListRead | null | undefined): Outcome
 {
     if (read && (read.state === 'newer' || read.state === 'unreadable'))
         return { ok: true, detail: `${read.note!.replace(/ - read as empty$/, '')} - left as it is; ${read.state === 'newer' ? 'update preferred-tools' : 'check its permissions'}, then run the command again` };

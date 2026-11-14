@@ -1,14 +1,15 @@
-// @ts-nocheck - typed in Task 12
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseAskBlocks, problemsOf, staticAsk } from './ask-blocks.ts';
+import type { AskBlock } from './ask-blocks.ts';
+import type { Question } from '../scripts/plan/types.ts';
 import { logicalRoot } from '../scripts/entries/locations.ts';
 import { currentOf } from '../scripts/entries/entry.ts';
 import { STATIC } from '../scripts/plan/asks-other.ts';
 
-const block = (body, id = 'menu') => parseAskBlocks(`\`\`\`ask${id ? ` ${id}` : ''}\n${body}\n\`\`\``)[0];
+const block = (body: string, id: string | null = 'menu') => parseAskBlocks(`\`\`\`ask${id ? ` ${id}` : ''}\n${body}\n\`\`\``)[0] as AskBlock;
 const GOOD = "What do you want to change?\n- 'Change tools (Recommended)' - a\n- 'Remove tools' - b\n- 'Done' - d";
 
 test('a sound block parses and has no problems; a block may omit an option the walk omits, never reorder one', () =>
@@ -24,7 +25,7 @@ test('a sound block parses and has no problems; a block may omit an option the w
 
 test('every way a block can break the limits is named', () =>
 {
-    const bad = (body, id) => problemsOf(block(body, id)).join(' | ');
+    const bad = (body: string, id?: string | null) => problemsOf(block(body, id)).join(' | ');
     assert.match(bad("Q?\n- 'Only (Recommended)' - a"), /1 options \(2 to 4 allowed\)/);
     assert.match(bad("Q?\n- 'A (Recommended)' - a\n- 'B' - b\n- 'C' - c\n- 'D' - d\n- 'E' - e", null), /5 options/);
     assert.match(bad("Q?\n- 'A' - a\n- 'B' - b", null), /0 options marked \(Recommended\)/);
@@ -34,7 +35,7 @@ test('every way a block can break the limits is named', () =>
     assert.match(bad("Q?\n- A (Recommended) - a\n- 'B' - b", null), /not written as/);
     assert.match(bad(GOOD, 'no-such-ask'), /not a key of asks\.STATIC/);
     assert.match(bad(GOOD, null), /no id after/);
-    assert.match(problemsOf(parseAskBlocks('```ask menu\nQ?\n- \'A (Recommended)\' - a')[0]).join(), /never closed/);
+    assert.match(problemsOf(parseAskBlocks('```ask menu\nQ?\n- \'A (Recommended)\' - a')[0] as AskBlock).join(), /never closed/);
 });
 
 test('a command file with CRLF line endings - a Windows checkout under Git\'s default autocrlf - parses as with LF', () => {
@@ -48,7 +49,7 @@ test('the commands hold every ask block to the limits', () =>
 {
     const root = path.join(import.meta.dirname, '..');
     let seen = 0;
-    const walk = (d) => fs.existsSync(d) && fs.readdirSync(d, { withFileTypes: true }).forEach((e) =>
+    const walk = (d: string) => fs.existsSync(d) && fs.readdirSync(d, { withFileTypes: true }).forEach((e) =>
     {
         const p = path.join(d, e.name);
         if (e.isDirectory()) return walk(p);
@@ -79,7 +80,7 @@ test("install maps both API key answers: 'No key' is written, since 'Use a key f
     const row = text.split('\n').find((l) => l.startsWith('| API key'));
     // the labels toolAsk prints (scripts/plan/asks-other.ts), each mapped
     for (const label of ['Use a key from .mcps-secrets', 'No key - lower rate limits', 'Sign in with OAuth']) assert.ok(row && row.includes(`'${label}'`), `${label}: ${row}`);
-    assert.ok(row.includes('"token": true') && row.includes('"token": false'), row);
+    assert.ok(row!.includes('"token": true') && row!.includes('"token": false'), row);
 });
 
 test('install has no step for servers already set up', () => {
@@ -101,16 +102,16 @@ test('asks.js never requires plan.js: the shared readers (currentOf, logicalRoot
 
 test('staticAsk fills a STATIC function\'s own placeholders', () => {
     assert.deepStrictEqual(STATIC['cursor-name-taken'].placeholders, ['<file>', '<name>']);
-    const q = staticAsk('cursor-name-taken');
+    const q = staticAsk('cursor-name-taken') as Question;
     assert.match(q.question, /^Cursor's <file> already has a server named <name> that preferred-tools did not write/);
     assert.deepStrictEqual(q.options.map((o) => o.label), ["Replace it with the plugin's (Recommended)", "Keep Cursor's own"]);
     // a function with no placeholders of its own still gets '<n>', '<m>', '<k>'
-    assert.match(staticAsk('prereqMissing').question, /^<n> needs <m>, which is missing/);
+    assert.match((staticAsk('prereqMissing') as Question).question, /^<n> needs <m>, which is missing/);
     // install and configure both carry the block, and it is sound
     for (const cmd of ['install.md', 'configure.md'])
     {
         const blocks = parseAskBlocks(fs.readFileSync(path.join(import.meta.dirname, '..', 'commands', cmd), 'utf8')).filter((b) => b.id === 'cursor-name-taken');
         assert.strictEqual(blocks.length, 1, cmd);
-        assert.deepStrictEqual(problemsOf(blocks[0]), [], cmd);
+        assert.deepStrictEqual(problemsOf(blocks[0] as AskBlock), [], cmd);
     }
 });

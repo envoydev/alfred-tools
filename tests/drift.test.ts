@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // client-drift and cursor-file (spec D9, 0.5.0): a list entry whose copy in Claude Code or Cursor was edited or removed
 // by hand, asked per entry - never in 'Apply all found' - and a Cursor file preferred-tools cannot read, as advice.
 // Every case runs against the fake claude in a throwaway world.
@@ -15,46 +14,52 @@ import * as cli from '../scripts/core/claude-cli.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import { apply } from '../scripts/apply/run.ts';
 import { accountFile } from '../scripts/core/account.ts';
+import type { Answers } from '../scripts/plan/types.ts';
+import type { DriftQuestion, Finding, MachineProbe } from '../scripts/fix/types.ts';
+import type { ServerEntry } from '../scripts/core/types.ts';
+import type { World } from './types.ts';
 
-const noMachine = () => ({ exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1, stdout: '', stderr: '' }), nodeVersion: '24.0.0' });
+const noMachine = (): MachineProbe => ({ exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1, stdout: '', stderr: '' }), nodeVersion: '24.0.0' });
 
-function installIn(w, project, answers)
+function installIn(w: World, project: string, answers: Answers)
 {
     const p = plan(inventory.buildInventory({ project, env: w.env }), { clients: ['claude', 'cursor'], ...answers }, { home: w.home, env: w.env });
     assert.deepStrictEqual(p.errors, []);
     assert.strictEqual(apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
 }
-const install = (w, answers) => installIn(w, w.project, answers);
-const ctxOf = (w, project = w.project) => makeCtx({ inv: inventory.buildInventory({ project, env: w.env }), env: w.env, machine: noMachine() });
-const drifts = (w, project) => detectAll(ctxOf(w, project), { only: 'client-drift' }).found;
-function run(w, ids, input = {}, project = w.project)
+const install = (w: World, answers: Answers) => installIn(w, w.project, answers);
+const ctxOf = (w: World, project = w.project) => makeCtx({ inv: inventory.buildInventory({ project, env: w.env }), env: w.env, machine: noMachine() });
+const drifts = (w: World, project?: string) => detectAll(ctxOf(w, project), { only: 'client-drift' }).found;
+function run(w: World, ids: string[], input: Record<string, string> = {}, project = w.project)
 {
-    const lines = [];
+    const lines: string[] = [];
     const res = applyFixes(ctxOf(w, project), ids, { tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')), input });
     return { res, text: lines.join('\n') };
 }
-const listFile = (w) => path.join(w.project, '.preferred-tools', 'mcps.json');
-const globalList = (w) => path.join(w.home, '.preferred-tools', 'mcps.json');
-const cursorFile = (w, dir = w.project) => path.join(dir, '.cursor', 'mcp.json');
-const globalCursor = (w) => path.join(w.home, '.cursor', 'mcp.json');
-const entryOf = (file, name) => readJson(file).servers.find((x) => x.name === name);
-const copyOf = (file, name) => readJson(file).mcpServers[name];
-const localReg = (w, name) => inventory.buildInventory({ project: w.project, env: w.env }).registrations.find((r) => r.name === name && r.scope === 'local');
-function reAdd(w, name, entry, scope = 'local')
+const listFile = (w: World) => path.join(w.project, '.preferred-tools', 'mcps.json');
+const globalList = (w: World) => path.join(w.home, '.preferred-tools', 'mcps.json');
+const cursorFile = (w: World, dir = w.project) => path.join(dir, '.cursor', 'mcp.json');
+const globalCursor = (w: World) => path.join(w.home, '.cursor', 'mcp.json');
+const entryOf = (file: string, name: string) => readJson(file).servers.find((x: { name: string }) => x.name === name);
+const copyOf = (file: string, name: string) => readJson(file).mcpServers[name];
+const localReg = (w: World, name: string) => inventory.buildInventory({ project: w.project, env: w.env }).registrations.find((r) => r.name === name && r.scope === 'local')!;
+function reAdd(w: World, name: string, entry: ServerEntry, scope = 'local')
 {
     cli.run(['mcp', 'remove', name, '-s', scope], { cwd: w.project, env: w.env });
     assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
 }
-function editCursor(file, name, change)
+// a Cursor copy as the tests edit it
+type Copy = { args: string[]; env: Record<string, string> & { SENTRY_ACCESS_TOKEN?: string; MINE?: string }; headers: Record<string, string> };
+function editCursor(file: string, name: string, change: ((copy: Copy) => unknown) | null)
 {
     const doc = readJson(file);
     if (change === null) delete doc.mcpServers[name];
     else change(doc.mcpServers[name]);
     writeJson(file, doc);
 }
-const shape = (f) => [f.app, f.change, f.keyGuard, f.rowGone, f.inherited];
-const driftQs = (w, project) => questions(detectAll(ctxOf(w, project))).drift.flat();
-const labels = (q) => q.options.map((o) => o.label);
+const shape = (f: Finding) => [f.app, f.change, f.keyGuard, f.rowGone, f.inherited];
+const driftQs = (w: World, project?: string) => questions(detectAll(ctxOf(w, project))).drift.flat();
+const labels = (q: DriftQuestion) => q.options.map((o) => o.label);
 
 test('fixes/lists.js loads before plan-lists.js and both export every function', () =>
 {
@@ -75,10 +80,10 @@ test('drift: Keep the change takes the edited entry into the list and the other 
     {
         install(w, { picks: { serena: { scope: 'local' } } });
         const e = localReg(w, 'serena').entry;
-        reAdd(w, 'serena', { ...e, args: [...e.args, '--mine'] });
+        reAdd(w, 'serena', { ...e, args: [...e.args!, '--mine'] });
         const found = drifts(w);
         assert.deepStrictEqual(found.map(shape), [['claude', 'differs', false, false, null]]);
-        const [q] = driftQs(w);
+        const [q] = driftQs(w) as [DriftQuestion];
         assert.strictEqual(q.id, 'drift-claude-serena~local');
         assert.strictEqual(q.question, 'serena in Claude Code differs from the plugin\'s list. Which should stay?');
         assert.deepStrictEqual(labels(q), ['Keep the change in Claude Code (Recommended)', 'Restore from the list']);
@@ -126,7 +131,7 @@ test('a stdio keyed route at global scope picked for Cursor is not drift', () =>
 
 // A 0.2.x/0.3.x key: the value lives in ~/.claude.json's registration, and the global root's .mcps-secrets holds only
 // the name (the old key files are read for names only). Cursor's copy is filled from the registration as read.
-function keyInRegistrationOnly(w)
+function keyInRegistrationOnly(w: World)
 {
     const root = path.join(w.home, '.preferred-tools');
     fs.mkdirSync(root, { recursive: true });
@@ -136,7 +141,7 @@ function keyInRegistrationOnly(w)
     fs.writeFileSync(path.join(root, '.mcps-secrets'), 'SENTRY_ACCESS_TOKEN=\n');
     return value;
 }
-const sentryKey = (e) => e.env.SENTRY_ACCESS_TOKEN;
+const sentryKey = (e: { env: Record<string, string> & { SENTRY_ACCESS_TOKEN?: string } }) => e.env.SENTRY_ACCESS_TOKEN;
 
 test('a stdio keyed copy restored in Cursor takes the value from the registration when the key files lack it', () =>
 {
@@ -163,7 +168,7 @@ test('a Cursor copy whose key field is empty where the list holds the key offers
         editCursor(globalCursor(w), 'sentry', (e) => { e.env.SENTRY_ACCESS_TOKEN = ''; });
         const found = drifts(w);
         assert.deepStrictEqual(found.map((f) => [f.app, f.change, f.keyEmpty]), [['cursor', 'differs', true]]);
-        const [q] = driftQs(w);
+        const [q] = driftQs(w) as [DriftQuestion];
         assert.deepStrictEqual(labels(q), ['Restore from the list (Recommended)', 'Leave Cursor\'s copy as it is']);
         const keep = run(w, ['none'], { 'drift:cursor:sentry~user': 'keep' });
         assert.match(keep.text, /its key field is empty, so Keep is not offered - answer restore or leave/);
@@ -184,9 +189,9 @@ test('a kept edit that fails the fingerprint leaves the list', () =>
         const mine = { command: 'node', args: ['mine.js'] };
         reAdd(w, 'serena', mine);
         assert.deepStrictEqual(drifts(w).map(shape), [['claude', 'differs', false, true, null]]);
-        const [q] = driftQs(w);
+        const [q] = driftQs(w) as [DriftQuestion];
         assert.deepStrictEqual(labels(q), ['Keep the change in Claude Code (Recommended)', 'Restore from the list']);
-        assert.strictEqual(q.options[0].description, 'the list lets go of it - it is no longer the plugin\'s server');
+        assert.strictEqual(q.options[0]!.description, 'the list lets go of it - it is no longer the plugin\'s server');
         const r = run(w, ['none'], { 'drift:claude:serena~local': 'keep' });
         assert.strictEqual(r.res.failed, null, r.text);
         assert.ok(!fs.existsSync(listFile(w)) || !entryOf(listFile(w), 'serena'), 'serena leaves the list');
@@ -196,7 +201,7 @@ test('a kept edit that fails the fingerprint leaves the list', () =>
 });
 
 // every file under a folder, for the search below
-const filesUnder = (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir, { recursive: true, withFileTypes: true }).filter((d) => d.isFile()).map((d) => path.join(d.parentPath || d.path, d.name)) : []);
+const filesUnder = (dir: string) => (fs.existsSync(dir) ? fs.readdirSync(dir, { recursive: true, withFileTypes: true }).filter((d) => d.isFile()).map((d) => path.join(d.parentPath || d.path, d.name)) : []);
 
 test('a token pasted into a hosted entry\'s headers in .cursor/mcp.json offers no Keep, and no file but Cursor\'s holds it afterwards', () =>
 {
@@ -207,7 +212,7 @@ test('a token pasted into a hosted entry\'s headers in .cursor/mcp.json offers n
         const token = `ctx7sk-${'0f'.repeat(12)}`;
         editCursor(globalCursor(w), 'context7', (s) => { s.headers = { Authorization: `Bearer ${token}` }; });
         assert.deepStrictEqual(drifts(w).map(shape), [['cursor', 'differs', true, false, null]]);
-        const [q] = driftQs(w);
+        const [q] = driftQs(w) as [DriftQuestion];
         assert.deepStrictEqual(labels(q), ['Restore from the list (Recommended)', 'Leave Cursor\'s copy as it is']);
         // a Keep passed anyway is refused, and Leave writes nothing
         const k = run(w, ['none'], { 'drift:cursor:context7~user': 'keep' });
@@ -233,7 +238,7 @@ test('a missing copy asks drift-missing, and its recommended answer takes the ap
         install(w, { picks: { serena: { scope: 'local' } } });
         editCursor(cursorFile(w), 'serena', null);
         assert.deepStrictEqual(drifts(w).map(shape), [['cursor', 'missing', false, false, null]]);
-        const [q] = driftQs(w);
+        const [q] = driftQs(w) as [DriftQuestion];
         assert.strictEqual(q.question, 'serena is on the plugin\'s list for Cursor but Cursor no longer has it. What should happen?');
         assert.deepStrictEqual(labels(q), ['Take Cursor off its list entry (Recommended)', 'Restore from the list']);
         const r = run(w, ['none'], { 'drift:cursor:serena~local': 'drop' });
@@ -253,7 +258,7 @@ test('Apply all found applies list-import and serena-base-modes and leaves every
         install(w, { picks: { serena: { scope: 'local' } } });
         // a managed server not on the list yet, serena's base modes set, and serena edited in Cursor
         assert.strictEqual(cli.run(['mcp', 'add-json', 'memory', JSON.stringify({ command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: path.join(w.project, '.preferred-tools', 'memory', 'memory.db') } }), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
-        const home = localReg(w, 'serena').entry.env.SERENA_HOME;
+        const home = localReg(w, 'serena').entry.env!.SERENA_HOME!;
         fs.mkdirSync(home, { recursive: true });
         fs.writeFileSync(path.join(home, 'serena_config.yml'), 'base_modes:\n  - interactive\n  - editing\n');
         editCursor(cursorFile(w), 'serena', (s) => s.args.push('--extra'));
@@ -294,11 +299,11 @@ test('both apps drifted: Claude Code\'s question first, its Keep skips Cursor\'s
     {
         install(w, { picks: { serena: { scope: 'local' } } });
         const e = localReg(w, 'serena').entry;
-        reAdd(w, 'serena', { ...e, args: [...e.args, '--mine'] });
+        reAdd(w, 'serena', { ...e, args: [...e.args!, '--mine'] });
         editCursor(cursorFile(w), 'serena', (s) => s.args.push('--extra'));
         const qs = driftQs(w);
         assert.deepStrictEqual(qs.map((x) => x.id), ['drift-claude-serena~local', 'drift-cursor-serena~local']);
-        assert.deepStrictEqual(qs[1].askAfter, { id: 'drift-claude-serena~local', answers: ['restore', 'leave'] }, 'Cursor\'s is put only after a Restore or Leave in Claude Code');
+        assert.deepStrictEqual(qs[1]!.askAfter, { id: 'drift-claude-serena~local', answers: ['restore', 'leave'] }, 'Cursor\'s is put only after a Restore or Leave in Claude Code');
         const r = run(w, ['none'], { 'drift:claude:serena~local': 'keep', 'drift:cursor:serena~local': 'restore' });
         assert.strictEqual(r.res.failed, null, r.text);
         const copy = copyOf(cursorFile(w), 'serena');
@@ -321,7 +326,7 @@ test('Keep the change in Cursor on a one-form entry ends with an mcp-replace', (
         assert.strictEqual(r.res.failed, null, r.text);
         const writes = w.calls().slice(calls).filter((a) => a[0] === 'mcp' && ['add-json', 'remove'].includes(a[1])).map((a) => [a[1], a[2]]);
         assert.deepStrictEqual(writes, [['remove', 'serena'], ['add-json', 'serena']], 'Claude Code takes Cursor\'s copy');
-        assert.ok(localReg(w, 'serena').entry.args.includes('--extra'));
+        assert.ok(localReg(w, 'serena').entry.args!.includes('--extra'));
         assert.ok(entryOf(listFile(w), 'serena').entry.args.includes('--extra'));
         assert.deepStrictEqual(drifts(w), []);
     }
@@ -348,7 +353,7 @@ test('two-form: Keep in Cursor changes cursorEntry only; Keep in Claude Code reb
         assert.strictEqual(w.calls().slice(calls).filter((a) => a[0] === 'mcp' && ['add-json', 'remove'].includes(a[1])).length, 0);
         // Claude Code's helper entry edited: entry moves, and cursorEntry is built again from it with its pin and pairs kept
         const reg = inventory.buildInventory({ project: w.project, env: w.env }).registrations.find((x) => x.name === 'context7');
-        reAdd(w, 'context7', { ...reg.entry, timeout: 60000 }, 'user');
+        reAdd(w, 'context7', { ...reg!.entry, timeout: 60000 }, 'user');
         assert.deepStrictEqual(drifts(w).map(shape), [['claude', 'differs', false, false, null]]);
         const r2 = run(w, ['none'], { 'drift:claude:context7~user': 'keep' });
         assert.strictEqual(r2.res.failed, null, r2.text);
@@ -366,7 +371,7 @@ test('an inherited drifted copy asks Restore from <folder> or Leave, and Leave a
     const w = world();
     try
     {
-        const rec = (dir, doc) => { fs.mkdirSync(path.join(dir, '.alfred'), { recursive: true }); fs.writeFileSync(path.join(dir, '.alfred', 'workspace.json'), JSON.stringify(doc)); };
+        const rec = (dir: string, doc: unknown) => { fs.mkdirSync(path.join(dir, '.alfred'), { recursive: true }); fs.writeFileSync(path.join(dir, '.alfred', 'workspace.json'), JSON.stringify(doc)); };
         const member = path.join(w.project, 'b');
         fs.mkdirSync(member);
         rec(w.project, { role: 'root', children: ['b'] });
@@ -375,7 +380,7 @@ test('an inherited drifted copy asks Restore from <folder> or Leave, and Leave a
         assert.ok(copyOf(cursorFile(w, member), 'memory'), 'the member got the root\'s project server');
         editCursor(cursorFile(w, member), 'memory', (s) => s.args.push('--extra'));
         assert.deepStrictEqual(drifts(w, member).map(shape), [['cursor', 'differs', false, false, w.project]]);
-        const [q] = driftQs(w, member);
+        const [q] = driftQs(w, member) as [DriftQuestion];
         assert.deepStrictEqual(labels(q), [`Restore from ${w.project} (Recommended)`, 'Leave it as it is']);
         const l = run(w, ['none'], { 'drift:cursor:memory~project': 'leave' }, member);
         assert.strictEqual(l.res.failed, null, l.text);
@@ -397,7 +402,7 @@ test('cursor-file names a symlinked or non-JSON .cursor/mcp.json as advice only'
         fs.mkdirSync(path.dirname(cursorFile(w)), { recursive: true });
         fs.writeFileSync(cursorFile(w), '{ // mine\n  "mcpServers": {}\n}\n');
         const found = () => detectAll(ctxOf(w), { only: 'cursor-file' }).found;
-        const [f] = found();
+        const [f] = found() as [Finding];
         assert.strictEqual(f.name, cursorFile(w));
         assert.match(f.found, /is not JSON \(Cursor reads comments and trailing commas, preferred-tools does not\) - remove them/);
         assert.strictEqual(f.blocked, 'advice only - nothing here is applied');

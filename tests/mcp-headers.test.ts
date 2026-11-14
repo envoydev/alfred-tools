@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // mcp-headers.js - the header helper a hosted registration names as `headersHelper` (spec D4). Each test copies it into
 // a throwaway root and runs it with its working folder elsewhere and HOME / USERPROFILE pointing into the throwaway world,
 // as Claude Code runs it: with CLAUDE_CODE_MCP_SERVER_NAME and _URL set. `{ byHand: true }` first runs it without them.
@@ -16,8 +15,8 @@ const SOURCE = path.join(import.meta.dirname, '..', 'scripts', 'copied', 'mcp-he
 // The copied files stay CommonJS: a test that loads one by its path loads it through a require.
 const requireCopied = createRequire(import.meta.url);
 const G = 'GITHUB_PERSONAL_ACCESS_TOKEN';
-const put = (file, text) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
-const sec = (dir) => path.join(dir, '.mcps-secrets');
+const put = (file: string, text: string | Buffer) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
+const sec = (dir: string) => path.join(dir, '.mcps-secrets');
 
 function world()
 {
@@ -27,13 +26,13 @@ function world()
     const elsewhere = path.join(dir, 'elsewhere');
     for (const d of [root, home, elsewhere]) fs.mkdirSync(d, { recursive: true });
     fs.copyFileSync(SOURCE, path.join(root, 'mcp-headers.js'));
-    const run = (...argv) =>
+    const run = (...argv: (string | { byHand?: boolean; env?: NodeJS.ProcessEnv })[]) =>
     {
-        const opts = argv[0] && typeof argv[0] === 'object' ? argv.shift() : {};
-        const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CODE_MCP_SERVER_NAME: 'github', CLAUDE_CODE_MCP_SERVER_URL: 'https://api.githubcopilot.com/mcp/' };
+        const opts = (argv[0] && typeof argv[0] === 'object' ? argv.shift() : {}) as { byHand?: boolean; env?: NodeJS.ProcessEnv };
+        const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CODE_MCP_SERVER_NAME: 'github', CLAUDE_CODE_MCP_SERVER_URL: 'https://api.githubcopilot.com/mcp/' };
         if (opts.byHand) { delete env.CLAUDE_CODE_MCP_SERVER_NAME; delete env.CLAUDE_CODE_MCP_SERVER_URL; }
         Object.assign(env, opts.env);
-        const r = spawnSync(process.execPath, [path.join(root, 'mcp-headers.js'), ...argv], { cwd: elsewhere, encoding: 'utf8', env });
+        const r = spawnSync(process.execPath, [path.join(root, 'mcp-headers.js'), ...(argv as string[])], { cwd: elsewhere, encoding: 'utf8', env });
         return { status: r.status, stdout: r.stdout, stderr: r.stderr, json: JSON.parse(r.stdout) };
     };
     return { dir, root, home, run, clean: () => fs.rmSync(dir, { recursive: true, force: true }) };
@@ -81,7 +80,7 @@ test('no value: {} on stdout and one stderr line naming the variable and the fil
         assert.deepStrictEqual(r.json, {});
         const lines = r.stderr.trim().split('\n');
         assert.strictEqual(lines.length, 1);
-        assert.ok(lines[0].includes(G) && lines[0].includes(sec(w.root)), lines[0]);
+        assert.ok(lines[0]!.includes(G) && lines[0]!.includes(sec(w.root)), lines[0]);
         assert.ok(!r.stderr.includes('fake-other') && !r.stdout.includes('fake-other'));
     }
     finally { w.clean(); }
@@ -97,7 +96,7 @@ test('run by hand - no CLAUDE_CODE_MCP_SERVER_NAME - it prints {} and one stderr
         assert.deepStrictEqual(r.json, {});
         const lines = r.stderr.trim().split('\n');
         assert.strictEqual(lines.length, 1);
-        assert.match(lines[0], /only when Claude Code runs it/);
+        assert.match(lines[0]!, /only when Claude Code runs it/);
         assert.ok(!r.stdout.includes('fake-1') && !r.stderr.includes('fake-1'));
         assert.deepStrictEqual(w.run({ env: { CLAUDE_CODE_MCP_SERVER_NAME: '' } }, G, 'Bearer').json, {}, 'an empty name is no Claude Code run');
         assert.deepStrictEqual(w.run(G, 'Bearer').json, { Authorization: 'Bearer fake-1' }, 'run by Claude Code, the same call prints the header');
@@ -153,7 +152,7 @@ test('it reads the grammar readDotenv reads', () => {
         for (const [name, bytes] of Object.entries(forms))
         {
             put(sec(w.root), bytes);
-            assert.deepStrictEqual(w.run(G, 'Bearer').json, { Authorization: `Bearer ${keys.readDotenv(sec(w.root))[G]}` }, name);
+            assert.deepStrictEqual(w.run(G, 'Bearer').json, { Authorization: `Bearer ${keys.readDotenv(sec(w.root))![G]}` }, name);
         }
     }
     finally { w.clean(); }
@@ -163,7 +162,7 @@ test('a note after the value is not part of the key, in the helper and in keys.j
     const w = world();
     try
     {
-        const forms = [
+        const forms: [string, string | null][] = [
             [`${G}=abc123 # work\n`, 'abc123'],
             [`${G}="abc 123" # work\n`, 'abc 123'],
             [`${G}='a # b'\n`, 'a # b'],
@@ -174,7 +173,7 @@ test('a note after the value is not part of the key, in the helper and in keys.j
         for (const [text, want] of forms)
         {
             put(sec(w.root), Buffer.from(text));
-            assert.strictEqual(keys.readDotenv(sec(w.root))[G], want === null ? '' : want, `keys.js: ${JSON.stringify(text)}`);
+            assert.strictEqual(keys.readDotenv(sec(w.root))![G], want === null ? '' : want, `keys.js: ${JSON.stringify(text)}`);
             assert.deepStrictEqual(w.run(G, 'Bearer').json, want === null ? {} : { Authorization: `Bearer ${want}` }, `helper: ${JSON.stringify(text)}`);
         }
     }
@@ -184,12 +183,12 @@ test('a note after the value is not part of the key, in the helper and in keys.j
 test('digestOf reads a CRLF copy as the same helper', () => {
     const text = fs.readFileSync(SOURCE, 'utf8');
     assert.strictEqual(helper.digestOf(text.replace(/\n/g, '\r\n')), helper.digestOf(text));
-    assert.strictEqual(helper.digestOf(Buffer.from(text)), helper.digestOf(text));
+    assert.strictEqual(helper.digestOf(Buffer.from(text) as unknown as string), helper.digestOf(text));
     assert.notStrictEqual(helper.digestOf(`${text} `), helper.digestOf(text));
 });
 
 // helper 3: Atlassian's personal token goes as Basic base64(email:api_token); the user writes email:api_token
-const schemeRun = (value, scheme) =>
+const schemeRun = (value: string, scheme: string) =>
 {
     const w = world();
     try
@@ -210,7 +209,7 @@ test('valueIn takes the first non-empty value in chain order and names its file'
     const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-valueof-')));
     try
     {
-        const [a, b, c] = ['a', 'b', 'c'].map((d) => sec(path.join(dir, d)));
+        const [a, b, c] = ['a', 'b', 'c'].map((d) => sec(path.join(dir, d))) as [string, string, string];
         put(a, 'K=\n');
         put(b, 'K=v1\n');
         put(c, 'K=v2\n');
@@ -233,7 +232,7 @@ test('authValue is the scheme and the value, with the Basic base64 rule', () => 
 test('helper 4 prints the same headers as helper 3, and exports its reader', () => {
     const helper = requireCopied(SOURCE);
     assert.strictEqual(helper.HELPER_VERSION, 4);
-    assert.match(fs.readFileSync(SOURCE, 'utf8').split('\n')[0], /^\/\/ preferred-tools mcp-headers 4$/);
+    assert.match(fs.readFileSync(SOURCE, 'utf8').split('\n')[0]!, /^\/\/ preferred-tools mcp-headers 4$/);
     for (const k of ['chainOf', 'digestOf', 'readDotenv', 'valueIn', 'authValue']) assert.strictEqual(typeof helper[k], 'function', k);
     assert.deepStrictEqual(schemeRun('fake-1', 'Bearer'), { Authorization: 'Bearer fake-1' });
     assert.deepStrictEqual(schemeRun('fake-1', 'Sentry-Bearer'), { Authorization: 'Sentry-Bearer fake-1' });

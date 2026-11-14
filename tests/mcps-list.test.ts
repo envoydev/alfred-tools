@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // mcps-list.js - the list of servers the plugin manages, one per root folder (spec D1): read, merge, write.
 import test from 'node:test';
 import assert from 'node:assert';
@@ -7,24 +6,25 @@ import os from 'node:os';
 import path from 'node:path';
 import * as kept from '../scripts/core/kept.ts';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
+import type { ListServer } from '../scripts/mcps-list/types.ts';
 import { LIST_VERSION, readList, writeList, mergeList, fromRegistration, serverKey, regKey, listFile } from '../scripts/mcps-list/mcps-list.ts';
 const { join } = path;
 
 const catalog = catalogLib.load();
-const row = (id) => catalog.byId.get(id);
+const row = (id: string) => catalog.byId.get(id);
 const dir = fs.mkdtempSync(join(os.tmpdir(), 'pt-mcps-list-'));
 test.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-const write = (name, text) => fs.writeFileSync(join(dir, name), text);
-const fresh = (name) => { const f = join(dir, name); fs.rmSync(f, { force: true }); fs.rmSync(`${f}.bak`, { force: true }); return f; };
-const srv = (name, scope, extra = {}) => ({ name, scope, row: name, route: 'local', clients: ['claude'], entry: { type: 'stdio', command: 'uvx', args: [name] }, key: null, ...extra });
-const githubDockerEntry = (value) => ({ type: 'stdio', command: 'docker', args: ['run', '-i', '--rm', '-e', 'GITHUB_PERSONAL_ACCESS_TOKEN', 'ghcr.io/github/github-mcp-server:v2.1.0', 'stdio'], env: { GITHUB_PERSONAL_ACCESS_TOKEN: value } });
+const write = (name: string, text: string) => fs.writeFileSync(join(dir, name), text);
+const fresh = (name: string) => { const f = join(dir, name); fs.rmSync(f, { force: true }); fs.rmSync(`${f}.bak`, { force: true }); return f; };
+const srv = (name: string, scope: string, extra: Partial<ListServer> = {}): ListServer => ({ name, scope, row: name, route: 'local', clients: ['claude'], entry: { type: 'stdio', command: 'uvx', args: [name] }, key: null, ...extra });
+const githubDockerEntry = (value: string) => ({ type: 'stdio', command: 'docker', args: ['run', '-i', '--rm', '-e', 'GITHUB_PERSONAL_ACCESS_TOKEN', 'ghcr.io/github/github-mcp-server:v2.1.0', 'stdio'], env: { GITHUB_PERSONAL_ACCESS_TOKEN: value } });
 
 test('readList: missing is null, not JSON is bad, newer is kept', () => {
     assert.equal(readList(join(dir, 'none.json')), null);
-    write('bad.json', '{'); assert.equal(readList(join(dir, 'bad.json')).state, 'bad');
-    write('new.json', '{"version":2,"servers":[],"own":[]}'); assert.equal(readList(join(dir, 'new.json')).state, 'newer');
+    write('bad.json', '{'); assert.equal(readList(join(dir, 'bad.json'))!.state, 'bad');
+    write('new.json', '{"version":2,"servers":[],"own":[]}'); assert.equal(readList(join(dir, 'new.json'))!.state, 'newer');
     write('ok.json', JSON.stringify({ version: 1, servers: [srv('serena', 'project')], own: [], cursorOffer: 'declined' }));
-    const ok = readList(join(dir, 'ok.json'));
+    const ok = readList(join(dir, 'ok.json'))!;
     assert.equal(ok.state, undefined);
     assert.equal(ok.servers.length, 1);
     assert.equal(ok.cursorOffer, 'declined');
@@ -45,7 +45,7 @@ test('writeList: a non-JSON file is kept as .bak first', () => {
     const r = writeList(f, { version: LIST_VERSION, servers: [srv('memory', 'project')], own: [] }, readList(f));
     assert.ok(r.ok);
     assert.equal(fs.readFileSync(`${f}.bak`, 'utf8'), '{');
-    assert.equal(readList(f).servers[0].name, 'memory');
+    assert.equal(readList(f)!.servers[0]!.name, 'memory');
 });
 
 test('writeList: a newer list is never replaced', () => {
@@ -68,9 +68,9 @@ test('writeList: empty servers and own delete the file', () => {
 
 test('writeList: through a temporary file then a rename', (t) => {
     const f = fresh('tmp.json');
-    const calls = [];
+    const calls: [fs.PathLike, fs.PathLike][] = [];
     const real = fs.renameSync;
-    t.mock.method(fs, 'renameSync', (a, b) => { calls.push([a, b]); return real(a, b); });
+    t.mock.method(fs, 'renameSync', (a: fs.PathLike, b: fs.PathLike) => { calls.push([a, b]); return real(a, b); });
     writeList(f, { version: LIST_VERSION, servers: [srv('memory', 'project')], own: [] }, null);
     assert.deepStrictEqual(calls, [[`${f}.${process.pid}.tmp`, f]]);
 });
@@ -83,7 +83,7 @@ test('mergeList: an upsert replaces by name and scope, a drop removes, own repla
         own: [{ name: 'y', scope: 'user', choice: 'own' }],
     });
     assert.deepStrictEqual(doc.servers.map(serverKey), ['mcp:serena~project', 'mcp:memory~project', 'mcp:context7~user']);
-    assert.deepStrictEqual(doc.servers[0].clients, ['claude', 'cursor']);
+    assert.deepStrictEqual(doc.servers[0]!.clients, ['claude', 'cursor']);
     assert.deepStrictEqual(doc.own, [{ name: 'y', scope: 'user', choice: 'own' }]);
     assert.equal(doc.version, LIST_VERSION);
     assert.deepStrictEqual(mergeList(list, {}).own, list.own, 'no own given keeps the list\'s');

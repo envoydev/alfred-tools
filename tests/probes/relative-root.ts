@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 12
 // THE RELATIVE DATA FOLDER - does a tool resolve the relative data folder project scope writes against the folder it
 // starts in? Each row is launched as plan.js builds it at project scope (data folder `.preferred-tools/<name>`), over
 // stdio, from a root folder R and then from R/child, under a throwaway HOME, and the file the tool writes into its data
@@ -24,37 +23,56 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { buildEntry } from '../../scripts/entries/entry.ts';
 import { load } from '../../scripts/catalog/catalog.ts';
+import type { ServerEntry } from '../../scripts/core/types.ts';
 const catalog = load();
 
-const DATA_FILE = { serena: 'serena_config.yml', memory: 'memory.db', appium: '.png' };
-const CALLS = {
+// a tool call the probe makes, a reply to it, and what one session saw
+interface Call
+{
+    name: string;
+    arguments: unknown;
+}
+interface Reply
+{
+    error?: unknown;
+    result?: { isError?: boolean; content?: unknown };
+}
+interface Probed
+{
+    tools: string[];
+    replies: Reply[];
+    error: string | null;
+}
+
+const DATA_FILE: Record<string, string> = { serena: 'serena_config.yml', memory: 'memory.db', appium: '.png' };
+const CALLS: Record<string, Call[]> = {
     appium: [{ name: 'appium_screenshot', arguments: {} }],
 };
-const isBrowser = (id) => id.startsWith('playwright-');
-const dataFile = (id) => (isBrowser(id) ? 'Local State' : DATA_FILE[id]);
-const callsOf = (id) => (isBrowser(id) ? [{ name: 'browser_navigate', arguments: { url: 'about:blank' } }, { name: 'browser_close', arguments: {} }] : CALLS[id] || []);
-const matches = (id, file) => (dataFile(id).startsWith('.') ? file.endsWith(dataFile(id)) : file === dataFile(id));
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const isBrowser = (id: string) => id.startsWith('playwright-');
+const dataFile = (id: string) => (isBrowser(id) ? 'Local State' : DATA_FILE[id]!);
+const callsOf = (id: string): Call[] => (isBrowser(id) ? [{ name: 'browser_navigate', arguments: { url: 'about:blank' } }, { name: 'browser_close', arguments: {} }] : CALLS[id] || []);
+const matches = (id: string, file: string) => (dataFile(id).startsWith('.') ? file.endsWith(dataFile(id)) : file === dataFile(id));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function args(argv)
+function args(argv: string[])
 {
-    const out = { rows: ['serena', 'memory', 'playwright-chrome', 'appium'], list: false, keep: false, scratch: null };
+    const out: { rows: string[]; list: boolean; keep: boolean; scratch: string | null } = { rows: ['serena', 'memory', 'playwright-chrome', 'appium'], list: false, keep: false, scratch: null };
     for (let i = 0; i < argv.length; i++)
     {
-        if (argv[i] === '--rows') out.rows = argv[++i].split(',').filter(Boolean);
+        if (argv[i] === '--rows') out.rows = argv[++i]!.split(',').filter(Boolean);
         else if (argv[i] === '--list') out.list = true;
         else if (argv[i] === '--keep') out.keep = true;
-        else if (argv[i] === '--scratch') out.scratch = argv[++i];
+        else if (argv[i] === '--scratch') out.scratch = argv[++i]!;
         else throw new Error(`unknown argument ${argv[i]}`);
     }
     return out;
 }
 
 // every file named like the row's data file under a folder -> [absolute path]
-function copies(id, dir)
+function copies(id: string, dir: string)
 {
-    const out = [];
-    const walk = (d, depth) =>
+    const out: string[] = [];
+    const walk = (d: string, depth: number): void =>
     {
         if (depth > 12) return;
         let list;
@@ -72,28 +90,28 @@ function copies(id, dir)
 }
 
 // One stdio session: initialize, tools/list, the calls in order. -> { tools, replies, error }
-function session(entry, { cwd, env, calls, timeoutMs = 600000 })
+function session(entry: ServerEntry, { cwd, env, calls, timeoutMs = 600000 }: { cwd: string; env: NodeJS.ProcessEnv; calls: Call[]; timeoutMs?: number })
 {
-    return new Promise((resolve) =>
+    return new Promise<Probed>((resolve) =>
     {
         const win = process.platform === 'win32';
-        const p = spawn(entry.command, entry.args || [], { cwd, env: { ...env, ...(entry.env || {}) }, stdio: ['pipe', 'pipe', 'pipe'], detached: !win, shell: false });
+        const p = spawn(entry.command!, entry.args || [], { cwd, env: { ...env, ...(entry.env || {}) }, stdio: ['pipe', 'pipe', 'pipe'], detached: !win, shell: false });
         let buf = '';
         let stderr = '';
         let done = false;
-        const out = { tools: [], replies: [], error: null };
-        const finish = (error) =>
+        const out: Probed = { tools: [], replies: [], error: null };
+        const finish = (error: string | null) =>
         {
             if (done) return;
             done = true;
             out.error = error || null;
             clearTimeout(timer);
-            try { if (win) spawn('taskkill', ['/pid', String(p.pid), '/t', '/f']); else process.kill(-p.pid, 'SIGKILL'); }
+            try { if (win) spawn('taskkill', ['/pid', String(p.pid), '/t', '/f']); else process.kill(-p.pid!, 'SIGKILL'); }
             catch { /* already gone */ }
             resolve(out);
         };
         const timer = setTimeout(() => finish(`no reply in ${timeoutMs / 1000}s`), timeoutMs);
-        const send = (m) => p.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...m })}\n`);
+        const send = (m: Record<string, unknown>) => p.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...m })}\n`);
         let next = 3;
         const callNext = () =>
         {
@@ -123,7 +141,7 @@ function session(entry, { cwd, env, calls, timeoutMs = 600000 })
                 }
                 else if (m.id === 2)
                 {
-                    out.tools = ((m.result && m.result.tools) || []).map((t) => t.name);
+                    out.tools = ((m.result && m.result.tools) || []).map((t: { name: string }) => t.name);
                     const missing = calls.filter((c) => !out.tools.includes(c.name)).map((c) => c.name);
                     if (missing.length) return finish(`MISSING TOOL ${missing.join(', ')}`);
                     callNext();
@@ -140,7 +158,7 @@ function session(entry, { cwd, env, calls, timeoutMs = 600000 })
     });
 }
 
-async function runRow(id, base, cache, opts)
+async function runRow(id: string, base: string, cache: string, opts: ReturnType<typeof args>)
 {
     const row = catalog.byId.get(id);
     if (!row || !row.locations) throw new Error(`${id}: not a catalog row with a data folder`);
@@ -151,7 +169,7 @@ async function runRow(id, base, cache, opts)
     for (const d of [HOME, child]) fs.mkdirSync(d, { recursive: true });
     const ctx = { platform: process.platform, arch: process.arch, project: R, home: HOME, env: {}, machine: {} };
     const entry = buildEntry(row, 'local', { rootStr: `.preferred-tools/${row.name}`, scope: 'project', params: {} }, ctx, catalog.rules);
-    if (isBrowser(id)) entry.args = [...entry.args, '--headless'];
+    if (isBrowser(id)) entry.args = [...entry.args!, '--headless'];
     console.log(`LAUNCH ${id} ${entry.command} ${(entry.args || []).join(' ')} ${JSON.stringify(entry.env || {})}`);
     const env = {
         ...process.env, HOME, USERPROFILE: HOME,
@@ -159,7 +177,7 @@ async function runRow(id, base, cache, opts)
         XDG_CACHE_HOME: cache, npm_config_cache: path.join(cache, 'npm'), UV_CACHE_DIR: path.join(cache, 'uv'), UV_PYTHON_INSTALL_DIR: path.join(cache, 'uv-python'),
     };
     let missing = false;
-    for (const [where, cwd] of [['root', R], ['child', child]])
+    for (const [where, cwd] of [['root', R], ['child', child]] as [string, string][])
     {
         const before = new Set([...copies(id, HOME), ...copies(id, R)]);
         const s = await session(entry, { cwd, env, calls: opts.list ? [] : callsOf(id).map((c) => ({ ...c })) });
@@ -167,7 +185,7 @@ async function runRow(id, base, cache, opts)
         if (s.error && /^MISSING TOOL/.test(s.error)) { missing = true; console.log(`RESULT ${id} ${where} fail - ${s.error}`); break; }
         const expected = path.join(cwd, '.preferred-tools', row.name);
         // a browser may flush its profile on close: give the file a moment to land
-        let fresh = [];
+        let fresh: string[] = [];
         for (let t = 0; t < 30; t++)
         {
             fresh = [...copies(id, HOME), ...copies(id, R)].filter((f) => !before.has(f));
@@ -175,10 +193,10 @@ async function runRow(id, base, cache, opts)
             await sleep(500);
         }
         const failedCall = s.replies.find((m) => m.error || (m.result && m.result.isError));
-        const show = (f) => path.relative(dir, f);
+        const show = (f: string) => path.relative(dir, f);
         if (!fresh.length)
         {
-            const why = id === 'appium' && failedCall ? 'no device' : s.error || (failedCall ? `the call failed: ${JSON.stringify(failedCall.error || failedCall.result.content).slice(0, 160)}` : 'no data file written');
+            const why = id === 'appium' && failedCall ? 'no device' : s.error || (failedCall ? `the call failed: ${JSON.stringify(failedCall.error || failedCall.result!.content).slice(0, 160)}` : 'no data file written');
             console.log(`RESULT ${id} ${where} fail - ${why}`);
             continue;
         }

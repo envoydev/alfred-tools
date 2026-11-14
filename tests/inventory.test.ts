@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -13,20 +12,23 @@ import { randomBytes } from 'node:crypto';
 import { MARKER, keep } from '../scripts/core/kept.ts';
 import * as roots from '../scripts/roots/roots.ts';
 import { signInFormOf } from '../scripts/entries/sign-in.ts';
+import type { World } from './types.ts';
+import type { BuildOptions, Inventory, InvRegistration, PluginRow } from '../scripts/inventory/types.ts';
+import type { ServerEntry, ServerMap } from '../scripts/core/types.ts';
 
 const catalog = catalogLib.load();
 const SERENA = { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20T23:59:59Z', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'], env: { SERENA_HOME: '/x' } };
-const PW = (engine, ver = '0.0.83') => ({ command: 'npx', args: ['-y', `@playwright/mcp@${ver}`, '--browser', engine, '--user-data-dir', `/p/${engine}`] });
-const URL_ = (u) => ({ type: 'http', url: u });
-const build = (w, extra = {}) => inv.buildInventory({ project: w.project, env: w.env, catalog, ...extra });
+const PW = (engine: string, ver = '0.0.83'): ServerEntry => ({ command: 'npx', args: ['-y', `@playwright/mcp@${ver}`, '--browser', engine, '--user-data-dir', `/p/${engine}`] });
+const URL_ = (u: string): ServerEntry => ({ type: 'http', url: u });
+const build = (w: World, extra: Partial<BuildOptions> = {}) => inv.buildInventory({ project: w.project, env: w.env, catalog, ...extra });
 
-function accountWith(w, { user = {}, local = {} } = {})
+function accountWith(w: World, { user = {}, local = {} }: { user?: ServerMap; local?: ServerMap } = {})
 {
     writeJson(account.accountFile(w.env), { mcpServers: user, projects: { [accountKey(w.project)]: { mcpServers: local } } });
 }
 
 test('a registration is matched by what it launches, under any name', () => {
-    const cases = [
+    const cases: [ServerEntry, string][] = [
         [SERENA, 'serena'],
         [{ command: 'uvx', args: ['--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'] }, 'memory'],
         [PW('chrome'), 'playwright-chrome'], [PW('msedge'), 'playwright-msedge'], [PW('firefox'), 'playwright-firefox'], [PW('webkit'), 'playwright-webkit'],
@@ -48,15 +50,15 @@ test('a registration is matched by what it launches, under any name', () => {
     {
         const m = inv.matchEntry(entry, catalog);
         assert.ok(m, `${JSON.stringify(entry)} should match ${row}`);
-        assert.strictEqual(m.rowId, row, JSON.stringify(entry));
+        assert.strictEqual(m!.rowId, row, JSON.stringify(entry));
     }
 });
 
 test('the cmd /c wrapper is looked through, and a bare Playwright with no --browser is nobody\'s', () => {
-    assert.strictEqual(inv.matchEntry({ command: 'cmd', args: ['/c', 'npx', '-y', '@playwright/mcp@0.0.83', '--browser', 'firefox'] }, catalog).rowId, 'playwright-firefox');
-    assert.strictEqual(inv.matchEntry({ command: 'cmd.exe', args: ['/d', '/s', '/c', 'npx', '-y', 'appium-mcp@1.97.1'] }, catalog).rowId, 'appium');
+    assert.strictEqual(inv.matchEntry({ command: 'cmd', args: ['/c', 'npx', '-y', '@playwright/mcp@0.0.83', '--browser', 'firefox'] }, catalog)!.rowId, 'playwright-firefox');
+    assert.strictEqual(inv.matchEntry({ command: 'cmd.exe', args: ['/d', '/s', '/c', 'npx', '-y', 'appium-mcp@1.97.1'] }, catalog)!.rowId, 'appium');
     assert.strictEqual(inv.matchEntry({ command: 'npx', args: ['-y', '@playwright/mcp@latest'] }, catalog), null);
-    assert.strictEqual(inv.matchEntry({ command: 'npx', args: ['-y', '@playwright/mcp@latest', '--browser=webkit'] }, catalog).rowId, 'playwright-webkit');
+    assert.strictEqual(inv.matchEntry({ command: 'npx', args: ['-y', '@playwright/mcp@latest', '--browser=webkit'] }, catalog)!.rowId, 'playwright-webkit');
 });
 
 test('a user\'s own server is never matched, even under a catalog name', () => {
@@ -109,12 +111,12 @@ test('Windows: local servers are found under the key Claude Code writes - the cw
     const w = world();
     try
     {
-        const local = (projects, project, platform = 'win32') =>
+        const local = (projects: Record<string, unknown>, project: string, platform = 'win32') =>
         {
             writeJson(account.accountFile(w.env), { projects });
             return Object.keys(account.readAccount(w.env, project, platform).local);
         };
-        const entry = (name) => ({ mcpServers: { [name]: SERENA } });
+        const entry = (name: string) => ({ mcpServers: { [name]: SERENA } });
         assert.deepStrictEqual(local({ 'C:/work/shop': entry('serena') }, 'C:\\work\\shop'), ['serena'], 'the slash form');
         assert.deepStrictEqual(local({ 'C:/Work/Shop': entry('serena') }, 'c:\\work\\shop'), ['serena'], 'typed in another case, the same NTFS folder');
         assert.deepStrictEqual(local({ 'C:/work/shop': entry('upper'), 'c:/work/shop': entry('lower') }, 'c:\\work\\shop'), ['lower'], 'the key typed as this cwd wins');
@@ -130,15 +132,15 @@ test('a missing, an empty and a malformed .mcp.json each say what they are', () 
     {
         const f = path.join(w.project, '.mcp.json');
         let i = build(w);
-        assert.strictEqual(i.sources.project.state, 'missing');
+        assert.strictEqual(i.sources.project!.state, 'missing');
         assert.deepStrictEqual(i.unreadable, []);
         fs.writeFileSync(f, '');
         i = build(w);
-        assert.strictEqual(i.sources.project.state, 'empty');
+        assert.strictEqual(i.sources.project!.state, 'empty');
         assert.deepStrictEqual(i.unreadable, []);
         fs.writeFileSync(f, '{ "mcpServers": { "a": ');
         i = build(w);
-        assert.strictEqual(i.sources.project.state, 'malformed');
+        assert.strictEqual(i.sources.project!.state, 'malformed');
         assert.deepStrictEqual(i.unreadable.map((u) => [u.scope, u.state]), [['project', 'malformed']]);
         assert.strictEqual(i.registrations.length, 0);
         fs.writeFileSync(f, '{"mcpServers": []}');
@@ -153,8 +155,8 @@ test('a BOM at the start of .mcp.json does not read as an empty file', () => {
     {
         fs.writeFileSync(path.join(w.project, '.mcp.json'), `﻿${JSON.stringify({ mcpServers: { serena: SERENA } })}`);
         const i = build(w);
-        assert.strictEqual(i.sources.project.state, 'ok');
-        assert.strictEqual(i.registrations[0].rowId, 'serena');
+        assert.strictEqual(i.sources.project!.state, 'ok');
+        assert.strictEqual(i.registrations[0]!.rowId, 'serena');
     }
     finally { w.clean(); }
 });
@@ -179,7 +181,7 @@ test('CLAUDE_CONFIG_DIR picks the account file, and a missing one is just empty'
         assert.strictEqual(account.accountFile(w.env), path.join(w.account, '.claude.json'));
         assert.strictEqual(account.accountFile({ HOME: '/h' }), path.join('/h', '.claude.json'));
         assert.strictEqual(account.configDir({ HOME: '/h' }), path.join('/h', '.claude'));
-        assert.strictEqual(build(w).sources.account.state, 'missing');
+        assert.strictEqual(build(w).sources.account!.state, 'missing');
     }
     finally { w.clean(); }
 });
@@ -190,10 +192,10 @@ test('servers under a name alfred-code once registered are marked retired, whate
     {
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { 'chrome-control': PW('chrome'), 'alfred-navigation': SERENA, serena: SERENA } });
         const i = build(w);
-        const by = Object.fromEntries(i.registrations.map((r) => [r.name, r]));
-        assert.strictEqual(by['chrome-control'].alfredRetired, true);
-        assert.strictEqual(by['alfred-navigation'].alfredRetired, true);
-        assert.strictEqual(by.serena.alfredRetired, false);
+        const by: Record<string, InvRegistration> & { serena?: InvRegistration } = Object.fromEntries(i.registrations.map((r) => [r.name, r]));
+        assert.strictEqual(by['chrome-control']!.alfredRetired, true);
+        assert.strictEqual(by['alfred-navigation']!.alfredRetired, true);
+        assert.strictEqual(by.serena!.alfredRetired, false);
         // offered nothing over: installedOf skips them
         assert.deepStrictEqual(inv.installedOf(i, 'playwright-chrome'), []);
         assert.strictEqual(inv.installedOf(i, 'serena').length, 1);
@@ -219,14 +221,14 @@ test('plugins: by exact id, enabled read from the settings file at their scope, 
         writeJson(path.join(w.project, '.claude', 'settings.json'), { enabledPlugins: { 'typescript-lsp@claude-plugins-official': true } });
         const i = build(w);
         const by = Object.fromEntries(i.plugins.map((p) => [p.id, p]));
-        assert.strictEqual(by['claude-hud@claude-hud'].enabled, true);
-        assert.strictEqual(by['claude-hud@claude-hud'].enabledFrom, 'settings');
-        assert.strictEqual(by['claude-hud@claude-hud'].rowId, null, 'claude-hud is no catalog row - retired-plugin offers its uninstall');
-        assert.strictEqual(by['typescript-lsp@claude-plugins-official'].enabled, true);
+        assert.strictEqual(by['claude-hud@claude-hud']!.enabled, true);
+        assert.strictEqual(by['claude-hud@claude-hud']!.enabledFrom, 'settings');
+        assert.strictEqual(by['claude-hud@claude-hud']!.rowId, null, 'claude-hud is no catalog row - retired-plugin offers its uninstall');
+        assert.strictEqual(by['typescript-lsp@claude-plugins-official']!.enabled, true);
         assert.ok(!('csharp-lsp@claude-plugins-official' in by), 'another project\'s plugin row is not this project\'s');
-        assert.strictEqual(by['alfred-navigation@envoydev'].alfredRetired, true);
-        assert.deepStrictEqual(by['broken@somewhere'].errors, ['cannot load']);
-        assert.strictEqual(by['broken@somewhere'].rowId, null);
+        assert.strictEqual(by['alfred-navigation@envoydev']!.alfredRetired, true);
+        assert.deepStrictEqual(by['broken@somewhere']!.errors, ['cannot load']);
+        assert.strictEqual(by['broken@somewhere']!.rowId, null);
         assert.strictEqual(i.alfredCodeEnabled, true);
         assert.deepStrictEqual(i.marketplaces.map((m) => m.name), ['claude-hud']);
     }
@@ -235,9 +237,9 @@ test('plugins: by exact id, enabled read from the settings file at their scope, 
 
 // Whether a plugin runs HERE: the first boolean in the git root's settings.local.json, this folder's settings.local.json,
 // its settings.json, then the user settings, whatever the install scope (docs/sources.md, P1-P6)
-const plugState = (w, ids) => writeJson(path.join(w.dir, 'state', 'plugins.json'), { marketplaces: [], installed: ids.map(([id, scope, enabled = true]) =>
+const plugState = (w: World, ids: [string, string, boolean?][]) => writeJson(path.join(w.dir, 'state', 'plugins.json'), { marketplaces: [], installed: ids.map(([id, scope, enabled = true]) =>
     ({ id, version: '1.0.0', scope, enabled, installPath: '/c', ...(scope === 'user' ? {} : { projectPath: account.projectKey(w.project) }) })) });
-const here = (i) => Object.fromEntries(i.plugins.map((p) => [p.id, [p.enabled, p.enabledHere]]));
+const here = (i: Inventory) => Object.fromEntries(i.plugins.map((p) => [p.id, [p.enabled, p.enabledHere]]));
 
 test('plugins: enabledHere reads the local files, then settings.json, then the user settings, whatever the install scope (P1-P3, P6)', () => {
     const w = world();
@@ -324,10 +326,10 @@ test('the CLI form writes every credential value as the marker; nothing it print
         const text = fs.readFileSync(out, 'utf8');
         for (const v of [token, key]) for (const where of [text, r.stdout, r.stderr, printed.stdout]) assert.ok(!where.includes(v), 'no live value written or printed');
         const regs = JSON.parse(text).registrations;
-        const sentry = regs.find((x) => x.name === 'sentry-live');
+        const sentry = regs.find((x: { name: string }) => x.name === 'sentry-live');
         assert.strictEqual(sentry.entry.env.SENTRY_ACCESS_TOKEN, MARKER);
         assert.strictEqual(sentry.rowId, 'sentry', 'still matched by what it launches');
-        assert.deepStrictEqual(regs.find((x) => x.name === 'mine').entry.env, { API_KEY: MARKER, MODE: 'x' });
+        assert.deepStrictEqual(regs.find((x: { name: string }) => x.name === 'mine').entry.env, { API_KEY: MARKER, MODE: 'x' });
     }
     finally { w.clean(); }
 });
@@ -336,10 +338,10 @@ test('the CLI form writes every credential value as the marker; nothing it print
 // in parent folders', M1-M7). A tree shaped like tests/probes/mcp-tree.ts's under the world's folder: a file above
 // HOME, in HOME, in ws and in ws/api; ws/api and ws/web are git repos, ws one only when `gitWs`.
 
-const SRV = (tag) => ({ command: 'node', args: ['server.js', tag] });
-function tree(w, { gitWs = true } = {})
+const SRV = (tag: string) => ({ command: 'node', args: ['server.js', tag] });
+function tree(w: World, { gitWs = true }: { gitWs?: boolean } = {})
 {
-    const t = { above: w.dir, home: w.home, ws: path.join(w.home, 'ws') };
+    const t = { above: w.dir, home: w.home, ws: path.join(w.home, 'ws') } as { above: string; home: string; ws: string; api: string; src: string; web: string; notes: string };
     Object.assign(t, { api: path.join(t.ws, 'api'), src: path.join(t.ws, 'api', 'src'), web: path.join(t.ws, 'web'), notes: path.join(t.ws, 'notes') });
     for (const d of [t.src, t.web, t.notes]) fs.mkdirSync(d, { recursive: true });
     writeJson(path.join(t.above, '.mcp.json'), { mcpServers: { 'p-above': SRV('p-above') } });
@@ -350,9 +352,9 @@ function tree(w, { gitWs = true } = {})
     return t;
 }
 // what came from inside the world (a real file above the temp folder is the machine's, not the test's)
-const inherited = (w, i) => i.registrations.filter((r) => r.scope === 'inherited' && !path.relative(w.dir, r.from).startsWith('..'));
-const fromOf = (w, i) => inherited(w, i).map((r) => `${r.name}@${path.relative(w.dir, r.from).split(path.sep).join('/') || '.'}`);
-const atProject = (w, project) => inv.buildInventory({ project, env: w.env, catalog });
+const inherited = (w: World, i: Inventory) => i.registrations.filter((r) => r.scope === 'inherited' && !path.relative(w.dir, r.from!).startsWith('..'));
+const fromOf = (w: World, i: Inventory) => inherited(w, i).map((r) => `${r.name}@${path.relative(w.dir, r.from!).split(path.sep).join('/') || '.'}`);
+const atProject = (w: World, project: string) => inv.buildInventory({ project, env: w.env, catalog });
 
 test('the walk reads the parent .mcp.json files Claude Code reads (M1)', () => {
     for (const gitWs of [true, false])
@@ -361,12 +363,12 @@ test('the walk reads the parent .mcp.json files Claude Code reads (M1)', () => {
         try
         {
             const t = tree(w, { gitWs });
-            const dirs = (p) => inv.ancestorMcpFiles(p).map((f) => f.dir).filter((d) => !path.relative(w.dir, d).startsWith('..'));
+            const dirs = (p: string) => inv.ancestorMcpFiles(p).map((f) => f.dir).filter((d) => !path.relative(w.dir, d).startsWith('..'));
             assert.deepStrictEqual(dirs(t.api), [t.ws, t.home, t.above], `ws/api, nearest first, HOME and above included (git ws: ${gitWs})`);
             assert.deepStrictEqual(dirs(t.src), [t.api, t.ws, t.home, t.above], `ws/api/src (git ws: ${gitWs})`);
             assert.deepStrictEqual(fromOf(w, atProject(w, t.src)), ['p-api@home/ws/api', 'dup@home/ws/api', 'p-ws@home/ws', 'dup@home/ws', 'p-home@home', 'p-above@.']);
             assert.deepStrictEqual(fromOf(w, atProject(w, t.api)), ['p-ws@home/ws', 'dup@home/ws', 'p-home@home', 'p-above@.'], "the project's own file is not inherited");
-            const r = inherited(w, atProject(w, t.src)).find((x) => x.name === 'p-api');
+            const r = inherited(w, atProject(w, t.src)).find((x) => x.name === 'p-api')!;
             assert.deepStrictEqual([r.file, r.own, r.rowId], [path.join(t.api, '.mcp.json'), true, null]);
         }
         finally { w.clean(); }
@@ -378,7 +380,7 @@ test('the same name nearer wins, the farther one is shadowed (M2)', () => {
     try
     {
         const t = tree(w);
-        const dups = (p) => inherited(w, atProject(w, p)).filter((r) => r.name === 'dup').map((r) => [path.relative(w.home, r.from).split(path.sep).join('/'), r.shadowed]);
+        const dups = (p: string) => inherited(w, atProject(w, p)).filter((r) => r.name === 'dup').map((r) => [path.relative(w.home, r.from!).split(path.sep).join('/'), r.shadowed]);
         assert.deepStrictEqual(dups(t.src), [['ws/api', null], ['ws', { scope: 'inherited', from: t.api }]]);
         assert.deepStrictEqual(dups(t.api), [['ws', { scope: 'project', from: t.api }]], "the project's own .mcp.json is nearer still");
     }
@@ -392,7 +394,7 @@ test('a local copy shadows the inherited one (M3)', () => {
         const t = tree(w);
         writeJson(account.accountFile(w.env), { projects: { [accountKey(t.web)]: { mcpServers: { dup: SRV('local') } } } });
         const i = atProject(w, t.web);
-        assert.deepStrictEqual(inherited(w, i).find((r) => r.name === 'dup').shadowed, { scope: 'local', from: null });
+        assert.deepStrictEqual(inherited(w, i).find((r) => r.name === 'dup')!.shadowed, { scope: 'local', from: null });
         assert.ok(i.registrations.some((r) => r.name === 'dup' && r.scope === 'local'));
     }
     finally { w.clean(); }
@@ -408,7 +410,7 @@ test('a malformed parent .mcp.json is named, not fatal', () => {
         assert.deepStrictEqual(fromOf(w, i), ['p-home@home', 'p-above@.'], 'only that file is lost, as M6 measured');
         const u = i.unreadable.filter((x) => x.scope === 'inherited');
         assert.deepStrictEqual(u.map((x) => [x.file, x.state]), [[path.join(t.ws, '.mcp.json'), 'malformed']]);
-        assert.ok(i.sources.inherited.some((s) => s.file === path.join(t.ws, '.mcp.json') && s.state === 'malformed'));
+        assert.ok(i.sources.inherited!.some((s) => s.file === path.join(t.ws, '.mcp.json') && s.state === 'malformed'));
         assert.deepStrictEqual(i.registrations.filter((r) => r.scope === 'project').map((r) => r.name), ['p-api', 'dup'], 'its own file still read');
     }
     finally { w.clean(); }
@@ -423,7 +425,7 @@ test('the walk follows a symlinked cwd the way Claude Code does (M5)', () => {
         fs.symlinkSync(t.api, link, process.platform === 'win32' ? 'junction' : 'dir');
         const i = atProject(w, link);
         assert.deepStrictEqual(fromOf(w, i), ['p-ws@home/ws', 'dup@home/ws', 'p-home@home', 'p-above@.'], "the real folder's parents, not the link's");
-        assert.deepStrictEqual(inherited(w, i).map((r) => inv.fromHere(i, r.from)), ['..', '..', '../..', '../../..'], 'named from the real folder, as Claude Code walks it');
+        assert.deepStrictEqual(inherited(w, i).map((r) => inv.fromHere(i, r.from!)), ['..', '..', '../..', '../../..'], 'named from the real folder, as Claude Code walks it');
     }
     finally { w.clean(); }
 });
@@ -442,7 +444,7 @@ test('the approval of an inherited server follows the measured rules (M7)', () =
             for (const f of [childLocal, parentLocal, user]) fs.rmSync(f, { force: true });
             for (const [f, doc] of Object.entries(files)) writeJson(f, doc);
             writeJson(acct, { projects: { [accountKey(t.web)]: { hasTrustDialogAccepted: trusted, ...entry } } });
-            return inherited(w, atProject(w, t.web)).find((r) => r.name === 'p-ws').approval;
+            return inherited(w, atProject(w, t.web)).find((r) => r.name === 'p-ws')!.approval;
         };
         const on = { enabledMcpjsonServers: ['p-ws'] };
         const off = { disabledMcpjsonServers: ['p-ws'] };
@@ -464,7 +466,7 @@ test("this folder's own .mcp.json server carries its approval, by the same rules
     try
     {
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { wd: SRV('wd') } });
-        const own = () => build(w).registrations.find((r) => r.scope === 'project' && r.name === 'wd').approval;
+        const own = () => build(w).registrations.find((r) => r.scope === 'project' && r.name === 'wd')!.approval;
         assert.strictEqual(own(), 'pending', 'nothing set');
         const local = path.join(w.project, '.claude', 'settings.local.json');
         writeJson(local, { disabledMcpjsonServers: ['wd'] });
@@ -483,7 +485,7 @@ test('no parent file, no inherited entry', () => {
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { mine: SRV('mine') } });
         const i = build(w);
         assert.deepStrictEqual(inherited(w, i), []);
-        assert.deepStrictEqual(i.sources.inherited.filter((s) => !path.relative(w.dir, s.file).startsWith('..')), []);
+        assert.deepStrictEqual(i.sources.inherited!.filter((s) => !path.relative(w.dir, s.file).startsWith('..')), []);
     }
     finally { w.clean(); }
 });
@@ -507,8 +509,8 @@ test('a subfolder session reads the project file and key M4 measured', () => {
             assert.deepStrictEqual(src.registrations.filter((r) => r.scope === 'project').map((r) => r.name), ['here'], "ws/api/src's own .mcp.json is its project file");
             assert.deepStrictEqual(src.registrations.filter((r) => r.scope === 'local').map((r) => r.name), ['at-root'], 'ws/api/src: the local servers keyed on the repo root');
             assert.deepStrictEqual(atProject(w, t.notes).registrations.filter((r) => r.scope === 'local').map((r) => r.name), ['notes-key'], `ws/notes (git ws: ${gitWs})`);
-            assert.strictEqual(account.readRegistration('at-root', 'local', t.src, w.env).args[1], 'root');
-            assert.strictEqual(account.readRegistration('here', 'project', t.src, w.env).args[1], 'here');
+            assert.strictEqual(account.readRegistration('at-root', 'local', t.src, w.env)!.args![1], 'root');
+            assert.strictEqual(account.readRegistration('here', 'project', t.src, w.env)!.args![1], 'here');
         }
         finally { w.clean(); }
     }
@@ -516,12 +518,12 @@ test('a subfolder session reads the project file and key M4 measured', () => {
 
 // ---- windows-mcp: the servers that start here ------------------------------------------------------------------------
 
-const WM = (scope, name, extra = {}) => ({ name, scope, entry: {}, rowId: 'windows-control', route: 'local', own: false, alfredRetired: false, ...extra });
-const PLUG = (id, enabled, scope = 'user') => { const [plugin, marketplace] = id.split('@'); return { id, plugin, marketplace, scope, enabled, rowId: null, alfredRetired: plugin === 'windows-control' }; };
-const startsHere = (registrations, plugins = []) => inv.windowsMcpServers({ registrations, plugins }).map((s) => `${s.name} ${s.scope} ${s.owner}`);
+const WM = (scope: string, name: string, extra: Partial<InvRegistration> = {}): InvRegistration => ({ name, scope, entry: {}, rowId: 'windows-control', route: 'local', own: false, alfredRetired: false, ...extra });
+const PLUG = (id: string, enabled: boolean, scope = 'user') => { const [plugin, marketplace] = id.split('@'); return { id, plugin, marketplace, scope, enabled, rowId: null, alfredRetired: plugin === 'windows-control' } as PluginRow; };
+const startsHere = (registrations: InvRegistration[], plugins: PluginRow[] = []) => inv.windowsMcpServers({ registrations, plugins }).map((s) => `${s.name} ${s.scope} ${s.owner}`);
 
 test('windowsMcpServers: one per name at its nearest scope, approved inherited only, enabled alfred-code plugins only', () => {
-    const registrations = [
+    const registrations: InvRegistration[] = [
         WM('user', 'windows-desktop'),
         WM('local', 'windows-desktop'),
         { name: 'windows-control', scope: 'local', entry: {}, rowId: null, route: null, own: true, alfredRetired: true },
@@ -547,7 +549,7 @@ test('windowsMcpServers: a plugin that cannot load is not counted - a dropped id
 });
 
 test("windowsMcpServers: this folder's own server counts once approved, a plugin where it is on here (M8, P1-P5)", () => {
-    for (const approval of ['pending', 'rejected']) assert.deepStrictEqual(startsHere([WM('project', 'wd-p', { approval })]), [], approval);
+    for (const approval of ['pending', 'rejected'] as const) assert.deepStrictEqual(startsHere([WM('project', 'wd-p', { approval })]), [], approval);
     assert.deepStrictEqual(startsHere([WM('project', 'wd-p', { approval: 'approved' })]), ['wd-p project catalog']);
     assert.deepStrictEqual(startsHere([WM('project', 'wd-p')]), ['wd-p project catalog'], 'a hand-built inventory, as in 0.1.4');
     // a pending one does not take its name's slot: the user-scope one of that name is what starts
@@ -557,7 +559,7 @@ test("windowsMcpServers: this folder's own server counts once approved, a plugin
 });
 
 test('windowsMcpServers: one plugin id installed at two scopes is one server, at the nearer scope (S28)', () => {
-    const at = (scope, enabled) => ({ ...PLUG('windows-control@envoydev', enabled, scope), enabledHere: true });
+    const at = (scope: string, enabled: boolean) => ({ ...PLUG('windows-control@envoydev', enabled, scope), enabledHere: true });
     assert.deepStrictEqual(startsHere([], [at('user', false), at('project', true)]), ['windows-control@envoydev project alfred-code']);
     assert.deepStrictEqual(startsHere([], [at('user', true), at('local', true)]), ['windows-control@envoydev local alfred-code']);
 });
@@ -574,11 +576,11 @@ test('the inventory reads trust and the roots map from --data', () => {
         writeJson(account.accountFile(w.env), { projects: { [accountKey(w.project)]: { hasTrustDialogAccepted: true } } });
         const i = build(w, { data });
         assert.strictEqual(i.trusted, true);
-        assert.deepStrictEqual(i.roots.project, { path: named, from: 'map' });
-        assert.deepStrictEqual(i.roots.global, { path: g, from: 'map' });
-        assert.strictEqual(i.roots.map.global, g);
+        assert.deepStrictEqual(i.roots!.project, { path: named, from: 'map' });
+        assert.deepStrictEqual(i.roots!.global, { path: g, from: 'map' });
+        assert.strictEqual(i.roots!.map.global, g);
         const none = build(w);
-        assert.deepStrictEqual([none.roots.project, none.roots.global, none.roots.map.projects], [null, null, {}], 'no --data: no map');
+        assert.deepStrictEqual([none.roots!.project, none.roots!.global, none.roots!.map.projects], [null, null, {}], 'no --data: no map');
         writeJson(account.accountFile(w.env), { projects: { [accountKey(w.project)]: { hasTrustDialogAccepted: false } } });
         assert.strictEqual(build(w, { data }).trusted, false);
         // the CLI passes --data through
@@ -626,8 +628,8 @@ test('a bridge registration matches sentry route bridge; mcp-remote by hand and 
     assert.strictEqual(inv.matchEntry({ command: 'node', args: ['/w/my-bridge.js', 'https://mcp.sentry.dev/mcp/{X}'] }, catalog), null);
     assert.strictEqual(inv.matchEntry({ command: 'node', args: ['/w/mcp-bridge.js', 'https://example.com/mcp/{X}', 'K', 'Bearer', 'mcp-remote@0.16.0'] }, catalog), null, 'a bridge to another host');
     assert.deepStrictEqual(inv.matchEntry(URL_('https://mcp.sentry.dev/mcp'), catalog), { rowId: 'sentry', route: 'remote' });
-    assert.strictEqual(inv.matchEntry(URL_('https://mcp.context7.com/mcp'), catalog).rowId, 'context7');
-    assert.strictEqual(inv.matchEntry(URL_('https://gitlab.example.com/api/v4/mcp'), catalog).rowId, 'gitlab', 'a hosted URL is never the bridge route');
+    assert.strictEqual(inv.matchEntry(URL_('https://mcp.context7.com/mcp'), catalog)!.rowId, 'context7');
+    assert.strictEqual(inv.matchEntry(URL_('https://gitlab.example.com/api/v4/mcp'), catalog)!.rowId, 'gitlab', 'a hosted URL is never the bridge route');
 });
 
 test('fingerprintKey gives a bridge fingerprint its own key', () => {
@@ -646,17 +648,17 @@ test('inv.cursor reads both Cursor files; entries hold only the names a list mar
         writeJson(path.join(w.project, '.cursor', 'mcp.json'), { mcpServers: { serena: S, memory: { command: 'x' }, mine: { command: 'node', args: ['mine.js'] } } });
         const i = build(w);
         const file = path.join(w.project, '.cursor', 'mcp.json');
-        assert.deepStrictEqual([i.cursor.project.file, i.cursor.project.state, i.cursor.project.names], [file, 'ok', ['serena', 'memory', 'mine']]);
-        assert.deepStrictEqual(Object.keys(i.cursor.project.entries), ['serena']);
-        assert.deepStrictEqual(i.cursor.project.entries.serena, keep(S, catalog.byId.get('serena')));
-        assert.deepStrictEqual([i.cursor.global.state, i.cursor.global.names, i.cursor.global.entries], ['absent', [], {}]);
-        assert.strictEqual(i.cursor.global.file, path.join(account.homeDir(w.env), '.cursor', 'mcp.json'));
+        assert.deepStrictEqual([i.cursor!.project.file, i.cursor!.project.state, i.cursor!.project.names], [file, 'ok', ['serena', 'memory', 'mine']]);
+        assert.deepStrictEqual(Object.keys(i.cursor!.project.entries), ['serena']);
+        assert.deepStrictEqual((i.cursor!.project.entries as Record<string, ServerEntry> & { serena?: ServerEntry }).serena, keep(S, catalog.byId.get('serena')));
+        assert.deepStrictEqual([i.cursor!.global.state, i.cursor!.global.names, i.cursor!.global.entries], ['absent', [], {}]);
+        assert.strictEqual(i.cursor!.global.file, path.join(account.homeDir(w.env), '.cursor', 'mcp.json'));
     }
     finally { w.clean(); }
 });
 
 test('inventory matches the shared sign-in form to its row\'s remote route, and a hand-made mcp-remote entry to no row', () => {
-    for (const [id, url] of [['gitlab', 'https://gitlab.com/api/v4/mcp'], ['atlassian', 'https://mcp.atlassian.com/v2/mcp'], ['sentry', 'https://mcp.sentry.dev/mcp']])
+    for (const [id, url] of [['gitlab', 'https://gitlab.com/api/v4/mcp'], ['atlassian', 'https://mcp.atlassian.com/v2/mcp'], ['sentry', 'https://mcp.sentry.dev/mcp']] as [string, string][])
         assert.deepStrictEqual(inv.matchEntry(signInFormOf(url, '/r', catalog, { platform: 'darwin' }), catalog), { rowId: id, route: 'remote' }, id);
     assert.strictEqual(inv.matchEntry({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0', 'https://mcp.atlassian.com/v2/mcp'] }, catalog), null);
     assert.strictEqual(inv.matchEntry({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0', 'https://mcp.example.com/mcp'], env: { MCP_REMOTE_CONFIG_DIR: '/r' } }, catalog), null);
@@ -670,7 +672,7 @@ test('inv.workspace is alfred-code\'s workspace as read, and no workspace withou
         writeJson(path.join(w.project, '.alfred', 'workspace.json'), { role: 'root', children: ['a'] });
         writeJson(path.join(w.project, 'a', '.alfred', 'workspace.json'), { parent: '..' });
         const i = build(w);
-        assert.deepStrictEqual([i.workspace.root, i.workspace.members], [path.resolve(w.project), [path.join(path.resolve(w.project), 'a')]]);
+        assert.deepStrictEqual([i.workspace!.root, i.workspace!.members], [path.resolve(w.project), [path.join(path.resolve(w.project), 'a')]]);
     }
     finally { w.clean(); }
 });

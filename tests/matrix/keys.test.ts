@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // The key cases end to end (spec D3-D7): the REAL claude CLI in throwaway homes and accounts (tests/harness.ts), a stub
 // HTTP MCP server on 127.0.0.1 (tests/fake-mcp-http.ts) standing in for github's hosted server, and a fake key in the
 // throwaway root's .mcps-secrets, filled after the apply wrote its name - as the user does. Every result is read back
@@ -26,6 +25,7 @@ import * as update from '../../scripts/update/check.ts';
 import { applyUpdates } from '../../scripts/update/apply.ts';
 import * as fake from '../fake-mcp-http.ts';
 import { Harness } from '../harness.ts';
+import type { HarnessRun } from '../harness.ts';
 import { keepWritten } from '../proof/matrix-keep.ts';
 import { spawnSync } from 'node:child_process';
 const { stubCatalog, trust, fill } = fake;
@@ -37,11 +37,11 @@ test.after(() => { keepWritten(base, 'keys'); fs.rmSync(base, { recursive: true,
 
 const G = 'GITHUB_PERSONAL_ACCESS_TOKEN';
 const KEY = `mx-${crypto.randomBytes(12).toString('hex')}`;
-const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
-const ok = (r) => { assert.deepStrictEqual(r.plan.errors, [], r.rendered); assert.strictEqual(r.report.failed, null, `${r.rendered}\n${r.text}`); };
+const readJson = (f: string) => JSON.parse(fs.readFileSync(f, 'utf8'));
+const ok = (r: HarnessRun) => { assert.deepStrictEqual(r.plan.errors, [], r.rendered); assert.strictEqual(r.report.failed, null, `${r.rendered}\n${r.text}`); };
 
 // A world: a throwaway home and account, every project server approved, and the stub
-async function world(name)
+async function world(name: string)
 {
     const h = new Harness({ root: path.join(base, name) });
     fs.writeFileSync(path.join(h.account, 'settings.json'), JSON.stringify({ enableAllProjectMcpServers: true }));
@@ -50,15 +50,15 @@ async function world(name)
 }
 
 // The registration as the CLI wrote it at its scope
-function written(h, dir, scope, name)
+function written(h: Harness, dir: string, scope: string, name: string)
 {
     if (scope === 'project') return { file: path.join(dir, '.mcp.json'), entry: readJson(path.join(dir, '.mcp.json')).mcpServers[name] };
     const file = account.accountFile(h.env);
     const doc = readJson(file);
-    return { file, entry: scope === 'user' ? doc.mcpServers[name] : account.projectEntry(doc.projects, dir).mcpServers[name] };
+    return { file, entry: scope === 'user' ? doc.mcpServers[name] : account.projectEntry(doc.projects, dir)!.mcpServers![name] };
 }
 
-function helperOnly(w)
+function helperOnly(w: ReturnType<typeof written>)
 {
     assert.ok(w.entry && typeof w.entry.headersHelper === 'string', `${w.file}: a headersHelper`);
     assert.ok(!Object.keys(w.entry.headers || {}).some((k) => k.toLowerCase() === 'authorization'), `${w.file}: no Authorization header`);
@@ -156,7 +156,7 @@ test('K4 - the helper deleted: connects without the header; fix finds helper-mis
         const ctx = () => makeCtx({ inv: h.inventory(dir, { catalog }), catalog, env: h.env, data: h.data });
         const found = detectAll(ctx(), { only: 'helper-missing' }).found;
         assert.deepStrictEqual(found.map((f) => [f.id, f.path]), [['helper-missing', path.join(root, roots.FILES.helper)]]);
-        const lines = [];
+        const lines: string[] = [];
         const res = applyFixes(ctx(), ['helper-missing'], { only: 'helper-missing', tmp: path.join(h.root, 'tmp', 'fix'), log: (...a) => lines.push(a.join(' ')) });
         assert.strictEqual(res.failed, null, lines.join('\n'));
         assert.strictEqual(roots.helperState(path.join(root, roots.FILES.helper)).state, 'same', 'read back from disk');
@@ -179,17 +179,17 @@ test('K5 - a server matching atlassian at global scope, recorded on its own: upd
     const r = h.run(dir, { existing: { 'mcp:atl~user': 'own' } });
     ok(r);
     const list = readJson(path.join(h.home, '.preferred-tools', roots.FILES.list));
-    assert.deepStrictEqual(list.own.map((e) => [e.name, e.scope, e.choice]), [['atl', 'user', 'own']], 'in the global root\'s list');
+    assert.deepStrictEqual(list.own.map((e: { name: string; scope: string; choice: string }) => [e.name, e.scope, e.choice]), [['atl', 'user', 'own']], 'in the global root\'s list');
     assert.strictEqual(readJson(path.join(h.data, roots.FILES.map)).global, path.join(h.home, '.preferred-tools'), 'the roots map names the global root');
 
     const inv = h.inventory(dir);
-    assert.strictEqual(inv.registrations.find((x) => x.name === 'atl').choice, 'own', 'the inventory reads the record');
+    assert.strictEqual(inv.registrations.find((x) => x.name === 'atl')!.choice, 'own', 'the inventory reads the record');
     const ctx = makeCtx({ inv, env: h.env, data: h.data });
     const d = detectAll(ctx);
     assert.deepStrictEqual(d.own, [{ name: 'atl', scope: 'user' }]);
     assert.ok(!d.found.some((f) => f.name === 'atl'), 'no detector reads it');
     assert.ok(render(d).includes('atl (user): on its own - not checked'));
-    const lines = [];
+    const lines: string[] = [];
     const res = applyFixes(ctx, ['all'], { only: 'atl', tmp: path.join(h.root, 'tmp', 'fix'), log: (...a) => lines.push(a.join(' ')) });
     assert.strictEqual(res.failed, null, lines.join('\n'));
 
@@ -210,7 +210,7 @@ test('K6 - update moves a 0.1.x key header to the helper and keeps the key file 
         const dir = h.project('upgrade');
         trust(h, dir);
         // as 0.1.x wrote it: the key in an Authorization header, its value from the environment
-        const old = { type: 'http', url: catalog.byId.get('github').routes.remote.url, headers: { Authorization: `Bearer \${${G}}` } };
+        const old = { type: 'http', url: catalog.byId.get('github')!.routes.remote!.url, headers: { Authorization: `Bearer \${${G}}` } };
         assert.strictEqual(h.claude(dir, ['mcp', 'add-json', 'github', JSON.stringify(old), '-s', 'local']).status, 0);
         const root = path.join(dir, '.preferred-tools');
         fs.mkdirSync(root, { recursive: true });
@@ -223,10 +223,10 @@ test('K6 - update moves a 0.1.x key header to the helper and keeps the key file 
         assert.deepStrictEqual([...ids].sort(), [`upgrade:list-import:${path.join(root, roots.FILES.list)}`, `upgrade:read-guard:${path.join(h.account, 'settings.json')}`, 'upgrade:key-to-helper:github~local', `upgrade:root-ignore:${root}`].sort(), update.render(out));
         assert.match(update.render(out), /New ways to pass data:\n/);
         assert.match(update.render(out), /\n {2}github \(local\) +key-to-helper: /);
-        const lines = [];
+        const lines: string[] = [];
         const res = applyUpdates(uctx, ids, out, { tmp: path.join(h.root, 'tmp', 'update'), log: (...a) => lines.push(a.join(' ')) });
         assert.deepStrictEqual([...res.applied].sort(), [...ids].sort(), lines.join('\n'));
-        const ignored = (f) => spawnSync('git', ['check-ignore', '-q', f], { cwd: dir }).status === 0;
+        const ignored = (f: string) => spawnSync('git', ['check-ignore', '-q', f], { cwd: dir }).status === 0;
         assert.ok(ignored(path.join(root, roots.FILES.secrets)), 'git ignores the key file');
         assert.ok(!ignored(path.join(root, roots.FILES.helper)), 'git keeps the helper a project-scope server would need');
         helperOnly(written(h, dir, 'local', 'github'));

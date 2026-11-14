@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -6,6 +5,7 @@ import path from 'node:path';
 import { load, fingerprintKey, CATALOG_DIR } from '../scripts/catalog/catalog.ts';
 import { reservedFrom } from '../scripts/catalog/refresh-reserved.ts';
 import * as bridge from '../scripts/copied/mcp-bridge.js';
+import type { CatalogRoute } from '../scripts/catalog/types.ts';
 
 const cat = load();
 const ROOT = path.join(import.meta.dirname, '..');
@@ -39,7 +39,7 @@ test('every row has the fields its kind needs', () => {
 
 test('the four groups are the brief\'s and hold the rows the brief lists', () => {
     assert.deepStrictEqual(cat.groups.map((g) => g.id), GROUPS);
-    const of = (g) => cat.tools.filter((r) => r.group === g).map((r) => r.id).sort();
+    const of = (g: string) => cat.tools.filter((r) => r.group === g).map((r) => r.id).sort();
     assert.deepStrictEqual(of('code'), ['memory', 'serena']);
     assert.deepStrictEqual(of('docs'), ['atlassian', 'context7', 'github', 'gitlab']);
     assert.deepStrictEqual(of('browsers'), ['playwright-chrome', 'playwright-firefox', 'playwright-msedge', 'playwright-webkit']);
@@ -61,23 +61,23 @@ test('every MCP route carries what its transport needs', () => {
             if (routeId === 'remote')
             {
                 assert.strictEqual(route.type, 'http', at);
-                assert.match(route.url, /^https:\/\//, at);
-                assert.ok(['oauth', 'token', 'optional-token'].includes(route.authMode), `${at}: authMode`);
+                assert.match(route.url!, /^https:\/\//, at);
+                assert.ok(['oauth', 'token', 'optional-token'].includes(route.authMode!), `${at}: authMode`);
             }
             else if (routeId === 'bridge') assert.strictEqual(route.runtime, 'bridge', at);
             else
             {
-                assert.ok(['uvx', 'npx', 'docker'].includes(route.runtime), `${at}: runtime`);
+                assert.ok(['uvx', 'npx', 'docker'].includes(route.runtime!), `${at}: runtime`);
                 assert.ok(Array.isArray(route.run), `${at}: run`);
                 if (route.runtime === 'uvx')
                 {
-                    assert.match(route.python, /^3\.\d+$/, at);
-                    assert.ok(route.package.fromSpec.includes('{version}'), at);
+                    assert.match(route.python!, /^3\.\d+$/, at);
+                    assert.ok(route.package!.fromSpec!.includes('{version}'), at);
                 }
-                if (route.runtime === 'docker') assert.ok(route.image.name && route.image.tag, at);
+                if (route.runtime === 'docker') assert.ok(route.image!.name && route.image!.tag, at);
                 else
                 {
-                    const p = route.package;
+                    const p = route.package!;
                     assert.ok(p.name && /^\d+\.\d+\.\d+$/.test(p.version) && /^\d{4}-\d\d-\d\dT23:59:59Z$/.test(p.cutoff), `${at}: pin and cut-off`);
                     assert.ok(['pypi', 'npm'].includes(p.registry), at);
                 }
@@ -90,7 +90,7 @@ test('every fingerprint is unique across the catalog', () => {
     const seen = new Map();
     for (const row of cat.tools)
     {
-        const prints = row.kind === 'plugin' ? [`plugin:${row.plugin}@${row.marketplace.name}`]
+        const prints = row.kind === 'plugin' ? [`plugin:${row.plugin}@${row.marketplace!.name}`]
             : Object.values(row.routes).flatMap((r) => r.fingerprints.map(fingerprintKey));
         for (const key of prints)
         {
@@ -105,38 +105,38 @@ test('every fingerprint is unique across the catalog', () => {
 test('every location root derives its paths from one root, in the row\'s locations map', () => {
     for (const row of cat.tools.filter((r) => r.locations))
     {
-        const loc = row.locations;
+        const loc = row.locations!;
         assert.ok(['project', 'account'].includes(loc.defaultSide), row.id);
         assert.strictEqual(typeof loc.relative, 'boolean', `${row.id}: relative - proven by tests/probes/relative-root.js`);
         assert.ok(loc.alfred, `${row.id}: the alfred-code root it reads from original-mcps.json`);
-        assert.ok(loc.derived.length >= 1 && loc.derived[0].sub !== undefined, row.id);
+        assert.ok(loc.derived.length >= 1 && loc.derived[0]!.sub !== undefined, row.id);
         for (const d of loc.derived) assert.ok(['arg', 'env'].includes(d.in) && d.key, row.id);
     }
     // the flags as measured (docs/sources.md 'Relative data folders - the probe'): serena, memory and the Playwright engine
     // passed from a root and a child; appium-mcp from a read of its pinned source (O3). A pin bump of any of these runs
     // the probe again before this list changes.
-    assert.deepStrictEqual(cat.tools.filter((r) => r.locations).map((r) => [r.id, r.locations.relative]), [
+    assert.deepStrictEqual(cat.tools.filter((r) => r.locations).map((r) => [r.id, r.locations!.relative]), [
         ['serena', true], ['memory', true], ['playwright-chrome', true], ['playwright-msedge', true], ['playwright-firefox', true],
         ['playwright-webkit', true], ['appium', true]]);
-    const loc = (id) => cat.byId.get(id).locations.derived.map((d) => `${d.in}:${d.key}:${d.sub}`);
+    const loc = (id: string) => cat.byId.get(id)!.locations!.derived.map((d) => `${d.in}:${d.key}:${d.sub}`);
     assert.deepStrictEqual(loc('serena'), ['env:SERENA_HOME:']);
     assert.deepStrictEqual(loc('memory'), ['env:MCP_MEMORY_SQLITE_PATH:memory.db']);
     assert.deepStrictEqual(loc('playwright-chrome'), ['arg:--user-data-dir:', 'arg:--output-dir:output']);
     assert.deepStrictEqual(loc('appium'), ['env:SCREENSHOTS_DIR:screenshots', 'env:PAGE_SOURCES_DIR:page-sources']);
-    assert.strictEqual(cat.byId.get('memory').locations.defaultSide, 'project');
+    assert.strictEqual(cat.byId.get('memory')!.locations!.defaultSide, 'project');
     // the old roots are the ones original-mcps.json holds, not a pattern
-    assert.strictEqual(cat.byId.get('serena').locations.alfred, '.alfred/serena/home');
-    assert.strictEqual(cat.byId.get('playwright-webkit').locations.alfred, '.alfred/webkit-control');
-    assert.strictEqual(cat.byId.get('appium').locations.alfred, '.alfred/mobile-control');
-    assert.strictEqual(cat.byId.get('memory').locations.alfred, '~/.alfred-memory');
+    assert.strictEqual(cat.byId.get('serena')!.locations!.alfred, '.alfred/serena/home');
+    assert.strictEqual(cat.byId.get('playwright-webkit')!.locations!.alfred, '.alfred/webkit-control');
+    assert.strictEqual(cat.byId.get('appium')!.locations!.alfred, '.alfred/mobile-control');
+    assert.strictEqual(cat.byId.get('memory')!.locations!.alfred, '~/.alfred-memory');
 });
 
 test('each Playwright engine is its own row with --browser and --no-webmcp', () => {
     for (const engine of ['chrome', 'msedge', 'firefox', 'webkit'])
     {
-        const route = cat.byId.get(`playwright-${engine}`).routes.local;
+        const route = cat.byId.get(`playwright-${engine}`)!.routes.local!;
         assert.deepStrictEqual(route.run, ['--browser', engine, '--no-webmcp']);
-        assert.deepStrictEqual(route.optionalArgs.executablePath, ['--executable-path', '{value}']);
+        assert.deepStrictEqual(route.optionalArgs!.executablePath, ['--executable-path', '{value}']);
     }
 });
 
@@ -144,7 +144,7 @@ test('only placeholders the builder knows appear, and no file holds a secret', (
     const text = fs.readFileSync(path.join(CATALOG_DIR, 'tools.json'), 'utf8');
     for (const m of text.matchAll(/(?<!\$)\{[a-zA-Z]+\}/g)) assert.ok(/^\{(root|name|host|value|version|minor|contextFile)\}$/.test(m[0]), `placeholder ${m[0]}`);
     // every ${VAR} is a bare reference
-    for (const m of text.matchAll(/\$\{([^}]*)\}/g)) assert.match(m[1], /^[A-Z][A-Z0-9_]*$/, `\${${m[1]}}`);
+    for (const m of text.matchAll(/\$\{([^}]*)\}/g)) assert.match(m[1]!, /^[A-Z][A-Z0-9_]*$/, `\${${m[1]}}`);
     // known token shapes
     for (const file of fs.readdirSync(CATALOG_DIR))
     {
@@ -155,20 +155,20 @@ test('only placeholders the builder knows appear, and no file holds a secret', (
 });
 
 test('os-restricted rows are the desktop servers', () => {
-    assert.deepStrictEqual(cat.byId.get('macos-control').os, ['darwin']);
-    assert.deepStrictEqual(cat.byId.get('windows-control').os, ['win32']);
+    assert.deepStrictEqual(cat.byId.get('macos-control')!.os, ['darwin']);
+    assert.deepStrictEqual(cat.byId.get('windows-control')!.os, ['win32']);
     assert.strictEqual(cat.tools.filter((r) => r.os.length < 3).length, 2);
 });
 
 test('code-running tools are named per row', () => {
-    const danger = (id) => cat.byId.get(id).dangerous.map((d) => d.tool);
+    const danger = (id: string) => cat.byId.get(id)!.dangerous.map((d) => d.tool);
     assert.deepStrictEqual(danger('playwright-chrome'), ['browser_run_code_unsafe']);
     assert.deepStrictEqual(danger('windows-control'), ['App']);
     assert.deepStrictEqual(danger('macos-control'), ['Shell']);
 });
 
 test('retired-plugin names the three plugins the catalog dropped, and no row', () => {
-    const r = cat.fixes.find((f) => f.id === 'retired-plugin');
+    const r = cat.fixes.find((f) => f.id === 'retired-plugin')!;
     assert.deepStrictEqual(r.ids, ['typescript-lsp@claude-plugins-official', 'csharp-lsp@claude-plugins-official', 'claude-hud@claude-hud']);
     assert.deepStrictEqual([r.kind, r.upgrade, r.tool], ['machine', '0.5.0', []]);
 });
@@ -195,13 +195,13 @@ test('every fix row has the fields the brief names and points at an existing row
         'key-to-helper', 'helper-missing', 'helper-stale', 'root-ignore', 'project-relative-path', 'mcp-order', 'helper-child-folder']);
     for (const f of cat.fixes)
     {
-        for (const k of FIX) assert.ok(f[k] !== undefined && f[k] !== '', `${f.id} lacks ${k}`);
+        for (const k of FIX as (keyof typeof f)[]) assert.ok(f[k] !== undefined && f[k] !== '', `${f.id} lacks ${k}`);
         for (const t of f.tool) assert.ok(cat.byId.has(t), `${f.id}: unknown row ${t}`);
         assert.ok(f.os.every((o) => OSES.includes(o)), f.id);
     }
     for (const id of ['key-to-helper', 'helper-missing', 'helper-stale', 'root-ignore'])
     {
-        const tools = cat.fixes.find((f) => f.id === id).tool;
+        const tools = cat.fixes.find((f) => f.id === id)!.tool;
         for (const t of ['gitlab', 'atlassian']) assert.ok(tools.includes(t), `${id} lists ${t}`);
     }
 });
@@ -212,8 +212,8 @@ test('every fix row has the fields the brief names and points at an existing row
 test('no catalog field named like a credential holds a plain string', () => {
     const CREDENTIAL = /(?:auth|token|key|secret|passw(?:or)?d|pwd|credentials?)$/i;
     const NOT_A_VALUE = [/^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/, /^[A-Z][A-Z0-9_]*$/, /^--[a-z0-9-]+$/];
-    const bad = [];
-    const walk = (v, at) =>
+    const bad: string[] = [];
+    const walk = (v: unknown, at: string): void =>
     {
         if (Array.isArray(v)) return v.forEach((x, i) => walk(x, `${at}[${i}]`));
         if (!v || typeof v !== 'object') return undefined;
@@ -229,19 +229,19 @@ test('no catalog field named like a credential holds a plain string', () => {
 });
 
 test('hosted keyed routes carry a helper block and no Authorization header', () => {
-    const want = { context7: ['CONTEXT7_API_KEY', 'Bearer', 'optional-token'], github: ['GITHUB_PERSONAL_ACCESS_TOKEN', 'Bearer', 'token'], sentry: ['SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'optional-token'],
+    const want: Record<string, string[]> = { context7: ['CONTEXT7_API_KEY', 'Bearer', 'optional-token'], github: ['GITHUB_PERSONAL_ACCESS_TOKEN', 'Bearer', 'token'], sentry: ['SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'optional-token'],
         gitlab: ['GITLAB_TOKEN', 'Bearer', 'optional-token'], atlassian: ['ATLASSIAN_API_TOKEN', 'Basic', 'optional-token'] };
     for (const row of cat.tools.filter((r) => r.kind === 'mcp' && r.routes.remote))
     {
-        const r = row.routes.remote;
+        const r = row.routes.remote as CatalogRoute & { headers?: Record<string, string> };
         assert.ok(!r.headers || !Object.keys(r.headers).some((h) => h.toLowerCase() === 'authorization'), `${row.id}: no Authorization header`);
         assert.ok(!JSON.stringify(r).includes('${'), `${row.id}: no \${VAR} in a hosted route`);
         assert.ok(!('tokenVar' in r), `${row.id}: a hosted route names its key through helper.var`);
         if (want[row.id])
         {
-            assert.deepStrictEqual([r.helper.var, r.helper.scheme, r.authMode], want[row.id], row.id);
-            assert.match(r.helper.var, /^[A-Za-z_][A-Za-z0-9_]*$/);
-            assert.match(r.helper.scheme, /^[!-~]+$/);
+            assert.deepStrictEqual([r.helper!.var, r.helper!.scheme, r.authMode], want[row.id], row.id);
+            assert.match(r.helper!.var, /^[A-Za-z_][A-Za-z0-9_]*$/);
+            assert.match(r.helper!.scheme, /^[!-~]+$/);
         }
         else assert.strictEqual(r.helper, undefined, `${row.id}: OAuth only`);
     }
@@ -255,37 +255,37 @@ test('the order lists every MCP row once and nothing else', () => {
 });
 
 test('gitlab and atlassian take a key through the helper, with OAuth as the keyless way', () => {
-    const want = { gitlab: ['GITLAB_TOKEN', 'Bearer'], atlassian: ['ATLASSIAN_API_TOKEN', 'Basic'] };
+    const want: Record<string, [string, string]> = { gitlab: ['GITLAB_TOKEN', 'Bearer'], atlassian: ['ATLASSIAN_API_TOKEN', 'Basic'] };
     for (const [id, [v, scheme]] of Object.entries(want))
     {
-        const r = cat.byId.get(id).routes.remote;
-        assert.strictEqual(r.helper.var, v, id);
-        assert.strictEqual(r.helper.scheme, scheme, id);
+        const r = cat.byId.get(id)!.routes.remote!;
+        assert.strictEqual(r.helper!.var, v, id);
+        assert.strictEqual(r.helper!.scheme, scheme, id);
         assert.strictEqual(r.keyless, 'oauth', id);
         assert.strictEqual(r.authMode, 'optional-token', id);
-        assert.ok(typeof r.helper.hint === 'string' && r.helper.hint.length > 0, `${id}: hint`);
+        assert.ok(typeof r.helper!.hint === 'string' && r.helper!.hint.length > 0, `${id}: hint`);
     }
 });
 
-test('memory keeps its data in the root of its scope', () => assert.strictEqual(cat.byId.get('memory').locations.defaultSide, 'project'));
+test('memory keeps its data in the root of its scope', () => assert.strictEqual(cat.byId.get('memory')!.locations!.defaultSide, 'project'));
 
 test('a bridge route: template names equal urlVars, a key helper, a pinned mcp-remote and a bridge fingerprint', () => {
-    const routes = cat.tools.filter((r) => r.kind === 'mcp').flatMap((r) => Object.entries(r.routes).filter(([, x]) => x.runtime === 'bridge').map(([id, x]) => [`${r.id}/${id}`, x]));
+    const routes = cat.tools.filter((r) => r.kind === 'mcp').flatMap((r) => Object.entries(r.routes).filter(([, x]) => x.runtime === 'bridge').map(([id, x]) => [`${r.id}/${id}`, x] as [string, CatalogRoute]));
     assert.deepStrictEqual(routes.map(([at]) => at), ['sentry/bridge']);
     for (const [at, route] of routes)
     {
         const names = bridge.templateNames(route.url);
         assert.ok(names, `${at}: a template the bridge reads`);
-        assert.deepStrictEqual(names.map((n) => n.name), route.urlVars.map((v) => v.var), `${at}: urlVars in the template's order`);
-        assert.ok(route.urlVars.every((v) => typeof v.label === 'string' && v.label), `${at}: each URL name has a label`);
+        assert.deepStrictEqual(names.map((n) => n.name), route.urlVars!.map((v) => v.var), `${at}: urlVars in the template's order`);
+        assert.ok(route.urlVars!.every((v) => typeof v.label === 'string' && v.label), `${at}: each URL name has a label`);
         assert.strictEqual(route.authMode, 'token', at);
-        assert.ok(route.helper.var && route.helper.scheme, `${at}: helper`);
-        assert.strictEqual(route.package.name, 'mcp-remote', at);
-        assert.match(route.package.version, /^\d+\.\d+\.\d+$/, at);
-        assert.match(route.package.cutoff, /^\d{4}-\d{2}-\d{2}T23:59:59Z$/, at);
+        assert.ok(route.helper!.var && route.helper!.scheme, `${at}: helper`);
+        assert.strictEqual(route.package!.name, 'mcp-remote', at);
+        assert.match(route.package!.version, /^\d+\.\d+\.\d+$/, at);
+        assert.match(route.package!.cutoff, /^\d{4}-\d{2}-\d{2}T23:59:59Z$/, at);
         assert.deepStrictEqual(route.prereqs, ['npx'], at);
         assert.ok(route.fingerprints.every((fp) => typeof fp.bridge === 'string' && fp.bridge.endsWith('/')), `${at}: bridge fingerprints`);
     }
-    const sentry = cat.tools.find((r) => r.id === 'sentry');
+    const sentry = cat.tools.find((r) => r.id === 'sentry')!;
     assert.strictEqual(sentry.recommendedRoute, 'remote', 'the bridge is a third choice, never the recommended one');
 });
