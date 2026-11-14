@@ -27,12 +27,14 @@ It installs nothing on its own. You drive it with four commands, run from the pr
 ## Install the plugin
 
 ```bash
-claude plugin marketplace add envoydev/alfred-code
+claude plugin marketplace add envoydev/plugins-marketplaces
 claude plugin install preferred-tools@envoydev
 ```
 
-It needs Node 22.18 or newer and the `claude` CLI on your `PATH`. The plugin is listed in the `envoydev` marketplace (the
-alfred-code repo); it works the same with or without alfred-code installed.
+It needs Node 22.18 or newer and the `claude` CLI on your `PATH`. The plugin is listed in the `envoydev` marketplace
+([envoydev/plugins-marketplaces](https://github.com/envoydev/plugins-marketplaces)); it works the same with or without
+alfred-code installed. If you added `envoydev` from `envoydev/alfred-code` before, the catalog has moved: its
+[README](https://github.com/envoydev/plugins-marketplaces#moving-from-the-old-marketplace) has the steps.
 
 ## Quick start
 

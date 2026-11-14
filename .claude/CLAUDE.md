@@ -4,12 +4,11 @@
 
 The tools its owner has tested and likes to use, MCP servers that work in Claude Code and Cursor, packaged as ONE Claude
 Code plugin, `preferred-tools`. The plugin carries each tool's install, update, rename, relocation and fix procedure. It
-is listed in the `envoydev` marketplace, which lives in the alfred-code repo
-(`https://github.com/envoydev/alfred-code`, `.claude-plugin/marketplace.json`); users install it as
+is listed in the `envoydev` marketplace, which lives in its own repo since 2026-11-14
+(`https://github.com/envoydev/plugins-marketplaces`, `.claude-plugin/marketplace.json`); users install it as
 `preferred-tools@envoydev`. The entry is a GitHub source on this repo's `main` with no `sha` (the user's ruling,
-2026-11-04; alfred-code's lint check 49 allows that only for an `envoydev/` repo on `main`): a fresh install fetches
-`main`'s tip, and a version bump merged to `main` is the release with no alfred-code change. So `main` stays
-release-only.
+2026-11-04): a fresh install fetches `main`'s tip, and a version bump merged to `main` is the release with no
+marketplace change. So `main` stays release-only.
 
 - `/preferred-tools:install` - manual (`disable-model-invocation: true`); adds only tools not installed in this project
   and asks nothing about a server already set up (one it recognises is managed; a claude.ai connector or another
@@ -112,7 +111,7 @@ private project names, no absolute local paths, no tokens, nothing from a user's
 
 ## Plugin facts this repo relies on
 
-From `.claude/skills/plugin-authoring/` (checked against the Claude Code plugin docs on 2026-09-12) and
+From `.claude/skills/plugin-packaging/` (checked against the Claude Code plugin docs on 2026-09-12) and
 `docs/plugin-cli-evidence.md` (measured). Re-verify a fact against the docs when Claude Code has moved far past
 those dates.
 
@@ -159,7 +158,9 @@ those dates.
 
 ## Related repos
 
-- alfred-code (`../alfred-code` when checked out beside this one) hosts the marketplace. It holds the record of the
+- plugins-marketplaces (`../plugins-marketplaces`) is the `envoydev` catalog; a catalog change (a description, a
+  category) is a commit there.
+- alfred-code (`../alfred-code` when checked out beside this one) is the sibling plugin of the catalog. It holds the record of the
   servers it shipped until 2.10.1: `stack/mcp/original-mcps.json`, `stack/mcp/shipped-mcps.json` and
   `stack/mcp/README.md`. Its claude-hud settings step is `scripts/plugin-settings.js`, `scripts/hud-statusline.js` and
   `meta/plugin-settings.json`. A change there follows its own CLAUDE.md, never an edit from this repo.
