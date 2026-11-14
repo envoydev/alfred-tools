@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 export * from './registration.ts';
 export * from './machine.ts';
 export * from './keys.ts';

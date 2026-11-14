@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // The 0.2.0 key rows (spec D7): a hosted key moved out of a registration into the header helper, the helper on disk kept
 // present and current, and a root's .gitignore that keeps its key file out of git. token-sync (stdio keys) is in
 // registration.js.
@@ -14,11 +13,16 @@ import { HELPER_VERSION } from '../copied/mcp-headers.js';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import * as C from './common.ts';
 import { ensureCommonjs, rootIgnoreLines, rootIgnore } from '../apply/file-steps.ts';
+import type { ServerEntry } from '../core/types.ts';
+import type { Roots } from '../entries/types.ts';
+import type { InvRegistration } from '../inventory/types.ts';
+import type { ShippedKind } from '../roots/types.ts';
+import type { Finding, FixCtx, MachineFixResult, ShippedFile } from './types.ts';
 
 // What roots.js needs to place a root, from a fix ctx.
-const rootCtx = (ctx) => ({ project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog });
+const rootCtx = (ctx: FixCtx) => ({ project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog });
 // The roots a fix writes into (R9): each family's root in use, else D2's recommended one.
-const rootsOf = (ctx) => roots.resolve(ctx.inv, null, rootCtx(ctx)).roots;
+const rootsOf = (ctx: FixCtx) => roots.resolve(ctx.inv, null, rootCtx(ctx)).roots;
 
 // ---- key-to-helper --------------------------------------------------------------------------------------------------
 // A managed hosted registration whose Authorization header holds a ${VAR} or a key (0.1.x wrote both). The helper reads
@@ -26,16 +30,16 @@ const rootsOf = (ctx) => roots.resolve(ctx.inv, null, rootCtx(ctx)).roots;
 // helper that would send no key.
 const ONE_VAR = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
 
-function authOf(entry)
+function authOf(entry: ServerEntry | null | undefined): { header: string; value: string } | null
 {
-    const headers = (entry && entry.headers) || {};
+    const headers: Record<string, string> = (entry && entry.headers) || {};
     const header = Object.keys(headers).find((h) => h.toLowerCase() === 'authorization');
-    return header && typeof headers[header] === 'string' ? { header, value: headers[header] } : null;
+    return header && typeof headers[header] === 'string' ? { header, value: headers[header]! } : null;
 }
 
-export function keyToHelperDetect(ctx)
+export function keyToHelperDetect(ctx: FixCtx): Finding[]
 {
-    const out = [];
+    const out: Finding[] = [];
     for (const reg of C.registrationsOf(ctx, 'key-to-helper'))
     {
         const route = C.routeOf(ctx, reg);
@@ -49,7 +53,7 @@ export function keyToHelperDetect(ctx)
         const one = ONE_VAR.exec(token);
         if (one)
         {
-            const name = one[1];
+            const name = one[1]!;
             const at = keys.valueIn(chain, name);
             if (at) { out.push(C.finding('key-to-helper', reg, `the Authorization header holds \${${name}} - the key moves to mcp-headers.js, which reads ${name} from ${at.file}`, { ...extra, keyName: name })); continue; }
             const old = keys.oldHolding(ctx.inv.project, ctx.home, name);
@@ -66,14 +70,14 @@ export function keyToHelperDetect(ctx)
 }
 
 // The entry as read, with `headersHelper` and without the header. fix.js writes the root's file steps before it (R9).
-export function keyToHelperFix(entry, f, ctx)
+export function keyToHelperFix(entry: ServerEntry, f: Finding, ctx: FixCtx): ServerEntry
 {
     const out = C.clone(entry);
     const auth = authOf(out);
-    if (auth) delete out.headers[auth.header];
+    if (auth) delete out.headers![auth.header];
     if (out.headers && !Object.keys(out.headers).length) delete out.headers;
-    const route = C.rowOf(ctx, f.row).routes[f.route];
-    out.headersHelper = helperFor(route, f.scope, { project: ctx.inv.project, platform: ctx.platform, home: ctx.home, roots: f.roots }, f.keyName);
+    const route = C.rowOf(ctx, f.row!)!.routes[f.route!]!;
+    out.headersHelper = helperFor(route, f.scope!, { project: ctx.inv.project, platform: ctx.platform, home: ctx.home, roots: f.roots }, f.keyName);
     return out;
 }
 
@@ -81,13 +85,13 @@ export function keyToHelperFix(entry, f, ctx)
 // The files this plugin copied that the managed registrations name, each once: [{ file, root, kind, reg }]. A
 // `headersHelper` names its helper; a bridge registration (0.4.0) its mcp-bridge.js and the mcp-headers.js beside it,
 // which the bridge requires. A project-scope path is relative to the project, the folder whose .mcp.json declares it.
-const SHIPPED = { helper: { word: 'helper', version: HELPER_VERSION }, bridge: { word: 'bridge', version: BRIDGE_VERSION }, serenaContext: { word: 'context', version: roots.SERENA_CONTEXT_VERSION } };
-function shippedFiles(ctx, fixId)
+const SHIPPED: Record<ShippedKind, { word: string; version: number }> = { helper: { word: 'helper', version: HELPER_VERSION }, bridge: { word: 'bridge', version: BRIDGE_VERSION }, serenaContext: { word: 'context', version: roots.SERENA_CONTEXT_VERSION } };
+function shippedFiles(ctx: FixCtx, fixId: string): ShippedFile[]
 {
     const P = pathFor(ctx.platform);
-    const seen = new Map();
-    const add = (file, kind, reg) => { if (!seen.has(file)) seen.set(file, { file, root: P.dirname(file), kind, reg }); };
-    let familyRoots = null;
+    const seen = new Map<string, ShippedFile>();
+    const add = (file: string, kind: ShippedKind, reg: InvRegistration) => { if (!seen.has(file)) seen.set(file, { file, root: P.dirname(file), kind, reg }); };
+    let familyRoots: Roots | null = null;
     for (const reg of C.registrationsOf(ctx, fixId))
     {
         const named = roots.helperPathOf(reg.entry && reg.entry.headersHelper);
@@ -97,7 +101,7 @@ function shippedFiles(ctx, fixId)
         const ctxAt = contextArgAt(reg.entry);
         if (ctxAt >= 0)
         {
-            const file = roots.absOf(reg.entry.args[ctxAt], rootCtx(ctx));
+            const file = roots.absOf(reg.entry.args![ctxAt], rootCtx(ctx));
             const root = (familyRoots || (familyRoots = rootsOf(ctx)))[roots.familyOf(reg.scope)];
             if (root && file === P.join(root, roots.FILES.serenaContext)) add(file, 'serenaContext', reg);
         }
@@ -112,35 +116,35 @@ function shippedFiles(ctx, fixId)
 
 // `bridged`: found through a bridge registration, which did not start without the file - so its fix needs a new start,
 // where a hosted server's helper runs at each connect (review)
-const helperFinding = (fixId, h, what, extra = {}) => ({ ...C.finding(fixId, h.reg, what, extra), name: h.file, path: h.file, shipped: h.kind, bridged: Boolean(bridgeParts(h.reg.entry)) || h.kind === 'serenaContext' });
-const nameOf = (h) => roots.FILES[h.kind];
+const helperFinding = (fixId: string, h: ShippedFile, what: string, extra: Partial<Finding> = {}): Finding => ({ ...C.finding(fixId, h.reg, what, extra), name: h.file, path: h.file, shipped: h.kind, bridged: Boolean(bridgeParts(h.reg.entry)) || h.kind === 'serenaContext' });
+const nameOf = (h: ShippedFile) => roots.FILES[h.kind];
 // the file this finding writes: 'helper' or 'bridge' (a finding from before 0.4.0 carries none: a helper)
-const kindOf = (f) => (f.shipped === 'bridge' || f.shipped === 'serenaContext' ? f.shipped : 'helper');
+const kindOf = (f: Finding): ShippedKind => (f.shipped === 'bridge' || f.shipped === 'serenaContext' ? f.shipped : 'helper');
 // a fix that writes a file says CommonJS beside it (apply.js ensureCommonjs, 0.4.0 Ruling 12)
-const withCommonjs = (root, r, kind) =>
+const withCommonjs = (root: string, r: MachineFixResult, kind: ShippedKind): MachineFixResult =>
 {
     if (kind === 'serenaContext') return r;
     const pkg = ensureCommonjs(root);
     return { ...r, detail: [r.detail, pkg.wrote ? `wrote ${path.join(root, 'package.json')} (type commonjs)` : null, pkg.note].filter(Boolean).join('; ') };
 };
 
-export function helperMissingDetect(ctx)
+export function helperMissingDetect(ctx: FixCtx): Finding[]
 {
     return shippedFiles(ctx, 'helper-missing').filter((h) => !fs.existsSync(h.file))
         .map((h) => helperFinding('helper-missing', h, `${nameOf(h)} is missing - ${h.reg.name} (${h.reg.scope}) ${bridgeParts(h.reg.entry) || h.kind === 'serenaContext' ? 'does not start' : 'connects without its key'}`));
 }
 
-export function helperMissingFix(f)
+export function helperMissingFix(f: Finding): MachineFixResult
 {
     const kind = kindOf(f);
-    fs.mkdirSync(path.dirname(f.path), { recursive: true });
-    fs.writeFileSync(f.path, roots.shippedSource(kind));
-    return withCommonjs(path.dirname(f.path), { ok: roots.shippedState(kind, f.path).state === 'same', detail: `wrote ${f.path} (${SHIPPED[kind].word} ${SHIPPED[kind].version})`, restart: Boolean(f.bridged) }, kind);
+    fs.mkdirSync(path.dirname(f.path!), { recursive: true });
+    fs.writeFileSync(f.path!, roots.shippedSource(kind));
+    return withCommonjs(path.dirname(f.path!), { ok: roots.shippedState(kind, f.path!).state === 'same', detail: `wrote ${f.path!} (${SHIPPED[kind].word} ${SHIPPED[kind].version})`, restart: Boolean(f.bridged) }, kind);
 }
 
-export function helperStaleDetect(ctx)
+export function helperStaleDetect(ctx: FixCtx): Finding[]
 {
-    const out = [];
+    const out: Finding[] = [];
     for (const h of shippedFiles(ctx, 'helper-stale').filter((x) => fs.existsSync(x.file)))
     {
         const { state, number } = roots.shippedState(h.kind, h.file);
@@ -154,23 +158,23 @@ export function helperStaleDetect(ctx)
     return out;
 }
 
-export function helperStaleFix(f)
+export function helperStaleFix(f: Finding): MachineFixResult
 {
     const kind = kindOf(f);
     const { word, version } = SHIPPED[kind];
-    if (roots.shippedState(kind, f.path).state === 'higher') return { ok: false, detail: `${f.path} is newer than this plugin - left; update preferred-tools`, restart: false };
-    fs.writeFileSync(f.path, roots.shippedSource(kind));
-    return withCommonjs(path.dirname(f.path), { ok: roots.shippedState(kind, f.path).state === 'same', detail: `rewrote ${f.path} (${word} ${f.from === undefined ? 'edited' : f.from} -> ${version})`, restart: Boolean(f.bridged) }, kind);
+    if (roots.shippedState(kind, f.path!).state === 'higher') return { ok: false, detail: `${f.path!} is newer than this plugin - left; update preferred-tools`, restart: false };
+    fs.writeFileSync(f.path!, roots.shippedSource(kind));
+    return withCommonjs(path.dirname(f.path!), { ok: roots.shippedState(kind, f.path!).state === 'same', detail: `rewrote ${f.path!} (${word} ${f.from === undefined ? 'edited' : f.from} -> ${version})`, restart: Boolean(f.bridged) }, kind);
 }
 
 // ---- root-ignore ----------------------------------------------------------------------------------------------------
 // A root in use inside a git work tree where git would commit its key file, or - a project root other than .alfred -
 // would ignore the helper a project-scope server needs committed (R13), or would commit mcp-remote's sign-in folder (0.5.0). The fix appends what rootIgnore writes; a gap no
 // appended line can close is blocked and named.
-export function rootIgnoreDetect(ctx)
+export function rootIgnoreDetect(ctx: FixCtx): Finding[]
 {
-    const out = [];
-    for (const family of ['project', 'global'])
+    const out: Finding[] = [];
+    for (const family of ['project', 'global'] as const)
     {
         const used = ctx.inv.roots && ctx.inv.roots[family];
         const root = used && used.path;
@@ -202,14 +206,14 @@ export function rootIgnoreDetect(ctx)
     return out;
 }
 
-export function rootIgnoreFix(f)
+export function rootIgnoreFix(f: Finding): MachineFixResult
 {
-    const r = rootIgnore(f.path);
+    const r = rootIgnore(f.path!);
     const still = [
-        f.fixes.secrets && roots.gitIgnores(path.join(f.path, roots.FILES.secrets)) === false && `git would still commit ${path.join(f.path, roots.FILES.secrets)}`,
-        f.fixes.helper && roots.gitIgnores(path.join(f.path, roots.FILES.helper)) === true && `git still ignores ${path.join(f.path, roots.FILES.helper)}`,
-        f.fixes.signIns && roots.gitIgnores(path.join(f.path, roots.FILES.signIns, 'tokens')) === false && `git would still commit ${path.join(f.path, roots.FILES.signIns)}/`,
-        ...(f.fixes.unignore || []).filter((x) => roots.gitIgnores(path.join(f.path, x)) === true).map((x) => `git still ignores ${path.join(f.path, x)}`),
+        f.fixes!.secrets && roots.gitIgnores(path.join(f.path!, roots.FILES.secrets)) === false && `git would still commit ${path.join(f.path!, roots.FILES.secrets)}`,
+        f.fixes!.helper && roots.gitIgnores(path.join(f.path!, roots.FILES.helper)) === true && `git still ignores ${path.join(f.path!, roots.FILES.helper)}`,
+        f.fixes!.signIns && roots.gitIgnores(path.join(f.path!, roots.FILES.signIns, 'tokens')) === false && `git would still commit ${path.join(f.path!, roots.FILES.signIns)}/`,
+        ...(f.fixes!.unignore || []).filter((x) => roots.gitIgnores(path.join(f.path!, x)) === true).map((x) => `git still ignores ${path.join(f.path!, x)}`),
     ].filter(Boolean);
     return { ok: !still.length, detail: still.length ? `${r.detail}; ${still.join('; ')}` : r.detail, restart: false };
 }

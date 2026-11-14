@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // The pin offers: each pinned MCP server behind a release at least 7 days old.
 import * as inventory from '../inventory/inventory.ts';
 import * as registryLib from '../catalog/registry.ts';
@@ -6,37 +5,40 @@ import { signInParts } from '../entries/sign-in.ts';
 import { pinnedVersion } from '../fix/common.ts';
 import { bumpEntry } from './offers-plugins.ts';
 import * as kept from '../core/kept.ts';
+import type { Release } from '../catalog/types.ts';
+import type { CursorOf } from '../cursor/types.ts';
+import type { UpdateCheck, UpdateCtx } from './types.ts';
 
 // ---- MCP pins --------------------------------------------------------------------------------------------------------
 
-export async function mcpOffers(ctx, out)
+export async function mcpOffers(ctx: UpdateCtx, out: UpdateCheck): Promise<void>
 {
-    const cache = new Map();
-    const latest = (registry, name) =>
+    const cache = new Map<string, Promise<Release[]>>();
+    const latest = (registry: string, name: string) =>
     {
         const key = `${registry}:${name}`;
         if (!cache.has(key)) cache.set(key, ctx.registry.versionsOf(registry, name));
-        return cache.get(key);
+        return cache.get(key)!;
     };
     for (const r of ctx.inv.registrations)
     {
         if (r.own || r.alfredRetired) continue;
         if (r.choice === 'own') { out.skipped.push(`${r.name} (${r.scope}): on its own - not checked`); continue; }
-        if (r.scope === 'inherited') { out.skipped.push(`${r.name} (inherited): inherited from ${inventory.fromHere(ctx.inv, r.from)} - update it there`); continue; }
-        const row = ctx.catalog.byId.get(r.rowId);
-        const def = row.routes[r.route];
+        if (r.scope === 'inherited') { out.skipped.push(`${r.name} (inherited): inherited from ${inventory.fromHere(ctx.inv, r.from!)} - update it there`); continue; }
+        const row = ctx.catalog.byId.get(r.rowId!)!;
+        const def = row.routes[r.route!]!;
         const at = `${r.name} (${r.scope})`;
         // the shared sign-in form (0.5.0, D5) runs mcp-remote at a pin, the bridge route's package
         const signIn = r.route === 'remote' && signInParts(r.entry);
         if (r.route === 'remote' && !signIn) { out.skipped.push(`${at}: a hosted URL has no pin`); continue; }
         if (def.runtime === 'docker') { out.skipped.push(`${at}: the Docker image tag is not checked - change it with /preferred-tools:configure`); continue; }
-        const pkg = signIn ? ctx.catalog.byId.get('sentry').routes.bridge.package : def.package;
+        const pkg = signIn ? ctx.catalog.byId.get('sentry')!.routes.bridge!.package : def.package;
         if (!pkg) continue;
         const from = pinnedVersion(r.entry, pkg.name);
         if (!from) { out.skipped.push(`${at}: ${pkg.name} is launched with no version, so it follows the registry already`); continue; }
-        let versions;
+        let versions: Release[];
         try { versions = await latest(pkg.registry, pkg.name); }
-        catch (e) { out.errors.push(`${at}: ${pkg.registry} lookup for ${pkg.name} failed - ${e.message}`); continue; }
+        catch (caught) { const e = caught as NodeJS.ErrnoException; out.errors.push(`${at}: ${pkg.registry} lookup for ${pkg.name} failed - ${e.message}`); continue; }
         const pick = registryLib.choose(versions, { registry: pkg.registry, now: ctx.now, current: from });
         if (pick.held.length) out.held.push(`${at}: ${registryLib.heldLine(pkg.name, pick.held)}`);
         if (!pick.offer) continue;
@@ -49,29 +51,29 @@ export async function mcpOffers(ctx, out)
 // Cursor's bridge copy of a two-form entry (D5): its mcp-remote pin, which mcpOffers never sees (Claude Code's side is a
 // hosted URL). One offer per list server with a cursorEntry, from Cursor's copy as read; a copy that is missing or drifted
 // from the list is named and left to fix.
-export async function cursorPinOffers(ctx, out)
+export async function cursorPinOffers(ctx: UpdateCtx, out: UpdateCheck): Promise<void>
 {
-    const pkg = ctx.catalog.byId.get('sentry').routes.bridge.package;
-    let versions = null;
-    for (const family of ['project', 'global'])
+    const pkg = ctx.catalog.byId.get('sentry')!.routes.bridge!.package!;
+    let versions: Release[] | null = null;
+    for (const family of ['project', 'global'] as const)
     {
         const l = ctx.inv.lists && ctx.inv.lists[family];
         if (!l || l.note || l.old) continue;
-        const seen = (ctx.inv.cursor && ctx.inv.cursor[family]) || { entries: {} };
+        const seen = (ctx.inv.cursor && ctx.inv.cursor[family]) || { entries: {} } as CursorOf;
         for (const s of l.servers || [])
         {
             if (!s.cursorEntry || !(s.clients || []).includes('cursor')) continue;
             const at = `${s.name} (${s.scope})`;
             const copy = seen.entries[s.name];
             if (!copy) { out.skipped.push(`${at}: Cursor's copy is not in ${seen.file} - not checked; /preferred-tools:fix settles it`); continue; }
-            const row = ctx.catalog.byId.get(s.row);
+            const row = ctx.catalog.byId.get(s.row!);
             if (JSON.stringify(copy) !== JSON.stringify(kept.keep(s.cursorEntry, row))) { out.skipped.push(`${at}: Cursor's copy in ${seen.file} differs from the list - not checked; /preferred-tools:fix settles it`); continue; }
             const from = pinnedVersion(s.cursorEntry, pkg.name);
             if (!from) continue;
             if (!versions)
             {
                 try { versions = await ctx.registry.versionsOf(pkg.registry, pkg.name); }
-                catch (e) { out.errors.push(`${at} in Cursor: ${pkg.registry} lookup for ${pkg.name} failed - ${e.message}`); return; }
+                catch (caught) { const e = caught as NodeJS.ErrnoException; out.errors.push(`${at} in Cursor: ${pkg.registry} lookup for ${pkg.name} failed - ${e.message}`); return; }
             }
             const pick = registryLib.choose(versions, { registry: pkg.registry, now: ctx.now, current: from });
             if (pick.held.length) out.held.push(`${at} in Cursor: ${registryLib.heldLine(pkg.name, pick.held)}`);

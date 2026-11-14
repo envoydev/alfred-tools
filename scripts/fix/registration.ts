@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // The registration fixes: each finds a known problem in an installed registration and edits that entry AS READ (its pin,
 // its cut-off and the args or env the user added stay). The edit is applied by `claude mcp remove` + `add-json` through
 // apply.js's mcp-replace, with a rollback; this file never writes.
@@ -12,19 +11,24 @@ import * as roots from '../roots/roots.ts';
 import * as C from './common.ts';
 import { windowsMcpServers, fromHere } from '../inventory/inventory.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
+import type { Env, ServerEntry } from '../core/types.ts';
+import type { CatalogRoute } from '../catalog/types.ts';
+import type { Root } from '../entries/types.ts';
+import type { InvRegistration, WindowsMcp } from '../inventory/types.ts';
+import type { Finding, FixCtx, MachineProbe } from './types.ts';
 
-const eachReg = (ctx, id, fn) => C.registrationsOf(ctx, id).map((reg) => fn(reg, C.routeOf(ctx, reg))).filter(Boolean);
+const eachReg = (ctx: FixCtx, id: string, fn: (reg: InvRegistration, route: CatalogRoute) => Finding | null): Finding[] => C.registrationsOf(ctx, id).map((reg) => fn(reg, C.routeOf(ctx, reg)!)).filter(Boolean) as Finding[];
 
 // ---- serena-windows-home --------------------------------------------------------------------------------------------
 // SERENA_HOME absolute, in backslashes and space-free. A value that is only wrong in its slashes keeps its folder (so the
 // ~327MB of language servers serena already fetched are found again); a value with a space needs another folder.
-function windowsHomeOf(value, ctx)
+function windowsHomeOf(value: string, ctx: FixCtx): string
 {
     const expanded = value.replace(/\$\{(?:HOME|USERPROFILE)\}/g, ctx.home);
     return path.win32.resolve(ctx.inv.project, expanded).replace(/\\+$/, '');
 }
 
-export function serenaWindowsHomeDetect(ctx)
+export function serenaWindowsHomeDetect(ctx: FixCtx): Finding[]
 {
     if (ctx.platform !== 'win32') return [];
     return eachReg(ctx, 'serena-windows-home', (reg) =>
@@ -41,7 +45,7 @@ export function serenaWindowsHomeDetect(ctx)
         const same = windowsHomeOf(value, ctx);
         if (validWindowsSerenaHome(same)) return C.finding('serena-windows-home', reg, what, { proposal: { SERENA_HOME: same }, note: `same folder, written absolute with backslashes: ${same}` });
         const fresh = serenaWindowsHome({ home: ctx.home });
-        if (fresh.root) return C.finding('serena-windows-home', reg, what, { proposal: { SERENA_HOME: fresh.root.path }, note: `a new home, ${fresh.root.path} - serena's data in '${value}' is not moved and its language servers download again (~327MB)` });
+        if (fresh.root) return C.finding('serena-windows-home', reg, what, { proposal: { SERENA_HOME: (fresh.root as Extract<Root, { kind: 'abs' }>).path }, note: `a new home, ${(fresh.root as Extract<Root, { kind: 'abs' }>).path} - serena's data in '${value}' is not moved and its language servers download again (~327MB)` });
         if (reg.scope === 'project') return C.finding('serena-windows-home', reg, what, { blocked: SPACED_PROJECT });
         return C.finding('serena-windows-home', reg, what, { input: { id: 'serenaHome', prompt: fresh.needsInput } });
     });
@@ -50,17 +54,17 @@ export function serenaWindowsHomeDetect(ctx)
 // serena's home in this folder's .mcp.json when no space-free folder is in reach (F7)
 const SPACED_PROJECT = "serena's home on Windows must be space-free - pick a space-free folder with /preferred-tools:configure, Location";
 
-function unsetSerenaHome(reg, ctx)
+function unsetSerenaHome(reg: InvRegistration, ctx: FixCtx): Finding | null
 {
     const profile = ctx.home || '';
     if (!/\s/.test(profile)) return null;
     const what = `no SERENA_HOME: serena's default home, ${path.win32.join(profile, '.serena')}, has a space`;
     if (reg.scope === 'project') return C.finding('serena-windows-home', reg, what, { blocked: SPACED_PROJECT });
-    const free = serenaSpaceFree(ctx).path;
+    const free = (serenaSpaceFree(ctx) as Extract<Root, { kind: 'abs' }>).path;
     return C.finding('serena-windows-home', reg, what, { proposal: { SERENA_HOME: free }, note: `a new home, ${free} - serena's data in ${path.win32.join(profile, '.serena')} is not moved and its language servers download again (~327MB)` });
 }
 
-export function serenaWindowsHomeFix(entry, f, ctx, input = {})
+export function serenaWindowsHomeFix(entry: ServerEntry, f: Finding, _ctx: FixCtx, input: Record<string, string> & { serenaHome?: string } = {}): ServerEntry
 {
     const home = (f.proposal && f.proposal.SERENA_HOME) || input.serenaHome;
     if (!home || !validWindowsSerenaHome(home)) throw new Error(`serena's home must be an absolute Windows folder in backslashes with no space; '${home || ''}' is not (pass --input serenaHome=<folder>)`);
@@ -68,24 +72,24 @@ export function serenaWindowsHomeFix(entry, f, ctx, input = {})
 }
 
 // ---- uvx-python / windows-arm-python --------------------------------------------------------------------------------
-const pythonAt = (args) => args.findIndex((a) => a === '--python' || a === '-p' || a.startsWith('--python='));
+const pythonAt = (args: string[]) => args.findIndex((a) => a === '--python' || a === '-p' || a.startsWith('--python='));
 
-export function uvxPythonDetect(ctx)
+export function uvxPythonDetect(ctx: FixCtx): Finding[]
 {
     return eachReg(ctx, 'uvx-python', (reg) =>
     {
         if (C.launcher(reg.entry) !== 'uvx' || pythonAt(C.launchArgs(reg.entry)) >= 0) return null;
-        const want = pythonRequest(C.routeOf(ctx, reg), ctx, ctx.rules);
+        const want = pythonRequest(C.routeOf(ctx, reg)!, ctx, ctx.rules);
         return C.finding('uvx-python', reg, `no --python: uvx picks the newest CPython, which has no wheel for some dependencies`, { proposal: { python: want } });
     });
 }
 
-export function uvxPythonFix(entry, f, ctx)
+export function uvxPythonFix(entry: ServerEntry, f: Finding, _ctx: FixCtx): ServerEntry
 {
-    return { ...entry, args: ['--python', f.proposal.python, ...entry.args] };
+    return { ...entry, args: ['--python', f.proposal!.python!, ...entry.args!] };
 }
 
-export function windowsArmPythonDetect(ctx)
+export function windowsArmPythonDetect(ctx: FixCtx): Finding[]
 {
     if (!isWindowsArm(ctx)) return [];
     return eachReg(ctx, 'windows-arm-python', (reg) =>
@@ -99,15 +103,15 @@ export function windowsArmPythonDetect(ctx)
     });
 }
 
-export function windowsArmPythonFix(entry, f)
+export function windowsArmPythonFix(entry: ServerEntry, f: Finding): ServerEntry
 {
-    const args = [...entry.args];
-    args[args.indexOf('--python') + 1] = f.proposal.python;
+    const args = [...entry.args!];
+    args[args.indexOf('--python') + 1] = f.proposal!.python!;
     return { ...entry, args };
 }
 
 // ---- windows-npx-cmd ------------------------------------------------------------------------------------------------
-export function windowsNpxCmdDetect(ctx)
+export function windowsNpxCmdDetect(ctx: FixCtx): Finding[]
 {
     if (ctx.platform !== 'win32') return [];
     return eachReg(ctx, 'windows-npx-cmd', (reg) =>
@@ -117,7 +121,7 @@ export function windowsNpxCmdDetect(ctx)
     });
 }
 
-export function windowsNpxCmdFix(entry)
+export function windowsNpxCmdFix(entry: ServerEntry): ServerEntry
 {
     return { ...entry, command: 'cmd', args: ['/c', 'npx', ...(entry.args || [])] };
 }
@@ -126,7 +130,7 @@ export function windowsNpxCmdFix(entry)
 // The release whose README documents --no-webmcp (catalog/fixes.json verifiedOn): a fixed floor, never the catalog's pin,
 // which moves on every refresh and would block a registration that already has the flag.
 const NO_WEBMCP_SINCE = '0.0.83';
-export function playwrightWebmcpDetect(ctx)
+export function playwrightWebmcpDetect(ctx: FixCtx): Finding[]
 {
     return eachReg(ctx, 'playwright-webmcp', (reg) =>
     {
@@ -139,9 +143,9 @@ export function playwrightWebmcpDetect(ctx)
     });
 }
 
-export function playwrightWebmcpFix(entry)
+export function playwrightWebmcpFix(entry: ServerEntry): ServerEntry
 {
-    const args = [...entry.args];
+    const args = [...entry.args!];
     const at = args.indexOf('--browser');
     args.splice(at >= 0 ? at + 2 : args.length, 0, '--no-webmcp');
     return { ...entry, args };
@@ -149,7 +153,7 @@ export function playwrightWebmcpFix(entry)
 
 // ---- appium-sdk-env -------------------------------------------------------------------------------------------------
 const SDK_ENV = ['ANDROID_HOME', 'JAVA_HOME'];
-export function androidSdk(ctx)
+export function androidSdk(ctx: { env: Env; machine: MachineProbe; platform: string; home: string }): string | null
 {
     const { env, machine: m } = ctx;
     for (const v of [env.ANDROID_HOME, env.ANDROID_SDK_ROOT]) if (v && m.exists(v)) return v;
@@ -160,7 +164,7 @@ export function androidSdk(ctx)
     return defaults.find((d) => m.exists(d)) || null;
 }
 
-export function javaHome(ctx)
+export function javaHome(ctx: { env: Env; machine: MachineProbe; platform: string }): string | null
 {
     const { env, machine: m } = ctx;
     if (env.JAVA_HOME && m.exists(env.JAVA_HOME)) return env.JAVA_HOME;
@@ -177,7 +181,7 @@ export function javaHome(ctx)
     return m.exists(P.join(home, 'bin', ctx.platform === 'win32' ? 'java.exe' : 'java')) ? home : null;
 }
 
-export function appiumSdkEnvDetect(ctx)
+export function appiumSdkEnvDetect(ctx: FixCtx): Finding[]
 {
     return eachReg(ctx, 'appium-sdk-env', (reg) =>
     {
@@ -194,20 +198,20 @@ export function appiumSdkEnvDetect(ctx)
     });
 }
 
-export function appiumSdkEnvFix(entry, f)
+export function appiumSdkEnvFix(entry: ServerEntry, f: Finding): ServerEntry
 {
-    return { ...entry, env: { ...(entry.env || {}), ...f.proposal } };
+    return { ...entry, env: { ...(entry.env || {}), ...(f.proposal as Record<string, string>) } };
 }
 
 // ---- serena-telemetry -----------------------------------------------------------------------------------------------
 // Only an ABSENT variable is a finding: a user who set it to something else chose that.
-export function serenaTelemetryDetect(ctx)
+export function serenaTelemetryDetect(ctx: FixCtx): Finding[]
 {
     return eachReg(ctx, 'serena-telemetry', (reg) =>
         (reg.entry.env || {}).SERENA_USAGE_REPORTING === undefined ? C.finding('serena-telemetry', reg, 'SERENA_USAGE_REPORTING is not set - serena sends a usage ping at every start') : null);
 }
 
-export function serenaTelemetryFix(entry)
+export function serenaTelemetryFix(entry: ServerEntry): ServerEntry
 {
     return { ...entry, env: { ...(entry.env || {}), SERENA_USAGE_REPORTING: 'false' } };
 }
@@ -216,7 +220,7 @@ export function serenaTelemetryFix(entry)
 // A managed serena whose --context is not the context file in its family's root: 0.4.x ran Serena's own claude-code
 // context, whose instructions name Claude Code's tools. The fix points it at <root>/serena-context.yml; fix.js plans the
 // file's write before the replace.
-export function serenaContextDetect(ctx)
+export function serenaContextDetect(ctx: FixCtx): Finding[]
 {
     const r = roots.resolve(ctx.inv, null, { project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog }).roots;
     return eachReg(ctx, 'serena-context', (reg) =>
@@ -232,12 +236,12 @@ export function serenaContextDetect(ctx)
     });
 }
 
-export function serenaContextFix(entry, f)
+export function serenaContextFix(entry: ServerEntry, f: Finding): ServerEntry
 {
     const args = [...(entry.args || [])];
     const i = args.indexOf('--context');
-    if (i >= 0 && i + 1 < args.length) args[i + 1] = f.want;
-    else args.push('--context', f.want);
+    if (i >= 0 && i + 1 < args.length) args[i + 1] = f.want!;
+    else args.push('--context', f.want!);
     return { ...entry, args };
 }
 
@@ -251,36 +255,36 @@ const PICK_NAME = "pick the key's name with /preferred-tools:configure";
 const ONE_VAR = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
 
 // The key inside a token field: the field's text less the route template's text around ${VAR}.
-function keyIn(value, template, v)
+function keyIn(value: unknown, template: string, v: string): string
 {
-    const [pre, post = ''] = template.split(`\${${v}}`);
+    const [pre, post = ''] = template.split(`\${${v}}`) as [string, string?];
     const s = String(value);
     return s.length >= pre.length + post.length && s.startsWith(pre) && s.endsWith(post) ? s.slice(pre.length, s.length - post.length) : s;
 }
 
-function stdioChainOf(ctx, scope)
+function stdioChainOf(ctx: FixCtx, scope: string): string[]
 {
     const r = roots.resolve(ctx.inv, null, { project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog }).roots;
     return keys.stdioChain({ scope, projectRoot: r.project, globalRoot: r.global });
 }
 
-export function tokenSyncDetect(ctx)
+export function tokenSyncDetect(ctx: FixCtx): Finding[]
 {
     return eachReg(ctx, 'token-sync', (reg, route) =>
     {
         if (reg.route === 'remote' || !['local', 'user'].includes(reg.scope)) return null;
         const fields = keys.tokenFields(reg.entry, route);
         if (!fields.length) return null;
-        const v = route.tokenVar;
-        const key = keyIn(fields[0].at.reduce((o, k) => o[k], reg.entry), fields[0].template, v);
+        const v = route.tokenVar!;
+        const key = keyIn(fields[0]!.at.reduce<unknown>((o, k) => (o as Record<string | number, unknown>)[k], reg.entry), fields[0]!.template, v);
         const chain = stdioChainOf(ctx, reg.scope);
         const extra = { route: reg.route, chain };
         if (key === '') return C.finding('token-sync', reg, `the registration's ${v} is empty`, { ...extra, blocked: PICK_NAME });
         const one = ONE_VAR.exec(key);
         if (one)
         {
-            const at = keys.valueIn(chain, one[1]);
-            return at ? C.finding('token-sync', reg, `the registration holds \${${one[1]}} while ${at.file} has the key`, { ...extra, keyName: one[1] }) : null;
+            const at = keys.valueIn(chain, one[1]!);
+            return at ? C.finding('token-sync', reg, `the registration holds \${${one[1]}} while ${at.file} has the key`, { ...extra, keyName: one[1]! }) : null;
         }
         if (keys.nameOfValue(chain, key)) return cursorBehind(ctx, reg, route, chain, extra);
         const what = `the key in the registration matches no name in ${chain.join(', ')}`;
@@ -291,7 +295,7 @@ export function tokenSyncDetect(ctx)
 // At user scope a server set up for Cursor holds its key in ~/.cursor/mcp.json too (spec D6): its copy is behind when
 // its value is not the one its list's key name has in the chain. The fix refills that copy alone, from .mcps-secrets
 // at apply (plan-lists.js repairTail), with Claude Code's registration as it is. -> finding | null
-function cursorBehind(ctx, reg, route, chain, extra)
+function cursorBehind(ctx: FixCtx, reg: InvRegistration, route: CatalogRoute, chain: string[], extra: { route: string | null; chain: string[] }): Finding | null
 {
     if (reg.scope !== 'user') return null;
     const l = ctx.inv.lists && ctx.inv.lists.global;
@@ -299,37 +303,37 @@ function cursorBehind(ctx, reg, route, chain, extra)
     if (!s || !s.key) return null;
     const file = cursorMcp.fileFor('global', ctx);
     const read = cursorMcp.readCursor(file);
-    const copy = read.state === 'ok' ? read.doc.mcpServers[reg.name] : null;
+    const copy = read.state === 'ok' ? read.doc!.mcpServers[reg.name] : null;
     const fields = copy ? keys.tokenFields(copy, route) : [];
     const at = keys.valueIn(chain, s.key);
     if (!fields.length || !at) return null;
-    const held = keyIn(fields[0].at.reduce((o, k) => (o == null ? o : o[k]), copy), fields[0].template, route.tokenVar);
+    const held = keyIn(fields[0]!.at.reduce<unknown>((o, k) => (o == null ? o : (o as Record<string | number, unknown>)[k]), copy), fields[0]!.template, route.tokenVar!);
     if (held === at.value) return null;
     return C.finding('token-sync', reg, `Cursor's copy in ${file} holds a key other than ${s.key} in ${at.file}`, { ...extra, keyName: s.key, cursorOnly: true });
 }
 
-export function tokenSyncFix(entry, f, ctx)
+export function tokenSyncFix(entry: ServerEntry, f: Finding, ctx: FixCtx): ServerEntry
 {
     // Cursor's copy alone: Claude Code's registration stays as it is
     if (f.cursorOnly) return entry;
-    const at = keys.valueIn(f.chain, f.keyName);
-    if (!at) throw new Error(`${f.keyName} is filled in none of ${f.chain.join(', ')} any more - nothing written`);
-    const row = C.rowOf(ctx, f.row);
-    return keys.fillKeys(entry, row, f.route, f.scope, { [row.routes[f.route].tokenVar]: at.value });
+    const at = keys.valueIn(f.chain!, f.keyName!);
+    if (!at) throw new Error(`${f.keyName} is filled in none of ${f.chain!.join(', ')} any more - nothing written`);
+    const row = C.rowOf(ctx, f.row!)!;
+    return keys.fillKeys(entry, row, f.route!, f.scope!, { [row.routes[f.route!]!.tokenVar!]: at.value });
 }
 
 // ---- windows-mcp-one-per-desktop ------------------------------------------------------------------------------------
 // Advice only (`fix: null`): windows-mcp 0.8.8 makes one missed overlay confirmation permanent for its process, and a
 // second server on the same desktop is the likely cause. The finding is always blocked: each server is dropped by its
 // owner's own command, and preferred-tools changes none of them.
-function windowsMcpDrop(s, ctx)
+function windowsMcpDrop(s: WindowsMcp, ctx: FixCtx): string
 {
     if (s.kind === 'plugin') return `claude plugin disable ${s.name} --scope ${s.scope}`;
     const how = s.owner === 'catalog' ? '/preferred-tools:configure (Remove)' : `claude mcp remove ${s.name} -s ${s.scope === 'inherited' ? 'project' : s.scope}`;
-    return s.scope === 'inherited' ? `${how}, run in ${fromHere(ctx.inv, s.from)}` : how;
+    return s.scope === 'inherited' ? `${how}, run in ${fromHere(ctx.inv, s.from!)}` : how;
 }
 
-export function windowsMcpOneDetect(ctx)
+export function windowsMcpOneDetect(ctx: FixCtx): Finding[]
 {
     const servers = windowsMcpServers(ctx.inv);
     if (servers.length < 2) return [];
@@ -337,7 +341,7 @@ export function windowsMcpOneDetect(ctx)
     const list = servers.map((s) => `${s.name} (${s.scope})`).join(', ');
     const drop = servers.map((s) => `${s.name} (${s.scope}): ${windowsMcpDrop(s, ctx)}`).join('; ');
     // `row` set by hand: a server is not a registration row, and --only narrows by it
-    return [C.finding('windows-mcp-one-per-desktop', { ...at, rowId: 'windows-control' }, `${servers.length} windows-mcp servers start in this project: ${list}`,
+    return [C.finding('windows-mcp-one-per-desktop', { ...at, rowId: 'windows-control' } as { rowId: string; name: string; scope: string }, `${servers.length} windows-mcp servers start in this project: ${list}`,
         { blocked: `keep one per Windows desktop - ${drop}; a stuck one recovers only in a new Claude Code session` })];
 }
 

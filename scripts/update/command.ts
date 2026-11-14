@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // The update command: reads its flags and runs the check, the asks or the apply.
 import path from 'node:path';
 import * as inventory from '../inventory/inventory.ts';
@@ -7,15 +6,19 @@ import * as tmpdir from '../core/tmpdir.ts';
 import { makeCtx, check, render } from './check.ts';
 import { questions } from './asks.ts';
 import { applyUpdates } from './apply.ts';
+import type { Env } from '../core/types.ts';
+import type { RunCli } from '../apply/types.ts';
+import type { MachineProbe } from '../fix/types.ts';
+import type { Registry, UpdateArgs } from './types.ts';
 
 // ---- CLI -------------------------------------------------------------------------------------------------------------
 
-export function parseArgs(argv)
+export function parseArgs(argv: string[]): UpdateArgs
 {
-    const args = { input: {} };
+    const args: UpdateArgs = { input: {} };
     for (let i = 0; i < argv.length; i++)
     {
-        const a = argv[i];
+        const a = argv[i]!;
         if (['--check', '--questions', '--json', '--no-refresh'].includes(a)) { args[a.slice(2)] = true; continue; }
         if (!['--apply', '--project', '--tmp', '--data', '--input'].includes(a)) throw new Error(`unknown argument '${a}'`);
         const v = argv[i + 1];
@@ -36,19 +39,19 @@ export function parseArgs(argv)
     return args;
 }
 
-export async function main(argv, { env = process.env, out = (s) => process.stdout.write(`${s}\n`), machine, registry, now, runCli } = {})
+export async function main(argv: string[], { env = process.env, out = (s: string) => process.stdout.write(`${s}\n`), machine, registry, now, runCli }: { env?: Env; out?: (line: string) => unknown; machine?: MachineProbe; registry?: Registry; now?: number; runCli?: RunCli } = {}): Promise<number>
 {
-    let args;
+    let args: UpdateArgs;
     try { args = parseArgs(argv); }
-    catch (e) { out(`update: ${e.message}\nusage: node scripts/update.ts --check | --questions | --apply <id,id|all|none> [--input key=value] [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`); return 2; }
+    catch (caught) { const e = caught as NodeJS.ErrnoException; out(`update: ${e.message}\nusage: node scripts/update.ts --check | --questions | --apply <id,id|all|none> [--input key=value] [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`); return 2; }
     const project = path.resolve(args.project || process.cwd());
     const inv = inventory.buildInventory({ project, env, run: runCli || cli.run, data: args.data || null });
-    if (!inv.cli.ok) { out('preferred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
+    if (!inv.cli!.ok) { out('preferred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
     const ctx = makeCtx({ inv, project, env, machine, registry, now, runCli: runCli || cli.run, refresh: !args['no-refresh'], data: args.data || null });
     const found = await check(ctx);
     if (args.apply)
     {
-        const log = (...a) => out(a.join('\n'));
+        const log = (...a: string[]) => out(a.join('\n'));
         const res = applyUpdates(ctx, args.apply.split(',').filter(Boolean), found, { tmp: args.tmp, log, input: args.input });
         // the last script on <tmp> removes it, unless fetch.js takes it on; apply() per server never does
         if (!res.fetchFile) tmpdir.release(res.dir, log);

@@ -24,6 +24,11 @@ export interface Env
     MSYSTEM?: string | undefined;
     OSTYPE?: string | undefined;
     CLAUDE_CODE_GIT_BASH_PATH?: string | undefined;
+    ProgramFiles?: string | undefined;
+    LOCALAPPDATA?: string | undefined;
+    ANDROID_HOME?: string | undefined;
+    ANDROID_SDK_ROOT?: string | undefined;
+    JAVA_HOME?: string | undefined;
     [name: string]: string | undefined;
 }
 
@@ -37,7 +42,7 @@ export interface ServerEntry
     type?: string | undefined; // stored - do not rename
     command?: string | undefined; // stored - do not rename
     args?: string[] | undefined; // stored - do not rename
-    env?: (Record<string, string> & { SERENA_HOME?: string }) | undefined; // stored - do not rename
+    env?: (Record<string, string> & { SERENA_HOME?: string; SERENA_USAGE_REPORTING?: string; npm_config_before?: string }) | undefined; // stored - do not rename
     url?: string | undefined; // stored - do not rename
     headers?: (Record<string, string> & { Authorization?: string }) | undefined; // stored - do not rename
     headersHelper?: string | undefined; // stored - do not rename

@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 12
 // The entry that rebuilds catalog/reserved-names.json; the work is in catalog/refresh-reserved.js.
 import { main } from './catalog/refresh-reserved.ts';
 

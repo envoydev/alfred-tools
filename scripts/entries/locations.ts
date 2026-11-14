@@ -70,7 +70,7 @@ export function withSub(rootStr: string, sub: string, _scope: string, ctx: Machi
 }
 
 // serena on Windows: SERENA_HOME absolute, in backslashes and space-free (fix row serena-windows-home).
-export function serenaWindowsHome(ctx: Machine): DefaultRoot
+export function serenaWindowsHome(ctx: Pick<Machine, 'home'>): DefaultRoot
 {
     const profile = ctx.home || '';
     if (profile && !/\s/.test(profile)) return { root: { kind: 'abs', path: path.win32.join(profile, '.serena') } };
@@ -79,7 +79,7 @@ export function serenaWindowsHome(ctx: Machine): DefaultRoot
 
 // A profile path with a space leaves serena no home under it: the space-free folder offered and taken by default in its
 // place, on the system drive.
-export function serenaSpaceFree(ctx: Machine): Root
+export function serenaSpaceFree(ctx: Pick<Machine, 'env'>): Root
 {
     const drive = (ctx.env && ctx.env.SystemDrive) || '';
     return { kind: 'abs', path: `${/^[A-Za-z]:$/.test(drive) ? drive : 'C:'}\\serena-home` };

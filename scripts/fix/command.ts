@@ -1,16 +1,17 @@
-// @ts-nocheck - typed in Task 12
 // The fix command: reads its flags and runs the detectors, the asks or the fixes.
 import path from 'node:path';
 import * as inventory from '../inventory/inventory.ts';
 import * as tmpdir from '../core/tmpdir.ts';
 import { makeCtx, applyFixes, detectAll, questions, render } from './fix.ts';
+import type { Env } from '../core/types.ts';
+import type { FixArgs, MachineProbe } from './types.ts';
 
 // ---- CLI ------------------------------------------------------------------------------------------------------------
 
-export function parseArgs(argv)
+export function parseArgs(argv: string[]): FixArgs
 {
-    const args = { input: {} };
-    const value = (i, flag) =>
+    const args: FixArgs = { input: {} };
+    const value = (i: number, flag: string) =>
     {
         const v = argv[i + 1];
         if (v === undefined || v === '' || v.startsWith('--')) throw new Error(`${flag} needs a value`);
@@ -18,7 +19,7 @@ export function parseArgs(argv)
     };
     for (let i = 0; i < argv.length; i++)
     {
-        const a = argv[i];
+        const a = argv[i]!;
         if (['--detect', '--questions', '--json'].includes(a)) { args[a.slice(2)] = true; continue; }
         if (!['--apply', '--only', '--input', '--project', '--tmp', '--data'].includes(a)) throw new Error(`unknown argument '${a}'`);
         const v = value(i, a);
@@ -40,19 +41,19 @@ export function parseArgs(argv)
     return args;
 }
 
-export function main(argv, { env = process.env, out = (s) => process.stdout.write(`${s}\n`), machine } = {})
+export function main(argv: string[], { env = process.env, out = (s: string) => process.stdout.write(`${s}\n`), machine }: { env?: Env; out?: (line: string) => unknown; machine?: MachineProbe } = {}): number
 {
-    let args;
+    let args: FixArgs;
     try { args = parseArgs(argv); }
-    catch (e) { out(`fix: ${e.message}\nusage: node scripts/fix.ts --detect | --questions | --apply <id,id|all> [--only <x>] [--input key=value] [--project <dir>] [--data <dir>]`); return 2; }
+    catch (caught) { const e = caught as NodeJS.ErrnoException; out(`fix: ${e.message}\nusage: node scripts/fix.ts --detect | --questions | --apply <id,id|all> [--only <x>] [--input key=value] [--project <dir>] [--data <dir>]`); return 2; }
     const project = path.resolve(args.project || process.cwd());
     const data = args.data || null;
     const inv = inventory.buildInventory({ project, env, data });
-    if (!inv.cli.ok) { out('preferred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
+    if (!inv.cli!.ok) { out('preferred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
     const ctx = makeCtx({ inv, env, machine, data });
     if (args.apply)
     {
-        const log = (...a) => out(a.join('\n'));
+        const log = (...a: string[]) => out(a.join('\n'));
         const res = applyFixes(ctx, args.apply.split(',').filter(Boolean), { only: args.only, input: args.input, tmp: args.tmp, log });
         // the last script on <tmp> removes it, unless fetch.js takes it on
         if (!res.fetchFile) tmpdir.release(res.tmp, log);

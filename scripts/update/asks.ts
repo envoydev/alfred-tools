@@ -1,21 +1,22 @@
-// @ts-nocheck - typed in Task 12
 // The update's asks, as data.
 import { REC } from '../plan/asks-keys.ts';
 import { chunk } from '../plan/asks-picks.ts';
 import { cursorNameQuestion, STATIC, cursorOfferQuestion } from '../plan/asks-other.ts';
+import type { Question } from '../plan/types.ts';
+import type { CursorOffer, UpdateCheck } from './types.ts';
 
 // ---- asks ------------------------------------------------------------------------------------------------------------
 
 // The asks as data: the offer (single-select), then the pick lists for 'Pick which' - multi-selects of at most four options,
 // one group per kind, at most four questions a call.
-export function questions(out)
+export function questions(out: UpdateCheck)
 {
     const items = [...out.offers, ...out.unchecked];
     // Cursor's offer, one per root, and the names Cursor already has, asked right after 'Set them up for Cursor too'
     const cursor = { cursorOffers: (out.cursorOffers || []).map(cursorOfferAsk), cursorNameQuestions: (out.cursorOffers || []).flatMap((o) => o.taken.map((t) => cursorNameQuestion(t))) };
     if (!items.length) return { offer: null, pick: [], ...cursor };
-    const groups = [['catalog', 'Catalog plugins'], ['other', 'Other plugins'], ['mcp', 'MCP servers'], ['helper', 'Key helpers'], ['upgrade', 'New ways to pass data', 'Data passing']];
-    const qs = [];
+    const groups = [['catalog', 'Catalog plugins'], ['other', 'Other plugins'], ['mcp', 'MCP servers'], ['helper', 'Key helpers'], ['upgrade', 'New ways to pass data', 'Data passing']] as [string, string, string?][];
+    const qs: Question[] = [];
     for (const [g, title, header] of groups)
     {
         const list = items.filter((o) => o.group === g);
@@ -31,7 +32,7 @@ export function questions(out)
 }
 
 // The ask cursor-offer (spec D9), asks.js's text; `answers` maps each label to the value passed back.
-function cursorOfferAsk(o)
+function cursorOfferAsk(o: CursorOffer)
 {
     const q = cursorOfferQuestion(o.root, o.servers.length);
     return { ...q.question, answers: q.answers };

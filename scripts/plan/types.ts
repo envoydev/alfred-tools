@@ -409,7 +409,7 @@ export interface RootUses
     bridge?: boolean;
     serenaContext?: boolean;
     keyFile?: string | null;
-    keyName?: string;
+    keyName?: string | null;
     keyNames?: string[];
     data?: string | null;
 }

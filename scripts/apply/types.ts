@@ -2,7 +2,7 @@
 import type { CliOptions, CliResult, Env, Outcome, ServerEntry } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { FetchStep } from '../entries/types.ts';
-import type { Plan } from '../plan/types.ts';
+import type { Expect, Plan } from '../plan/types.ts';
 
 // What one step reports: ok and why, and for a deny-read whether the file had every rule already.
 export interface StepResult extends Outcome
@@ -85,8 +85,8 @@ export interface ApplyReport
     lists: StepResult[];
 }
 
-// The part of a plan apply reads: update.js and fix.js build their own.
-export type ApplyPlan = Pick<Plan, 'project' | 'steps'> & Partial<Pick<Plan, 'alfredCodeEnabled' | 'expect' | 'reconnect' | 'errors'>>;
+// The part of a plan apply reads: update.js and fix.js build their own, whose expected servers carry no row.
+export type ApplyPlan = Pick<Plan, 'project' | 'steps'> & Partial<Pick<Plan, 'alfredCodeEnabled' | 'reconnect' | 'errors'>> & { expect?: Pick<Expect, 'kind' | 'name' | 'scope' | 'route'>[] };
 
 // What each step runs with: the project, the CLI, the catalog, the plugin data folder, and the report so far.
 export interface ApplyCtx

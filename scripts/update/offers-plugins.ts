@@ -1,9 +1,10 @@
-// @ts-nocheck - typed in Task 12
 // The plugin offers: each installed plugin behind its marketplace's release.
 import fs from 'node:fs';
 import path from 'node:path';
 import * as inventory from '../inventory/inventory.ts';
 import { clone, compareVersions, pinnedVersion } from '../fix/common.ts';
+import type { ServerEntry } from '../core/types.ts';
+import type { PluginOffer, UpdateCheck, UpdateCtx } from './types.ts';
 
 const { bareName } = inventory;
 
@@ -11,13 +12,13 @@ const { bareName } = inventory;
 
 // The entry with `pkg`'s pin moved to `to` and its cut-off to `cutoff`. Only a cut-off the entry already carries moves: a
 // user who removed it keeps it removed. null when the entry pins no version of `pkg`.
-export function bumpEntry(entry, pkg, to, cutoff)
+export function bumpEntry(entry: ServerEntry, pkg: string, to: string, cutoff: string): ServerEntry | null
 {
     const from = pinnedVersion(entry, pkg);
     if (!from) return null;
     const e = clone(entry);
     let done = false;
-    e.args = (e.args || []).map((a, i, all) =>
+    e.args = (e.args || []).map((a, _i, _all) =>
     {
         if (!done && !a.startsWith('-') && bareName(a) === pkg && a.endsWith(from)) { done = true; return a.slice(0, a.length - from.length) + to; }
         return a;
@@ -32,12 +33,12 @@ export function bumpEntry(entry, pkg, to, cutoff)
 
 // The version a marketplace lists for a plugin, from its clone: the plugin's own plugin.json when the entry points at a
 // folder in the clone (that file wins over the entry), else the entry's `version`. null: not listed.
-export function listedVersion(installLocation, pluginName)
+export function listedVersion(installLocation: string | null | undefined, pluginName: string): string | null
 {
     if (!installLocation) return null;
     let file = installLocation;
     try { if (!fs.statSync(file).isFile()) file = path.join(installLocation, '.claude-plugin', 'marketplace.json'); } catch { return null; }
-    let doc;
+    let doc: { plugins?: { name: string; source?: unknown; version?: unknown }[]; metadata?: { pluginRoot?: string } };
     try { doc = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
     const entry = (doc.plugins || []).find((p) => p.name === pluginName);
     if (!entry) return null;
@@ -50,9 +51,9 @@ export function listedVersion(installLocation, pluginName)
     return entry.version ? String(entry.version) : null;
 }
 
-export function pluginOffers(ctx, out)
+export function pluginOffers(ctx: UpdateCtx, out: UpdateCheck): void
 {
-    const refreshed = new Map();
+    const refreshed = new Map<string, string | null>();
     for (const p of ctx.inv.plugins)
     {
         if (!refreshed.has(p.marketplace))
@@ -63,11 +64,11 @@ export function pluginOffers(ctx, out)
                 const r = ctx.runCli(['plugin', 'marketplace', 'update', p.marketplace], { cwd: ctx.project, env: ctx.env });
                 refreshed.set(p.marketplace, !r.error && r.status === 0 ? null : `marketplace ${p.marketplace} did not refresh (${`${r.stderr}${r.stdout}`.trim().split('\n').slice(-1)[0] || 'no output'}) - compared against its last clone`);
             }
-            if (refreshed.get(p.marketplace)) out.notes.push(refreshed.get(p.marketplace));
+            if (refreshed.get(p.marketplace)) out.notes.push(refreshed.get(p.marketplace)!);
         }
         const market = ctx.inv.marketplaces.find((m) => m.name === p.marketplace);
         const to = listedVersion(market && market.installLocation, p.plugin);
-        const base = { kind: 'plugin', id: `plugin:${p.id}~${p.scope}`, plugin: p.id, scope: p.scope, from: p.version || null, group: p.rowId ? 'catalog' : 'other', label: `${p.id} (${p.scope})` };
+        const base: Omit<PluginOffer, 'to'> = { kind: 'plugin', id: `plugin:${p.id}~${p.scope}`, plugin: p.id, scope: p.scope, from: p.version || null, group: p.rowId ? 'catalog' : 'other', label: `${p.id} (${p.scope})` };
         if (!market) { out.skipped.push(`${p.id} (${p.scope}): its marketplace '${p.marketplace}' is not registered, so nothing to compare against`); continue; }
         if (to === null) { out.unchecked.push({ ...base, to: null }); continue; }
         const cmp = compareVersions(p.version || '', to);

@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-nocheck - typed in Task 12
 // The entry /preferred-tools commands run to fetch what an apply registered; the work is in apply/.
 import { main } from './apply/fetch-command.ts';
 

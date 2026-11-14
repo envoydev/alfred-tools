@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // The file offers: the helper, bridge and serena-context copies behind the plugin's own.
 import { pathFor } from '../entries/platform.ts';
 import { contextArgAt, bridgeParts } from '../entries/entry.ts';
@@ -7,24 +6,28 @@ import { HELPER_VERSION } from '../copied/mcp-headers.js';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import { homeDir } from '../core/account.ts';
 import * as fixLib from '../fix/fix.ts';
+import type { Catalog } from '../catalog/types.ts';
+import type { ShippedKind } from '../roots/types.ts';
+import type { Finding } from '../fix/types.ts';
+import type { UpdateCheck, UpdateCtx } from './types.ts';
 
 // ---- key helpers (spec D7, R10) ---------------------------------------------------------------------------------------
 
 // Each mcp-headers.js a managed registration names, or a root in use holds, with a lower number than this plugin's is
 // offered; a hand edit or a newer copy is left to /preferred-tools:fix, with a note.
-export function helperOffers(ctx, out)
+export function helperOffers(ctx: UpdateCtx, out: UpdateCheck): void
 {
     const P = pathFor(ctx.inv.os);
     const rctx = { project: ctx.project, home: homeDir(ctx.env), platform: ctx.inv.os, catalog: ctx.catalog };
-    const dirs = new Set(['project', 'global'].map((f) => ctx.inv.roots && ctx.inv.roots[f] && ctx.inv.roots[f].path).filter(Boolean));
-    const bridgeDirs = new Set();
-    const contextDirs = new Set();
+    const dirs = new Set((['project', 'global'] as const).map((f) => ctx.inv.roots && ctx.inv.roots[f] && ctx.inv.roots[f].path).filter(Boolean) as string[]);
+    const bridgeDirs = new Set<string>();
+    const contextDirs = new Set<string>();
     for (const r of ctx.inv.registrations || [])
     {
         if (!r.rowId || r.own || r.alfredRetired || r.choice === 'own' || r.scope === 'inherited') continue;
         // serena's context file (0.5.0, D7), where the entry names this plugin's
         const at = contextArgAt(r.entry);
-        if (at >= 0) contextDirs.add(P.dirname(roots.absOf(r.entry.args[at], rctx)));
+        if (at >= 0) contextDirs.add(P.dirname(roots.absOf(r.entry.args![at], rctx)));
         const named = roots.helperPathOf(r.entry && r.entry.headersHelper);
         if (named) dirs.add(P.dirname(roots.absOf(named, rctx)));
         // a bridge's folder holds its bridge and the helper it requires (0.4.0)
@@ -32,7 +35,7 @@ export function helperOffers(ctx, out)
         if (bridge) bridgeDirs.add(P.dirname(roots.absOf(bridge.path, rctx)));
     }
     for (const root of bridgeDirs) dirs.add(root);
-    const offer = (kind, root, version) =>
+    const offer = (kind: ShippedKind, root: string, version: number) =>
     {
         const name = roots.FILES[kind];
         const file = P.join(root, name);
@@ -54,10 +57,10 @@ export function helperOffers(ctx, out)
 // absolute project paths (project-relative-path), the root's .gitignore (root-ignore), the .mcp.json order (mcp-order).
 // Only those detectors run. A finding that cannot apply alone - blocked, or needing a folder - is a note naming
 // /preferred-tools:fix, counted in `waiting`.
-export const upgradeCatalog = (catalog) => ({ ...catalog, fixes: catalog.fixes.filter((f) => f.upgrade) });
-const upgradeLabel = (f) => (f.kind === 'registration' ? `${f.name} (${f.scope})` : f.name);
+export const upgradeCatalog = (catalog: Catalog): Catalog => ({ ...catalog, fixes: catalog.fixes.filter((f) => f.upgrade) });
+const upgradeLabel = (f: Finding) => (f.kind === 'registration' ? `${f.name} (${f.scope})` : f.name);
 
-export function upgradeOffers(ctx, out)
+export function upgradeOffers(ctx: UpdateCtx, out: UpdateCheck): void
 {
     const catalog = upgradeCatalog(ctx.catalog);
     if (!catalog.fixes.length) return;
@@ -76,7 +79,7 @@ export function upgradeOffers(ctx, out)
         const label = upgradeLabel(f);
         if (f.blocked || f.input)
         {
-            const why = f.blocked || `needs a folder from you (${f.input.prompt})`;
+            const why = f.blocked || `needs a folder from you (${f.input!.prompt})`;
             out.notes.push(`${label}: ${f.found} - not applied here: ${why}${/\/preferred-tools:fix/.test(why) ? '' : '; then run /preferred-tools:fix'}`);
             out.waiting += 1;
             continue;

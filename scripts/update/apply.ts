@@ -1,4 +1,3 @@
-// @ts-nocheck - typed in Task 12
 // Applying the picked offers: plugins, pins, files and the new ways to pass data.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -21,10 +20,16 @@ import { ensureCommonjs } from '../apply/file-steps.ts';
 import * as fixLib from '../fix/fix.ts';
 import { plan } from '../plan/plan.ts';
 import * as declines from '../core/declines.ts';
+import type { Declined } from '../core/types.ts';
+import type { InvList } from '../inventory/types.ts';
+import type { Log } from '../apply/types.ts';
+import type { ListWriteStep, McpReplaceStep, PlanStep } from '../plan/types.ts';
+import type { CursorOffer, CursorPinOffer, FileOffer, McpOffer, Offer, PluginOffer, UpdateCheck, UpdateCtx, UpdateRun, UpgradeOffer } from './types.ts';
+import type { JobStep } from '../apply/types.ts';
 
 // ---- apply -----------------------------------------------------------------------------------------------------------
 
-function updatePlugin(ctx, offer, log)
+function updatePlugin(ctx: UpdateCtx, offer: PluginOffer, log: Log): boolean
 {
     const r = ctx.runCli(['plugin', 'update', offer.plugin, '--scope', offer.scope], { cwd: ctx.project, env: ctx.env });
     if (r.error || r.status !== 0) { log(`FAILED ${offer.label}: claude plugin update failed - ${`${r.stderr}${r.stdout}`.trim().split('\n').slice(-1)[0]}`); return false; }
@@ -35,7 +40,7 @@ function updatePlugin(ctx, offer, log)
     return offer.to === null || v === offer.to;
 }
 
-function updateMcp(ctx, offer, tmp, log)
+function updateMcp(ctx: UpdateCtx, offer: McpOffer, tmp: string, log: Log): boolean
 {
     // a new way to pass data rewrote it earlier in this run: the pin moves on the registration as it is now - a change
     // starts from what is installed
@@ -44,23 +49,23 @@ function updateMcp(ctx, offer, tmp, log)
         const now = inventory.buildInventory({ project: ctx.project, env: ctx.env, run: ctx.runCli, data: ctx.data, catalog: ctx.catalog }).registrations.find((r) => r.name === offer.name && r.scope === offer.scope);
         const entry = now ? bumpEntry(now.entry, offer.package, offer.to, offer.cutoff) : null;
         if (!entry) { log(`CHECK  ${offer.label}: rewritten earlier in this run and no longer pins ${offer.package} - left`); return false; }
-        offer = { ...offer, old: now.entry, entry };
+        offer = { ...offer, old: now!.entry, entry };
     }
     // the new pin is not in the cache yet: fetch it right after the rewrite (entries.js fetchStep)
     const fetch = fetchStep(offer.name, offer.entry, offer.row, offer.old);
-    const replace = { op: 'mcp-replace', name: offer.name, scope: offer.scope, old: offer.old, entry: offer.entry, row: offer.row, route: offer.route, why: `${offer.package} ${offer.from} -> ${offer.to}` };
+    const replace: McpReplaceStep = { op: 'mcp-replace', name: offer.name, scope: offer.scope, old: offer.old, entry: offer.entry, row: offer.row, route: offer.route, why: `${offer.package} ${offer.from} -> ${offer.to}` };
     // the list and Cursor take the registration as read back, in the same run (spec D9 Update 2), from the lists as they
     // stand now - an earlier step of this run may have written them
-    const notes = [];
+    const notes: string[] = [];
     const now = inventory.buildInventory({ project: ctx.project, env: ctx.env, run: ctx.runCli, data: ctx.data, catalog: ctx.catalog });
     const tail = repairTail(now, { platform: now.os, project: ctx.project, home: account.homeDir(ctx.env), env: ctx.env, catalog: ctx.catalog, notes }, [replace]);
     for (const n of notes) log(`note   ${n}`);
     const plan = { project: ctx.project, alfredCodeEnabled: Boolean(ctx.inv && ctx.inv.alfredCodeEnabled), steps: mcpOrder.withOrderStep([replace, ...(fetch ? [fetch] : []), ...tail], ctx.project, mcpOrder.ownProjectNames(ctx.inv || {})), expect: [{ kind: 'mcp', name: offer.name, scope: offer.scope, route: offer.route }] };
-    const report = apply(plan, { env: ctx.env, tmp, runCli: ctx.runCli, fetchFile: false, log: (...a) => log(a.join(' ')) });
-    if (report.fetch && report.fetch.fetch.length) ctx.fetches.push(report.fetch);
+    const report = apply(plan, { env: ctx.env, tmp, runCli: ctx.runCli, fetchFile: false, log: (...a: string[]) => log(a.join(' ')) });
+    if (report.fetch && report.fetch.fetch.length) ctx.fetches!.push(report.fetch);
     if (report.failed) return false;
-    const again = tail.flatMap((x) => x.reapprove || []);
-    if (again.length) ctx.reapprove.push(...again);
+    const again = tail.flatMap((x) => (x as { reapprove?: string[] }).reapprove || []);
+    if (again.length) ctx.reapprove!.push(...again);
     const got = inventory.buildInventory({ project: ctx.project, env: ctx.env, run: ctx.runCli }).registrations.find((r) => r.name === offer.name && r.scope === offer.scope);
     const pin = got ? pinnedVersion(got.entry, offer.package) : null;
     log(`${pin === offer.to ? 'ok    ' : 'CHECK '} ${offer.label}: ${offer.package} ${offer.from} -> ${pin || '?'} (read back from the file the CLI wrote), cut-off ${offer.cutoff}`);
@@ -69,32 +74,32 @@ function updateMcp(ctx, offer, tmp, log)
 
 // Cursor's bridge copy with its pin moved: the list's cursorEntry and Cursor's file, read back. No claude call - Claude
 // Code's entry is a hosted URL with its helper.
-function updateCursorPin(ctx, offer, tmp, log)
+function updateCursorPin(ctx: UpdateCtx, offer: CursorPinOffer, tmp: string, log: Log): boolean
 {
     const scopes = offer.family === 'global' ? ['user'] : ['local', 'project'];
-    const before = ((ctx.inv.lists[offer.family] || {}).servers || []).filter((x) => (x.clients || []).includes('cursor')).map((x) => x.name);
-    const steps = [
+    const before = ((ctx.inv.lists![offer.family] || {} as Partial<InvList>).servers || []).filter((x) => (x.clients || []).includes('cursor')).map((x) => x.name);
+    const steps: PlanStep[] = [
         { op: 'list-write', file: offer.list, family: offer.family, upserts: [{ server: { ...offer.server, cursorEntry: offer.entry }, after: null, cursorFile: offer.file }], drops: [], own: null, why: `${offer.list}: Cursor's copy of ${offer.name} at ${offer.package} ${offer.to}` },
         { op: 'cursor-write', file: offer.file, family: offer.family, lists: [{ file: offer.list, scopes }], before, skip: [], replace: [], why: `${offer.file}: ${offer.name} at ${offer.package} ${offer.to}` },
     ];
-    const report = apply({ project: ctx.project, steps }, { env: ctx.env, tmp, runCli: ctx.runCli, fetchFile: false, log: (...a) => log(a.join(' ')) });
+    const report = apply({ project: ctx.project, steps }, { env: ctx.env, tmp, runCli: ctx.runCli, fetchFile: false, log: (...a: string[]) => log(a.join(' ')) });
     if (report.failed) return false;
     const got = readCursor(offer.file);
-    const pin = got.state === 'ok' ? pinnedVersion(got.doc.mcpServers[offer.name] || {}, offer.package) : null;
+    const pin = got.state === 'ok' ? pinnedVersion(got.doc!.mcpServers[offer.name] || {}, offer.package) : null;
     log(`${pin === offer.to ? 'ok    ' : 'CHECK '} ${offer.label}: ${offer.package} ${offer.from} -> ${pin || '?'} (read back from ${offer.file}), cut-off ${offer.cutoff}`);
     return pin === offer.to;
 }
 
 // A helper or bridge copy rewritten with this plugin's, if it is still the lower one the check offered; read back. The
 // root's package.json says CommonJS when it has none (apply.js ensureCommonjs).
-function updateHelper(offer, log)
+function updateHelper(offer: FileOffer, log: Log): boolean
 {
     const kind = offer.kind === 'bridge' ? 'bridge' : offer.kind === 'context' ? 'serenaContext' : 'helper';
     const before = roots.shippedState(kind, offer.file);
     if (before.state !== 'lower') { log(`CHECK  ${offer.label}: now ${before.state} - left as it is`); return false; }
     fs.writeFileSync(offer.file, roots.shippedSource(kind));
     // a YAML file needs no package.json
-    const pkg = kind === 'serenaContext' ? {} : ensureCommonjs(path.dirname(offer.file));
+    const pkg = kind === 'serenaContext' ? {} as { note?: string | null } : ensureCommonjs(path.dirname(offer.file));
     if (pkg.note) log(`note   ${pkg.note}`);
     const ok = roots.shippedState(kind, offer.file).state === 'same';
     log(`${ok ? 'ok    ' : 'CHECK '} ${offer.label}: ${kind} ${offer.from} -> ${offer.to} (read back)`);
@@ -105,13 +110,13 @@ function updateHelper(offer, log)
 // It runs before the pins: its health check then reads a launch already in the cache, and a pin moved after it starts
 // from what it wrote. One an earlier step already did (a rewrite puts .mcp.json in order) is done. Its launches join
 // this run's fetch file.
-function updateUpgrade(ctx, offer, dir, log)
+function updateUpgrade(ctx: UpdateCtx, offer: UpgradeOffer, dir: string, log: Log): boolean
 {
     const inv = inventory.buildInventory({ project: ctx.project, env: ctx.env, run: ctx.runCli, data: ctx.data, catalog: ctx.catalog });
     const fctx = fixLib.makeCtx({ inv, catalog: upgradeCatalog(ctx.catalog), env: ctx.env, machine: ctx.machine, data: ctx.data });
     const r = fixLib.applyFixes(fctx, [offer.fix], { only: offer.name, name: offer.name, scope: offer.scope || undefined, tmp: dir, log, runCli: ctx.runCli, fetchFile: false });
-    if (r.fetch && r.fetch.fetch.length) ctx.fetches.push(r.fetch);
-    for (const f of r.applied.filter((x) => x.kind === 'registration')) { ctx.restart = true; ctx.touched.add(`${f.name}~${f.scope}`); }
+    if (r.fetch && r.fetch.fetch.length) ctx.fetches!.push(r.fetch);
+    for (const f of r.applied.filter((x) => x.kind === 'registration')) { ctx.restart = true; ctx.touched!.add(`${f.name}~${f.scope}`); }
     // a plugin taken out leaves the session's plugins as they were until it reloads
     if (r.applied.some((x) => x.id === 'retired-plugin')) ctx.restart = true;
     const ok = !r.failed && !r.remaining.length && (r.applied.length > 0 || r.gone);
@@ -122,19 +127,19 @@ function updateUpgrade(ctx, offer, dir, log)
 // Update's Cursor offer, answered (spec D9). 'declined' keeps 'Not now' in the root's list; 'set' is configure's apps
 // change for each server, through the plan's own list, Cursor and file steps. A name Cursor's file already holds is
 // replaced or kept on its `cursor-name:<name>@<file>` answer; with none it stays Claude Code only and is named.
-function applyCursorOffer(ctx, o, answer, input, dir, log)
+function applyCursorOffer(ctx: UpdateCtx, o: CursorOffer, answer: string, input: Record<string, string>, dir: string, log: Log): boolean
 {
-    const say = (...a) => log(a.join(' '));
+    const say = (...a: string[]) => log(a.join(' '));
     if (answer === 'declined')
     {
-        const step = { op: 'list-write', file: o.list, family: o.family, upserts: [], drops: [], own: null, cursorOffer: 'declined', why: `${o.list}: Cursor is not offered again for ${o.root}` };
+        const step: ListWriteStep = { op: 'list-write', file: o.list, family: o.family, upserts: [], drops: [], own: null, cursorOffer: 'declined', why: `${o.list}: Cursor is not offered again for ${o.root}` };
         const r = apply({ project: ctx.project, steps: [step] }, { env: ctx.env, tmp: dir, runCli: ctx.runCli, fetchFile: false, log: say });
         log(`${r.failed ? 'FAILED' : 'ok    '} ${o.id}: not now - kept in ${o.list}`);
         return !r.failed;
     }
     const inv = inventory.buildInventory({ project: ctx.project, env: ctx.env, run: ctx.runCli, data: ctx.data, catalog: ctx.catalog });
     const change = Object.fromEntries(o.servers.map((x) => [`mcp:${x.name}~${x.scope}`, { clients: ['claude', 'cursor'] }]));
-    const cursorNames = {};
+    const cursorNames: Record<string, string> = {};
     for (const t of o.taken)
     {
         const given = input[`cursor-name:${t.name}@${t.file}`];
@@ -149,16 +154,16 @@ function applyCursorOffer(ctx, o, answer, input, dir, log)
 }
 
 // -> { applied: [id], failed: [id], unknown: [id], fetchFile }
-export function applyUpdates(ctx, ids, out, { tmp, log = console.log, input = {} } = {})
+export function applyUpdates(ctx: UpdateCtx, ids: string[], out: UpdateCheck, { tmp, log = console.log, input = {} }: { tmp?: string | undefined; log?: Log; input?: Record<string, string> } = {}): UpdateRun
 {
-    const res = { applied: [], failed: [], unknown: [], fetchFile: null, dir: null };
+    const res: UpdateRun = { applied: [], failed: [], unknown: [], fetchFile: null, dir: null };
     // the uninstall offers turned down (spec D9): shown and left unpicked, or kept out of 'All of them' for alfred-code
-    let turnedDown;
+    let turnedDown: Declined[];
     try { turnedDown = declines.parse(input['retired-declined']); }
-    catch (e) { log(`FAILED ${e.message}`); res.failed.push('retired-declined'); return res; }
+    catch (caught) { const e = caught as NodeJS.ErrnoException; log(`FAILED ${e.message}`); res.failed.push('retired-declined'); return res; }
     const known = [...out.offers, ...out.unchecked];
     const named = ids.filter((i) => i !== 'all' && i !== 'none');
-    let everything = [];
+    let everything: Offer[] = [];
     if (ids.includes('all'))
     {
         // where alfred-code is set up, an old plugin's uninstall is reached only by its own pick
@@ -167,7 +172,7 @@ export function applyUpdates(ctx, ids, out, { tmp, log = console.log, input = {}
         everything = out.offers.filter((o) => !kept.includes(o));
     }
     if (turnedDown.length) log(declines.add(ctx.data, turnedDown).detail);
-    const picked = ids.includes('all') ? [...everything, ...named.map((i) => known.find((o) => o.id === i)).filter((o) => o && !everything.includes(o))] : named.map((i) => known.find((o) => o.id === i) || i);
+    const picked = ids.includes('all') ? [...everything, ...named.map((i) => known.find((o) => o.id === i)).filter((o) => o && !everything.includes(o)) as Offer[]] : named.map((i) => known.find((o) => o.id === i) || i);
     // the new ways to pass data first - list-import, a registration's, then a file's or folder's - and the pins after
     // them (updateUpgrade)
     const chosen = ordered(picked, ctx.catalog);
@@ -180,7 +185,7 @@ export function applyUpdates(ctx, ids, out, { tmp, log = console.log, input = {}
     for (const c of chosen)
     {
         if (typeof c === 'string') { res.unknown.push(c); log(`NOT OFFERED ${c}: nothing is behind under that id`); continue; }
-        const ok = c.kind === 'plugin' ? updatePlugin(ctx, c, log) : c.kind === 'helper' || c.kind === 'bridge' || c.kind === 'context' ? updateHelper(c, log) : c.kind === 'upgrade' ? updateUpgrade(ctx, c, dir, log) : c.kind === 'cursor-pin' ? updateCursorPin(ctx, c, dir, log) : updateMcp(ctx, c, dir, log);
+        const ok = c.kind === 'plugin' ? updatePlugin(ctx, c, log) : c.kind === 'helper' || c.kind === 'bridge' || c.kind === 'context' ? updateHelper(c, log) : c.kind === 'upgrade' ? updateUpgrade(ctx, c, dir, log) : c.kind === 'cursor-pin' ? updateCursorPin(ctx, c, dir, log) : updateMcp(ctx, c as McpOffer, dir, log);
         (ok ? res.applied : res.failed).push(c.id);
     }
     // Cursor's offer, after the pins (spec D9): 'Set them up' or 'Not now' as answered; no answer writes nothing
@@ -196,7 +201,7 @@ export function applyUpdates(ctx, ids, out, { tmp, log = console.log, input = {}
     if (ctx.reapprove.length) log('', reapproveLine([...new Set(ctx.reapprove)]));
     // every rewritten server in one fetch file, for fetch.js in the background (apply.js says why); a server rewritten
     // twice in this run is fetched once at its scope, as it was written last
-    const last = new Map();
+    const last = new Map<string, JobStep>();
     for (const s of ctx.fetches.flatMap((f) => f.fetch)) { last.delete(`${s.name}~${s.scope}`); last.set(`${s.name}~${s.scope}`, s); }
     const job = fetchLib.job(ctx.project, [...last.values()], [...new Set(ctx.fetches.flatMap((f) => f.check))]);
     if (job.fetch.length)
