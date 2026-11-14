@@ -1319,3 +1319,11 @@ unless a URL is given. 'The former plugin' and 'the former folder' are the plugi
   `fs.mkdir(MCP_REMOTE_CONFIG_DIR, { recursive: true })`, before each token write, so a session left running during the
   move can bring the former folder back on its next token write. The memory server's package was not in the cache:
   NOT MEASURED. D3's came-back advice and the note to close other windows cover both.
+- A6 - moving an account to another catalog source under the same name (claude 2.1.x, measured 2026-11-14 on a
+  throwaway config with two local catalogs, then on the owner's account): `claude plugin marketplace add <new source>`
+  for a name already added re-points it in place - 'Plugins already installed from it now update from the new source' -
+  and `known_marketplaces.json` and the settings entry both follow; every installed plugin stays installed, one the new
+  catalog does not list shows the error 'Plugin <name> not found in marketplace <name>' and uninstalls as usual. When a
+  settings file's `extraKnownMarketplaces` entry names the old source, the add is refused ('its source doesn't match its
+  extraKnownMarketplaces entry ... change the entry'); with the entry's `repo` changed, the same add re-points. So
+  `marketplace remove` (which uninstalls every plugin from it) is never needed to move a catalog.
