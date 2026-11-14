@@ -2210,7 +2210,7 @@ test('both-present is blocked with the merge text; came-back is advice and root-
         const [back] = moveOf(w) as [Finding];
         assert.match(back.blocked!, /\.preferred-tools came back after the move and holds memory - a server started before the move wrote there; close the Claude Code and Cursor windows using it, move what you keep into \.alfred-tools, then delete it/);
         put(path.join(ptRoot(w), 'mcp-headers.js'), rootsLib.helperSource());
-        assert.deepStrictEqual(detect(ctxOf(w), 'root-repoint').found.map((f) => [f.name, Boolean(f.blocked)]), [['github', false]]);
+        assert.deepStrictEqual(detect(ctxOf(w), 'root-repoint').found.filter((f) => f.id === 'root-repoint').map((f) => [f.name, Boolean(f.blocked)]), [['github', false]]);
     }
     finally { w.clean(); }
 });
@@ -2282,6 +2282,66 @@ test('project equal to home: one rename, both families re-pointed', () =>
         assert.strictEqual(l.lines.filter((line) => /^ok +root-move: renamed/.test(line)).length, 1);
         for (const [name, scope] of [['github', 'local'], ['github-user', 'user']] as const)
             assert.match(entryAt(ww, name, scope).headersHelper!, /\.alfred-tools/, `${name} (${scope})`);
+    }
+    finally { w.clean(); }
+});
+
+// ---- the gate: the move first, the rest checked again after it (spec D3) --------------------------------------------
+test('with a move pending, only the move is offered and the rest waits', () =>
+{
+    const w = world();
+    try
+    {
+        oldRoot(w);
+        const d = detect(ctxOf(w));
+        assert.deepStrictEqual(ids(d.found), ['root-move']);
+        assert.ok(d.afterMove!.some((f) => f.id === 'helper-stale') && d.afterMove!.some((f) => f.id === 'list-import'), JSON.stringify(ids(d.afterMove!)));
+        assert.match(renderFixes(d), /After the move \(checked again once it is done\):/);
+    }
+    finally { w.clean(); }
+});
+
+test('fix --only <name> with a move pending offers only the move', () =>
+{
+    const w = world();
+    try
+    {
+        oldRoot(w);
+        assert.deepStrictEqual(ids(detect(ctxOf(w), 'github').found), ['root-move']);
+    }
+    finally { w.clean(); }
+});
+
+test('with only root-repoint fixable, helper-missing waits (no write into a new .preferred-tools); a repoint-only apply prints RECHECK', () =>
+{
+    const w = world();
+    try
+    {
+        put(path.join(ptRoot(w), 'mcp-headers.js'), rootsLib.helperSource());
+        seed(w, 'github', 'local', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: helperCmd(path.join(formerRoot(w.project), 'mcp-headers.js'), 'ACME_GH', 'Bearer') });
+        const d = detect(ctxOf(w));
+        assert.deepStrictEqual(ids(d.found), ['root-repoint']);
+        assert.ok(d.afterMove!.some((f) => f.id === 'helper-missing'), JSON.stringify(ids(d.afterMove!)));
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.ok(!fs.existsSync(formerRoot(w.project)), 'no helper written into a new .preferred-tools');
+        assert.match(l.text(), /RECHECK - the folders moved; checking again/);
+        assert.strictEqual(entryAt(w, 'github', 'local').headersHelper, helperCmd(path.join(ptRoot(w), 'mcp-headers.js'), 'ACME_GH', 'Bearer'));
+    }
+    finally { w.clean(); }
+});
+
+test('after a move, a second apply finds nothing and prints no RECHECK', () =>
+{
+    const w = world();
+    try
+    {
+        oldRoot(w);
+        assert.strictEqual(applyFixes(ctxOf(w), ['root-move'], { tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
+        const l = logged();
+        const res = applyFixes(ctxOf(w), ['root-move', 'root-repoint'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.ok(res.gone, l.text());
+        assert.doesNotMatch(l.text(), /RECHECK/);
     }
     finally { w.clean(); }
 });

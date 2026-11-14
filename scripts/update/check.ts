@@ -29,12 +29,13 @@ import * as account from '../core/account.ts';
 import { pluginOffers } from './offers-plugins.ts';
 import { mcpOffers, cursorPinOffers } from './offers-pins.ts';
 import { helperOffers, upgradeOffers } from './offers-files.ts';
+import * as rename from '../fix/rename.ts';
 import type { Env } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
 import type { RunCli } from '../apply/types.ts';
 import type { MachineProbe } from '../fix/types.ts';
-import type { Offer, Registry, UpdateCheck, UpdateCtx } from './types.ts';
+import type { Offer, Registry, UpdateCheck, UpdateCtx, UpgradeOffer } from './types.ts';
 
 // ---- check -----------------------------------------------------------------------------------------------------------
 
@@ -61,6 +62,15 @@ export async function checkUpdates(context: UpdateCtx): Promise<UpdateCheck>
     const stays = (offer: Offer) => !(offer.kind === 'plugin' && leaving.has(`${offer.plugin}~${offer.scope}`));
     out.offers = out.offers.filter(stays);
     out.unchecked = out.unchecked.filter(stays);
+    // a folder move or a re-point waits (spec D3): it is the only thing offered, and the rest is checked again after it
+    const asFinding = (offer: Offer) => ({ id: (offer as UpgradeOffer).fix, name: (offer as UpgradeOffer).name, scope: null, found: '' });
+    if (out.offers.some((offer) => offer.kind === 'upgrade' && rename.gates(asFinding(offer))))
+    {
+        out.offers = out.offers.filter((offer) => offer.kind === 'upgrade' && rename.passesGate(asFinding(offer)));
+        out.unchecked = [];
+        out.notes.push('the rest is checked again after the folders move');
+        return out;
+    }
     cursorOffers(context, out);
     return out;
 }

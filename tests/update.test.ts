@@ -611,7 +611,7 @@ const listed = (root: string, servers: [string, string, unknown][]) => writeJson
 test('the fix rows update applies are the ones marked upgrade, each with the version that brought its way', () =>
 {
     const catalog = load();
-    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['list-import', '0.5.0'], ['retired-plugin', '0.5.0'], ['read-guard', '0.5.0'], ['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
+    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['root-move', '0.5.0'], ['root-repoint', '0.5.0'], ['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['list-import', '0.5.0'], ['retired-plugin', '0.5.0'], ['read-guard', '0.5.0'], ['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
 });
 
 test('update offers the new ways to pass data that fix knows - a 0.1.x key header, a relative project path - and applies them after the pins, by registration', async () =>
@@ -1123,4 +1123,48 @@ test('the upgrade rows run in order: list-import, serena-context, serena-base-mo
     const o = (fix: string, scope: string | null, fixKind: string) => ({ kind: 'upgrade', id: `upgrade:${fix}`, fix, scope, fixKind }) as Offer;
     const offers = [o('read-guard', null, 'file'), o('retired-plugin', 'user', 'machine'), o('serena-base-modes', null, 'file'), o('serena-context', 'local', 'registration'), o('list-import', null, 'file'), { kind: 'mcp', id: 'mcp:serena~local' } as Offer];
     assert.deepStrictEqual((ordered(offers, catalog) as Offer[]).map((x) => x.fix || x.id), ['list-import', 'serena-context', 'serena-base-modes', 'retired-plugin', 'read-guard', 'mcp:serena~local']);
+});
+
+// ---- the rename: the folder move is offered alone, then the rest (spec D3) -----------------------------------------
+const formerRootOf = (w: World) => path.join(w.project, '.preferred-tools');
+function oldProjectRoot(w: World)
+{
+    const root = formerRootOf(w);
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(path.join(root, 'preferred-tools.json'), '{"version":1,"servers":[]}\n');
+    fs.writeFileSync(path.join(root, 'mcp-headers.js'), roots.helperSource().replace(/^\/\/ alfred-tools mcp-headers \d+/, '// preferred-tools mcp-headers 4'));
+    const entry = { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${path.join(root, 'mcp-headers.js')} ACME_GH Bearer` };
+    assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'github', JSON.stringify(entry), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+}
+
+test('the check offers root-move alone and notes the rest; apply prints RECHECK; the second check offers the rest in .alfred-tools', async () => {
+    const w = world();
+    try
+    {
+        oldProjectRoot(w);
+        const c = await run(w, ['--check', '--no-refresh', '--json']);
+        const out = JSON.parse(c.text);
+        assert.deepStrictEqual(out.offers.map((o: { id: string }) => o.id), ['upgrade:root-move:project'], c.text);
+        assert.ok(out.notes.includes('the rest is checked again after the folders move'), c.text);
+        const a = await run(w, ['--apply', 'upgrade:root-move:project']);
+        assert.strictEqual(a.code, 0, a.text);
+        assert.strictEqual(a.text.match(/RECHECK - the folders moved; checking again/g)!.length, 1, a.text);
+        const again = JSON.parse((await run(w, ['--check', '--no-refresh', '--json'])).text);
+        assert.ok(again.offers.some((o: { id: string; name?: string }) => o.id.startsWith('upgrade:list-import:') && o.name!.includes('.alfred-tools')), JSON.stringify(again.offers.map((o: { id: string }) => o.id)));
+        assert.ok(!again.offers.some((o: { id: string }) => /root-move|root-repoint/.test(o.id)));
+    }
+    finally { w.clean(); }
+});
+
+test('root-repoint alone gates the check too', async () => {
+    const w = world();
+    try
+    {
+        oldProjectRoot(w);
+        fs.renameSync(formerRootOf(w), path.join(w.project, '.alfred-tools'));
+        const out = JSON.parse((await run(w, ['--check', '--no-refresh', '--json'])).text);
+        assert.deepStrictEqual(out.offers.map((o: { id: string }) => o.id), ['upgrade:root-repoint:github~local']);
+        assert.ok(out.notes.includes('the rest is checked again after the folders move'));
+    }
+    finally { w.clean(); }
 });

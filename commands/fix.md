@@ -130,6 +130,7 @@ Run it with the Bash tool's `timeout: 600000` (10 minutes, the most it allows by
 Paste the output verbatim. Report each fix as 'fixed' or 'STILL FOUND', each skipped one with its reason, and a failure
 with the line it printed - a failed rewrite prints a `RESTORE BY HAND` line, give it to the user as written.
 A key in it shows as `${ALFRED_TOOLS_KEPT}`, never its value: the user puts their key back there.
+If the output has a `RECHECK` line, go back to step 1 in this same command (once): the rest was not offered before the move.
 
 A fix that changes what a server launches (a python request, a cut-off), or removes a broken npx cache folder
 (`npx-cache-entry`), prints `Fetch next, in the background (...):

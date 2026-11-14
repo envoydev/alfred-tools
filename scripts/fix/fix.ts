@@ -83,6 +83,7 @@ function trustNotes(context: FixCtx, only: string | undefined): string[]
 export function detectAll(context: FixCtx, { only }: { only?: string | undefined } = {}): Detected
 {
     const own = (context.inventory.registrations || []).filter((registration) => registration.choice === 'own' && (!only || [registration.name, registration.rowId].includes(only)));
+    const gate: Finding[] = [];
     const out: Detected = { found: [], held: [], own: own.map((registration) => ({ name: registration.name, scope: registration.scope })), notes: trustNotes(context, only) };
     for (const fix of context.catalog.fixes)
     {
@@ -94,7 +95,19 @@ export function detectAll(context: FixCtx, { only }: { only?: string | undefined
         if (fix.kind === 'file' && !fix.advice && typeof (F as unknown as Record<string, unknown>)[fix.steps!] !== 'function') throw new Error(`fix row ${fix.id}: no steps function ${fix.steps} in scripts/fix/`);
         // an advice row has no fix: its finding is shown and never offered, whatever its detector returned
         const advice = (finding: Finding) => (fix.advice && !finding.blocked ? { blocked: 'advice only - nothing here is applied' } : {});
-        for (const finding of detect(context)) if (matches(finding, only)) out.found.push({ ...finding, ...advice(finding), kind: fix.kind, symptom: fix.symptom, documented: fix.documented !== false });
+        for (const finding of detect(context))
+        {
+            const decorated = { ...finding, ...advice(finding), kind: fix.kind, symptom: fix.symptom, documented: fix.documented !== false };
+            if (matches(finding, only)) out.found.push(decorated);
+            // the move's own findings are read whatever `only` names: a narrowed run cannot pass the gate
+            else if (F.passesGate(decorated) && fix.id !== 'retired-plugin') gate.push(decorated);
+        }
+    }
+    const gating = [...out.found, ...gate].filter(F.gates);
+    if (gating.length)
+    {
+        out.afterMove = out.found.filter((finding) => !F.passesGate(finding));
+        out.found = [...out.found.filter(F.passesGate), ...gate];
     }
     return out;
 }
@@ -119,6 +132,7 @@ export function renderFixes(detected: Detected): string
             if (finding.note) lines.push(`  ${' '.repeat(idWidth)}  ${' '.repeat(toolW)}  note: ${finding.note}`);
         }
     }
+    if ((detected.afterMove || []).length) lines.push('', 'After the move (checked again once it is done):', ...detected.afterMove!.map((finding) => `  ${finding.id}  ${where(finding)}  ${finding.found}`));
     if ((detected.notes || []).length) lines.push('', ...detected.notes.map((note) => `note: ${note}`));
     for (const heldFix of held) lines.push('', `Held, not checked: ${heldFix.id} - ${heldFix.why}`);
     if ((detected.own || []).length) lines.push('', ...detected.own.map((ownEntry) => `${ownEntry.name} (${ownEntry.scope}): on its own - not checked`));
@@ -182,7 +196,7 @@ function driftSkip(finding: Finding, picked: Finding[], input: Record<string, st
 // servers of one row would both match) - update applies one at a time; `fetchFile: false` writes no fetch file and
 // returns the launches to fetch as `fetch`, for update to hand on in its own (apply.ts). `gone`: nothing picked is found
 // any more - an earlier step did it.
-export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, input = {}, tmp, log = console.log, runCli = cli.runClaude, fetchFile }: FixOptions = {}): FixRun
+export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, input = {}, tmp, log = console.log, runCli = cli.runClaude, fetchFile, quietRecheck = false }: FixOptions = {}): FixRun
 {
     const result: FixRun = { applied: [], skipped: [], failed: null, remaining: [], steps: 0, fetchFile: null, fetch: null, gone: false, tmp: tmp || null };
     const known = new Set(context.catalog.fixes.map((fixRow) => fixRow.id));
@@ -364,7 +378,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         (left ? result.remaining : result.applied).push(finding);
         log(`${left ? 'STILL FOUND' : 'fixed      '} ${finding.id} on ${where(finding)}`);
     }
-    if (moves.length || result.applied.some((finding) => finding.id === 'root-repoint')) log('', 'RECHECK - the folders moved; checking again');
+    if (!quietRecheck && (moves.length || result.applied.some((finding) => finding.id === 'root-repoint'))) log('', 'RECHECK - the folders moved; checking again');
     if (result.applied.some((finding) => !noRestart.has(finding))) log('', `Restart Claude Code so the repaired registrations and the language server start fresh${result.fetchFile ? ' - after the fetch reports, so a session start does not download the same package beside it' : ''}.`);
     return result;
 }

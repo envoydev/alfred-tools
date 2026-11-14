@@ -114,7 +114,7 @@ function updateUpgrade(context: UpdateCtx, offer: UpgradeOffer, dir: string, log
 {
     const projectInventory = inventory.buildInventory({ project: context.project, env: context.env, run: context.runCli, data: context.data, catalog: context.catalog });
     const fctx = fixLib.makeCtx({ inventory: projectInventory, catalog: upgradeCatalog(context.catalog), env: context.env, machine: context.machine, data: context.data });
-    const result = fixLib.applyFixes(fctx, [offer.fix], { only: offer.name, name: offer.name, scope: offer.scope || undefined, tmp: dir, log, runCli: context.runCli, fetchFile: false });
+    const result = fixLib.applyFixes(fctx, [offer.fix], { only: offer.name, name: offer.name, scope: offer.scope || undefined, tmp: dir, log, runCli: context.runCli, fetchFile: false, quietRecheck: true });
     if (result.fetch && result.fetch.fetch.length) context.fetches!.push(result.fetch);
     for (const finding of result.applied.filter((candidate) => candidate.kind === 'registration')) { context.restart = true; context.touched!.add(`${finding.name}~${finding.scope}`); }
     // a plugin taken out leaves the session's plugins as they were until it reloads
@@ -197,6 +197,8 @@ export function applyUpdates(context: UpdateCtx, ids: string[], out: UpdateCheck
         const ok = answer === 'set' || answer === 'declined' ? applyCursorOffer(context, cursorOffer, answer, input, dir, log) : (log(`FAILED ${cursorOffer.id}: '${answer}' is not set or declined`), false);
         (ok ? result.applied : result.failed).push(cursorOffer.id);
     }
+    // the folders moved (spec D3): the command checks again and offers the rest
+    if (chosen.some((choice) => typeof choice !== 'string' && choice.kind === 'upgrade' && ['root-move', 'root-repoint'].includes(choice.fix) && result.applied.includes(choice.id))) log('', 'RECHECK - the folders moved; checking again');
     // Cursor asks to approve a changed entry again (spec Risks)
     if (context.reapprove.length) log('', reapproveLine([...new Set(context.reapprove)]));
     // every rewritten server in one fetch file, for fetch.ts in the background (apply.ts says why); a server rewritten

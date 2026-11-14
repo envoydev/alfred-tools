@@ -12,6 +12,14 @@ import type { ServerEntry } from '../core/types.ts';
 import type { Machine } from '../entries/types.ts';
 import type { Finding, FixCtx, MachineFixResult, MovedRoot } from './types.ts';
 
+// The plugin under its former name: its uninstall is offered beside the move (spec D5), never held back by it.
+export const OLD_PLUGIN_ID = 'preferred-tools@envoydev';
+
+// While a folder move or a re-point is fixable, it is the only thing offered (spec D3): every other finding's paths are
+// about to change. The former plugin's uninstall stays, and so does what is shown but never applied.
+export const gates = (finding: Finding): boolean => !finding.blocked && ((finding.id === 'root-move' && finding.name !== 'data') || finding.id === 'root-repoint');
+export const passesGate = (finding: Finding): boolean => finding.id === 'root-move' || finding.id === 'root-repoint' || (finding.id === 'retired-plugin' && finding.name === OLD_PLUGIN_ID);
+
 export const machineOf = (context: FixCtx): Machine => ({ platform: context.platform, project: context.inventory.project, home: context.home });
 
 const isDir = (dir: string): boolean => { try { return fs.lstatSync(dir).isDirectory(); } catch { return false; } };

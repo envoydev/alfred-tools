@@ -169,6 +169,7 @@ export interface Detected
     held: { id: string; why: string }[]; // stored - do not rename
     own: { name: string; scope: string }[]; // stored - do not rename
     notes: string[]; // stored - do not rename
+    afterMove?: Finding[]; // stored - do not rename: set only while a folder move waits (spec D3)
 }
 // The asks as data (stored - do not rename: --questions prints them): the three-way choice, the picks four a call, and
 // each drifted copy's question with what its labels answer.
@@ -204,6 +205,7 @@ export interface FixOptions
     log?: Log;
     runCli?: RunCli;
     fetchFile?: string | false | undefined;
+    quietRecheck?: boolean | undefined;
 }
 // applyFixes' result.
 export interface FixRun

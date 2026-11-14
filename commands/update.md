@@ -127,6 +127,7 @@ health check never starts a pin not fetched yet; their lines are fix's own, and 
 rewrite puts the old registration back and prints the line that does it by hand if that fails too (`RESTORE BY HAND`):
 give it to the user as written.
 A key in it shows as `${ALFRED_TOOLS_KEPT}`, never its value: the user puts their key back there. Paste the output verbatim, then report each result as read back.
+If the output has a `RECHECK` line, go back to step 1 in this same command (once): the rest was not offered before the move.
 
 A new pin is not in the runtime's cache yet, so an MCP update prints `Fetch next, in the background (...): <file>`. Run,
 with the Bash tool's `run_in_background`:
