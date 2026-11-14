@@ -46,6 +46,35 @@ test('collect keeps every file two temp folders hold under one name, in the orde
     finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test('keepWritten masks what changes from run to run: a generated key, the temp folder in a case-folded rule, update- folders, the uv cache', () =>
+{
+    const os = require('node:os');
+    const { keepWritten } = require('./proof/matrix-keep.js');
+    const run = (suffix, hex) =>
+    {
+        const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-keep-'));
+        const root = path.join(base, `pt-ws-${suffix}`);
+        const ci = fs.realpathSync(base).split('').map((c) => (/[a-z]/i.test(c) ? `[${c.toLowerCase()}${c.toUpperCase()}]` : c)).join('');
+        fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+        fs.writeFileSync(path.join(root, '.claude', 'settings.local.json'), JSON.stringify({ deny: [`Read(/${ci}/pt-ws-${suffix}/**)`], key: `mx-${hex}` }));
+        fs.mkdirSync(path.join(root, `update-${suffix.slice(0, 6)}`), { recursive: true });
+        fs.writeFileSync(path.join(root, `update-${suffix.slice(0, 6)}`, 'plan.json'), '{}');
+        fs.mkdirSync(path.join(root, '.cache', 'uv', 'archive-v0', suffix), { recursive: true });
+        fs.writeFileSync(path.join(root, '.cache', 'uv', 'archive-v0', suffix, 'package.json'), '{}');
+        const keep = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-kept-'));
+        keepWritten(root, 'x', { PT_PROOF_DIR: keep });
+        const out = {};
+        const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else out[path.relative(keep, f)] = fs.readFileSync(f, 'utf8'); } };
+        walk(keep);
+        fs.rmSync(base, { recursive: true, force: true });
+        fs.rmSync(keep, { recursive: true, force: true });
+        return out;
+    };
+    const one = run('AbC123', '0123456789abcdef01234567');
+    assert.deepStrictEqual(one, run('xYz789', 'fedcba9876543210fedcba98'));
+    assert.ok(!Object.keys(one).some((f) => f.includes('.cache')), 'the uv cache is not kept');
+});
+
 test('compare passes equal records and an allowed line, fails any other difference', () =>
 {
     const rec = (usage, file = '{}\n') => ({ flows: [{ name: 'f', steps: [{ entry: 'plan', code: 2, stdout: '', stderr: usage, files: { '.mcp.json': file } }] }] });
