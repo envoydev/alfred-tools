@@ -18,8 +18,7 @@ export function blockingStdio(streams: NodeJS.WriteStream[] = [process.stdout, p
 {
     for (const stream of streams)
     {
-        const typedStream = stream as unknown as HandleOf;
-        try { if (typedStream && typedStream._handle && typeof typedStream._handle.setBlocking === 'function') typedStream._handle.setBlocking(true); }
+        try { if (stream && (stream as unknown as HandleOf)._handle && typeof (stream as unknown as HandleOf)._handle!.setBlocking === 'function') (stream as unknown as HandleOf)._handle!.setBlocking!(true); }
         catch { /* a stream that cannot block keeps Node's default */ }
     }
 }

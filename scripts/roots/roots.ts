@@ -274,7 +274,7 @@ export function pointsIntoRoot(registration: RootReg, inventory: InventoryView, 
     if (!rootStr || rootStr.includes('${') && !/^\$\{(?:HOME|USERPROFILE)\}/.test(rootStr)) return null;
     const parent = pathApi.dirname(absOf(rootStr, context));
     const map = (inventory.roots && inventory.roots.map) || emptyMap();
-    const known = [...standard('project', context), ...standard('global', context)].map((standardRoot) => standardRoot.root).concat([map.global, ...Object.values(map.projects || {})].filter((rootPath): rootPath is string => Boolean(rootPath)));
+    const known = [...standard('project', context), ...standard('global', context)].map((standardRoot) => standardRoot.root).concat([map.global, ...Object.values(map.projects || {})].filter(Boolean) as string[]);
     const exists = existsOf(context);
     return known.includes(parent) || [FILES.secrets, FILES.helper, FILES.record, FILES.list].some((fileName) => exists(pathApi.join(parent, fileName))) ? parent : null;
 }

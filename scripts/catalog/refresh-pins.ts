@@ -69,7 +69,7 @@ export function renderPins(out: Refresh, { write }: { write: boolean }): string
     return lines.join('\n');
 }
 
-export async function runRefreshPinsCommand(argv: string[], { out = (text: string) => { process.stdout.write(`${text}\n`); }, registry, now, file = FILE, env = process.env }: { out?: (text: string) => void; registry?: RegistryReader; now?: number; file?: string; env?: Env } = {}): Promise<number>
+export async function runRefreshPinsCommand(argv: string[], { out = (text: string) => process.stdout.write(`${text}\n`), registry, now, file = FILE, env = process.env }: { out?: (text: string) => void; registry?: RegistryReader; now?: number; file?: string; env?: Env } = {}): Promise<number>
 {
     const unknown = argv.filter((argument) => argument !== '--write');
     if (unknown.length) { out(`refresh-pins: unknown argument '${unknown[0]}'\nusage: node scripts/refresh-pins.ts [--write]`); return 2; }

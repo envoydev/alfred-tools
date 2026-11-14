@@ -107,14 +107,14 @@ export function hostedChain({ scope, projectRoot, globalRoot, globalNamed = fals
 {
     const beside = scope === 'user' ? globalRoot : projectRoot;
     const named = scope === 'local' && globalNamed ? globalRoot : null;
-    return uniq([beside, named, path.join(home, '.preferred-tools'), path.join(home, '.alfred')].filter((folder): folder is string => Boolean(folder)).map(secretsIn));
+    return uniq(([beside, named, path.join(home, '.preferred-tools'), path.join(home, '.alfred')].filter(Boolean) as string[]).map(secretsIn));
 }
 
 // stdioChain({ scope, projectRoot, globalRoot }) -> the files the apply reads a stdio key from: local scope the project
 // root's, then the global root's; user scope the global root's. Project scope takes no stdio key (spec D5).
 export function stdioChain({ scope, projectRoot, globalRoot }: Omit<KeyChain, 'home'> & { home?: string | undefined }): string[]
 {
-    if (scope === 'local') return uniq([projectRoot, globalRoot].filter((folder): folder is string => Boolean(folder)).map(secretsIn));
+    if (scope === 'local') return uniq(([projectRoot, globalRoot].filter(Boolean) as string[]).map(secretsIn));
     if (scope === 'user') return globalRoot ? [secretsIn(globalRoot)] : [];
     return [];
 }

@@ -29,8 +29,7 @@ export function runClaude(args: string[], { cwd, env, input, timeout = 120000 }:
     const options = { encoding: 'utf8' as const, cwd, env: env || process.env, input, timeout, windowsHide: true, maxBuffer: 64 * 1024 * 1024 };
     let result = spawnSync('claude', args, options);
     // npm's claude.cmd cannot be spawned directly on Windows (ENOENT or EINVAL): go through cmd.exe with quoted arguments.
-    const code = result.error && (result.error as NodeJS.ErrnoException).code;
-    if (process.platform === 'win32' && result.error && (code === 'ENOENT' || code === 'EINVAL'))
+    if (process.platform === 'win32' && result.error && ((result.error as NodeJS.ErrnoException).code === 'ENOENT' || (result.error as NodeJS.ErrnoException).code === 'EINVAL'))
         result = spawnSync(['claude', ...args.map(cmdArg)].join(' '), { ...options, shell: true });
     return { status: result.status, stdout: result.stdout || '', stderr: result.stderr || '', error: result.error || null, signal: result.signal };
 }
