@@ -378,12 +378,12 @@ test('W5 - a stdio server inherits the environment Claude Code starts with: a pa
         HOME: h.home, USERPROFILE: h.home, APPDATA: path.join(h.home, 'AppData', 'Roaming'), LOCALAPPDATA: path.join(h.home, 'AppData', 'Local'),
         CLAUDE_CONFIG_DIR: h.account, DISABLE_AUTOUPDATER: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', MCP_SERVER_CONNECTION_BATCH_SIZE: '20',
     });
-    const auth = cli.run(['auth', 'status'], { cwd: api, env });
+    const auth = cli.runClaude(['auth', 'status'], { cwd: api, env });
     if (!/"loggedIn":\s*false/.test(`${auth.stdout || ''}${auth.stderr || ''}`)) return t.skip('NOT RUN - the throwaway account is not reported logged out, and a claude -p never runs logged in');
     for (const [value, want] of [[path.join(h.home, 'android-sdk'), 'set'], [null, 'unset']])
     {
         fs.rmSync(log, { force: true });
-        cli.run(['-p', 'hi'], { cwd: api, env: value ? { ...env, ANDROID_HOME: value } : env, timeout: 90000 });
+        cli.runClaude(['-p', 'hi'], { cwd: api, env: value ? { ...env, ANDROID_HOME: value } : env, timeout: 90000 });
         const starts = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
         assert.ok(starts.length > 0, `the parent's server started from the child (ANDROID_HOME ${want})`);
         for (const s of starts) assert.deepStrictEqual([s.cwd, s.env], [api, [`env:ANDROID_HOME=${want}`]], 'in the folder Claude started in, with the variable as Claude Code had it');

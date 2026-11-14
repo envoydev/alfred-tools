@@ -16,7 +16,7 @@ import type { FileNames, KeyChain, KeyHit, TokenField } from './types.ts';
 
 const KEY_FILE = path.join('.preferred-tools', '.secrets');
 const projectFile = (project: string): string => path.join(project, KEY_FILE);
-const alfredStores = (project: string): string[] => ['.secrets', '.sensitive-data'].map((n) => path.join(project, '.alfred', n));
+const alfredStores = (project: string): string[] => ['.secrets', '.sensitive-data'].map((storeName) => path.join(project, '.alfred', storeName));
 
 // alfred-code's dotenv grammar (v3.2.1 stack/hooks/layout.js readDotenv): `KEY=value`, `export ` allowed before it, one
 // pair of matching quotes around the trimmed value dropped; `#` and `;` lines and blank lines are comments, any other line
@@ -27,21 +27,21 @@ const COMMENT = /^\s*(?:[#;]|$)/;
 // `NAME=abc # work` is abc, `NAME=abc#1` is abc#1
 const unquote = (raw: string): string =>
 {
-    const q = /^\s*(["'])(.*?)\1(?:\s+#.*)?\s*$/.exec(raw);
-    return q ? q[2]! : raw.replace(/\s+#.*$/, '').trim();
+    const match = /^\s*(["'])(.*?)\1(?:\s+#.*)?\s*$/.exec(raw);
+    return match ? match[2]! : raw.replace(/\s+#.*$/, '').trim();
 };
 export function readDotenv(file: string): Record<string, string> | null
 {
-    let buf: Buffer;
-    try { buf = fs.readFileSync(file); }
+    let buffer: Buffer;
+    try { buffer = fs.readFileSync(file); }
     catch { return null; }
-    const text = buf[0] === 0xff && buf[1] === 0xfe ? buf.subarray(2).toString('utf16le') : buf.toString('utf8').replace(/^﻿/, '');
+    const text = buffer[0] === 0xff && buffer[1] === 0xfe ? buffer.subarray(2).toString('utf16le') : buffer.toString('utf8').replace(/^﻿/, '');
     const values: Record<string, string> = {};
     for (const line of text.split(/\r?\n/))
     {
         if (COMMENT.test(line)) continue;
-        const m = LINE.exec(line);
-        if (m) values[m[1]!] = unquote(m[2]!);
+        const match = LINE.exec(line);
+        if (match) values[match[1]!] = unquote(match[2]!);
     }
     return values;
 }
@@ -50,8 +50,8 @@ export function readDotenv(file: string): Record<string, string> | null
 // holds the row word (GITHUB, SENTRY, CONTEXT7) - a key kept under a name the catalog does not use; a webhook secret or a
 // client id is not one.
 const KEY_SHAPED = /(?:TOKEN|KEY|PAT)$/;
-const nearMiss = (n: string, name: string, word: string | null | undefined): boolean => n !== name && Boolean(word) && n.toUpperCase().includes(word!) && KEY_SHAPED.test(n.toUpperCase());
-export const offeredName = (n: string, name: string, word: string | null | undefined): boolean => n === name || nearMiss(n, name, word);
+const nearMiss = (candidate: string, name: string, word: string | null | undefined): boolean => candidate !== name && Boolean(word) && candidate.toUpperCase().includes(word!) && KEY_SHAPED.test(candidate.toUpperCase());
+export const offeredName = (candidate: string, name: string, word: string | null | undefined): boolean => candidate === name || nearMiss(candidate, name, word);
 
 // The token fields a catalog route defines and an entry holds: [{ at: ['env', K] | ['headers', H] | ['args', i], template }]
 export function tokenFields(entry: ServerEntry | null | undefined, route: CatalogRoute | null | undefined): TokenField[]
@@ -62,13 +62,13 @@ export function tokenFields(entry: ServerEntry | null | undefined, route: Catalo
     for (const key of ['env', 'headers'])
         for (const [k, template] of Object.entries((route as unknown as Record<string, Record<string, unknown> | undefined>)[key] || {}))
             if (typeof template === 'string' && template.includes(ref) && entry[key] && Object.hasOwn(entry[key] as object, k)) out.push({ at: [key, k], template });
-    const opt = route.optionalArgs && route.optionalArgs['token'];
-    const i = opt && Array.isArray(entry.args) ? entry.args.indexOf(opt[0]!) : -1;
-    if (i >= 0 && i + 1 < entry.args!.length) out.push({ at: ['args', i + 1], template: opt![1]! });
+    const tokenArgs = route.optionalArgs && route.optionalArgs['token'];
+    const i = tokenArgs && Array.isArray(entry.args) ? entry.args.indexOf(tokenArgs[0]!) : -1;
+    if (i >= 0 && i + 1 < entry.args!.length) out.push({ at: ['args', i + 1], template: tokenArgs![1]! });
     return out;
 }
 
-export const valueAt = (entry: unknown, at: (string | number)[]): unknown => at.reduce<unknown>((o, k) => (o == null ? undefined : (o as Record<string | number, unknown>)[k]), entry);
+export const valueAt = (entry: unknown, at: (string | number)[]): unknown => at.reduce<unknown>((current, k) => (current == null ? undefined : (current as Record<string | number, unknown>)[k]), entry);
 export const PLACEHOLDER = /^\s*(?:[A-Za-z][\w-]*\s+)?(?:\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\})+\s*$/;
 
 // fillKeys(entry, row, routeId, scope, found) -> a copy with each token field set by the target scope: at project scope
@@ -82,10 +82,10 @@ export function fillKeys(entry: ServerEntry, row: CatalogRow | null | undefined,
     const value = found[route!.tokenVar!];
     if (scope !== 'project' && typeof value !== 'string') return entry;
     const out = JSON.parse(JSON.stringify(entry)) as ServerEntry;
-    for (const f of fields)
+    for (const field of fields)
     {
-        const parent = valueAt(out, f.at.slice(0, -1)) as Record<string | number, unknown>;
-        parent[f.at[f.at.length - 1]!] = scope === 'project' ? f.template : f.template.split(`\${${route!.tokenVar}}`).join(value);
+        const parent = valueAt(out, field.at.slice(0, -1)) as Record<string | number, unknown>;
+        parent[field.at[field.at.length - 1]!] = scope === 'project' ? field.template : field.template.split(`\${${route!.tokenVar}}`).join(value);
     }
     return out;
 }
@@ -107,14 +107,14 @@ export function hostedChain({ scope, projectRoot, globalRoot, globalNamed = fals
 {
     const beside = scope === 'user' ? globalRoot : projectRoot;
     const named = scope === 'local' && globalNamed ? globalRoot : null;
-    return uniq([beside, named, path.join(home, '.preferred-tools'), path.join(home, '.alfred')].filter((d): d is string => Boolean(d)).map(secretsIn));
+    return uniq([beside, named, path.join(home, '.preferred-tools'), path.join(home, '.alfred')].filter((folder): folder is string => Boolean(folder)).map(secretsIn));
 }
 
 // stdioChain({ scope, projectRoot, globalRoot }) -> the files the apply reads a stdio key from: local scope the project
 // root's, then the global root's; user scope the global root's. Project scope takes no stdio key (spec D5).
 export function stdioChain({ scope, projectRoot, globalRoot }: Omit<KeyChain, 'home'> & { home?: string | undefined }): string[]
 {
-    if (scope === 'local') return uniq([projectRoot, globalRoot].filter((d): d is string => Boolean(d)).map(secretsIn));
+    if (scope === 'local') return uniq([projectRoot, globalRoot].filter((folder): folder is string => Boolean(folder)).map(secretsIn));
     if (scope === 'user') return globalRoot ? [secretsIn(globalRoot)] : [];
     return [];
 }
@@ -133,7 +133,7 @@ export function valueIn(files: string[], name: string): KeyHit | null
 // The names each file holds with a value -> [{ file, names }]. Every value is dropped here.
 // The names a key file defines, filled or not - the values stay in this process. [] when the file cannot be read.
 export const namesIn = (file: string): string[] => Object.keys(readDotenv(file) || {});
-export const filledNames = (files: string[]): FileNames[] => files.map((file) => ({ file, names: Object.entries(readDotenv(file) || {}).filter(([, v]) => v !== '').map(([k]) => k) }));
+export const filledNames = (files: string[]): FileNames[] => files.map((file) => ({ file, names: Object.entries(readDotenv(file) || {}).filter(([, value]) => value !== '').map(([k]) => k) }));
 
 // The key files 0.1.x read, which 0.2.0 reads for names only: alfred-code's store in the project and in each parent folder
 // (its chain walks the parents, so a workspace root's store served its child repos), the project's
@@ -162,12 +162,12 @@ export function nameOfValue(files: string[], value: unknown): string | null
     if (typeof value !== 'string' || value === '') return null;
     for (const file of files)
     {
-        const hit = Object.entries(readDotenv(file) || {}).find(([, v]) => v === value);
+        const hit = Object.entries(readDotenv(file) || {}).find(([, heldValue]) => heldValue === value);
         if (hit) return hit[0];
     }
     return null;
 }
 
 // A name that looks like a credential (spec D9, the docs' own test): a key belongs in .mcps-secrets, never in a setting.
-export const credentialName = (n: unknown): boolean => /TOKEN|SECRET|PASSWORD|KEY|AUTH/i.test(String(n));
+export const credentialName = (name: unknown): boolean => /TOKEN|SECRET|PASSWORD|KEY|AUTH/i.test(String(name));
 

@@ -159,7 +159,7 @@ const BRIDGE_SHA256: Record<number, string> = {
     for (const m of text.matchAll(/\brequire\(\s*(['"])([^'"]+)\1\s*\)/g))
         need(m[2]!.startsWith('node:') || m[2] === './mcp-headers.js', `${rel}: require('${m[2]}') - the bridge runs outside the plugin, so node: modules and ./mcp-headers.js only`);
     const keysSrc = fs.readFileSync(path.join(root, 'scripts', 'keys', 'keys.ts'), 'utf8');
-    const pattern = /const credentialName = \(n(?::\s*\w+)?\)(?::\s*\w+)? => (\/[^/]+\/[a-z]*)\.test/.exec(keysSrc);
+    const pattern = /const credentialName = \(name(?::\s*\w+)?\)(?::\s*\w+)? => (\/[^/]+\/[a-z]*)\.test/.exec(keysSrc);
     need(pattern && String(bridge.CREDENTIAL) === pattern[1], `${rel}: CREDENTIAL is not keys.js credentialName's pattern`);
 }
 

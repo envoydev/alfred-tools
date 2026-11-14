@@ -12,27 +12,27 @@ import type { CatalogRoute, CatalogRow, CatalogRules } from '../catalog/types.ts
 import type { BridgeParts, BuildAnswers, Current, HelperParts, Machine, Registration } from './types.ts';
 
 // The installed registration's own answers, read back from the entry.
-export function currentOf(row: CatalogRow, reg: Registration): Current
+export function currentOf(row: CatalogRow, registration: Registration): Current
 {
-    const e = reg.entry;
-    const flag = (f: string) => { const i = (e.args || []).indexOf(f); return i >= 0 ? e.args![i + 1] : undefined; };
-    const bridge = bridgeParts(e);
+    const entry = registration.entry;
+    const flag = (flagName: string) => { const i = (entry.args || []).indexOf(flagName); return i >= 0 ? entry.args![i + 1] : undefined; };
+    const bridge = bridgeParts(entry);
     if (bridge)
     {
         // each catalog URL name, by position, to the name the template holds
-        const route = Object.values(row.routes).find((r) => r.runtime === 'bridge');
+        const route = Object.values(row.routes).find((candidate) => candidate.runtime === 'bridge');
         const held = templateNames(bridge.template) || [];
-        const urlNames = Object.fromEntries(((route && route.urlVars) || []).map((v, i) => [v.var, held[i] ? held[i]!.name : v.var]));
-        return { name: reg.name, scope: reg.scope, route: reg.route, entry: e, rootStr: null, executablePath: undefined, token: true, keyName: bridge.keyName, urlNames, host: null };
+        const urlNames = Object.fromEntries(((route && route.urlVars) || []).map((urlVar, i) => [urlVar.var, held[i] ? held[i]!.name : urlVar.var]));
+        return { name: registration.name, scope: registration.scope, route: registration.route, entry: entry, rootStr: null, executablePath: undefined, token: true, keyName: bridge.keyName, urlNames, host: null };
     }
     return {
-        name: reg.name, scope: reg.scope, route: reg.route, entry: e,
-        rootStr: row.locations ? rootOfEntry(row, e) : null,
+        name: registration.name, scope: registration.scope, route: registration.route, entry: entry,
+        rootStr: row.locations ? rootOfEntry(row, entry) : null,
         executablePath: flag('--executable-path'),
-        token: Boolean(e.headersHelper || (e.headers && e.headers['Authorization']) || (e.args || []).includes('--api-key')),
-        keyName: helperNameOf(e.headersHelper),
+        token: Boolean(entry.headersHelper || (entry.headers && entry.headers['Authorization']) || (entry.args || []).includes('--api-key')),
+        keyName: helperNameOf(entry.headersHelper),
         // the shared sign-in form (D5) holds its URL as an argument
-        host: e.url ? new URL(e.url).hostname : signInParts(e) ? new URL(signInParts(e)!.url).hostname : null,
+        host: entry.url ? new URL(entry.url).hostname : signInParts(entry) ? new URL(signInParts(entry)!.url).hostname : null,
     };
 }
 
@@ -40,7 +40,7 @@ export function currentOf(row: CatalogRow, reg: Registration): Current
 
 export function subst(text: unknown, values: Record<string, string>): string
 {
-    return String(text).replace(/\{(\w+)\}/g, (m: string, k: string) => (k in values ? values[k]! : m));
+    return String(text).replace(/\{(\w+)\}/g, (match: string, k: string) => (k in values ? values[k]! : match));
 }
 
 // ---- the server's settings (spec D9) ---------------------------------------------------------------------------------
@@ -54,7 +54,7 @@ export function settingsOf(row: CatalogRow, routeId: string, entry: ServerEntry 
 {
     const route = row.routes[routeId]!;
     if (route.runtime === 'bridge') return [];
-    const derived = new Set(((row.locations && row.locations.derived) || []).filter((d) => d.in === 'env').map((d) => d.key));
+    const derived = new Set(((row.locations && row.locations.derived) || []).filter((derivedLocation) => derivedLocation.in === 'env').map((derivedLocation) => derivedLocation.key));
     const env = (entry ? entry.env : route.env) || {};
     return Object.entries(env).filter(([k]) => k !== route.tokenVar && !derived.has(k) && !APPIUM_SDK_ENV.includes(k) && k !== 'npm_config_before' && !keys.credentialName(k));
 }
@@ -67,8 +67,8 @@ export function mergeSettings(entry: ServerEntry, route: CatalogRoute, pairs: Re
     out.env = { ...(out.env || {}), ...pairs };
     if (out.command === 'docker' && Array.isArray(out.args) && route.image)
     {
-        const at = out.args.findIndex((a) => typeof a === 'string' && a.startsWith(`${route.image!.name}:`));
-        const passed = new Set(out.args.filter((_a, i) => out.args![i - 1] === '-e'));
+        const at = out.args.findIndex((argument) => typeof argument === 'string' && argument.startsWith(`${route.image!.name}:`));
+        const passed = new Set(out.args.filter((_argument, i) => out.args![i - 1] === '-e'));
         const add = Object.keys(pairs).filter((k) => !passed.has(k)).flatMap((k) => ['-e', k]);
         if (at >= 0 && add.length) out.args.splice(at, 0, ...add);
     }
@@ -84,9 +84,9 @@ export function mergeSettings(entry: ServerEntry, route: CatalogRoute, pairs: Re
 const PLAIN_ARG = /^[A-Za-z0-9_./:@+,=-]+$/;
 export function shellArg(text: string, style: string): string
 {
-    const t = style === 'win32' ? text.replace(/\\/g, '/') : text;
-    if (PLAIN_ARG.test(t)) return t;
-    return style === 'posix' ? `'${t.replace(/'/g, "'\\''")}'` : `"${t}"`;
+    const normalized = style === 'win32' ? text.replace(/\\/g, '/') : text;
+    if (PLAIN_ARG.test(normalized)) return normalized;
+    return style === 'posix' ? `'${normalized.replace(/'/g, "'\\''")}'` : `"${normalized}"`;
 }
 
 // The registration's `headersHelper`: `node <path> <NAME> <SCHEME> [<global root>]`, each path quoted for `style` (see
@@ -101,23 +101,23 @@ export function helperCommand({ helperPath, name, scheme, globalRoot = null, sty
 export function helperArgv(command: unknown): string[]
 {
     const out: string[] = [];
-    let cur: string | null = null;
+    let current: string | null = null;
     const text = String(command);
     for (let i = 0; i < text.length; i++)
     {
-        const c = text[i]!;
-        if (c === "'" || c === '"')
+        const character = text[i]!;
+        if (character === "'" || character === '"')
         {
-            const end = text.indexOf(c, i + 1);
+            const end = text.indexOf(character, i + 1);
             const stop = end < 0 ? text.length : end;
-            cur = (cur || '') + text.slice(i + 1, stop);
+            current = (current || '') + text.slice(i + 1, stop);
             i = stop;
         }
-        else if (c === '\\' && (text[i + 1] === "'" || text[i + 1] === '"')) { cur = (cur || '') + text[i + 1]; i++; }
-        else if (/\s/.test(c)) { if (cur !== null) out.push(cur); cur = null; }
-        else cur = (cur || '') + c;
+        else if (character === '\\' && (text[i + 1] === "'" || text[i + 1] === '"')) { current = (current || '') + text[i + 1]; i++; }
+        else if (/\s/.test(character)) { if (current !== null) out.push(current); current = null; }
+        else current = (current || '') + character;
     }
-    if (cur !== null) out.push(cur);
+    if (current !== null) out.push(current);
     return out;
 }
 
@@ -126,43 +126,43 @@ export function helperParts(command: unknown): HelperParts | null
 {
     if (typeof command !== 'string') return null;
     const argv = helperArgv(command);
-    const at = argv.findIndex((a) => /mcp-headers\.js$/.test(a));
+    const at = argv.findIndex((argument) => /mcp-headers\.js$/.test(argument));
     return at < 0 ? null : { path: argv[at]!, args: argv.slice(at + 1) };
 }
 
 // Where a registration at `scope` finds the helper: absolute at every scope, in the root of the scope's family (F7).
-export function helperPathFor(scope: string, ctx: Machine): string
+export function helperPathFor(scope: string, context: Machine): string
 {
-    return pathFor(ctx.platform).join(rootOf(scope === 'user' ? 'global' : 'project', ctx), 'mcp-headers.js');
+    return pathFor(context.platform).join(rootOf(scope === 'user' ? 'global' : 'project', context), 'mcp-headers.js');
 }
 
 // The helper's third argument: the global root, at local scope only and only when it is a named folder - the helper reads
 // ~/.preferred-tools and ~/.alfred itself.
-export const helperGlobalRoot = (scope: string, ctx: Machine): string | null | undefined => (scope === 'local' && ctx.roots && ctx.roots.globalNamed ? ctx.roots.global : null);
+export const helperGlobalRoot = (scope: string, context: Machine): string | null | undefined => (scope === 'local' && context.roots && context.roots.globalNamed ? context.roots.global : null);
 
 // The key name a `headersHelper` passes, or null: the helper's arguments as this plugin writes them, `<NAME> <SCHEME>`.
 export function helperNameOf(command: unknown): string | null
 {
-    const h = helperParts(command);
-    return h && h.args.length >= 2 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(h.args[0]!) && /^[A-Za-z][\w-]*$/.test(h.args[1]!) ? h.args[0]! : null;
+    const helper = helperParts(command);
+    return helper && helper.args.length >= 2 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(helper.args[0]!) && /^[A-Za-z][\w-]*$/.test(helper.args[1]!) ? helper.args[0]! : null;
 }
 
 // The helper command a hosted keyed route gets at `scope`: the key's name (`keyName`, else the catalog's default) and
 // the route's scheme.
-export const helperFor = (route: CatalogRoute, scope: string, ctx: Machine, keyName: string | null | undefined = null): string => helperCommand({ helperPath: helperPathFor(scope, ctx), name: keyName || route.helper!.var, scheme: route.helper!.scheme, globalRoot: helperGlobalRoot(scope, ctx), style: ctx.platform === 'win32' ? 'win32' : 'posix' });
+export const helperFor = (route: CatalogRoute, scope: string, context: Machine, keyName: string | null | undefined = null): string => helperCommand({ helperPath: helperPathFor(scope, context), name: keyName || route.helper!.var, scheme: route.helper!.scheme, globalRoot: helperGlobalRoot(scope, context), style: context.platform === 'win32' ? 'win32' : 'posix' });
 
 // ---- the bridge (0.4.0) --------------------------------------------------------------------------------------------
 
 // Where a bridge registration at `scope` finds mcp-bridge.js: beside the helper, absolute at every scope.
-export function bridgePathFor(scope: string, ctx: Machine): string
+export function bridgePathFor(scope: string, context: Machine): string
 {
-    return pathFor(ctx.platform).join(rootOf(scope === 'user' ? 'global' : 'project', ctx), 'mcp-bridge.js');
+    return pathFor(context.platform).join(rootOf(scope === 'user' ? 'global' : 'project', context), 'mcp-bridge.js');
 }
 
 // serena's context file (D7): in the scope's family root, absolute at every scope.
-export function contextPathFor(scope: string, ctx: Machine): string
+export function contextPathFor(scope: string, context: Machine): string
 {
-    return pathFor(ctx.platform).join(rootOf(scope === 'user' ? 'global' : 'project', ctx), 'serena-context.yml');
+    return pathFor(context.platform).join(rootOf(scope === 'user' ? 'global' : 'project', context), 'serena-context.yml');
 }
 
 // The --context an entry runs with points at this plugin's file (any root) - the path form D7 writes, not a name such as
@@ -176,12 +176,12 @@ export function contextArgAt(entry: ServerEntry | null | undefined): number
 
 // The entry with its context file following the scope's root (a root change, a scope move). A named context is fix's to
 // change (serena-context), so it is left.
-export function applyContext(entry: ServerEntry, scope: string, ctx: Machine): ServerEntry
+export function applyContext(entry: ServerEntry, scope: string, context: Machine): ServerEntry
 {
     const at = contextArgAt(entry);
     if (at < 0) return entry;
     const args = [...entry.args!];
-    args[at] = contextPathFor(scope, ctx);
+    args[at] = contextPathFor(scope, context);
     return { ...entry, args };
 }
 
@@ -192,37 +192,37 @@ export function bridgeParts(entry: ServerEntry | null | undefined): BridgeParts 
     if (!entry || typeof entry !== 'object' || typeof entry.command !== 'string' || !Array.isArray(entry.args)) return null;
     if (path.basename(entry.command.replace(/\\/g, '/')).replace(/\.exe$/i, '').toLowerCase() !== 'node') return null;
     const args = entry.args.map(String);
-    const at = args.findIndex((a) => a.replace(/\\/g, '/').split('/').pop() === 'mcp-bridge.js');
+    const at = args.findIndex((argument) => argument.replace(/\\/g, '/').split('/').pop() === 'mcp-bridge.js');
     if (at < 0 || !args[at + 1]) return null;
-    const [template, keyName = null, scheme = null, pkg = null, globalRoot = null] = args.slice(at + 1);
-    return { path: args[at]!, template: template!, keyName, scheme, pkg, globalRoot };
+    const [template, keyName = null, scheme = null, packageSpec = null, globalRoot = null] = args.slice(at + 1);
+    return { path: args[at]!, template: template!, keyName, scheme, pkg: packageSpec, globalRoot };
 }
 
 // A template with each catalog name replaced by the user's: { SENTRY_ORG: 'SENTRY_SLUG' } turns {SENTRY_ORG} into
 // {SENTRY_SLUG}, and keeps an optional segment's `?`.
-export const renameTemplate = (template: string, names: Record<string, string>): string => template.replace(/\{([A-Za-z_][A-Za-z0-9_]*)(\?)?\}/g, (_m: string, name: string, opt: string | undefined) => `{${names[name] || name}${opt || ''}}`);
+export const renameTemplate = (template: string, names: Record<string, string>): string => template.replace(/\{([A-Za-z_][A-Za-z0-9_]*)(\?)?\}/g, (_match: string, name: string, optional: string | undefined) => `{${names[name] || name}${optional || ''}}`);
 
 // A fresh entry from the catalog. `a` = { rootStr, scope, executablePath, token, keyName, params }. A hosted route that
 // sends a key gets `headersHelper` and no `headers`: the key stays in .mcps-secrets (spec D4).
-export function buildEntry(row: CatalogRow, routeId: string, a: BuildAnswers, ctx: Machine, rules: CatalogRules): ServerEntry
+export function buildEntry(row: CatalogRow, routeId: string, answers: BuildAnswers, context: Machine, rules: CatalogRules): ServerEntry
 {
     const route = row.routes[routeId]!;
     if (routeId === 'remote')
     {
-        const entry: ServerEntry = { type: route.type, url: subst(route.url, a.params || {}) };
-        const useKey = route.helper && (route.authMode === 'token' || (route.authMode === 'optional-token' && a.token));
-        if (useKey) entry.headersHelper = helperFor(route, a.scope, ctx, a.keyName);
+        const entry: ServerEntry = { type: route.type, url: subst(route.url, answers.params || {}) };
+        const useKey = route.helper && (route.authMode === 'token' || (route.authMode === 'optional-token' && answers.token));
+        if (useKey) entry.headersHelper = helperFor(route, answers.scope, context, answers.keyName);
         return entry;
     }
     if (route.runtime === 'bridge')
     {
         // no shell reads this command line: a path with a space is one argument as it is
-        const p = route.package!;
-        const globalRoot = helperGlobalRoot(a.scope, ctx);
+        const packageSpec = route.package!;
+        const globalRoot = helperGlobalRoot(answers.scope, context);
         return {
             command: 'node',
-            args: [bridgePathFor(a.scope, ctx), renameTemplate(route.url!, a.urlNames || {}), a.keyName || route.helper!.var, route.helper!.scheme, `${p.name}@${p.version}`, ...(globalRoot ? [globalRoot] : [])],
-            env: { npm_config_before: p.cutoff },
+            args: [bridgePathFor(answers.scope, context), renameTemplate(route.url!, answers.urlNames || {}), answers.keyName || route.helper!.var, route.helper!.scheme, `${packageSpec.name}@${packageSpec.version}`, ...(globalRoot ? [globalRoot] : [])],
+            env: { npm_config_before: packageSpec.cutoff },
         };
     }
 
@@ -230,29 +230,29 @@ export function buildEntry(row: CatalogRow, routeId: string, a: BuildAnswers, ct
     const extra: string[] = [];
     for (const [key, spec] of Object.entries(route.optionalArgs || {}))
     {
-        if (key === 'executablePath' && a.executablePath) extra.push(...spec!.map((s) => subst(s, { value: a.executablePath! })));
-        if (key === 'token' && a.token) extra.push(...spec!);
+        if (key === 'executablePath' && answers.executablePath) extra.push(...spec!.map((argTemplate) => subst(argTemplate, { value: answers.executablePath! })));
+        if (key === 'token' && answers.token) extra.push(...spec!);
     }
     if (route.runtime === 'uvx')
     {
-        const p = route.package!;
-        const args = ['--python', pythonRequest(route, ctx, rules), '--exclude-newer', p.cutoff];
-        for (const w of route.with || []) args.push('--with', w);
-        const run = route.run!.some((x) => x.includes('{contextFile}')) ? route.run!.map((x) => subst(x, { contextFile: contextPathFor(a.scope, ctx) })) : route.run!;
-        args.push('--from', subst(p.fromSpec, { version: p.version }), ...run, ...extra);
+        const packageSpec = route.package!;
+        const args = ['--python', pythonRequest(route, context, rules), '--exclude-newer', packageSpec.cutoff];
+        for (const withPackage of route.with || []) args.push('--with', withPackage);
+        const run = route.run!.some((runArgument) => runArgument.includes('{contextFile}')) ? route.run!.map((runArgument) => subst(runArgument, { contextFile: contextPathFor(answers.scope, context) })) : route.run!;
+        args.push('--from', subst(packageSpec.fromSpec, { version: packageSpec.version }), ...run, ...extra);
         entry = { command: 'uvx', args };
         if (Object.keys(route.env || {}).length) entry.env = { ...route.env };
     }
     else if (route.runtime === 'npx')
     {
-        const p = route.package!;
-        const args = ['-y', `${p.name}@${p.version}`, ...route.run!, ...extra];
-        entry = ctx.platform === 'win32' && rules.windowsNpxCmd ? { command: 'cmd', args: ['/c', 'npx', ...args] } : { command: 'npx', args };
-        entry.env = { ...(route.env || {}), npm_config_before: p.cutoff };
+        const packageSpec = route.package!;
+        const args = ['-y', `${packageSpec.name}@${packageSpec.version}`, ...route.run!, ...extra];
+        entry = context.platform === 'win32' && rules.windowsNpxCmd ? { command: 'cmd', args: ['/c', 'npx', ...args] } : { command: 'npx', args };
+        entry.env = { ...(route.env || {}), npm_config_before: packageSpec.cutoff };
     }
     else if (route.runtime === 'docker')
     {
-        const useBinary = ctx.machine && ctx.machine.docker === false && route.fallback;
+        const useBinary = context.machine && context.machine.docker === false && route.fallback;
         if (useBinary) entry = { command: route.fallback!.command, args: [...route.fallback!.args] };
         else
         {
@@ -261,7 +261,7 @@ export function buildEntry(row: CatalogRow, routeId: string, a: BuildAnswers, ct
         }
         if (Object.keys(route.env || {}).length) entry.env = { ...route.env };
     }
-    if (row.locations && a.rootStr !== undefined) entry = applyRoot(entry, row, a.rootStr!, a.scope, ctx);
+    if (row.locations && answers.rootStr !== undefined) entry = applyRoot(entry, row, answers.rootStr!, answers.scope, context);
     return entry;
 }
 

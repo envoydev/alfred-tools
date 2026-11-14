@@ -21,22 +21,22 @@ test('workspace: a root with two joined children and an ignored one', () => {
     const root = world();
     rec(root, { role: 'root', children: ['a', 'b', 'c'], ignoredChildren: ['c'] });
     for (const c of ['a', 'b', 'c']) rec(dir(path.join(root, c)), { parent: '..' });
-    const got = ws.of(path.join(root, 'a'), {});
+    const got = ws.workspaceOf(path.join(root, 'a'), {});
     assert.deepStrictEqual(got, { root, members: [path.join(root, 'a'), path.join(root, 'b')], ancestors: [root], notes: [] });
-    assert.deepStrictEqual(ws.of(root, {}).ancestors, []);
+    assert.deepStrictEqual(ws.workspaceOf(root, {}).ancestors, []);
     // the ignored child is no member, so from it there is no workspace
-    assert.deepStrictEqual(ws.of(path.join(root, 'c'), {}).root, null);
+    assert.deepStrictEqual(ws.workspaceOf(path.join(root, 'c'), {}).root, null);
 });
 
 test('workspace: a record that is not JSON, and a standalone child, read as no workspace', () => {
     const root = world();
     rec(root, '{ not json');
-    assert.deepStrictEqual(ws.of(root, {}), { root: null, members: [], ancestors: [], notes: [`${path.join(root, '.alfred', 'workspace.json')} is not JSON - read as no workspace`] });
+    assert.deepStrictEqual(ws.workspaceOf(root, {}), { root: null, members: [], ancestors: [], notes: [`${path.join(root, '.alfred', 'workspace.json')} is not JSON - read as no workspace`] });
     const solo = world();
     rec(solo, { role: 'standalone' });
-    assert.deepStrictEqual(ws.of(solo, {}).notes, [`${solo} is standalone`]);
+    assert.deepStrictEqual(ws.workspaceOf(solo, {}).notes, [`${solo} is standalone`]);
     // no record anywhere: no note
-    assert.deepStrictEqual(ws.of(world(), {}), { root: null, members: [], ancestors: [], notes: [] });
+    assert.deepStrictEqual(ws.workspaceOf(world(), {}), { root: null, members: [], ancestors: [], notes: [] });
     // JSON that is not an object
     const arr = world();
     rec(arr, '[]');
@@ -48,7 +48,7 @@ test('workspace: the old line file is read like workspace.json', () => {
     line(root, '﻿# a comment\r\nrole root\r\nchild a\r\nchild b\r\nabove none\r\nignore skill x\r\n');
     for (const c of ['a', 'b']) line(dir(path.join(root, c)), 'parent ..\n');
     assert.deepStrictEqual(ws.readRecord(root), { role: 'root', children: ['a', 'b'], ignoredChildren: [] });
-    assert.deepStrictEqual(ws.of(path.join(root, 'b'), {}).members, [path.join(root, 'a'), path.join(root, 'b')]);
+    assert.deepStrictEqual(ws.workspaceOf(path.join(root, 'b'), {}).members, [path.join(root, 'a'), path.join(root, 'b')]);
     // a child folder name with inner whitespace reads back as itself
     line(dir(path.join(root, 'x')), 'child two  words\nchild two  words\nparent ..\nparent ../..\n');
     assert.deepStrictEqual(ws.readRecord(path.join(root, 'x')), { parent: '..', children: ['two  words'], ignoredChildren: [] });
@@ -78,7 +78,7 @@ test('workspace walk refuses a child outside the root and a loop', () => {
     rec(root, { role: 'root', children: ['a', '../x'] });
     dir(path.join(path.dirname(root), 'x'));
     rec(dir(path.join(root, 'a')), { parent: '..', children: ['..'] });
-    const got = ws.of(path.join(root, 'a'), {});
+    const got = ws.workspaceOf(path.join(root, 'a'), {});
     assert.deepStrictEqual(got.members, [path.join(root, 'a')]);
     assert.strictEqual(got.notes.length, 2, got.notes.join('\n'));
     assert.ok(got.notes.some((l) => l.includes(path.join(path.dirname(root), 'x')) && l.includes('outside')), got.notes.join('\n'));
@@ -90,7 +90,7 @@ test('workspace: a missing child is skipped and named; a child whose record name
     rec(root, { role: 'root', children: ['gone', 'a', 'b'] });
     rec(dir(path.join(root, 'a')), { parent: '..' });
     rec(dir(path.join(root, 'b')), { role: 'standalone' });
-    const got = ws.of(root, {});
+    const got = ws.workspaceOf(root, {});
     assert.deepStrictEqual(got.members, [path.join(root, 'a')]);
     assert.deepStrictEqual(got.notes, [`${path.join(root, 'gone')} is listed as a child of ${root} but is missing - skipped`]);
 });
@@ -101,7 +101,7 @@ test('workspace: nested members walk down, and each one\'s folders above are nea
     rec(dir(path.join(root, 'apps')), { parent: '..', children: ['web/admin'] });
     rec(dir(path.join(root, 'apps', 'web', 'admin')), { parent: '../..' });
     const admin = path.join(root, 'apps', 'web', 'admin');
-    const got = ws.of(admin, {});
+    const got = ws.workspaceOf(admin, {});
     assert.deepStrictEqual(got.members, [path.join(root, 'apps'), admin]);
     assert.deepStrictEqual(got.ancestors, [path.join(root, 'apps'), root]);
     assert.deepStrictEqual(ws.below(got, root), [{ folder: path.join(root, 'apps'), ancestors: [root] }, { folder: admin, ancestors: [path.join(root, 'apps'), root] }]);
@@ -112,10 +112,10 @@ test('workspace: an absolute ALFRED_CODE_DATA_PATH reads as no workspace, with i
     const root = world();
     rec(root, { role: 'root' });
     const note = 'alfred-code\'s data is moved by ALFRED_CODE_DATA_PATH - its workspace record is not read';
-    assert.deepStrictEqual(ws.of(root, { ALFRED_CODE_DATA_PATH: path.join(tmp, 'elsewhere') }), { root: null, members: [], ancestors: [], notes: [note] });
-    assert.deepStrictEqual(ws.of(world(), { ALFRED_CODE_DATA_PATH: path.join(tmp, 'elsewhere') }).notes, []);
+    assert.deepStrictEqual(ws.workspaceOf(root, { ALFRED_CODE_DATA_PATH: path.join(tmp, 'elsewhere') }), { root: null, members: [], ancestors: [], notes: [note] });
+    assert.deepStrictEqual(ws.workspaceOf(world(), { ALFRED_CODE_DATA_PATH: path.join(tmp, 'elsewhere') }).notes, []);
     // a relative one is alfred-code's .alfred still
-    assert.strictEqual(ws.of(root, { ALFRED_CODE_DATA_PATH: 'data' }).root, root);
+    assert.strictEqual(ws.workspaceOf(root, { ALFRED_CODE_DATA_PATH: 'data' }).root, root);
 });
 
 test('workspace: nothing under .alfred is written', () => {
@@ -124,6 +124,6 @@ test('workspace: nothing under .alfred is written', () => {
     rec(dir(path.join(root, 'a')), { parent: '..' });
     const snap = () => [root, path.join(root, 'a')].map((f) => fs.readdirSync(path.join(f, '.alfred')).map((x) => [x, fs.readFileSync(path.join(f, '.alfred', x), 'utf8')]));
     const before = JSON.stringify(snap());
-    ws.of(path.join(root, 'a'), {});
+    ws.workspaceOf(path.join(root, 'a'), {});
     assert.strictEqual(JSON.stringify(snap()), before);
 });

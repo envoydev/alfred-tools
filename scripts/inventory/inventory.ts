@@ -18,7 +18,7 @@ import * as roots from '../roots/roots.ts';
 import { bridgeParts } from '../entries/entry.ts';
 import { signInParts } from '../entries/sign-in.ts';
 import * as existing from './existing.ts';
-import { of } from '../roots/workspace.ts';
+import { workspaceOf } from '../roots/workspace.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import type { Account, Env, FileState, ServerEntry, ServerMap } from '../core/types.ts';
@@ -194,7 +194,7 @@ export function pluginRows(listJson: PluginListRow[], project: string, env: Env,
     return rows;
 }
 
-export function buildInventory({ project, env = process.env, platform = process.platform, arch = process.arch, catalog = catalogLib.load(), run = cli.run, data = null }: BuildOptions): Inventory
+export function buildInventory({ project, env = process.env, platform = process.platform, arch = process.arch, catalog = catalogLib.load(), run = cli.runClaude, data = null }: BuildOptions): Inventory
 {
     const proj = path.resolve(project);
     const out: Inventory = {
@@ -260,7 +260,7 @@ export function buildInventory({ project, env = process.env, platform = process.
     out.lists = { project: listOf(out, 'project', rootCtx), global: listOf(out, 'global', rootCtx) };
     out.cursor = cursorFiles(out, { platform, env, project: proj }, catalog);
     // the workspace alfred-code records (spec D4a): the folders whose Cursor files take this folder's project servers
-    out.workspace = of(proj, env);
+    out.workspace = workspaceOf(proj, env);
     const fp = (entry: ServerEntry) => existing.fingerprintOf(entry, catalog);
     for (const r of out.registrations)
     {

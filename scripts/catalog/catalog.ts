@@ -16,12 +16,12 @@ export function load(dir: string = CATALOG_DIR): Catalog
 }
 
 // One string per fingerprint, equal for two rows exactly when they would match the same registration.
-export function fingerprintKey(f: Fingerprint): string
+export function fingerprintKey(fingerprint: Fingerprint): string
 {
-    if (f.bridge) return `bridge:${f.bridge}`;
-    if (f.pkg) return `pkg:${f.pkg}${f.flag ? `+${f.flag}=${f.value}` : ''}`;
-    if (f.command) return `cmd:${f.command}`;
-    return `url:${f.host || '*'}${f.pathPrefix || ''}`;
+    if (fingerprint.bridge) return `bridge:${fingerprint.bridge}`;
+    if (fingerprint.pkg) return `pkg:${fingerprint.pkg}${fingerprint.flag ? `+${fingerprint.flag}=${fingerprint.value}` : ''}`;
+    if (fingerprint.command) return `cmd:${fingerprint.command}`;
+    return `url:${fingerprint.host || '*'}${fingerprint.pathPrefix || ''}`;
 }
 
 export const routesOf = (row: CatalogRow): string[] => (row.kind === 'mcp' ? Object.keys(row.routes) : []);

@@ -212,7 +212,7 @@ export function clientDriftDetect(ctx: FixCtx): Finding[]
         }
     }
     // a workspace member's copies of the folders above's project servers (D4a): compared with the folder above's entry
-    const ws = ctx.inv.workspace !== undefined ? ctx.inv.workspace : workspace.of(ctx.inv.project, ctx.env || {});
+    const ws = ctx.inv.workspace !== undefined ? ctx.inv.workspace : workspace.workspaceOf(ctx.inv.project, ctx.env || {});
     if (ws && ws.root && (ws.ancestors || []).length)
     {
         const file = cursorMcp.fileFor('project', cctx);

@@ -21,18 +21,18 @@ export function blockingStdio(streams: NodeJS.WriteStream[] = [process.stdout, p
 {
     for (const stream of streams)
     {
-        const s = stream as unknown as HandleOf;
-        try { if (s && s._handle && typeof s._handle.setBlocking === 'function') s._handle.setBlocking(true); }
+        const typedStream = stream as unknown as HandleOf;
+        try { if (typedStream && typedStream._handle && typeof typedStream._handle.setBlocking === 'function') typedStream._handle.setBlocking(true); }
         catch { /* a stream that cannot block keeps Node's default */ }
     }
 }
 
 // Two JSON values the same, whatever their key order (moved from plan.js, which re-exports it).
-export function sortKeys(v: unknown): unknown
+export function sortKeys(value: unknown): unknown
 {
-    if (Array.isArray(v)) return v.map(sortKeys);
-    if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys((v as Record<string, unknown>)[k])]));
-    return v;
+    if (Array.isArray(value)) return value.map(sortKeys);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((k) => [k, sortKeys((value as Record<string, unknown>)[k])]));
+    return value;
 }
-export const deepEqual = (a: unknown, b: unknown): boolean => JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
+export const deepEqual = (left: unknown, right: unknown): boolean => JSON.stringify(sortKeys(left)) === JSON.stringify(sortKeys(right));
 

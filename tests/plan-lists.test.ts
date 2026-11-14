@@ -458,7 +458,7 @@ function wsWorld({ own = [], at = null }: { own?: ListServer[]; at?: string | nu
     const m = Object.fromEntries(['a', 'b', 'c'].map((c) => { const d = path.join(w.project, c); fs.mkdirSync(d); wsRec(d, { parent: '..' }); return [c, d]; })) as Record<string, string> & { a: string; b: string; c: string };
     const aList = path.join(m.a, '.preferred-tools', 'mcps.json');
     if (own.length) { fs.mkdirSync(path.dirname(aList), { recursive: true }); fs.writeFileSync(aList, JSON.stringify({ version: 1, servers: own, own: [] })); }
-    w.inv.workspace = wsLib.of(at || w.project, {});
+    w.inv.workspace = wsLib.workspaceOf(at || w.project, {});
     const cf = (d: string) => path.join(d, '.cursor', 'mcp.json');
     return { ...w, m, aList, cf };
 }
@@ -539,7 +539,7 @@ test('workspace: a plan at a member writes its own file with the root\'s project
     fs.mkdirSync(path.dirname(w.listFile), { recursive: true });
     fs.writeFileSync(w.listFile, JSON.stringify({ version: 1, servers: [srv('serena')], own: [] }));
     const a = { project: w.m.a, listFile: w.aList, cursorFile: w.cf(w.m.a) };
-    const inv = { ...w.inv, project: w.m.a, lists: { project: null, global: null }, workspace: wsLib.of(w.m.a, {}) };
+    const inv = { ...w.inv, project: w.m.a, lists: { project: null, global: null }, workspace: wsLib.workspaceOf(w.m.a, {}) };
     const ctx = { ...w.ctx, project: w.m.a, roots: { project: path.dirname(w.aList), global: null } };
     const out = outOf({ op: 'list-write', file: w.aList, family: 'project', upserts: [{ server: srv('memory'), after: null, cursorFile: null }], drops: [], own: null, why: 'x' });
     const steps = cursorSteps(inv, ctx, out, {});
@@ -551,7 +551,7 @@ test('workspace: a plan at a member writes its own file with the root\'s project
 test('workspace: a root in git with a plain-folder member gets the note for its own entries', { skip: !GIT && 'NOT RUN: git is not on PATH' }, () => {
     const w = wsWorld();
     gitInit(w.project);
-    const inv = { ...w.inv, project: w.m.a, lists: { project: null, global: null }, workspace: wsLib.of(w.m.a, {}) };
+    const inv = { ...w.inv, project: w.m.a, lists: { project: null, global: null }, workspace: wsLib.workspaceOf(w.m.a, {}) };
     const ctx = { ...w.ctx, project: w.m.a, roots: { project: path.dirname(w.aList), global: null } };
     const out = outOf({ op: 'list-write', file: w.aList, family: 'project', upserts: [{ server: srv('memory'), after: null, cursorFile: null }], drops: [], own: null, why: 'x' });
     cursorSteps(inv, ctx, out, {});
@@ -560,7 +560,7 @@ test('workspace: a root in git with a plain-folder member gets the note for its 
     // a member that is its own repo: no note
     gitInit(w.m.b);
     const bout = outOf({ op: 'list-write', file: path.join(w.m.b, '.preferred-tools', 'mcps.json'), family: 'project', upserts: [{ server: srv('memory'), after: null, cursorFile: null }], drops: [], own: null, why: 'x' });
-    cursorSteps({ ...inv, project: w.m.b, workspace: wsLib.of(w.m.b, {}) }, { ...ctx, project: w.m.b, roots: { project: path.join(w.m.b, '.preferred-tools'), global: null } }, bout, {});
+    cursorSteps({ ...inv, project: w.m.b, workspace: wsLib.workspaceOf(w.m.b, {}) }, { ...ctx, project: w.m.b, roots: { project: path.join(w.m.b, '.preferred-tools'), global: null } }, bout, {});
     assert.deepStrictEqual(bout.notes, []);
 });
 
@@ -584,7 +584,7 @@ test('workspace: a record read as no workspace is named once in a plan that writ
     const w = cursorWorld();
     fs.mkdirSync(path.join(w.project, '.alfred'), { recursive: true });
     fs.writeFileSync(path.join(w.project, '.alfred', 'workspace.json'), '{ nope');
-    w.inv.workspace = wsLib.of(w.project, {});
+    w.inv.workspace = wsLib.workspaceOf(w.project, {});
     const out = outOf(listWriteOf(w, [srv('serena')]));
     cursorSteps(w.inv, w.ctx, out, {});
     assert.deepStrictEqual(out.notes.filter((l) => l.includes('read as no workspace')), [`${path.join(w.project, '.alfred', 'workspace.json')} is not JSON - read as no workspace`]);
@@ -666,10 +666,10 @@ test('install names a listed server missing from Claude Code and re-adds nothing
     {
         const first = plan(inventoryLib.buildInventory({ project: w.project, env: w.env }), { clients: ['claude'], picks: { memory: {}, serena: { scope: 'local' } } }, { home: w.home, env: w.env });
         assert.strictEqual(apply(first, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
-        cli.run(['mcp', 'remove', 'memory', '-s', 'local'], { cwd: w.project, env: w.env });
+        cli.runClaude(['mcp', 'remove', 'memory', '-s', 'local'], { cwd: w.project, env: w.env });
         const s = inventoryLib.buildInventory({ project: w.project, env: w.env }).registrations.find((r) => r.name === 'serena');
-        cli.run(['mcp', 'remove', 'serena', '-s', 'local'], { cwd: w.project, env: w.env });
-        cli.run(['mcp', 'add-json', 'serena', JSON.stringify({ ...s!.entry, args: [...s!.entry.args!, '--mine'] }), '-s', 'local'], { cwd: w.project, env: w.env });
+        cli.runClaude(['mcp', 'remove', 'serena', '-s', 'local'], { cwd: w.project, env: w.env });
+        cli.runClaude(['mcp', 'add-json', 'serena', JSON.stringify({ ...s!.entry, args: [...s!.entry.args!, '--mine'] }), '-s', 'local'], { cwd: w.project, env: w.env });
         const inv = inventoryLib.buildInventory({ project: w.project, env: w.env });
         assert.deepStrictEqual(changedOutside(inv), ['serena was changed outside preferred-tools', 'memory is on the list but not in Claude Code - run /preferred-tools:fix']);
         const p = plan(inv, { clients: ['claude'], picks: { context7: { route: 'remote', scope: 'local' } } }, { home: w.home, env: w.env });

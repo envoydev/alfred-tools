@@ -123,7 +123,7 @@ export class Harness
         return fs.realpathSync(dir);
     }
 
-    claude(project: string, args: string[]): CliResult { return cli.run(args, { cwd: project, env: this.env }); }
+    claude(project: string, args: string[]): CliResult { return cli.runClaude(args, { cwd: project, env: this.env }); }
 
     // `catalog`: a case's own copy (a hosted route pointed at a stub), used by the inventory's matching as by the plan
     inventory(project: string, { catalog }: { catalog?: Catalog | undefined } = {}) { return inventory.buildInventory({ project, env: this.env, data: this.data, ...(catalog ? { catalog } : {}) }); }

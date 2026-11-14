@@ -8,7 +8,7 @@ import type { Declined, DeclinedFile, Outcome } from './types.ts';
 
 export const FILE = 'retired-declined.json';
 const fileOf = (dataDir: string): string => path.join(dataDir, FILE);
-export const same = (a: Declined, b: Declined): boolean => a.id === b.id && a.scope === b.scope;
+export const same = (first: Declined, second: Declined): boolean => first.id === second.id && first.scope === second.scope;
 
 // -> { declined } | { bad } | null (no file)
 function load(dataDir: string): { declined: Declined[]; bad?: undefined } | { bad: true; declined?: undefined } | null
@@ -19,7 +19,7 @@ function load(dataDir: string): { declined: Declined[]; bad?: undefined } | { ba
     {
         const doc = JSON.parse(text) as Partial<DeclinedFile> | null;
         if (!doc || !Array.isArray(doc.declined)) return { bad: true };
-        return { declined: doc.declined.filter((d) => d && typeof d.id === 'string' && typeof d.scope === 'string').map(({ id, scope }) => ({ id, scope })) };
+        return { declined: doc.declined.filter((entry) => entry && typeof entry.id === 'string' && typeof entry.scope === 'string').map(({ id, scope }) => ({ id, scope })) };
     }
     catch { return { bad: true }; }
 }
@@ -39,7 +39,7 @@ export function add(dataDir: string | null | undefined, items: Declined[]): Outc
     const doc = load(dataDir);
     if (doc && doc.bad) return { ok: false, detail: `${fileOf(dataDir)} is not JSON - nothing recorded; fix or delete it` };
     const declined = doc ? doc.declined! : [];
-    for (const it of items) if (!declined.some((d) => same(d, it))) declined.push({ id: it.id, scope: it.scope });
+    for (const it of items) if (!declined.some((entry) => same(entry, it))) declined.push({ id: it.id, scope: it.scope });
     fs.mkdirSync(dataDir, { recursive: true });
     const file = fileOf(dataDir);
     const tmp = `${file}.${process.pid}.tmp`;

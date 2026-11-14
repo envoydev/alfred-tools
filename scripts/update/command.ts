@@ -45,16 +45,16 @@ export async function main(argv: string[], { env = process.env, out = (s: string
     try { args = parseArgs(argv); }
     catch (caught) { const e = caught as NodeJS.ErrnoException; out(`update: ${e.message}\nusage: node scripts/update.ts --check | --questions | --apply <id,id|all|none> [--input key=value] [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`); return 2; }
     const project = path.resolve(args.project || process.cwd());
-    const inv = inventory.buildInventory({ project, env, run: runCli || cli.run, data: args.data || null });
+    const inv = inventory.buildInventory({ project, env, run: runCli || cli.runClaude, data: args.data || null });
     if (!inv.cli!.ok) { out('preferred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
-    const ctx = makeCtx({ inv, project, env, machine, registry, now, runCli: runCli || cli.run, refresh: !args['no-refresh'], data: args.data || null });
+    const ctx = makeCtx({ inv, project, env, machine, registry, now, runCli: runCli || cli.runClaude, refresh: !args['no-refresh'], data: args.data || null });
     const found = await check(ctx);
     if (args.apply)
     {
         const log = (...a: string[]) => out(a.join('\n'));
         const res = applyUpdates(ctx, args.apply.split(',').filter(Boolean), found, { tmp: args.tmp, log, input: args.input });
         // the last script on <tmp> removes it, unless fetch.js takes it on; apply() per server never does
-        if (!res.fetchFile) tmpdir.release(res.dir, log);
+        if (!res.fetchFile) tmpdir.releaseTempDir(res.dir, log);
         return res.failed.length || res.unknown.length ? 1 : 0;
     }
     if (args.questions) out(JSON.stringify(questions(found), null, 2));

@@ -117,7 +117,7 @@ export function cursorSteps(inv: Inventory, ctx: ListCtx, out: PlanOut, answers:
     const P = pathFor(ctx.platform);
     const named = answers.cursorNames || {};
     const steps: CursorWritePlanStep[] = [];
-    const ws = inv.workspace !== undefined ? inv.workspace : (ctx.project ? workspace.of(ctx.project, ctx.env || {}) : null);
+    const ws = inv.workspace !== undefined ? inv.workspace : (ctx.project ? workspace.workspaceOf(ctx.project, ctx.env || {}) : null);
     const inWs = Boolean(ws && ws.root);
     const strip = (u: ListUpsert) => { u.server = { ...u.server, clients: (u.server.clients || []).filter((c) => c !== 'cursor') }; };
     // a taken name in `file`: 'keep' runs `onKeep`, 'replace' is pushed to `replace`, no answer is a plan error

@@ -670,7 +670,7 @@ test('the asks stay inside the AskUserQuestion limits: one Recommended, first; f
 
 function seed(w: World, name: string, scope: string, entry: ServerEntry)
 {
-    const r = cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env });
+    const r = cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env });
     assert.strictEqual(r.status, 0, r.stderr);
 }
 const ctxOf = (w: World, over: Partial<Parameters<typeof makeCtx>[0]> = {}) => makeCtx({ inv: inventory.buildInventory({ project: w.project, env: w.env }), env: w.env, machine: noMachine(), ...over });
@@ -1923,7 +1923,7 @@ test('a windows-npx-cmd repair on an entry with cursor ends with list-write and 
         const cursorFile = path.join(w.project, '.cursor', 'mcp.json');
         // an older install wrote serena with no --python in all three places
         const e = noPython(localEntry(w, 'serena')!);
-        cli.run(['mcp', 'remove', 'serena', '-s', 'local'], { cwd: w.project, env: w.env });
+        cli.runClaude(['mcp', 'remove', 'serena', '-s', 'local'], { cwd: w.project, env: w.env });
         seed(w, 'serena', 'local', e);
         const list = readJson(listFile);
         list.servers[0].entry = noPython(list.servers[0].entry);

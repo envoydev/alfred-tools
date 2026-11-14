@@ -18,7 +18,7 @@ export async function main(argv: string[]): Promise<number>
     const log = (...a: string[]) => console.log(a.join('\n'));
     const res = await run(j, { log });
     // the last script on the command's <tmp>: the folder the fetch file sits in goes with it
-    tmpdir.release(path.dirname(path.resolve(file)), log);
+    tmpdir.releaseTempDir(path.dirname(path.resolve(file)), log);
     return res.warnings.length ? 1 : 0;
 }
 

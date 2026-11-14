@@ -420,7 +420,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     // 2. 0.5.0's update, as the command runs it
     const checkNow = async () =>
     {
-        const inv = inventory.buildInventory({ project: p, env: hh.env, run: cli.run, data: hh.data });
+        const inv = inventory.buildInventory({ project: p, env: hh.env, run: cli.runClaude, data: hh.data });
         const ctx = makeCtx({ inv, project: p, env: hh.env, refresh: false, data: hh.data });
         return { ctx, found: await check(ctx) };
     };
@@ -447,7 +447,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     assert.strictEqual(serena.args[serena.args.indexOf('--context') + 1], path.join(projRoot, 'serena-context.yml'));
     assert.ok(fs.existsSync(path.join(projRoot, 'serena-context.yml')));
     // the plugins: typescript-lsp uninstalled, claude-hud kept and its decline recorded
-    const plugins = JSON.parse(cli.run(['plugin', 'list', '--json'], { cwd: p, env: hh.env }).stdout || '[]');
+    const plugins = JSON.parse(cli.runClaude(['plugin', 'list', '--json'], { cwd: p, env: hh.env }).stdout || '[]');
     const ids: string[] = plugins.map((x: { id: string; scope: string }) => `${x.id}~${x.scope}`);
     assert.ok(ids.includes(`${HUD}~user`) && !ids.some((i) => i.startsWith(`${TSL}~`)), ids.join(', '));
     assert.deepStrictEqual(readJson(path.join(hh.data, 'retired-declined.json')).declined, [{ id: HUD, scope: 'user' }]);

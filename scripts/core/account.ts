@@ -26,16 +26,16 @@ export function projectKey(dir: string): string
 export function localRoot(project: string): string
 {
     if (fs.existsSync(path.join(project, '.git')) || !fs.existsSync(project)) return project;
-    const r = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: project, encoding: 'utf8', windowsHide: true });
-    return r.status === 0 && r.stdout.trim() ? path.resolve(r.stdout.trim()) : project;
+    const result = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: project, encoding: 'utf8', windowsHide: true });
+    return result.status === 0 && result.stdout.trim() ? path.resolve(result.stdout.trim()) : project;
 }
 
 // `~` and `~/x` to the home directory (the script expands it; the server never sees a `~`).
-export function expandHome(p: string, env: Env = process.env): string
+export function expandHome(inputPath: string, env: Env = process.env): string
 {
-    if (p === '~') return homeDir(env);
-    if (/^~[\\/]/.test(p)) return path.join(homeDir(env), p.slice(2));
-    return p;
+    if (inputPath === '~') return homeDir(env);
+    if (/^~[\\/]/.test(inputPath)) return path.join(homeDir(env), inputPath.slice(2));
+    return inputPath;
 }
 
 // A JSON file as a state, never a throw: ok | missing | empty | malformed (| unreadable).
@@ -63,9 +63,9 @@ export function projectEntry(projects: Record<string, AccountProject>, project: 
     if (platform !== 'win32') return projects[projectKey(project)] || projects[path.resolve(project)];
     let real: string | null = null;
     try { real = fs.realpathSync.native(project); } catch { /* a folder not on disk has no real path */ }
-    const want = [path.win32.resolve(project), real].filter((p): p is string => Boolean(p)).map((p) => p.replace(/\\/g, '/'));
-    const key = want.find((w) => Object.hasOwn(projects, w))
-        ?? Object.keys(projects).find((k) => want.some((w) => w.toLowerCase() === k.toLowerCase()));
+    const want = [path.win32.resolve(project), real].filter((folder): folder is string => Boolean(folder)).map((folder) => folder.replace(/\\/g, '/'));
+    const key = want.find((candidate) => Object.hasOwn(projects, candidate))
+        ?? Object.keys(projects).find((k) => want.some((candidate) => candidate.toLowerCase() === k.toLowerCase()));
     return key === undefined ? undefined : projects[key];
 }
 
@@ -75,11 +75,11 @@ export function projectEntry(projects: Record<string, AccountProject>, project: 
 export function readAccount(env: Env, project: string, platform: string = process.platform): Account
 {
     const file = accountFile(env);
-    const s = readState<AccountFile>(file);
-    const doc: AccountFile = s.doc || {};
+    const state = readState<AccountFile>(file);
+    const doc: AccountFile = state.doc || {};
     const projects = doc.projects && typeof doc.projects === 'object' ? doc.projects : {};
     const mine = projectEntry(projects, localRoot(project), platform) || {};
-    return { ...s, user: doc.mcpServers || {}, local: mine.mcpServers || {}, projects };
+    return { ...state, user: doc.mcpServers || {}, local: mine.mcpServers || {}, projects };
 }
 
 // What the CLI wrote for one server at one scope, read from the file it wrote it to.
@@ -87,10 +87,10 @@ export function readRegistration(name: string, scope: string, project: string, e
 {
     if (scope === 'project')
     {
-        const s = readState<AccountProject>(path.join(project, '.mcp.json'));
-        return s.doc && s.doc.mcpServers ? s.doc.mcpServers[name] : undefined;
+        const state = readState<AccountProject>(path.join(project, '.mcp.json'));
+        return state.doc && state.doc.mcpServers ? state.doc.mcpServers[name] : undefined;
     }
-    const a = readAccount(env, project);
-    return (scope === 'user' ? a.user : a.local)[name];
+    const account = readAccount(env, project);
+    return (scope === 'user' ? account.user : account.local)[name];
 }
 

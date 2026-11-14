@@ -16,7 +16,7 @@ export function main(argv: string[]): number
     const log = (...a: string[]) => console.log(a.join('\n'));
     const report = apply(plan, { tmp: flag('--tmp'), data: flag('--data') || null, log });
     // the last script on <tmp> removes it: this one, unless fetch.js takes it on
-    if (!report.fetchFile) tmpdir.release(report.tmp, log);
+    if (!report.fetchFile) tmpdir.releaseTempDir(report.tmp, log);
     return report.failed ? 1 : 0;
 }
 

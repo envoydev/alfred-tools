@@ -22,44 +22,44 @@ export async function refresh(tools: ToolsFile, { registry, now = Date.now() }: 
     const next = JSON.parse(JSON.stringify(tools)) as ToolsFile;
     const out: Refresh = { next, changes: [], held: [], errors: [] };
     const cache = new Map<string, Promise<{ v: Release[]; e?: undefined } | { e: Error; v?: undefined }>>();
-    const versions = (reg: string, name: string) =>
+    const versions = (registryName: string, name: string) =>
     {
-        const key = `${reg}:${name}`;
-        if (!cache.has(key)) cache.set(key, registry.versionsOf(reg, name).then((v) => ({ v }), (e: Error) => ({ e })));
+        const key = `${registryName}:${name}`;
+        if (!cache.has(key)) cache.set(key, registry.versionsOf(registryName, name).then((releases) => ({ v: releases }), (error: Error) => ({ e: error })));
         return cache.get(key)!;
     };
     for (const row of next.tools)
         for (const [routeId, route] of Object.entries(row.routes || {}))
         {
-            const pkg = route.package;
-            if (!pkg) continue;
-            const got = await versions(pkg.registry, pkg.name);
+            const packageSpec = route.package;
+            if (!packageSpec) continue;
+            const lookup = await versions(packageSpec.registry, packageSpec.name);
             const at = `${row.id}/${routeId}`;
-            if (got.e) { out.errors.push(`${at}: ${pkg.registry} lookup for ${pkg.name} failed - ${got.e.message}`); continue; }
-            const pick = registryLib.choose(got.v!, { registry: pkg.registry, now, current: pkg.version });
-            if (pick.held.length) out.held.push(`${at}: ${registryLib.heldLine(pkg.name, pick.held)}`);
+            if (lookup.e) { out.errors.push(`${at}: ${packageSpec.registry} lookup for ${packageSpec.name} failed - ${lookup.e.message}`); continue; }
+            const pick = registryLib.choose(lookup.v!, { registry: packageSpec.registry, now, current: packageSpec.version });
+            if (pick.held.length) out.held.push(`${at}: ${registryLib.heldLine(packageSpec.name, pick.held)}`);
             if (!pick.offer) continue;
-            out.changes.push({ row: row.id, route: routeId, package: pkg.name, from: pkg.version, to: pick.offer.version, ageDays: pick.offer.ageDays });
-            pkg.version = pick.offer.version;
-            pkg.cutoff = registryLib.cutoffOf(now);
+            out.changes.push({ row: row.id, route: routeId, package: packageSpec.name, from: packageSpec.version, to: pick.offer.version, ageDays: pick.offer.ageDays });
+            packageSpec.version = pick.offer.version;
+            packageSpec.cutoff = registryLib.cutoffOf(now);
         }
     return out;
 }
 
 export const serialize = (tools: ToolsFile): string => `${JSON.stringify(tools, null, 2)}\n`;
 
-export function render(out: Refresh, { write }: { write: boolean }): string
+export function renderPins(out: Refresh, { write }: { write: boolean }): string
 {
     const lines: string[] = [];
     if (out.changes.length)
     {
         lines.push(write ? 'Moved:' : 'Would move:');
-        const w = Math.max(...out.changes.map((c) => `${c.row}/${c.route}`.length));
-        for (const c of out.changes) lines.push(`  ${`${c.row}/${c.route}`.padEnd(w)}  ${c.package} ${c.from} -> ${c.to}  (${c.ageDays} days old)`);
+        const width = Math.max(...out.changes.map((change) => `${change.row}/${change.route}`.length));
+        for (const change of out.changes) lines.push(`  ${`${change.row}/${change.route}`.padEnd(width)}  ${change.package} ${change.from} -> ${change.to}  (${change.ageDays} days old)`);
     }
     else lines.push('refresh-pins: every pin is at the newest release that is at least 7 days old');
     for (const [title, list] of [['Held back', out.held], ['Could not check', out.errors]] as const)
-        if (list.length) lines.push(`${title}:`, ...list.map((l) => `  ${l}`));
+        if (list.length) lines.push(`${title}:`, ...list.map((line) => `  ${line}`));
     if (out.changes.length && write)
         lines.push('', 'Next: a moved pin is a release.',
             '  1. Read each package\'s release notes for a changed flag, tool name or default; re-verify the row against the vendor docs and record it in docs/sources.md.',
@@ -69,15 +69,15 @@ export function render(out: Refresh, { write }: { write: boolean }): string
     return lines.join('\n');
 }
 
-export async function main(argv: string[], { out = (s: string) => { process.stdout.write(`${s}\n`); }, registry, now, file = FILE, env = process.env }: { out?: (s: string) => void; registry?: RegistryReader; now?: number; file?: string; env?: Env } = {}): Promise<number>
+export async function runRefreshPinsCommand(argv: string[], { out = (text: string) => { process.stdout.write(`${text}\n`); }, registry, now, file = FILE, env = process.env }: { out?: (text: string) => void; registry?: RegistryReader; now?: number; file?: string; env?: Env } = {}): Promise<number>
 {
-    const unknown = argv.filter((a) => a !== '--write');
+    const unknown = argv.filter((argument) => argument !== '--write');
     if (unknown.length) { out(`refresh-pins: unknown argument '${unknown[0]}'\nusage: node scripts/refresh-pins.ts [--write]`); return 2; }
     const write = argv.includes('--write');
     const tools = JSON.parse(fs.readFileSync(file, 'utf8')) as ToolsFile;
-    const result = await refresh(tools, { registry: registry || { versionsOf: (reg: string, name: string) => registryLib.versionsOf(reg, name, { env }) }, now });
+    const result = await refresh(tools, { registry: registry || { versionsOf: (registryName: string, name: string) => registryLib.versionsOf(registryName, name, { env }) }, now });
     if (write && result.changes.length) fs.writeFileSync(file, serialize(result.next));
-    out(render(result, { write }));
+    out(renderPins(result, { write }));
     return result.errors.length ? 1 : 0;
 }
 

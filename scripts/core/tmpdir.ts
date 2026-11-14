@@ -16,7 +16,7 @@ const MAX_AGE_MS = 24 * 3600 * 1000;
 const tempRoot = (): string => fs.realpathSync(os.tmpdir());
 
 // true for a folder this plugin made: its real parent is the real temp folder and its name starts preferred-tools-
-export function ours(dir: string): boolean
+export function isOurTempDir(dir: string): boolean
 {
     try
     {
@@ -27,34 +27,34 @@ export function ours(dir: string): boolean
 }
 
 // -> true when removed. A folder that is not ours is left, with a line saying so.
-export function release(dir: string | null | undefined, log: (line: string) => void = console.log): boolean
+export function releaseTempDir(dir: string | null | undefined, log: (line: string) => void = console.log): boolean
 {
     if (!dir) return false;
-    if (!ours(dir)) { log(`${dir} left as it is: not a folder preferred-tools made in the temp folder`); return false; }
+    if (!isOurTempDir(dir)) { log(`${dir} left as it is: not a folder preferred-tools made in the temp folder`); return false; }
     fs.rmSync(fs.realpathSync(dir), { recursive: true, force: true });
     return true;
 }
 
 // this plugin's folders older than 24 hours; a folder another user owns, or one that is not a folder, is skipped
-export function sweep(now: number = Date.now()): void
+export function sweepTempDirs(now: number = Date.now()): void
 {
     const root = tempRoot();
     for (const name of fs.readdirSync(root))
     {
         if (!name.startsWith(PREFIX)) continue;
-        const p = path.join(root, name);
+        const folder = path.join(root, name);
         try
         {
-            const st = fs.lstatSync(p);
-            if (st.isDirectory() && now - st.mtimeMs > MAX_AGE_MS) fs.rmSync(p, { recursive: true, force: true });
+            const stats = fs.lstatSync(folder);
+            if (stats.isDirectory() && now - stats.mtimeMs > MAX_AGE_MS) fs.rmSync(folder, { recursive: true, force: true });
         }
         catch { /* not ours to remove */ }
     }
 }
 
-export function make(): string
+export function makeTempDir(): string
 {
-    try { sweep(); } catch { /* a temp folder that cannot be listed still makes a new one */ }
+    try { sweepTempDirs(); } catch { /* a temp folder that cannot be listed still makes a new one */ }
     return fs.mkdtempSync(path.join(tempRoot(), PREFIX));
 }
 

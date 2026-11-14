@@ -25,43 +25,43 @@ const FILE_KEY_EXTRA = /(?:^|[._-])pass(?:phrase)?$|(?:^|[._-])(?:client|private
 const CAMEL_PASS = /[a-z0-9](?:Pass(?:phrase)?|PWD|Pwd)$/;
 export const credKey = (k: string): boolean => SECRET_KEY_RE.test(k) || FILE_KEY_EXTRA.test(k) || CAMEL_PASS.test(k);
 const SHAPE = /\b(?:sntryu_[0-9a-f]{16,}|ctx7sk-[0-9a-f-]{16,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/g;
-const PEM = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----|$)/g;
+const PRIVATE_KEY_BLOCK = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----|$)/g;
 const PAIR = /((?:^|[;,])\s*(?:password|pwd)\s*=\s*)([^;,]*)/gi;
 const USERINFO = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]*:)([^@\s/]+)(?=@)/gi;
 const PLACEHOLDERS = /^\s*(?:[A-Za-z][\w-]*\s+)?(?:\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\})+\s*$/;
 
-const live = (s: unknown): boolean => typeof s === 'string' && s.trim() !== '' && !PLACEHOLDERS.test(s);
-const maskParts = (s: string): string => s.replace(PEM, MARKER).replace(SHAPE, MARKER)
+const live = (value: unknown): boolean => typeof value === 'string' && value.trim() !== '' && !PLACEHOLDERS.test(value);
+const maskParts = (text: string): string => text.replace(PRIVATE_KEY_BLOCK, MARKER).replace(SHAPE, MARKER)
     .replace(PAIR, (all: string, head: string, value: string) => (live(value) ? head + MARKER : all))
     .replace(USERINFO, (all: string, head: string, value: string) => (live(value) ? head + MARKER : all));
-const keepString = (s: string, whole: boolean): string => (!live(s) ? s : whole ? MARKER : maskParts(s));
+const keepString = (text: string, whole: boolean): string => (!live(text) ? text : whole ? MARKER : maskParts(text));
 // `--api-key` -> 'api-key'; a bare value or a lone dash -> null
-const flagName = (a: unknown): string | null => (typeof a === 'string' && /^--?[A-Za-z]/.test(a) ? a.replace(/^--?/, '').split('=')[0]! : null);
+const flagName = (argument: unknown): string | null => (typeof argument === 'string' && /^--?[A-Za-z]/.test(argument) ? argument.replace(/^--?/, '').split('=')[0]! : null);
 
 function locationKeys(row: RowOf): { env: Set<string>; arg: Set<string> }
 {
     const derived = (row && row.locations && row.locations.derived) || [];
-    return { env: new Set(derived.filter((d) => d.in === 'env').map((d) => d.key)), arg: new Set(derived.filter((d) => d.in === 'arg').map((d) => d.key)) };
+    return { env: new Set(derived.filter((derivedLocation) => derivedLocation.in === 'env').map((derivedLocation) => derivedLocation.key)), arg: new Set(derived.filter((derivedLocation) => derivedLocation.in === 'arg').map((derivedLocation) => derivedLocation.key)) };
 }
 
 // an argument list: a value after a credential flag is masked whole, one after a location flag never
 function keepArgs(args: unknown[], whole: boolean, locArgs: Set<string> = new Set()): unknown[]
 {
-    return args.map((a, i) =>
+    return args.map((argument, i) =>
     {
-        if (typeof a !== 'string') return keepNode(a, '', whole);
+        if (typeof argument !== 'string') return keepNode(argument, '', whole);
         const prev = i > 0 ? args[i - 1] : null;
-        if (locArgs.has(prev as string)) return a;
-        const eq = a.indexOf('=');
-        if (flagName(a) && eq > 0)
+        if (locArgs.has(prev as string)) return argument;
+        const equalsIndex = argument.indexOf('=');
+        if (flagName(argument) && equalsIndex > 0)
         {
-            const flag = a.slice(0, eq);
-            if (locArgs.has(flag)) return a;
-            const value = a.slice(eq + 1);
+            const flag = argument.slice(0, equalsIndex);
+            if (locArgs.has(flag)) return argument;
+            const value = argument.slice(equalsIndex + 1);
             return `${flag}=${keepString(value, whole || credKey(flagName(flag)!))}`;
         }
-        if (flagName(a)) return a;
-        return keepString(a, whole || Boolean(flagName(prev) && !(prev as string).includes('=') && credKey(flagName(prev)!)));
+        if (flagName(argument)) return argument;
+        return keepString(argument, whole || Boolean(flagName(prev) && !(prev as string).includes('=') && credKey(flagName(prev)!)));
     });
 }
 
@@ -71,7 +71,7 @@ function keepNode(node: unknown, key: string, whole: boolean): unknown
     if (Array.isArray(node)) return keepArgs(node, whole || credKey(key));
     if (!node || typeof node !== 'object') return node;
     const below = whole || credKey(key);
-    return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, keepNode(v, k, below)]));
+    return Object.fromEntries(Object.entries(node).map(([k, value]) => [k, keepNode(value, k, below)]));
 }
 
 // keep(entry, row) -> a copy with every credential value as MARKER. `row` is the catalog row the registration matched,
@@ -79,19 +79,19 @@ function keepNode(node: unknown, key: string, whole: boolean): unknown
 export function keep<Entry>(entry: Entry, row?: RowOf): Entry
 {
     if (!entry || typeof entry !== 'object') return entry;
-    const loc = locationKeys(row);
+    const locations = locationKeys(row);
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(entry))
+    for (const [k, value] of Object.entries(entry))
     {
-        if (k === 'args' && Array.isArray(v)) out['args'] = keepArgs(v, false, loc.arg);
-        else if (k === 'headers' && v && typeof v === 'object' && !Array.isArray(v)) out['headers'] = Object.fromEntries(Object.entries(v).map(([h, x]) => [h, keepNode(x, h, true)]));
-        else if (k === 'env' && v && typeof v === 'object' && !Array.isArray(v)) out['env'] = Object.fromEntries(Object.entries(v).map(([e, x]) => [e, loc.env.has(e) ? x : keepNode(x, e, false)]));
-        else out[k] = keepNode(v, k, false);
+        if (k === 'args' && Array.isArray(value)) out['args'] = keepArgs(value, false, locations.arg);
+        else if (k === 'headers' && value && typeof value === 'object' && !Array.isArray(value)) out['headers'] = Object.fromEntries(Object.entries(value).map(([headerName, headerValue]) => [headerName, keepNode(headerValue, headerName, true)]));
+        else if (k === 'env' && value && typeof value === 'object' && !Array.isArray(value)) out['env'] = Object.fromEntries(Object.entries(value).map(([variableName, variableValue]) => [variableName, locations.env.has(variableName) ? variableValue : keepNode(variableValue, variableName, false)]));
+        else out[k] = keepNode(value, k, false);
     }
     return out as Entry;
 }
 
-const at = (node: unknown, path: Path): unknown => path.reduce<unknown>((o, k) => (o == null ? undefined : (o as Record<string | number, unknown>)[k]), node);
+const at = (node: unknown, path: Path): unknown => path.reduce<unknown>((current, k) => (current == null ? undefined : (current as Record<string | number, unknown>)[k]), node);
 
 // restore(entry, source, row) -> { entry } | { error }. Each string holding MARKER takes the string at the same place in
 // `source` (the registration as it is now) whose kept text equals it; an arg takes the first unused source arg whose
@@ -109,7 +109,7 @@ export function restore<Entry>(entry: Entry, source: ServerEntry | null | undefi
             if (!node.includes(MARKER)) return node;
             if (path.length === 2 && path[0] === 'args')
             {
-                const j = (kept.args || []).findIndex((x, i) => !used.has(i) && x === node);
+                const j = (kept.args || []).findIndex((keptArg, i) => !used.has(i) && keptArg === node);
                 if (j < 0) { error = error || `args[${path[1]}] holds a kept value the registration no longer has`; return node; }
                 used.add(j);
                 return sourceArgs[j];
@@ -117,9 +117,9 @@ export function restore<Entry>(entry: Entry, source: ServerEntry | null | undefi
             if (at(kept, path) !== node) { error = error || `${path.join('.')} holds a kept value the registration no longer has`; return node; }
             return at(source, path);
         }
-        if (Array.isArray(node)) return node.map((x, i) => walk(x, [...path, i]));
+        if (Array.isArray(node)) return node.map((item, i) => walk(item, [...path, i]));
         if (!node || typeof node !== 'object') return node;
-        return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, walk(v, [...path, k])]));
+        return Object.fromEntries(Object.entries(node).map(([k, value]) => [k, walk(value, [...path, k])]));
     };
     const out = walk(entry, []) as Entry;
     return error ? { error } : { entry: out };
@@ -143,5 +143,5 @@ export function credentialPaths(entry: unknown, row?: RowOf): string[]
 }
 
 // A value shaped like a known key (SHAPE) or a PEM block - tested in this process, never returned.
-export const looksLikeKey = (v: unknown): boolean => new RegExp(SHAPE.source).test(String(v)) || new RegExp(PEM.source).test(String(v));
+export const looksLikeKey = (value: unknown): boolean => new RegExp(SHAPE.source).test(String(value)) || new RegExp(PRIVATE_KEY_BLOCK.source).test(String(value));
 

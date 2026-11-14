@@ -27,7 +27,7 @@ const invOf = (extra: Partial<Inventory> = {}) => ({
     lists: { project: null, global: null }, roots: { map: { version: 1, global: null, projects: {} } }, ...extra,
 }) as Inventory;
 const regOf = (name: string, scope: string, entry: ServerEntry, rowId: string | null, route: string | null, extra: Partial<InvRegistration> = {}): InvRegistration => ({ name, scope, entry, rowId, route, own: !rowId, alfredRetired: false, choice: null, ...extra });
-const register = (w: World, name: string, entry: ServerEntry, scope: string) => assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
+const register = (w: World, name: string, entry: ServerEntry, scope: string) => assert.strictEqual(cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
 
 test('connector names match a hosted row by prefix', () => {
     assert.deepStrictEqual(X.HOSTED_ROWS, ['context7', 'github', 'gitlab', 'atlassian', 'sentry']);
@@ -135,7 +135,7 @@ test('own round-trips: a server left on its own is listed in its family root\'s 
         assert.strictEqual(apply(back, { env: w.env, tmp: path.join(w.dir, 'tmp2'), log: () => {}, data }).failed, null);
         assert.deepStrictEqual(readJson(path.join(groot, 'mcps.json')).own, [{ connector: 'Atlassian', choice: 'own' }]);
         // a launch that changed since is no longer on its own
-        assert.strictEqual(cli.run(['mcp', 'remove', 'github', '-s', 'user'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'remove', 'github', '-s', 'user'], { cwd: w.project, env: w.env }).status, 0);
         register(w, 'github', { command: 'docker', args: ['run', '-i', '--rm', 'ghcr.io/github/github-mcp-server'] }, 'user');
         inv = inventory.buildInventory({ project: w.project, env: w.env, data });
         assert.strictEqual(inv.registrations.find((x) => x.name === 'github')!.choice, null);

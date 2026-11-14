@@ -123,7 +123,7 @@ export const nextLines = (file: string, j: FetchJob): string[] => [
 ];
 
 // Each server's status line as `claude mcp get` prints it - a health check of up to 30 s each. -> [{ name, out }]
-export function status(names: string[], { cwd, env, runCli = cli.run, log = console.log }: { cwd: string; env: Env; runCli?: RunCli; log?: Log }): Status[]
+export function status(names: string[], { cwd, env, runCli = cli.runClaude, log = console.log }: { cwd: string; env: Env; runCli?: RunCli; log?: Log }): Status[]
 {
     if (names.length) log('', 'Status, from the CLI:');
     return names.map((name) =>
@@ -138,7 +138,7 @@ export function status(names: string[], { cwd, env, runCli = cli.run, log = cons
 }
 
 // -> Promise<{ fetched: [what], started: [name], skipped: [line], warnings: [detail], status: [{ name, out }] }>
-export async function run(j: FetchJob, { env = process.env, runFetch = realFetch, start = realStart, runCli = cli.run, log = console.log }: FetchOptions = {}): Promise<FetchRun>
+export async function run(j: FetchJob, { env = process.env, runFetch = realFetch, start = realStart, runCli = cli.runClaude, log = console.log }: FetchOptions = {}): Promise<FetchRun>
 {
     const res: FetchRun = { fetched: [], started: [], skipped: [], warnings: [], status: [] };
     const cwd = j.project;

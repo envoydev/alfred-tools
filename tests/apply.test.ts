@@ -355,7 +355,7 @@ test('the CLI form applies a written plan and exits 1 on a failure', () => {
 // ---- live values and the temp folder (no live credential in a file a command line names) -------------------------------
 
 const hex = (n: number) => crypto.randomBytes(n).toString('hex');
-const register = (w: World, name: string, entry: unknown, scope = 'local') => assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
+const register = (w: World, name: string, entry: unknown, scope = 'local') => assert.strictEqual(cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
 // the walk as the commands run it: the inventory as inventory.js writes it (every credential value kept), the plan from
 // it, then the apply, which puts the real values back from the registrations it reads
 function keptWalk(w: World, answers: Answers, { fail }: { fail?: string } = {})
@@ -380,7 +380,7 @@ test('a configure move and an in-place replace of an entry with live values writ
         // appium with a key the user added to its env; a location change rewrites it in place
         walk(w, { picks: { appium: { scope: 'user', location: { side: 'project' } } } });
         const appium = accountDoc(w).mcpServers['appium-mcp'];
-        cli.run(['mcp', 'remove', 'appium-mcp', '-s', 'user'], { cwd: w.project, env: w.env });
+        cli.runClaude(['mcp', 'remove', 'appium-mcp', '-s', 'user'], { cwd: w.project, env: w.env });
         register(w, 'appium-mcp', { ...appium, env: { ...appium.env, APPIUM_API_KEY: key } }, 'user');
         const r = keptWalk(w, { change: { 'mcp:sentry-live~local': { name: 'sentry-moved' }, 'mcp:appium-mcp~user': { location: { side: 'account' } } } });
         assert.deepStrictEqual(r.p.errors, []);
@@ -426,7 +426,7 @@ test('a registration changed since it was read is not written over', () => {
         const inv = inventory.keptOf(inventory.buildInventory({ project: w.project, env: w.env }));
         const p = plan(inv, { change: { 'mcp:context7~local': { token: true } } }, { home: w.home, env: w.env });
         // the key is taken out of the registration between the read and the apply
-        cli.run(['mcp', 'remove', 'context7', '-s', 'local'], { cwd: w.project, env: w.env });
+        cli.runClaude(['mcp', 'remove', 'context7', '-s', 'local'], { cwd: w.project, env: w.env });
         register(w, 'context7', { type: 'http', url: 'https://mcp.context7.com/mcp', headers: { 'X-API-Key': '${CONTEXT7_API_KEY}' } });
         const before = w.writes().length;
         const report = apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} });
@@ -1134,7 +1134,7 @@ test('the apply repeats the reconnect lines after the read-back, and names a ref
         const gets: string[] = [];
         const runCli = (argv: string[], o?: CliOptions) =>
         {
-            if (argv[0] !== 'mcp' || argv[1] !== 'get') return cli.run(argv, o);
+            if (argv[0] !== 'mcp' || argv[1] !== 'get') return cli.runClaude(argv, o);
             gets.push(argv[2]!);
             return { status: 0, stdout: `${argv[2]}:\n  Status: ✘ Failed to connect\n  ${ISSUE}\n`, stderr: '' } as CliResult;
         };

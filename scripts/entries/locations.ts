@@ -10,26 +10,26 @@ import type { DefaultRoot, Machine, Root } from './types.ts';
 // A root is logical until it is written: { kind: 'project', rel } (under the project), { kind: 'home', rel } (under the
 // account home) or { kind: 'abs', path }.
 
-export function parseRoot(text: string, _ctx?: unknown): Root
+export function parseRoot(text: string, _context?: unknown): Root
 {
-    const t = String(text).trim();
-    if (t === '~' || /^~[\\/]/.test(t)) return { kind: 'home', rel: slashes(t.slice(2)) };
-    if (/^\$\{(HOME|USERPROFILE)\}[\\/]/.test(t)) return { kind: 'home', rel: slashes(t.replace(/^\$\{[A-Z]+\}[\\/]/, '')) };
-    if (path.win32.isAbsolute(t) || path.posix.isAbsolute(t)) return { kind: 'abs', path: t };
-    return { kind: 'project', rel: slashes(t.replace(/^\.[\\/]/, '')) };
+    const trimmed = String(text).trim();
+    if (trimmed === '~' || /^~[\\/]/.test(trimmed)) return { kind: 'home', rel: slashes(trimmed.slice(2)) };
+    if (/^\$\{(HOME|USERPROFILE)\}[\\/]/.test(trimmed)) return { kind: 'home', rel: slashes(trimmed.replace(/^\$\{[A-Z]+\}[\\/]/, '')) };
+    if (path.win32.isAbsolute(trimmed) || path.posix.isAbsolute(trimmed)) return { kind: 'abs', path: trimmed };
+    return { kind: 'project', rel: slashes(trimmed.replace(/^\.[\\/]/, '')) };
 }
 
 // A written root read back as a logical one: an absolute path under the project or the account home becomes that side
 // again, so a move to project scope can write it relative.
-export function logicalRoot(text: string, ctx: Machine): Root
+export function logicalRoot(text: string, context: Machine): Root
 {
-    const root = parseRoot(text, ctx);
+    const root = parseRoot(text, context);
     if (root.kind !== 'abs') return root;
-    const P = pathFor(ctx.platform);
-    const rel = P.relative(ctx.project, root.path);
-    if (rel && !rel.startsWith('..') && !P.isAbsolute(rel)) return { kind: 'project', rel: slashes(rel) };
-    const homeRel = P.relative(ctx.home, root.path);
-    if (homeRel && !homeRel.startsWith('..') && !P.isAbsolute(homeRel)) return { kind: 'home', rel: slashes(homeRel) };
+    const pathApi = pathFor(context.platform);
+    const rel = pathApi.relative(context.project, root.path);
+    if (rel && !rel.startsWith('..') && !pathApi.isAbsolute(rel)) return { kind: 'project', rel: slashes(rel) };
+    const homeRel = pathApi.relative(context.home, root.path);
+    if (homeRel && !homeRel.startsWith('..') && !pathApi.isAbsolute(homeRel)) return { kind: 'home', rel: slashes(homeRel) };
     return root;
 }
 
@@ -41,12 +41,12 @@ export const homeVar = (platform: string): string => (platform === 'win32' ? '${
 export function expandVars(text: unknown, env: Env): { value: string; unset: string[] }
 {
     const unset: string[] = [];
-    const value = String(text).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (m: string, name: string, fallback: string | undefined) =>
+    const value = String(text).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (match: string, name: string, fallback: string | undefined) =>
     {
         if (typeof env[name] === 'string') return env[name]!;
         if (fallback !== undefined) return fallback;
         unset.push(name);
-        return m;
+        return match;
     });
     return { value, unset };
 }
@@ -54,34 +54,34 @@ export function expandVars(text: unknown, env: Env): { value: string; unset: str
 // The string written into the registration: an absolute path at every scope, project scope included (the user's ruling,
 // 2026-11-11: the .mcp.json names this machine's paths), with `~` expanded here, never left for the server. `scope` is
 // kept for the callers that pass it.
-export function formatRoot(root: Root, _scope: string, ctx: Machine): { value: string }
+export function formatRoot(root: Root, _scope: string, context: Machine): { value: string }
 {
-    const P = pathFor(ctx.platform);
-    if (root.kind === 'abs') return { value: P.normalize(root.path) };
-    if (root.kind === 'home') return { value: P.join(ctx.home, ...root.rel.split('/')) };
-    return { value: P.resolve(ctx.project, ...root.rel.split('/')) };
+    const pathApi = pathFor(context.platform);
+    if (root.kind === 'abs') return { value: pathApi.normalize(root.path) };
+    if (root.kind === 'home') return { value: pathApi.join(context.home, ...root.rel.split('/')) };
+    return { value: pathApi.resolve(context.project, ...root.rel.split('/')) };
 }
 
 // root + sub, in the written form: joined with the OS's separator at every scope
-export function withSub(rootStr: string, sub: string, _scope: string, ctx: Machine): string
+export function withSub(rootStr: string, sub: string, _scope: string, context: Machine): string
 {
     if (!sub) return rootStr;
-    return pathFor(ctx.platform).join(rootStr, sub);
+    return pathFor(context.platform).join(rootStr, sub);
 }
 
 // serena on Windows: SERENA_HOME absolute, in backslashes and space-free (fix row serena-windows-home).
-export function serenaWindowsHome(ctx: Pick<Machine, 'home'>): DefaultRoot
+export function serenaWindowsHome(context: Pick<Machine, 'home'>): DefaultRoot
 {
-    const profile = ctx.home || '';
+    const profile = context.home || '';
     if (profile && !/\s/.test(profile)) return { root: { kind: 'abs', path: path.win32.join(profile, '.serena') } };
     return { needsInput: `the profile path ${profile || '(unknown)'} has a space, and serena's home must be space-free on Windows: type an absolute folder without spaces (for example C:\\serena-home)` };
 }
 
 // A profile path with a space leaves serena no home under it: the space-free folder offered and taken by default in its
 // place, on the system drive.
-export function serenaSpaceFree(ctx: Pick<Machine, 'env'>): Root
+export function serenaSpaceFree(context: Pick<Machine, 'env'>): Root
 {
-    const drive = (ctx.env && ctx.env.SystemDrive) || '';
+    const drive = (context.env && context.env.SystemDrive) || '';
     return { kind: 'abs', path: `${/^[A-Za-z]:$/.test(drive) ? drive : 'C:'}\\serena-home` };
 }
 
@@ -93,24 +93,24 @@ export function validWindowsSerenaHome(rootStr: string): boolean
 // The default root for a row (before the user's answer), as a logical root: the project folder (memory: the account
 // folder), never alfred-code's - the plugin stands alone. alfred-code data already on disk comes back as `alfred`, an
 // answer of its own. serena on Windows overrides both.
-export function defaultRoot(row: CatalogRow, name: string, ctx: Machine): DefaultRoot
+export function defaultRoot(row: CatalogRow, name: string, context: Machine): DefaultRoot
 {
-    const loc = row.locations!;
-    if (loc.windowsAbsolute && ctx.platform === 'win32') return serenaWindowsHome(ctx);
-    const out: { root: Root; alfred?: Root } = { root: otherPlace(row, name, loc.defaultSide, ctx) };
-    const old = alfredRoot(row, ctx);
+    const locations = row.locations!;
+    if (locations.windowsAbsolute && context.platform === 'win32') return serenaWindowsHome(context);
+    const out: { root: Root; alfred?: Root } = { root: otherPlace(row, name, locations.defaultSide, context) };
+    const old = alfredRoot(row, context);
     if (old) out.alfred = old;
     return out;
 }
 
 // The row's alfred-code data folder when it is on disk (its old root from original-mcps.json), else null.
-export function alfredRoot(row: CatalogRow, ctx: Machine): Root | null
+export function alfredRoot(row: CatalogRow, context: Machine): Root | null
 {
     if (!row.locations || !row.locations.alfred) return null;
-    const exists = ctx.exists || ((p: string) => fs.existsSync(p));
-    const old = parseRoot(row.locations.alfred, ctx);
-    const abs = old.kind === 'home' ? pathFor(ctx.platform).join(ctx.home, ...old.rel.split('/')) : pathFor(ctx.platform).resolve(ctx.project, ...(old as { rel: string }).rel.split('/'));
-    return exists(abs) ? old : null;
+    const exists = context.exists || ((filePath: string) => fs.existsSync(filePath));
+    const old = parseRoot(row.locations.alfred, context);
+    const absolutePath = old.kind === 'home' ? pathFor(context.platform).join(context.home, ...old.rel.split('/')) : pathFor(context.platform).resolve(context.project, ...(old as { rel: string }).rel.split('/'));
+    return exists(absolutePath) ? old : null;
 }
 
 // ---- alfred-code's folder -------------------------------------------------------------------------------------------
@@ -128,89 +128,89 @@ export function machinePath(value: unknown): boolean
     return /^(\/|~|\\\\)/.test(value) || /^[A-Za-z]:[\\/]/.test(value);
 }
 
-export function alfredData(ctx: Machine, enabled: unknown): boolean
+export function alfredData(context: Machine, enabled: unknown): boolean
 {
     if (!enabled) return false;
-    const exists = ctx.exists || ((p: string) => fs.existsSync(p));
-    return Boolean(exists(pathFor(ctx.platform).join(ctx.project, '.alfred', '.gitignore')));
+    const exists = context.exists || ((filePath: string) => fs.existsSync(filePath));
+    return Boolean(exists(pathFor(context.platform).join(context.project, '.alfred', '.gitignore')));
 }
 
 // Why .alfred/<name> cannot hold this tool's data, or null.
-export function alfredNameProblem(name: string, ctx: Machine): string | null
+export function alfredNameProblem(name: string, context: Machine): string | null
 {
     // macOS and Windows file systems ignore case: '.alfred/Docs' is alfred-code's docs folder there
     if (ALFRED_ENTRIES.includes(String(name).toLowerCase())) return `'${name}' is one of alfred-code's own entries under .alfred (${ALFRED_ENTRIES.join(', ')}) - pick another name or folder`;
-    const at = pathFor(ctx.platform).join(ctx.project, '.alfred', name);
-    const exists = ctx.exists || ((p: string) => fs.existsSync(p));
+    const at = pathFor(context.platform).join(context.project, '.alfred', name);
+    const exists = context.exists || ((filePath: string) => fs.existsSync(filePath));
     if (!exists(at)) return null;
     // a path that cannot be read is not reported as a file
-    const isDir = ctx.isDir || ((p: string) => { try { return fs.statSync(p).isDirectory(); } catch { return true; } });
+    const isDir = context.isDir || ((filePath: string) => { try { return fs.statSync(filePath).isDirectory(); } catch { return true; } });
     return isDir(at) ? null : `.alfred/${name} exists and is not a folder - pick another name or folder`;
 }
 
 // The root of a scope family (spec D2): ctx.roots when the plan or the questions resolved them, else the recommended
 // ones without alfred-code - <project>/.preferred-tools and <home>/.preferred-tools.
-export function rootOf(family: string, ctx: Machine): string
+export function rootOf(family: string, context: Machine): string
 {
-    const P = pathFor(ctx.platform);
-    const set = ctx.roots && ctx.roots[family as 'project' | 'global'];
+    const pathApi = pathFor(context.platform);
+    const set = context.roots && context.roots[family as 'project' | 'global'];
     if (set) return set;
-    return family === 'global' ? P.join(ctx.home, '.preferred-tools') : P.join(ctx.project, '.preferred-tools');
+    return family === 'global' ? pathApi.join(context.home, '.preferred-tools') : pathApi.join(context.project, '.preferred-tools');
 }
 
 // The location side recommended for a row at a scope (spec D2, F6): the data folder sits in the root of the scope's
 // family - 'project' (the project root) at project and local scope, 'account' (the global root) at global scope. serena
 // on Windows needs an absolute, space-free home: a root with a space gives 'default' (the profile's .serena, else a
 // space-free folder).
-export function recommendedSide(row: CatalogRow, scope: string, ctx: Machine): string
+export function recommendedSide(row: CatalogRow, scope: string, context: Machine): string
 {
     const side = scope === 'user' ? 'account' : 'project';
-    if (row.locations!.windowsAbsolute && ctx.platform === 'win32') return validWindowsSerenaHome(rootOf(side === 'account' ? 'global' : 'project', ctx)) ? side : 'default';
+    if (row.locations!.windowsAbsolute && context.platform === 'win32') return validWindowsSerenaHome(rootOf(side === 'account' ? 'global' : 'project', context)) ? side : 'default';
     return side;
 }
 
 // A tool's folder in a root, as a logical root: 'account' - the global root's, else the project root's (spec D2).
-export function otherPlace(_row: CatalogRow, name: string, side: string, ctx: Machine | null = null): Root
+export function otherPlace(_row: CatalogRow, name: string, side: string, context: Machine | null = null): Root
 {
-    if (ctx && ctx.platform && (ctx.roots || ctx.project)) return logicalRoot(pathFor(ctx.platform).join(rootOf(side === 'account' ? 'global' : 'project', ctx), name), ctx);
+    if (context && context.platform && (context.roots || context.project)) return logicalRoot(pathFor(context.platform).join(rootOf(side === 'account' ? 'global' : 'project', context), name), context);
     return side === 'account' ? { kind: 'home', rel: `.preferred-tools/${name}` } : { kind: 'project', rel: `.preferred-tools/${name}` };
 }
 
 // The other place from 'Locations': the account folder for a project default, the project folder for memory.
-export const otherSide = (row: CatalogRow, name: string, ctx: Machine | null = null): Root => otherPlace(row, name, row.locations!.defaultSide === 'account' ? 'project' : 'account', ctx);
+export const otherSide = (row: CatalogRow, name: string, context: Machine | null = null): Root => otherPlace(row, name, row.locations!.defaultSide === 'account' ? 'project' : 'account', context);
 
 // The root an installed entry carries, in written form, from the row's first derived key.
 export function rootOfEntry(row: CatalogRow, entry: ServerEntry): string | null
 {
-    const d = row.locations!.derived[0]!;
+    const derivedLocation = row.locations!.derived[0]!;
     let value: string | undefined;
-    if (d.in === 'env') value = (entry.env || {})[d.key];
+    if (derivedLocation.in === 'env') value = (entry.env || {})[derivedLocation.key];
     else
     {
         const args = entry.args || [];
-        const i = args.indexOf(d.key);
+        const i = args.indexOf(derivedLocation.key);
         value = i >= 0 ? args[i + 1] : undefined;
     }
     if (typeof value !== 'string') return null;
-    if (!d.sub) return value;
+    if (!derivedLocation.sub) return value;
     const cut = value.replace(/[\\/]+$/, '');
-    const tail = cut.slice(-d.sub.length);
-    return tail === d.sub ? cut.slice(0, -d.sub.length).replace(/[\\/]+$/, '') : value;
+    const tail = cut.slice(-derivedLocation.sub.length);
+    return tail === derivedLocation.sub ? cut.slice(0, -derivedLocation.sub.length).replace(/[\\/]+$/, '') : value;
 }
 
 // Write the location root into an entry (fresh build or an edit of an installed one): every derived key.
-export function applyRoot(entry: ServerEntry, row: CatalogRow, rootStr: string, scope: string, ctx: Machine): ServerEntry
+export function applyRoot(entry: ServerEntry, row: CatalogRow, rootStr: string, scope: string, context: Machine): ServerEntry
 {
     const out: ServerEntry = { ...entry, env: { ...(entry.env || {}) } };
     if (entry.args) out.args = [...entry.args];
-    for (const d of row.locations!.derived)
+    for (const derivedLocation of row.locations!.derived)
     {
-        const value = withSub(rootStr, d.sub, scope, ctx);
-        if (d.in === 'env') out.env![d.key] = value;
+        const value = withSub(rootStr, derivedLocation.sub, scope, context);
+        if (derivedLocation.in === 'env') out.env![derivedLocation.key] = value;
         else
         {
-            const i = out.args!.indexOf(d.key);
-            if (i >= 0) out.args![i + 1] = value; else out.args!.push(d.key, value);
+            const i = out.args!.indexOf(derivedLocation.key);
+            if (i >= 0) out.args![i + 1] = value; else out.args!.push(derivedLocation.key, value);
         }
     }
     if (!Object.keys(out.env!).length) delete out.env;

@@ -1801,7 +1801,7 @@ test('plan.js --questions with --connectors prints no existing block, reads no l
     const w = world();
     try
     {
-        assert.strictEqual(cli.run(['mcp', 'add-json', 'github', JSON.stringify({ type: 'http', url: 'https://api.githubcopilot.com/mcp/' }), '-s', 'user'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'github', JSON.stringify({ type: 'http', url: 'https://api.githubcopilot.com/mcp/' }), '-s', 'user'], { cwd: w.project, env: w.env }).status, 0);
         const invFile = path.join(w.dir, 'inv.json');
         fs.writeFileSync(invFile, JSON.stringify(inventoryLib.keptOf(inventoryLib.buildInventory({ project: w.project, env: w.env }))));
         const run = (...extra: string[]) => spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'plan.ts'), '--questions', invFile, ...extra], { encoding: 'utf8', env: w.env, cwd: w.project });
@@ -2039,7 +2039,7 @@ test('change the root: the old data and the old key file stay, the new key file 
         const v = `v-${Date.now()}-not-printed`;
         const install = plan(inventoryLib.buildInventory({ project: w.project, env: w.env, data }), pickOne('playwright-chrome', { scope: 'local' }), { home: w.home, env: w.env });
         assert.strictEqual(apply(install, { env: w.env, tmp: path.join(w.dir, 'tmp1'), data, log: () => {} }).failed, null);
-        const add = (name: string, scope: string, entry: ServerEntry) => assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
+        const add = (name: string, scope: string, entry: ServerEntry) => assert.strictEqual(cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
         add('github', 'local', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${path.join(old, 'mcp-headers.js')} ${G} Bearer` });
         add('context7', 'local', { command: 'npx', args: ['-y', '@upstash/context7-mcp@2.0.0'] });
         mcpsAt(old, [`${G}=${v}`]);
@@ -2136,7 +2136,7 @@ test('the 0.1.x key files are read for names only: a held key is never matched a
         const v = `v-${Date.now()}-not-printed`;
         const entry = installed('sentry', { route: 'local', scope: 'local' }).entry;
         entry.env = { ...entry.env, SENTRY_ACCESS_TOKEN: v };
-        assert.strictEqual(cli.run(['mcp', 'add-json', 'sentry', JSON.stringify(entry), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'sentry', JSON.stringify(entry), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         // the project's 0.1.x key file holds the same value under a name of the user's own
         const old = keys.oldFiles(w.project, w.home).find((f) => f.startsWith(path.join(w.project, '.preferred-tools')));
         fs.mkdirSync(path.dirname(old!), { recursive: true });
@@ -2166,7 +2166,7 @@ test('configure: a 0.1.x project-scope github Docker registration keeps Project 
         try
         {
             const v = `v-${Date.now()}-not-printed`;
-            assert.strictEqual(cli.run(['mcp', 'add-json', 'github', JSON.stringify(docker), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
+            assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'github', JSON.stringify(docker), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
             mcpsAt(path.join(w.project, '.preferred-tools'), [filled ? `${G}=${v}` : `${G}=`]);
             const i = inventoryLib.buildInventory({ project: w.project, env: w.env });
             const ctx = fix.makeCtx({ inv: i, env: w.env, machine: { exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1 }) } as unknown as MachineProbe });

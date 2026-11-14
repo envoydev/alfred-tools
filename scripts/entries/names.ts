@@ -11,7 +11,7 @@ export function nameProblem(name: string, { catalog, taken = [], self = null }: 
 {
     if (!new RegExp(catalog.rules.nameRe).test(name)) return `'${name}' must match ${catalog.rules.nameRe}`;
     if (catalog.reserved.has(name)) return `'${name}' is a name alfred-code once registered and may retire`;
-    const other = taken.find((r) => r.name === name && !(self && r.name === self.name && r.scope === self.scope));
+    const other = taken.find((registration) => registration.name === name && !(self && registration.name === self.name && registration.scope === self.scope));
     if (other) return `'${name}' already belongs to another registration at ${other.scope} scope`;
     return null;
 }
@@ -37,8 +37,8 @@ function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: str
     if (bridge)
     {
         if (!bridge.pkg) return null;
-        const npm = ['npm', 'exec', '--yes', '--package', bridge.pkg, '--', 'node', '-e', '0'];
-        const argv = /^[A-Za-z]:/.test(bridge.path) ? ['cmd', '/c', ...npm] : npm;
+        const npmArgv = ['npm', 'exec', '--yes', '--package', bridge.pkg, '--', 'node', '-e', '0'];
+        const argv = /^[A-Za-z]:/.test(bridge.path) ? ['cmd', '/c', ...npmArgv] : npmArgv;
         return { op: 'fetch', name, row: rowId, what: bridge.pkg, argv, env: entry.env || {}, why: `${rowId || name}: fetch ${bridge.pkg} so the first start answers in time` };
     }
     let cmd: string | undefined = entry.command;
@@ -49,7 +49,7 @@ function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: str
     let what: string | undefined;
     if (/^npx(\.cmd)?$/i.test(cmd || ''))
     {
-        what = args.find((a) => !a.startsWith('-'));
+        what = args.find((argument) => !argument.startsWith('-'));
         if (!what) return null;
         // `-e 0`, not `-e ''`: on Windows the fetch goes through cmd.exe, where an empty argument is dropped
         argv = ['npm', 'exec', '--yes', '--package', what, '--', 'node', '-e', '0'];
@@ -69,7 +69,7 @@ function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: str
     }
     else if (/^docker(\.exe)?$/i.test(cmd || ''))
     {
-        what = args.find((a) => /^[a-z0-9.-]+(\/[a-z0-9._-]+)+:[\w.-]+$/.test(a));
+        what = args.find((argument) => /^[a-z0-9.-]+(\/[a-z0-9._-]+)+:[\w.-]+$/.test(argument));
         if (!what) return null;
         argv = ['docker', 'pull', what];
     }

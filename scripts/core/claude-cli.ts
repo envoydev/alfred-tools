@@ -10,10 +10,10 @@ export function argvQuote(arg: string): string
 {
     let out = '"';
     let slashes = 0;
-    for (const ch of String(arg))
+    for (const character of String(arg))
     {
-        if (ch === '\\') { slashes++; continue; }
-        out += ch === '"' ? `${'\\'.repeat(slashes * 2 + 1)}"` : `${'\\'.repeat(slashes)}${ch}`;
+        if (character === '\\') { slashes++; continue; }
+        out += character === '"' ? `${'\\'.repeat(slashes * 2 + 1)}"` : `${'\\'.repeat(slashes)}${character}`;
         slashes = 0;
     }
     return `${out}${'\\'.repeat(slashes * 2)}"`;
@@ -24,16 +24,16 @@ export function argvQuote(arg: string): string
 const META = /([()\][%!^"`<>&|;, *?])/g;
 export const cmdArg = (arg: string): string => argvQuote(arg).replace(META, '^$1').replace(META, '^$1');
 
-export function run(args: string[], { cwd, env, input, timeout = 120000 }: CliOptions = {}): CliResult
+export function runClaude(args: string[], { cwd, env, input, timeout = 120000 }: CliOptions = {}): CliResult
 {
-    const opts = { encoding: 'utf8' as const, cwd, env: env || process.env, input, timeout, windowsHide: true, maxBuffer: 64 * 1024 * 1024 };
-    let r = spawnSync('claude', args, opts);
+    const options = { encoding: 'utf8' as const, cwd, env: env || process.env, input, timeout, windowsHide: true, maxBuffer: 64 * 1024 * 1024 };
+    let result = spawnSync('claude', args, options);
     // npm's claude.cmd cannot be spawned directly on Windows (ENOENT or EINVAL): go through cmd.exe with quoted arguments.
-    const code = r.error && (r.error as NodeJS.ErrnoException).code;
-    if (process.platform === 'win32' && r.error && (code === 'ENOENT' || code === 'EINVAL'))
-        r = spawnSync(['claude', ...args.map(cmdArg)].join(' '), { ...opts, shell: true });
-    return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '', error: r.error || null, signal: r.signal };
+    const code = result.error && (result.error as NodeJS.ErrnoException).code;
+    if (process.platform === 'win32' && result.error && (code === 'ENOENT' || code === 'EINVAL'))
+        result = spawnSync(['claude', ...args.map(cmdArg)].join(' '), { ...options, shell: true });
+    return { status: result.status, stdout: result.stdout || '', stderr: result.stderr || '', error: result.error || null, signal: result.signal };
 }
 
-export const available = (opts?: CliOptions): string | null => { const r = run(['--version'], opts); return !r.error && r.status === 0 ? r.stdout.trim() : null; };
+export const available = (options?: CliOptions): string | null => { const result = runClaude(['--version'], options); return !result.error && result.status === 0 ? result.stdout.trim() : null; };
 

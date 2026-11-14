@@ -36,7 +36,7 @@ test('Windows: every argument reaches a .cmd shim through cmd.exe as written', {
         fs.writeFileSync(path.join(dir, 'claude.cmd'), `@"${process.execPath}" "%~dp0\\echo.js" %*\r\n`);
         // only the shim's folder and System32: a real claude.exe further down PATH would be spawned directly instead
         const env = { ...process.env, PATH: [dir, path.join(process.env.SystemRoot || 'C:\\Windows', 'System32')].join(';') };
-        const r = cli.run(NASTY, { env });
+        const r = cli.runClaude(NASTY, { env });
         assert.strictEqual(r.status, 0, r.stderr);
         assert.deepStrictEqual(JSON.parse(r.stdout), NASTY);
     }

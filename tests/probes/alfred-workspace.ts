@@ -161,7 +161,7 @@ export function buildAlfred(S: string, { alfredDir, version, claude, platform = 
     const exported = exportTo(src, alfred);
     if (exported) return { notRun: `${version}: ${exported}` };
 
-    const real = (args: string[]) => cli.run(args, { cwd: h.home, env: h.env });
+    const real = (args: string[]) => cli.runClaude(args, { cwd: h.home, env: h.env });
     const add = real(['plugin', 'marketplace', 'add', alfred]);
     if (add.status !== 0) return { notRun: `${version}: claude plugin marketplace add failed: ${tail(add.stderr || add.stdout)}` };
     const listed = () => { try { return JSON.parse(real(['plugin', 'list', '--json']).stdout || '[]'); } catch { return []; } };

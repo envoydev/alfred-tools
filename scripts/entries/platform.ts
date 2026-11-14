@@ -4,7 +4,7 @@ import type { Env } from '../core/types.ts';
 import type { CatalogRoute, CatalogRules } from '../catalog/types.ts';
 
 export const pathFor = (platform: string): path.PlatformPath => (platform === 'win32' ? path.win32 : path.posix);
-export const slashes = (p: string): string => p.replace(/\\/g, '/');
+export const slashes = (pathText: string): string => pathText.replace(/\\/g, '/');
 
 // An x64 node emulated on ARM reports arch x64 and PROCESSOR_ARCHITECTURE AMD64, so the machine-wide
 // PROCESSOR_IDENTIFIER ('ARMv8 (64-bit) Family 8 ...') is what still tells the truth there (alfred-code uv-python.js).
@@ -17,9 +17,9 @@ export function isWindowsArm({ platform, arch, env = {} }: { platform: string; a
 }
 
 // The `--python` request: the row's minor, or on Windows ARM64 the x64 build of that minor (every wheel exists there).
-export function pythonRequest(route: CatalogRoute, ctx: { platform: string; arch?: string | undefined; env?: Env | undefined }, rules: CatalogRules): string
+export function pythonRequest(route: CatalogRoute, context: { platform: string; arch?: string | undefined; env?: Env | undefined }, rules: CatalogRules): string
 {
-    if (!isWindowsArm(ctx)) return route.python!;
+    if (!isWindowsArm(context)) return route.python!;
     return rules.windowsArmPython.replace('{minor}', route.python!);
 }
 

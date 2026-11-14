@@ -182,7 +182,7 @@ function driftSkip(f: Finding, picked: Finding[], input: Record<string, string>)
 // servers of one row would both match) - update applies one at a time; `fetchFile: false` writes no fetch file and
 // returns the launches to fetch as `fetch`, for update to hand on in its own (apply.js). `gone`: nothing picked is found
 // any more - an earlier step did it.
-export function applyFixes(ctx: FixCtx, ids: string[], { only, name, scope, input = {}, tmp, log = console.log, runCli = cli.run, fetchFile }: FixOptions = {}): FixRun
+export function applyFixes(ctx: FixCtx, ids: string[], { only, name, scope, input = {}, tmp, log = console.log, runCli = cli.runClaude, fetchFile }: FixOptions = {}): FixRun
 {
     const res: FixRun = { applied: [], skipped: [], failed: null, remaining: [], steps: 0, fetchFile: null, fetch: null, gone: false, tmp: tmp || null };
     const known = new Set(ctx.catalog.fixes.map((f) => f.id));

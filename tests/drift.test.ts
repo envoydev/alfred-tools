@@ -45,8 +45,8 @@ const copyOf = (file: string, name: string) => readJson(file).mcpServers[name];
 const localReg = (w: World, name: string) => inventory.buildInventory({ project: w.project, env: w.env }).registrations.find((r) => r.name === name && r.scope === 'local')!;
 function reAdd(w: World, name: string, entry: ServerEntry, scope = 'local')
 {
-    cli.run(['mcp', 'remove', name, '-s', scope], { cwd: w.project, env: w.env });
-    assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
+    cli.runClaude(['mcp', 'remove', name, '-s', scope], { cwd: w.project, env: w.env });
+    assert.strictEqual(cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
 }
 // a Cursor copy as the tests edit it
 type Copy = { args: string[]; env: Record<string, string> & { SENTRY_ACCESS_TOKEN?: string; MINE?: string }; headers: Record<string, string> };
@@ -257,7 +257,7 @@ test('Apply all found applies list-import and serena-base-modes and leaves every
     {
         install(w, { picks: { serena: { scope: 'local' } } });
         // a managed server not on the list yet, serena's base modes set, and serena edited in Cursor
-        assert.strictEqual(cli.run(['mcp', 'add-json', 'memory', JSON.stringify({ command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: path.join(w.project, '.preferred-tools', 'memory', 'memory.db') } }), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'memory', JSON.stringify({ command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: path.join(w.project, '.preferred-tools', 'memory', 'memory.db') } }), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         const home = localReg(w, 'serena').entry.env!.SERENA_HOME!;
         fs.mkdirSync(home, { recursive: true });
         fs.writeFileSync(path.join(home, 'serena_config.yml'), 'base_modes:\n  - interactive\n  - editing\n');

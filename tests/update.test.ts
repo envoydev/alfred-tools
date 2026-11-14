@@ -139,8 +139,8 @@ test('an offer: serena is behind, the table shows current -> offered, apply rewr
         const before = inventory.buildInventory({ project: w.project, env: w.env }).registrations.find((r) => r.name === 'serena')!;
         // the user's own addition, which an update must keep
         const mine = { ...before.entry, args: [...before.entry.args!, '--my-flag'] };
-        cli.run(['mcp', 'remove', 'serena', '-s', 'local'], { cwd: w.project, env: w.env });
-        cli.run(['mcp', 'add-json', 'serena', JSON.stringify(mine), '-s', 'local'], { cwd: w.project, env: w.env });
+        cli.runClaude(['mcp', 'remove', 'serena', '-s', 'local'], { cwd: w.project, env: w.env });
+        cli.runClaude(['mcp', 'add-json', 'serena', JSON.stringify(mine), '-s', 'local'], { cwd: w.project, env: w.env });
 
         const reg = fakeRegistry(pypiSerena(['2.1.0', 60], ['2.2.0', 20]));
         const setupWrites = w.writes().length;
@@ -202,7 +202,7 @@ test('a remote route, a docker tag and the user\'s own server are skipped or lef
     try
     {
         install(w, { picks: { context7: { route: 'remote', scope: 'project' }, serena: { scope: 'local' } } });
-        cli.run(['mcp', 'add-json', 'my-own', JSON.stringify({ command: 'npx', args: ['-y', 'some-pkg@1.0.0'] }), '-s', 'user'], { cwd: w.project, env: w.env });
+        cli.runClaude(['mcp', 'add-json', 'my-own', JSON.stringify({ command: 'npx', args: ['-y', 'some-pkg@1.0.0'] }), '-s', 'user'], { cwd: w.project, env: w.env });
         const c = await run(w, ['--check', '--no-refresh'], { registry: fakeRegistry({ 'npm:some-pkg': [{ version: '2.0.0', time: ago(90) }] }) });
         assert.match(c.text, /context7 \(project\): a hosted URL has no pin/);
         assert.match(c.text, /Could not check:\n\s+serena \(local\): pypi lookup for serena-agent failed - no such package/);
@@ -453,8 +453,8 @@ test('update --apply keeps <tmp> while a fetch file is handed on, and apply() ca
         // a live token in the sentry registration, as a user may have written it there
         const token = `sntryu_${crypto.randomBytes(16).toString('hex')}`;
         const before = inventory.buildInventory({ project: w.project, env: w.env }).registrations.find((r) => r.rowId === 'sentry')!;
-        cli.run(['mcp', 'remove', before.name, '-s', 'local'], { cwd: w.project, env: w.env });
-        cli.run(['mcp', 'add-json', before.name, JSON.stringify({ ...before.entry, env: { ...before.entry.env, SENTRY_ACCESS_TOKEN: token } }), '-s', 'local'], { cwd: w.project, env: w.env });
+        cli.runClaude(['mcp', 'remove', before.name, '-s', 'local'], { cwd: w.project, env: w.env });
+        cli.runClaude(['mcp', 'add-json', before.name, JSON.stringify({ ...before.entry, env: { ...before.entry.env, SENTRY_ACCESS_TOKEN: token } }), '-s', 'local'], { cwd: w.project, env: w.env });
         const reg = fakeRegistry({ ...pypiSerena(['2.1.0', 60], ['2.2.0', 20]), 'npm:@sentry/mcp-server': [{ version: '0.42.0', time: ago(60) }, { version: '0.43.0', time: ago(20) }] });
 
         const dir = t.made();
@@ -489,7 +489,7 @@ test('update: a pinned server on its own is skipped, not offered', async () =>
     const w = world();
     try
     {
-        assert.strictEqual(cli.run(['mcp', 'add-json', 'context7', JSON.stringify(C7_PINNED), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'context7', JSON.stringify(C7_PINNED), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         assert.match((await run(w, ['--check', '--no-refresh'], { registry: C7_AHEAD() })).text, /2\.0\.0 -> 9\.0\.0/, 'managed: offered');
         ownRecord(path.join(w.project, '.preferred-tools'));
         const c = await run(w, ['--check', '--no-refresh'], { registry: C7_AHEAD() });
@@ -507,7 +507,7 @@ test('fix and update take --data after their read-only flag', async () =>
     const w = world();
     try
     {
-        assert.strictEqual(cli.run(['mcp', 'add-json', 'context7', JSON.stringify(C7_PINNED), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'context7', JSON.stringify(C7_PINNED), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         const data = path.join(w.dir, 'data');
         const named = path.join(w.project, 'tools');
         ownRecord(named);
@@ -536,8 +536,8 @@ test('update offers and rewrites a lower-numbered helper copy; leaves a higher o
         const helperAt = (root: string, n: number) => { fs.mkdirSync(root, { recursive: true }); fs.writeFileSync(path.join(root, 'mcp-headers.js'), roots.helperSource().replace(/^\/\/ preferred-tools mcp-headers \d+/, `// preferred-tools mcp-headers ${n}`)); };
         const lower = path.join(pt, 'mcp-headers.js');
         const higher = path.join(home, 'mcp-headers.js');
-        assert.strictEqual(cli.run(['mcp', 'add-json', 'github', JSON.stringify({ type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${lower} GITHUB_PERSONAL_ACCESS_TOKEN Bearer` }), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
-        assert.strictEqual(cli.run(['mcp', 'add-json', 'sentry', JSON.stringify({ type: 'http', url: 'https://mcp.sentry.dev/mcp', headersHelper: `node ${higher} SENTRY_ACCESS_TOKEN Sentry-Bearer` }), '-s', 'user'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'github', JSON.stringify({ type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${lower} GITHUB_PERSONAL_ACCESS_TOKEN Bearer` }), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'sentry', JSON.stringify({ type: 'http', url: 'https://mcp.sentry.dev/mcp', headersHelper: `node ${higher} SENTRY_ACCESS_TOKEN Sentry-Bearer` }), '-s', 'user'], { cwd: w.project, env: w.env }).status, 0);
         helperAt(pt, 0);
         helperAt(home, HV + 1);
         const c = await run(w, ['--check', '--no-refresh']);
@@ -571,7 +571,7 @@ test('update offers a lower mcp-bridge.js for rewriting beside the helper', asyn
         fs.writeFileSync(path.join(pt, 'mcp-headers.js'), roots.helperSource());
         const bridgeFile = path.join(pt, 'mcp-bridge.js');
         fs.writeFileSync(bridgeFile, roots.shippedSource('bridge').replace(/^\/\/ preferred-tools mcp-bridge \d+/, '// preferred-tools mcp-bridge 0'));
-        assert.strictEqual(cli.run(['mcp', 'add-json', 'sentry', JSON.stringify(bridgeEntry(pt)), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'sentry', JSON.stringify(bridgeEntry(pt)), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         const c = await run(w, ['--check', '--no-refresh'], { registry: fakeRegistry({ 'npm:mcp-remote': [{ version: '0.16.0', time: ago(20) }] }) });
         assert.strictEqual(c.code, 0, c.text);
         assert.match(c.text, new RegExp(`mcp-bridge\\.js in .*\\.preferred-tools +0 -> ${BV}`));
@@ -589,7 +589,7 @@ test("update moves a bridge's mcp-remote pin and its cut-off", async () => {
     {
         const pt = path.join(w.project, '.preferred-tools');
         const e = bridgeEntry(pt);
-        assert.strictEqual(cli.run(['mcp', 'add-json', 'sentry', JSON.stringify(e), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'sentry', JSON.stringify(e), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         const reg = fakeRegistry({ 'npm:mcp-remote': [{ version: '0.16.0', time: ago(25) }, { version: '0.16.4', time: ago(8) }] });
         const inv = inventory.buildInventory({ project: w.project, env: w.env });
         const ctx = makeCtx({ inv, project: w.project, env: w.env, machine: noLsp, registry: reg, now: NOW, refresh: false });
@@ -623,10 +623,10 @@ test('update offers the new ways to pass data that fix knows - a 0.1.x key heade
         const pt = path.join(w.project, '.preferred-tools');
         for (const root of [pt, path.join(w.home, '.preferred-tools')]) { fs.mkdirSync(root, { recursive: true }); fs.writeFileSync(path.join(root, '.mcps-secrets'), `ACME_GH=${v}\n`); }
         const gh = { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headers: { Authorization: 'Bearer ${ACME_GH}' } };
-        for (const scope of ['local', 'user']) assert.strictEqual(cli.run(['mcp', 'add-json', 'github', JSON.stringify(gh), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
+        for (const scope of ['local', 'user']) assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'github', JSON.stringify(gh), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
         // 0.2.0's shape: a project-scope data path relative to the project
         const memory = { command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: '.preferred-tools/memory/memory.db' } };
-        assert.strictEqual(cli.run(['mcp', 'add-json', 'memory', JSON.stringify(memory), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'memory', JSON.stringify(memory), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
         const registry = fakeRegistry({ 'pypi:mcp-memory-service': [{ version: '12.1.1', time: ago(40) }, { version: '12.5.0', time: ago(20) }] });
         // already on the list (0.5.0), so list-import has nothing to offer here
         listed(pt, [['github', 'local', gh], ['memory', 'project', memory]]);
@@ -680,7 +680,7 @@ test('an upgrade that cannot apply on its own - a key not filled - is a note nam
     try
     {
         const gh = { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headers: { Authorization: 'Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}' } };
-        assert.strictEqual(cli.run(['mcp', 'add-json', 'github', JSON.stringify(gh), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'github', JSON.stringify(gh), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         listed(path.join(w.project, '.preferred-tools'), [['github', 'local', gh]]);
         const c = await run(w, ['--check', '--no-refresh']);
         assert.strictEqual(c.code, 0, c.text);
@@ -707,7 +707,7 @@ test("'All of them' on a 0.2.0 .mcp.json - relative paths, out of order, a pin b
     {
         // as 0.2.0 wrote it: playwright-chrome before memory, both relative
         for (const [name, entry] of [['playwright-chrome', PW('0.0.83')], ['memory', MEM()]] as [string, ServerEntry][])
-            assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
+            assert.strictEqual(cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
         const registry = fakeRegistry({ 'npm:@playwright/mcp': [{ version: '0.0.83', time: ago(60) }, { version: '0.0.90', time: ago(10) }], 'pypi:mcp-memory-service': [{ version: '12.1.1', time: ago(40) }] });
         const c = await run(w, ['--check', '--no-refresh'], { registry });
         assert.match(c.text, /\n {2}\S*\.mcp\.json +mcp-order: /, c.text);
@@ -740,7 +740,7 @@ test('an upgrade picked for one registration never rewrites another of the same 
     const w = world();
     try
     {
-        for (const name of ['memory', 'memory-work']) assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(MEM()), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
+        for (const name of ['memory', 'memory-work']) assert.strictEqual(cli.runClaude(['mcp', 'add-json', name, JSON.stringify(MEM()), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
         const registry = fakeRegistry({ 'pypi:mcp-memory-service': [{ version: '12.1.1', time: ago(40) }] });
         const a = await run(w, ['--apply', 'upgrade:project-relative-path:memory~project'], { registry });
         assert.strictEqual(a.code, 0, a.text);
@@ -760,7 +760,7 @@ test('one server pin-bumped at two scopes keeps a fetch step for each', async ()
     try
     {
         const m = { command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: path.join(w.home, 'mem.db') } };
-        for (const scope of ['user', 'local']) assert.strictEqual(cli.run(['mcp', 'add-json', 'memory', JSON.stringify(m), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
+        for (const scope of ['user', 'local']) assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'memory', JSON.stringify(m), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
         const registry = fakeRegistry({ 'pypi:mcp-memory-service': [{ version: '12.1.1', time: ago(40) }, { version: '12.5.0', time: ago(20) }] });
         const tmp = fs.mkdtempSync(path.join(w.dir, 'preferred-tools-'));
         const a = await run(w, ['--apply', 'all', '--tmp', tmp], { registry });
@@ -782,7 +782,7 @@ test('a 0.4.x own server is skipped before list-import: update all leaves it byt
     const w = world();
     try
     {
-        assert.strictEqual(cli.run(['mcp', 'add-json', 'context7', JSON.stringify(C7_PINNED), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'context7', JSON.stringify(C7_PINNED), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         ownRecord(path.join(w.project, '.preferred-tools'));
         const before = JSON.stringify((readAccount(w.env, w.project).local as ServerMap & { context7?: ServerEntry }).context7);
         const a = await run(w, ['--apply', 'all', '--no-refresh'], { registry: C7_AHEAD() });
@@ -878,7 +878,7 @@ test('update offers a lower serena-context.yml as context:<file> and rewrites it
         const file = path.join(pt, 'serena-context.yml');
         fs.writeFileSync(file, roots.shippedSource('serenaContext').replace(/^# preferred-tools serena-context \d+/, '# preferred-tools serena-context 0'));
         const S = { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20T23:59:59Z', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server', '--context', file, '--project-from-cwd'], env: { SERENA_USAGE_REPORTING: 'false', SERENA_HOME: path.join(pt, 'serena') } };
-        assert.strictEqual(cli.run(['mcp', 'add-json', 'serena', JSON.stringify(S), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'serena', JSON.stringify(S), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         const registry = fakeRegistry({ 'pypi:serena-agent': [{ version: '2.1.0', time: ago(30) }] });
         const c = await run(w, ['--check', '--no-refresh'], { registry });
         assert.strictEqual(c.code, 0, c.text);
@@ -899,8 +899,8 @@ const cursorCopy = (w: World, name: string, file = projectCursor(w)) => readJson
 const localReg = (w: World, name: string) => inventory.buildInventory({ project: w.project, env: w.env }).registrations.find((r) => r.name === name && r.scope === 'local')!;
 const reAdd = (w: World, name: string, entry: unknown) =>
 {
-    cli.run(['mcp', 'remove', name, '-s', 'local'], { cwd: w.project, env: w.env });
-    assert.strictEqual(cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+    cli.runClaude(['mcp', 'remove', name, '-s', 'local'], { cwd: w.project, env: w.env });
+    assert.strictEqual(cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
 };
 const serenaPin = (e: ServerEntry) => pinnedVersion(e, 'serena-agent');
 
@@ -1012,7 +1012,7 @@ test('update neither re-adds a missing copy nor rewrites a drifted Cursor copy',
     {
         install(w, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'local' }, memory: {}, 'playwright-chrome': {} } });
         // memory gone from Claude Code, playwright-chrome gone from Cursor, serena edited in Cursor
-        cli.run(['mcp', 'remove', 'memory', '-s', 'local'], { cwd: w.project, env: w.env });
+        cli.runClaude(['mcp', 'remove', 'memory', '-s', 'local'], { cwd: w.project, env: w.env });
         const doc = readJson(projectCursor(w));
         delete doc.mcpServers['playwright-chrome'];
         doc.mcpServers.serena.args.push('--extra');

@@ -18,9 +18,9 @@ const pypiBase = (env: Env): string => (env.PREFERRED_TOOLS_PYPI_URL || 'https:/
 
 async function getJson(url: string, fetchFn: FetchFn): Promise<unknown>
 {
-    const res = await fetchFn(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(30000) });
-    if (!res.ok) throw new Error(`${url} answered HTTP ${res.status}`);
-    return res.json();
+    const response = await fetchFn(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(30000) });
+    if (!response.ok) throw new Error(`${url} answered HTTP ${response.status}`);
+    return response.json();
 }
 
 // -> [{ version, time (ms) }]; a deprecated (npm) or fully yanked (PyPI) release is left out.
@@ -30,18 +30,18 @@ export async function versionsOf(registry: string, name: string, { env = process
     {
         const doc = await getJson(`${npmBase(env)}/${name.replace('/', '%2F')}`, fetchFn) as NpmDoc;
         return Object.keys(doc.versions || {})
-            .filter((v) => !(doc.versions![v] || {}).deprecated && doc.time && doc.time[v])
-            .map((v) => ({ version: v, time: Date.parse(doc.time![v]!) }));
+            .filter((version) => !(doc.versions![version] || {}).deprecated && doc.time && doc.time[version])
+            .map((version) => ({ version: version, time: Date.parse(doc.time![version]!) }));
     }
     if (registry === 'pypi')
     {
         const doc = await getJson(`${pypiBase(env)}/${name}/json`, fetchFn) as PypiDoc;
         const out: Release[] = [];
-        for (const [v, files] of Object.entries(doc.releases || {}))
+        for (const [version, files] of Object.entries(doc.releases || {}))
         {
-            const live = (files || []).filter((f) => !f.yanked);
+            const live = (files || []).filter((file) => !file.yanked);
             if (!live.length) continue;
-            out.push({ version: v, time: Math.min(...live.map((f) => Date.parse(f.upload_time_iso_8601 || f.upload_time))) });
+            out.push({ version: version, time: Math.min(...live.map((file) => Date.parse(file.upload_time_iso_8601 || file.upload_time))) });
         }
         return out;
     }
@@ -52,14 +52,14 @@ export async function versionsOf(registry: string, name: string, { env = process
 // `current` null means no pin to compare: every stable release counts as newer.
 export function choose(versions: Release[], { registry, now = Date.now(), days = AGE_DAYS, current = null }: { registry: string; now?: number; days?: number; current?: string | null }): Choice
 {
-    const stable = versions.filter((v) => STABLE[registry as keyof typeof STABLE].test(v.version) && Number.isFinite(v.time));
-    const newer = stable.filter((v) => current === null || compareVersions(v.version, current) === 1);
-    newer.sort((a, b) => compareVersions(b.version, a.version)!);
-    const age = (v: Release): number => Math.floor((now - v.time) / DAY);
-    const ok = newer.find((v) => now - v.time >= days * DAY);
+    const stable = versions.filter((release) => STABLE[registry as keyof typeof STABLE].test(release.version) && Number.isFinite(release.time));
+    const newer = stable.filter((release) => current === null || compareVersions(release.version, current) === 1);
+    newer.sort((first, second) => compareVersions(second.version, first.version)!);
+    const age = (release: Release): number => Math.floor((now - release.time) / DAY);
+    const ok = newer.find((release) => now - release.time >= days * DAY);
     return {
         offer: ok ? { version: ok.version, ageDays: age(ok) } : null,
-        held: newer.filter((v) => now - v.time < days * DAY && (!ok || compareVersions(v.version, ok.version) === 1)).map((v) => ({ version: v.version, ageDays: age(v) })),
+        held: newer.filter((release) => now - release.time < days * DAY && (!ok || compareVersions(release.version, ok.version) === 1)).map((release) => ({ version: release.version, ageDays: age(release) })),
     };
 }
 

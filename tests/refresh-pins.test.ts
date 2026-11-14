@@ -88,7 +88,7 @@ test('main: a dry run writes nothing, --write writes the moved catalog, and a fa
     try
     {
         const lines: string[] = [];
-        const run = (argv: string[], registry: RegistryReader = fakeRegistry(tools)) => refreshPins.main(argv, { file: c.file, out: (s) => lines.push(s), registry, now: NOW });
+        const run = (argv: string[], registry: RegistryReader = fakeRegistry(tools)) => refreshPins.runRefreshPinsCommand(argv, { file: c.file, out: (s) => lines.push(s), registry, now: NOW });
         assert.strictEqual(await run([]), 0);
         assert.strictEqual(fs.readFileSync(c.file, 'utf8'), fs.readFileSync(FILE, 'utf8'), 'a dry run writes nothing');
         assert.match(lines.join('\n'), /Would move:[\s\S]*Run again with --write/);

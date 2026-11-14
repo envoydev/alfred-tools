@@ -90,7 +90,7 @@ export function runStep(step: PlanStep, ctx: ApplyCtx): StepResult
 // halfway. The slow half - the fetch steps and the `claude mcp get` status, minutes on a first install - goes to
 // <tmp>/fetch.json (or `fetchFile`; false writes none, for a caller that collects several applies) for fetch.js, which
 // the command runs in the background.
-export function apply(plan: ApplyPlan, { env = process.env, tmp, runCli = cli.run, log = console.log, fetchFile, data = null }: ApplyOptions = {}): ApplyReport
+export function apply(plan: ApplyPlan, { env = process.env, tmp, runCli = cli.runClaude, log = console.log, fetchFile, data = null }: ApplyOptions = {}): ApplyReport
 {
     const project = plan.project;
     const report: ApplyReport = { applied: [], failed: null, notRun: [], readback: [], keys: [], noop: false, toFetch: [], fetch: null, fetchFile: null, tmp: tmp || null, appliedKeys: new Set(), cursorFiles: new Set(), lists: [] };

@@ -44,7 +44,7 @@ export function retiredPluginDetect(ctx: FixCtx): Finding[]
 export function retiredPluginFix(f: Finding, ctx: FixCtx): MachineFixResult
 {
     const command = `claude plugin uninstall ${f.name} --scope ${f.scope}`;
-    const r = cli.run(['plugin', 'uninstall', f.name, '--scope', f.scope!], { cwd: ctx.inv.project, env: ctx.env });
+    const r = cli.runClaude(['plugin', 'uninstall', f.name, '--scope', f.scope!], { cwd: ctx.inv.project, env: ctx.env });
     if (r.error || r.status !== 0) return { ok: false, detail: `${command} failed - ${String(`${r.stderr || ''}${r.stdout || ''}` || (r.error && r.error.message) || 'no output').trim().split('\n').slice(-1)[0]}` };
     const left = inventory.buildInventory({ project: ctx.inv.project, env: ctx.env, data: ctx.data }).plugins;
     if (left.some((p) => p.id === f.name && p.scope === f.scope)) return { ok: false, detail: `${f.name} is still listed at ${f.scope} after ${command}` };

@@ -19,15 +19,15 @@ export function reservedFrom(alfredDir: string): string[]
 {
     const read = (rel: string): AlfredFiles => JSON.parse(fs.readFileSync(path.join(alfredDir, rel), 'utf8')) as AlfredFiles;
     const retired = read('meta/retired-plugins.json').plugins;
-    const rows: RetiredRow[] = Array.isArray(retired) ? retired : Object.entries(retired).map(([id, v]) => ({ id, ...v }));
-    const ids = new Set(rows.map((r) => r.id || r.name));
-    const a = rows.filter((r) => r.retiredIn === '2.10.1').map((r) => (r.id || r.name)!);
-    const b = (read('meta/stack-manifest.json').retired.mcps || []).filter((n) => !ids.has(n));
+    const rows: RetiredRow[] = Array.isArray(retired) ? retired : Object.entries(retired).map(([id, retiredRow]) => ({ id, ...retiredRow }));
+    const ids = new Set(rows.map((row) => row.id || row.name));
+    const retiredIds = rows.filter((row) => row.retiredIn === '2.10.1').map((row) => (row.id || row.name)!);
+    const retiredMcpNames = (read('meta/stack-manifest.json').retired.mcps || []).filter((name) => !ids.has(name));
     const original = new Set(Object.keys(read('stack/mcp/original-mcps.json').mcpServers));
-    return [...new Set([...a, ...b])].filter((n) => !original.has(n)).sort();
+    return [...new Set([...retiredIds, ...retiredMcpNames])].filter((name) => !original.has(name)).sort();
 }
 
-export function main(argv: string[]): number
+export function runRefreshReservedCommand(argv: string[]): number
 {
     const at = argv.indexOf('--alfred');
     const alfred = path.resolve(at >= 0 ? argv[at + 1]! : path.join(import.meta.dirname, '..', '..', '..', 'alfred-code'));

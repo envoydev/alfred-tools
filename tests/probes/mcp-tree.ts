@@ -122,7 +122,7 @@ export function world(S: string, name: string, claudeDir?: string | null)
 export function call(d: TreeWorld, cwd: string, args: string[], timeout = 90000): Called
 {
     const log = path.join(d.logs, `${String(++d.seq).padStart(3, '0')}.log`);
-    const r = cli.run(args, { cwd, env: { ...d.env, PT_PROBE_LOG: log }, timeout });
+    const r = cli.runClaude(args, { cwd, env: { ...d.env, PT_PROBE_LOG: log }, timeout });
     sleep(300);
     let started: Called['started'] = [];
     try { started = fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)); }
@@ -371,7 +371,7 @@ function main(argv: string[])
             return 1;
         }
         for (const line of facts(r.res!)) print(`FACT ${line}`);
-        print(`claude ${(cli.run(['--version'], {}).stdout || '').trim()}, ${process.platform} ${process.arch}`);
+        print(`claude ${(cli.runClaude(['--version'], {}).stdout || '').trim()}, ${process.platform} ${process.arch}`);
         code = 0;
         return code;
     }

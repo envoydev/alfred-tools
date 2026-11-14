@@ -418,7 +418,7 @@ function seed(b: AlfredBuilt, folder: string, secrets: string[])
     };
     for (const [name, entry] of Object.entries(live))
     {
-        const a = cli.run(['mcp', 'add-json', name, JSON.stringify(entry), '-s', 'local'], { cwd: folder, env: b.env });
+        const a = cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', 'local'], { cwd: folder, env: b.env });
         if (a.status !== 0) problems.push(`add ${name}: ${(a.stderr || a.stdout).trim().slice(0, 200)}`);
     }
     return { leftOut, liveName: 'sentry-live', newName: 'sentry-moved', problems };

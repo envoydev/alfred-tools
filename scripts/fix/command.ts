@@ -56,7 +56,7 @@ export function main(argv: string[], { env = process.env, out = (s: string) => p
         const log = (...a: string[]) => out(a.join('\n'));
         const res = applyFixes(ctx, args.apply.split(',').filter(Boolean), { only: args.only, input: args.input, tmp: args.tmp, log });
         // the last script on <tmp> removes it, unless fetch.js takes it on
-        if (!res.fetchFile) tmpdir.release(res.tmp, log);
+        if (!res.fetchFile) tmpdir.releaseTempDir(res.tmp, log);
         return res.failed ? 1 : 0;
     }
     const detected = detectAll(ctx, { only: args.only });

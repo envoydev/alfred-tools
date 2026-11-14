@@ -38,7 +38,7 @@ import type { Offer, Registry, UpdateCheck, UpdateCtx } from './types.ts';
 
 // ---- check -----------------------------------------------------------------------------------------------------------
 
-export function makeCtx({ inv, project, catalog = catalogLib.load(), env = process.env, machine, runCli = cli.run, registry, now = Date.now(), refresh = true, data = null }: { inv: Inventory; project: string; catalog?: Catalog; env?: Env; machine?: MachineProbe | undefined; runCli?: RunCli; registry?: Registry | undefined; now?: number | undefined; refresh?: boolean; data?: string | null }): UpdateCtx
+export function makeCtx({ inv, project, catalog = catalogLib.load(), env = process.env, machine, runCli = cli.runClaude, registry, now = Date.now(), refresh = true, data = null }: { inv: Inventory; project: string; catalog?: Catalog; env?: Env; machine?: MachineProbe | undefined; runCli?: RunCli; registry?: Registry | undefined; now?: number | undefined; refresh?: boolean; data?: string | null }): UpdateCtx
 {
     return {
         inv, project, catalog, env, runCli, now, refresh, data,
