@@ -11,8 +11,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 
-const BRIDGE = path.join(__dirname, '..', 'scripts', 'mcp-bridge.js');
-const HELPER = path.join(__dirname, '..', 'scripts', 'mcp-headers.js');
+const BRIDGE = path.join(__dirname, '..', 'scripts', 'copied', 'mcp-bridge.js');
+const HELPER = path.join(__dirname, '..', 'scripts', 'copied', 'mcp-headers.js');
 const RUNTIME = path.join(__dirname, 'fake-runtime.ts');
 const T = 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}';
 const LOCAL = 'http://127.0.0.1:9/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}';

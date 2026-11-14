@@ -273,8 +273,8 @@ with, while the key sat in a file (the user's Windows workspace, 2026-11-10).
   `~/.preferred-tools/.mcps-secrets`, then `~/.alfred/.mcps-secrets`; a stdio route's by the apply (local: the project
   root, then the global root; global: the global root). The 0.1.x files (alfred-code's store, `.preferred-tools/.secrets`,
   `~/.preferred-tools/.secrets`) are read for names only, so a line can say where a key still sits.
-- **D4 - The header helper, `mcp-headers.js`.** `scripts/mcp-headers.js`, Node built-ins only, first line
-  `// preferred-tools mcp-headers <n>`, its SHA-256 pinned per number in `tests/lint.js`. `write-helper` copies it into
+- **D4 - The header helper, `mcp-headers.js`.** `scripts/copied/mcp-headers.js`, Node built-ins only, first line
+  `// preferred-tools mcp-headers <n>`, its SHA-256 pinned per number in `tests/lint.ts`. `write-helper` copies it into
   the root when absent or lower; a higher number is never overwritten. A hosted keyed registration carries
   `headersHelper: node <path> <NAME> <SCHEME> [<global root>]` and no `Authorization` header - a path the shell would
   split is quoted (single quotes on macOS and Linux, double quotes in the committed `.mcp.json`, forward slashes on

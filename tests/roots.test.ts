@@ -215,7 +215,7 @@ test('shippedState reads the bridge like the helper: absent, lower, same, edited
         const file = path.join(dir, roots.FILES.bridge);
         assert.strictEqual(roots.FILES.bridge, 'mcp-bridge.js');
         const src = roots.shippedSource('bridge');
-        const { BRIDGE_VERSION } = require('../scripts/mcp-bridge.js');
+        const { BRIDGE_VERSION } = require('../scripts/copied/mcp-bridge.js');
         assert.deepStrictEqual(roots.shippedState('bridge', file), { state: 'absent', number: null });
         fs.writeFileSync(file, src.replace(/^\/\/ preferred-tools mcp-bridge \d+/, '// preferred-tools mcp-bridge 0'));
         assert.deepStrictEqual(roots.shippedState('bridge', file), { state: 'lower', number: 0 });

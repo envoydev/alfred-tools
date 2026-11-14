@@ -10,8 +10,8 @@ const { contextArgAt, bridgeParts } = require('../entries/entry.ts');
 function helperOffers(ctx, out)
 {
     const roots = require('../roots/roots.ts');
-    const { HELPER_VERSION } = require('../mcp-headers.js');
-    const { BRIDGE_VERSION } = require('../mcp-bridge.js');
+    const { HELPER_VERSION } = require('../copied/mcp-headers.js');
+    const { BRIDGE_VERSION } = require('../copied/mcp-bridge.js');
     const P = pathFor(ctx.inv.os);
     const rctx = { project: ctx.project, home: require('../core/account.ts').homeDir(ctx.env), platform: ctx.inv.os, catalog: ctx.catalog };
     const dirs = new Set(['project', 'global'].map((f) => ctx.inv.roots && ctx.inv.roots[f] && ctx.inv.roots[f].path).filter(Boolean));

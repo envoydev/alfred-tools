@@ -10,8 +10,8 @@ const { pathFor } = require('../entries/platform.ts');
 const { helperFor, contextArgAt, bridgeParts } = require('../entries/entry.ts');
 const keys = require('../keys/keys.ts');
 const roots = require('../roots/roots.ts');
-const { HELPER_VERSION } = require('../mcp-headers.js');
-const { BRIDGE_VERSION } = require('../mcp-bridge.js');
+const { HELPER_VERSION } = require('../copied/mcp-headers.js');
+const { BRIDGE_VERSION } = require('../copied/mcp-bridge.js');
 const C = require('./common.ts');
 
 // What roots.js needs to place a root, from a fix ctx.

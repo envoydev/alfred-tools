@@ -10,7 +10,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const keys = require('../scripts/keys/keys.ts');
 
-const SOURCE = path.join(__dirname, '..', 'scripts', 'mcp-headers.js');
+const SOURCE = path.join(__dirname, '..', 'scripts', 'copied', 'mcp-headers.js');
 const G = 'GITHUB_PERSONAL_ACCESS_TOKEN';
 const put = (file, text) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
 const sec = (dir) => path.join(dir, '.mcps-secrets');
@@ -124,7 +124,7 @@ test('stdout always parses as JSON', () => {
 });
 
 test('its chain equals keys.hostedChain for project, local and global scope', () => {
-    const helper = require('../scripts/mcp-headers.js');
+    const helper = require('../scripts/copied/mcp-headers.js');
     const h = path.join(path.sep, 'h');
     const p = path.join(path.sep, 'w', 'p', '.alfred');
     const k = path.join(path.sep, 'k');
@@ -179,7 +179,7 @@ test('a note after the value is not part of the key, in the helper and in keys.j
 });
 
 test('digestOf reads a CRLF copy as the same helper', () => {
-    const helper = require('../scripts/mcp-headers.js');
+    const helper = require('../scripts/copied/mcp-headers.js');
     const text = fs.readFileSync(SOURCE, 'utf8');
     assert.strictEqual(helper.digestOf(text.replace(/\n/g, '\r\n')), helper.digestOf(text));
     assert.strictEqual(helper.digestOf(Buffer.from(text)), helper.digestOf(text));

@@ -80,8 +80,8 @@ function ensureCommonjs(root)
 // A file this plugin copies into a root - <root>/mcp-headers.js (D4) or <root>/mcp-bridge.js (0.4.0): copied when absent
 // or its number is lower; a hand edit or a newer copy is left. package.json beside it either way.
 const SHIPPED = {
-    helper: { word: 'helper', version: () => require('../mcp-headers.js').HELPER_VERSION },
-    bridge: { word: 'bridge', version: () => require('../mcp-bridge.js').BRIDGE_VERSION },
+    helper: { word: 'helper', version: () => require('../copied/mcp-headers.js').HELPER_VERSION },
+    bridge: { word: 'bridge', version: () => require('../copied/mcp-bridge.js').BRIDGE_VERSION },
     // serena's context (D7): YAML, so no package.json beside it
     serenaContext: { word: 'context', version: () => roots.SERENA_CONTEXT_VERSION, plain: true },
 };

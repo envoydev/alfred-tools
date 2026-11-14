@@ -948,7 +948,7 @@ const localEntry = (w, name) => account.readAccount(w.env, w.project).local[name
 const ctxData = (w, data) => makeCtx({ inv: inventory.buildInventory({ project: w.project, env: w.env, data }), env: w.env, machine: noMachine(), data });
 const logged = () => { const lines = []; return { lines, log: (...a) => lines.push(a.join(' ')), text: () => lines.join('\n') }; };
 const gitInit = (dir) => { fsx.mkdirSync(dir, { recursive: true }); assert.strictEqual(spawnx('git', ['init', '-q', dir]).status, 0); };
-const HV = require('../scripts/mcp-headers.js').HELPER_VERSION;
+const HV = require('../scripts/copied/mcp-headers.js').HELPER_VERSION;
 const helperAt = (root, number, extra = '') => put(path.join(root, 'mcp-headers.js'), rootsLib.helperSource().replace(/^\/\/ preferred-tools mcp-headers \d+/, `// preferred-tools mcp-headers ${number}`) + extra);
 const shownOf = (d) => `${render(d)}${JSON.stringify(d)}`;
 
@@ -1500,7 +1500,7 @@ test('fix prints the reconnect line for each hosted keyed registration it rewrot
 
 // ---- the bridge (0.4.0): its file and the helper beside it, and its mcp-remote cache folder -------------------------
 
-const BV = require('../scripts/mcp-bridge.js').BRIDGE_VERSION;
+const BV = require('../scripts/copied/mcp-bridge.js').BRIDGE_VERSION;
 const BRIDGE = (root, pin = '0.16.0') => ({ command: 'node', args: [path.join(root, 'mcp-bridge.js'), 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}', SK, 'Sentry-Bearer', `mcp-remote@${pin}`], env: { npm_config_before: '2026-11-11T23:59:59Z' } });
 const bridgeAt = (root, number, extra = '') => put(path.join(root, 'mcp-bridge.js'), rootsLib.shippedSource('bridge').replace(/^\/\/ preferred-tools mcp-bridge \d+/, `// preferred-tools mcp-bridge ${number}`) + extra);
 

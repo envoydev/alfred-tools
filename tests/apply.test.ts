@@ -738,7 +738,7 @@ test('a replace or a move keeps the stdio key the registration holds when the ch
 });
 
 // ---- 0.2.0: the apply's file steps (spec D2-D4, D6, D8; plan R8, R13) -------------------------------------------------
-const HELPER_SRC = path.join(__dirname, '..', 'scripts', 'mcp-headers.js');
+const HELPER_SRC = path.join(__dirname, '..', 'scripts', 'copied', 'mcp-headers.js');
 const KEY_HEAD = '# preferred-tools MCP keys - fill in each value; this file is never committed';
 function runSteps(w, list, opts = {})
 {
@@ -759,7 +759,7 @@ test('write-helper: absent is written; a lower number is rewritten; the same num
         let r = runSteps(w, [step]);
         assert.strictEqual(r.report.failed, null, r.text);
         assert.strictEqual(fs.readFileSync(dest, 'utf8'), src);
-        const HV = require('../scripts/mcp-headers.js').HELPER_VERSION;
+        const HV = require('../scripts/copied/mcp-headers.js').HELPER_VERSION;
         assert.ok(r.text.includes(`wrote ${dest} (helper ${HV})`), r.text);
         fs.writeFileSync(dest, src.replace(/^\/\/ preferred-tools mcp-headers \d+/, '// preferred-tools mcp-headers 0'));
         r = runSteps(w, [step]);
@@ -1157,7 +1157,7 @@ test('the apply repeats the reconnect lines after the read-back, and names a ref
 
 // ---- the bridge file (0.4.0) ------------------------------------------------------------------------------------------
 
-const BRIDGE_SRC = path.join(__dirname, '..', 'scripts', 'mcp-bridge.js');
+const BRIDGE_SRC = path.join(__dirname, '..', 'scripts', 'copied', 'mcp-bridge.js');
 const { fetchStep } = require('../scripts/entries/names.ts');
 test('write-bridge writes, rewrites a lower copy, and leaves an edited or newer one', () => {
     const w = world();
@@ -1167,7 +1167,7 @@ test('write-bridge writes, rewrites a lower copy, and leaves an edited or newer 
         const root = path.join(w.project, '.preferred-tools');
         const dest = path.join(root, 'mcp-bridge.js');
         const step = { op: 'write-bridge', path: root };
-        const BV = require('../scripts/mcp-bridge.js').BRIDGE_VERSION;
+        const BV = require('../scripts/copied/mcp-bridge.js').BRIDGE_VERSION;
         let r = runSteps(w, [step]);
         assert.strictEqual(r.report.failed, null, r.text);
         assert.strictEqual(fs.readFileSync(dest, 'utf8'), src);
@@ -1449,7 +1449,7 @@ test('write-serena-context writes an absent and a lower file, keeps a higher or 
     const w = world();
     try
     {
-        const src = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'serena-context.yml'), 'utf8');
+        const src = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'copied', 'serena-context.yml'), 'utf8');
         const root = path.join(w.project, '.preferred-tools');
         const dest = path.join(root, 'serena-context.yml');
         const step = { op: 'write-serena-context', path: root };

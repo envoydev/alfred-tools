@@ -28,6 +28,7 @@ release-only.
   user's ruling, 2026-11-12). It was the model-invocable `update-tools` skill until the user's ruling (2026-10-27) made
   it a command; manual like the other three, so the plugin puts no description in every session.
   Since 0.5.0 it also offers Cursor once per root when Cursor is found, and once to uninstall the retired plugins.
+  The copied files live in `scripts/copied/`, which stays CommonJS: a root runs them outside the plugin, byte for byte.
 - **The catalog keeps only tools that work in Claude Code and Cursor** (the user's rulings 3, 5 and 6, 2026-11-12/13):
   claude-hud, typescript-lsp and csharp-lsp left it in 0.5.0, and a plugin row comes back only when it works in both.
 

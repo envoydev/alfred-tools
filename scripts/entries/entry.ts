@@ -4,7 +4,7 @@
 // Nothing here reads a machine: the OS, the arch, the home and the project come in through `ctx`.
 const path = require('node:path');
 const keys = require('../keys/keys.ts');
-const { templateNames } = require('../mcp-bridge.js');
+const { templateNames } = require('../copied/mcp-bridge.js');
 const { pathFor, pythonRequest } = require('./platform.ts');
 const { rootOfEntry, rootOf, applyRoot } = require('./locations.ts');
 const { signInParts } = require('./sign-in.ts');

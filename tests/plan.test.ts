@@ -2461,7 +2461,7 @@ test('a root with helper 3 and no bridge gets both rewritten for a bridge; a new
         fs.writeFileSync(path.join(b.proot, 'mcp-headers.js'), roots.helperSource().replace(/^\/\/ preferred-tools mcp-headers \d+/, '// preferred-tools mcp-headers 3'));
         const ops = (p) => p.steps.map((s) => s.op);
         assert.deepStrictEqual(ops(bridgePlan(b, { route: 'bridge', scope: 'project' })).filter((o) => o.startsWith('write-')), ['write-helper', 'write-bridge']);
-        const { BRIDGE_VERSION } = require('../scripts/mcp-bridge.js');
+        const { BRIDGE_VERSION } = require('../scripts/copied/mcp-bridge.js');
         fs.writeFileSync(path.join(b.proot, 'mcp-bridge.js'), roots.shippedSource('bridge').replace(/^\/\/ preferred-tools mcp-bridge \d+/, `// preferred-tools mcp-bridge ${BRIDGE_VERSION + 1}`));
         const p = bridgePlan(b, { route: 'bridge', scope: 'project' });
         assert.ok(!ops(p).includes('write-bridge'));

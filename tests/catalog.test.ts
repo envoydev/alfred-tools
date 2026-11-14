@@ -269,7 +269,7 @@ test('gitlab and atlassian take a key through the helper, with OAuth as the keyl
 test('memory keeps its data in the root of its scope', () => assert.strictEqual(cat.byId.get('memory').locations.defaultSide, 'project'));
 
 test('a bridge route: template names equal urlVars, a key helper, a pinned mcp-remote and a bridge fingerprint', () => {
-    const bridge = require('../scripts/mcp-bridge.js');
+    const bridge = require('../scripts/copied/mcp-bridge.js');
     const routes = cat.tools.filter((r) => r.kind === 'mcp').flatMap((r) => Object.entries(r.routes).filter(([, x]) => x.runtime === 'bridge').map(([id, x]) => [`${r.id}/${id}`, x]));
     assert.deepStrictEqual(routes.map(([at]) => at), ['sentry/bridge']);
     for (const [at, route] of routes)

@@ -12,7 +12,7 @@ const { spawnSync } = require('node:child_process');
 const account = require('../core/account.ts');
 const { rootOfEntry, alfredData } = require('../entries/locations.ts');
 const { helperParts, bridgeParts, helperNameOf } = require('../entries/entry.ts');
-const helper = require('../mcp-headers.js');
+const helper = require('../copied/mcp-headers.js');
 
 const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json', signIns: 'mcp-remote-v1', serenaContext: 'serena-context.yml' };
 // The read guard (0.5.0, ruling 13): two deny rules in Claude Code's settings that keep a session's Read tool out of
@@ -339,9 +339,9 @@ function ignoreGap(root, family, { writes = [] } = {})
 // The files this plugin copies into a root: the key helper (D4), the URL bridge (0.4.0) and serena's context (0.5.0,
 // D7). Each carries its version on its first line.
 const SHIPPED_LINE = { helper: /^\/\/ preferred-tools mcp-headers (\d+)\s*$/, bridge: /^\/\/ preferred-tools mcp-bridge (\d+)\s*$/, serenaContext: /^# preferred-tools serena-context (\d+)\s*$/ };
-const shippedVersion = (kind) => (kind === 'bridge' ? require('../mcp-bridge.js').BRIDGE_VERSION : kind === 'serenaContext' ? SERENA_CONTEXT_VERSION : helper.HELPER_VERSION);
+const shippedVersion = (kind) => (kind === 'bridge' ? require('../copied/mcp-bridge.js').BRIDGE_VERSION : kind === 'serenaContext' ? SERENA_CONTEXT_VERSION : helper.HELPER_VERSION);
 const shippedText = {};
-const shippedSource = (kind) => (shippedText[kind] = shippedText[kind] || fs.readFileSync(path.join(__dirname, '..', FILES[kind]), 'utf8'));
+const shippedSource = (kind) => (shippedText[kind] = shippedText[kind] || fs.readFileSync(path.join(__dirname, '..', 'copied', FILES[kind]), 'utf8'));
 const helperSource = () => shippedSource('helper');
 
 // The file at `file` against this plugin's copy of `kind` ('helper' or 'bridge'): 'absent', 'lower' (rewrite it), 'same',

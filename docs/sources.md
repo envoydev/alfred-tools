@@ -839,7 +839,7 @@ The released 0.4.0 (`2e6e0ea`), cloned from GitHub into the Parallels VM and run
   `Issue:` line for a refused key is word for word the macOS one, so `apply.REFUSED` matches it. `fetch.js` passes the
   Status line on as written.
 - Git for Windows installs with `core.autocrlf=true` in its system gitconfig, so a clone - `claude plugin install`'s
-  included - checks out CRLF except where `.gitattributes` says `eol=lf` (only `scripts/mcp-headers.js`). A CRLF
+  included - checks out CRLF except where `.gitattributes` says `eol=lf` (only `scripts/copied/mcp-headers.js`). A CRLF
   `mcp-bridge.js` is the same bridge: `roots.js` and lint compare through `digestOf`, and its first-line pattern
   takes a CR.
 - npm test on a CRLF clone: 529, 513 pass, 1 fail, 15 skip (8 darwin-fixture tests NOT RUN on a Windows host, the

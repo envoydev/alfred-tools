@@ -524,7 +524,7 @@ test('update offers and rewrites a lower-numbered helper copy; leaves a higher o
         assert.strictEqual(cli.run(['mcp', 'add-json', 'github', JSON.stringify({ type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${lower} GITHUB_PERSONAL_ACCESS_TOKEN Bearer` }), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         assert.strictEqual(cli.run(['mcp', 'add-json', 'sentry', JSON.stringify({ type: 'http', url: 'https://mcp.sentry.dev/mcp', headersHelper: `node ${higher} SENTRY_ACCESS_TOKEN Sentry-Bearer` }), '-s', 'user'], { cwd: w.project, env: w.env }).status, 0);
         helperAt(pt, 0);
-        const HV = require('../scripts/mcp-headers.js').HELPER_VERSION;
+        const HV = require('../scripts/copied/mcp-headers.js').HELPER_VERSION;
         helperAt(home, HV + 1);
         const c = await run(w, ['--check', '--no-refresh']);
         assert.strictEqual(c.code, 0, c.text);
@@ -559,7 +559,7 @@ test('update offers a lower mcp-bridge.js for rewriting beside the helper', asyn
         const bridgeFile = path.join(pt, 'mcp-bridge.js');
         fs.writeFileSync(bridgeFile, roots.shippedSource('bridge').replace(/^\/\/ preferred-tools mcp-bridge \d+/, '// preferred-tools mcp-bridge 0'));
         assert.strictEqual(cli.run(['mcp', 'add-json', 'sentry', JSON.stringify(bridgeEntry(pt)), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
-        const BV = require('../scripts/mcp-bridge.js').BRIDGE_VERSION;
+        const BV = require('../scripts/copied/mcp-bridge.js').BRIDGE_VERSION;
         const c = await run(w, ['--check', '--no-refresh'], { registry: fakeRegistry({ 'npm:mcp-remote': [{ version: '0.16.0', time: ago(20) }] }) });
         assert.strictEqual(c.code, 0, c.text);
         assert.match(c.text, new RegExp(`mcp-bridge\\.js in .*\\.preferred-tools +0 -> ${BV}`));

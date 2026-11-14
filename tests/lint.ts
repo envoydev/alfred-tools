@@ -119,7 +119,7 @@ const HELPER_SHA256 = {
     4: '6376dc81ff5b192a8e75de1f350e75a766dc9ad01cd950d58fd6733700469017', // exports its reader for mcp-bridge.js
 };
 {
-    const rel = path.join('scripts', 'mcp-headers.js');
+    const rel = path.join('scripts', 'copied', 'mcp-headers.js');
     const text = fs.readFileSync(path.join(root, rel), 'utf8');
     const helper = require(path.join(root, rel));
     const first = /^\/\/ preferred-tools mcp-headers (\d+)\r?$/m.exec(text.split('\n')[0]);
@@ -129,7 +129,7 @@ const HELPER_SHA256 = {
         const version = Number(first[1]);
         need(version === helper.HELPER_VERSION, `${rel}: the first line says version ${version}, HELPER_VERSION is ${helper.HELPER_VERSION}`);
         const digest = helper.digestOf(text);
-        need(digest === HELPER_SHA256[version], `${rel}: SHA-256 ${digest} is not HELPER_SHA256[${version}] in tests/lint.js - a changed helper bumps its version`);
+        need(digest === HELPER_SHA256[version], `${rel}: SHA-256 ${digest} is not HELPER_SHA256[${version}] in tests/lint.ts - a changed helper bumps its version`);
     }
     for (const m of text.matchAll(/\brequire\(\s*(['"])([^'"]+)\1\s*\)/g))
         need(m[2].startsWith('node:'), `${rel}: require('${m[2]}') - the helper runs outside the plugin, so node: modules only`);
@@ -141,7 +141,7 @@ const BRIDGE_SHA256 = {
     1: '8aff5de859ba6b69c3f40d20d35c2d36738d6c35c791a821614f53a48bc29635', // 0.4.0
 };
 {
-    const rel = path.join('scripts', 'mcp-bridge.js');
+    const rel = path.join('scripts', 'copied', 'mcp-bridge.js');
     const text = fs.readFileSync(path.join(root, rel), 'utf8');
     const bridge = require(path.join(root, rel));
     const first = /^\/\/ preferred-tools mcp-bridge (\d+)\r?$/m.exec(text.split('\n')[0]);
@@ -150,8 +150,8 @@ const BRIDGE_SHA256 = {
     {
         const version = Number(first[1]);
         need(version === bridge.BRIDGE_VERSION, `${rel}: the first line says version ${version}, BRIDGE_VERSION is ${bridge.BRIDGE_VERSION}`);
-        const digest = require(path.join(root, 'scripts', 'mcp-headers.js')).digestOf(text);
-        need(digest === BRIDGE_SHA256[version], `${rel}: SHA-256 ${digest} is not BRIDGE_SHA256[${version}] in tests/lint.js - a changed bridge bumps its version`);
+        const digest = require(path.join(root, 'scripts', 'copied', 'mcp-headers.js')).digestOf(text);
+        need(digest === BRIDGE_SHA256[version], `${rel}: SHA-256 ${digest} is not BRIDGE_SHA256[${version}] in tests/lint.ts - a changed bridge bumps its version`);
     }
     for (const m of text.matchAll(/\brequire\(\s*(['"])([^'"]+)\1\s*\)/g))
         need(m[2].startsWith('node:') || m[2] === './mcp-headers.js', `${rel}: require('${m[2]}') - the bridge runs outside the plugin, so node: modules and ./mcp-headers.js only`);
@@ -165,7 +165,7 @@ const SERENA_CONTEXT_SHA256 = {
     1: '5bd9211269e4440ac32b1240b5aa66a277ba16cd84f754adedd58f278ccf5321', // 0.5.0
 };
 {
-    const rel = path.join('scripts', 'serena-context.yml');
+    const rel = path.join('scripts', 'copied', 'serena-context.yml');
     const text = fs.readFileSync(path.join(root, rel), 'utf8');
     const first = /^# preferred-tools serena-context (\d+)\r?$/.exec(text.split('\n')[0]);
     need(first, `${rel}: the first line must be '# preferred-tools serena-context <version>'`);
@@ -174,8 +174,8 @@ const SERENA_CONTEXT_SHA256 = {
         const version = Number(first[1]);
         const want = require(path.join(root, 'scripts', 'roots', 'roots.ts')).SERENA_CONTEXT_VERSION;
         need(version === want, `${rel}: the first line says version ${version}, SERENA_CONTEXT_VERSION is ${want}`);
-        const digest = require(path.join(root, 'scripts', 'mcp-headers.js')).digestOf(text);
-        need(digest === SERENA_CONTEXT_SHA256[version], `${rel}: SHA-256 ${digest} is not SERENA_CONTEXT_SHA256[${version}] in tests/lint.js - a changed context bumps its version`);
+        const digest = require(path.join(root, 'scripts', 'copied', 'mcp-headers.js')).digestOf(text);
+        need(digest === SERENA_CONTEXT_SHA256[version], `${rel}: SHA-256 ${digest} is not SERENA_CONTEXT_SHA256[${version}] in tests/lint.ts - a changed context bumps its version`);
     }
 }
 
