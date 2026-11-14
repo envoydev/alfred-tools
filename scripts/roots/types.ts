@@ -79,6 +79,15 @@ export interface IgnoreGap
 }
 
 // The files this plugin copies into a root, and one's state against this plugin's copy.
+// A default root under the plugin's former name and what is beside it (spec D3): 'move' - the new name is absent or an
+// empty folder; 'both' - both hold root files; 'came-back' - the former one holds none; 'link' - a symbolic link.
+export interface PendingMove
+{
+    families: Family[];
+    from: string;
+    to: string;
+    state: 'move' | 'both' | 'came-back' | 'link';
+}
 export type ShippedKind = 'helper' | 'bridge' | 'serenaContext';
 export interface ShippedState
 {

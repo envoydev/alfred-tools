@@ -16,7 +16,7 @@ import { load } from '../catalog/catalog.ts';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import type { Catalog } from '../catalog/types.ts';
 import type { Machine, Roots } from '../entries/types.ts';
-import type { Family, IgnoreGap, InUse, InventoryView, MapRead, RecordEntry, Resolved, RootAnswer, RootOption, RootReg, RootsCtx, RootsMap, ShippedKind, ShippedState } from './types.ts';
+import type { Family, IgnoreGap, InUse, InventoryView, MapRead, PendingMove, RecordEntry, Resolved, RootAnswer, RootOption, RootReg, RootsCtx, RootsMap, ShippedKind, ShippedState } from './types.ts';
 
 export const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json', signIns: 'mcp-remote-v1', serenaContext: 'serena-context.yml' };
 // The root folder's name, and the one this plugin gave it under its former name (preferred-tools until 0.4.0, spec D3)
@@ -30,6 +30,37 @@ export function holdsRootFiles(dir: string): boolean
     try { names = fs.readdirSync(dir); }
     catch { return false; }
     return names.some((name) => ROOT_FILE_NAMES.includes(name));
+}
+
+// Each default root still under the former name, one per folder (a project that is the home folder is both families),
+// read by fix and update's root-move and by install and configure's stop. Names only, never a file's contents.
+export function pendingMoves(context: { project: string; home: string; platform: string }): PendingMove[]
+{
+    const pathApi = pathFor(context.platform);
+    const bases: { base: string; families: Family[] }[] = [];
+    for (const [base, family] of [[context.project, 'project'], [context.home, 'global']] as const)
+    {
+        const same = bases.find((candidate) => pathApi.resolve(candidate.base) === pathApi.resolve(base));
+        if (same) same.families.push(family);
+        else bases.push({ base, families: [family] });
+    }
+    const out: PendingMove[] = [];
+    for (const { base, families } of bases)
+    {
+        const from = pathApi.join(base, FORMER_ROOT_NAME);
+        const to = pathApi.join(base, ROOT_NAME);
+        let stat: fs.Stats;
+        try { stat = fs.lstatSync(from); }
+        catch { continue; }
+        if (stat.isSymbolicLink()) { out.push({ families, from, to, state: 'link' }); continue; }
+        if (!stat.isDirectory()) continue;
+        let beside: string[] | null;
+        try { beside = fs.readdirSync(to); }
+        catch { beside = null; }
+        const state = !beside || !beside.length ? 'move' : holdsRootFiles(from) ? 'both' : 'came-back';
+        out.push({ families, from, to, state });
+    }
+    return out;
 }
 // The read guard (0.5.0, ruling 13): two deny rules in Claude Code's settings that keep a session's Read tool out of
 // mcp-remote's sign-in tokens and the key file, wherever a root sits.

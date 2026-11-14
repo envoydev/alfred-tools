@@ -190,7 +190,7 @@ test('no catalog default name is in the reserved set, and the shipped set is the
 test('every fix row has the fields the brief names and points at an existing row and a distinct id', () => {
     const FIX = ['id', 'tool', 'os', 'symptom', 'detect', 'fix', 'verifiedOn', 'source'];
     assert.strictEqual(new Set(cat.fixes.map((f) => f.id)).size, cat.fixes.length);
-    assert.deepStrictEqual(cat.fixes.map((f) => f.id), ['root-repoint', 'serena-windows-home', 'serena-windows-ts-shim', 'uvx-python', 'windows-arm-python',
+    assert.deepStrictEqual(cat.fixes.map((f) => f.id), ['root-move', 'root-repoint', 'serena-windows-home', 'serena-windows-ts-shim', 'uvx-python', 'windows-arm-python',
         'windows-npx-cmd', 'playwright-webmcp', 'appium-sdk-env', 'serena-telemetry', 'token-sync', 'serena-context', 'serena-base-modes', 'list-import', 'retired-plugin', 'read-guard', 'client-drift', 'cursor-file', 'windows-mcp-one-per-desktop', 'data-folder-ignore', 'npx-cache-entry',
         'key-to-helper', 'helper-missing', 'helper-stale', 'root-ignore', 'project-relative-path', 'mcp-order', 'helper-child-folder']);
     for (const f of cat.fixes)

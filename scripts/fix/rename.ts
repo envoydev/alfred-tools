@@ -10,7 +10,7 @@ import { pathFor } from '../entries/platform.ts';
 import * as C from './common.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Machine } from '../entries/types.ts';
-import type { Finding, FixCtx, MovedRoot } from './types.ts';
+import type { Finding, FixCtx, MachineFixResult, MovedRoot } from './types.ts';
 
 export const machineOf = (context: FixCtx): Machine => ({ platform: context.platform, project: context.inventory.project, home: context.home });
 
@@ -128,4 +128,69 @@ export function rootRepointDetect(context: FixCtx): Finding[]
 export function rootRepointFix(entry: ServerEntry, _finding: Finding, context: FixCtx): ServerEntry
 {
     return repointEntry(entry, movedRoots(context), machineOf(context));
+}
+
+// ---- root-move ------------------------------------------------------------------------------------------------------
+
+export const OPEN_FILE = 'a file in it is open - close Claude Code and Cursor, then run /alfred-tools:update from a terminal session started fresh';
+
+// One finding per folder still under the former name (spec D3), keyed by its families. A registration that resolves into
+// it but is not managed - one left on its own, or the user's own - is named, never re-pointed.
+export function rootMoveDetect(context: FixCtx): Finding[]
+{
+    const machine = machineOf(context);
+    const out: Finding[] = [];
+    for (const move of roots.pendingMoves({ project: context.inventory.project, home: context.home, platform: context.platform }))
+    {
+        const one = [{ from: move.from, to: move.to }];
+        const names = (entry: ServerEntry | null | undefined) => Boolean(entry) && !deepEqual(repointEntry(entry!, one, machine), entry);
+        const regs = (context.inventory.registrations || []).filter((registration) => registration.scope !== 'inherited' && names(registration.entry));
+        const managed = C.registrationsOf(context, 'root-move');
+        const mine = regs.filter((registration) => managed.includes(registration));
+        const unmanaged = regs.filter((registration) => !managed.includes(registration)).map((registration) => `${registration.name} (${registration.scope}) names ${firstPath(registration.entry, move.from, machine)} - not re-pointed, yours to change`);
+        const base = { id: 'root-move', row: null, name: move.families.join('+'), scope: null, moveFrom: move.from, moveTo: move.to, ...(unmanaged.length ? { unmanaged, note: unmanaged.join('; ') } : {}) };
+        const dir = pathFor(context.platform).dirname(move.from);
+        if (move.state === 'link') { out.push({ ...base, found: `${move.from} is a link`, blocked: 'a link - move its target by hand' }); continue; }
+        if (move.state === 'both') { out.push({ ...base, found: `${move.from} and ${move.to} both hold this plugin's files`, blocked: `both .preferred-tools and .alfred-tools are in ${dir}: move what you keep from .preferred-tools into .alfred-tools, delete .preferred-tools, then run /alfred-tools:fix` }); continue; }
+        if (move.state === 'came-back')
+        {
+            let held: string[] = [];
+            try { held = fs.readdirSync(move.from); }
+            catch { held = []; }
+            out.push({ ...base, found: `${move.from} came back after the move`, blocked: `${move.from} came back after the move and holds ${held.join(', ') || 'nothing'} - a server started before the move wrote there; close the Claude Code and Cursor windows using it, move what you keep into .alfred-tools, then delete it` });
+            continue;
+        }
+        const global = move.families.includes('global') ? '; another project whose registrations name ~/.preferred-tools, or whose helper reads keys from it, works again when /alfred-tools:update runs in it' : '';
+        out.push({ ...base, found: `renames ${move.from} to ${move.to} (keys, list, helpers, sign-ins and data move unread) and points ${mine.length} registration(s) at it; close other Claude Code and Cursor windows first${global}` });
+    }
+    return out;
+}
+
+// The first written path in `entry` that resolves into `root`, for the line that names an unmanaged registration.
+function firstPath(entry: ServerEntry, root: string, machine: Machine): string
+{
+    const one = [{ from: root, to: root }];
+    const values = [entry.command, ...(entry.args || []), ...Object.values(entry.env || {})].filter((value): value is string => typeof value === 'string');
+    const found = values.find((value) => repointText(value, one, machine, false) !== value);
+    if (found) return found;
+    const helperLine = typeof entry.headersHelper === 'string' && repointText(entry.headersHelper, one, machine, true) !== entry.headersHelper;
+    return helperLine ? `${entry.headersHelper} (headersHelper)` : root;
+}
+
+// The rename, one call: an empty .alfred-tools is removed first; nothing inside is read (spec D3).
+export function rootMoveFix(finding: Finding, _context: FixCtx): MachineFixResult
+{
+    const from = finding.moveFrom!;
+    const to = finding.moveTo!;
+    try
+    {
+        let beside: string[] | null = null;
+        try { beside = fs.readdirSync(to); }
+        catch { beside = null; }
+        if (beside && !beside.length) fs.rmdirSync(to);
+        fs.renameSync(from, to);
+    }
+    catch (caught) { const error = caught as NodeJS.ErrnoException; return { ok: false, detail: `${from} not moved: ${error.message} - ${OPEN_FILE}` }; }
+    const done = !fs.existsSync(from) && fs.existsSync(to);
+    return { ok: done, detail: done ? `renamed ${from} to ${to}` : `${from} is still there after the rename` };
 }

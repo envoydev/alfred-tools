@@ -223,7 +223,37 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         result.skipped.push(finding);
         log(`skipped client-drift on ${where(finding)}: ${why}`);
     }
-    const todo = picked.filter((candidate) => !result.skipped.includes(candidate));
+    let todo = picked.filter((candidate) => !result.skipped.includes(candidate));
+
+    // the folder move (spec D3) comes first: each picked root renamed, then everything else found again on the moved
+    // folders - the copied files a moved root holds brought up to date, and every managed server naming a moved root
+    // re-pointed in this same apply
+    const moves = todo.filter((finding) => finding.id === 'root-move' && finding.moveFrom);
+    if (moves.length)
+    {
+        for (const finding of moves)
+        {
+            const moveResult = F.rootMoveFix(finding, context);
+            log(`${moveResult.ok ? 'ok    ' : 'FAILED'} root-move: ${moveResult.detail}`);
+            if (!moveResult.ok) { result.failed = moveResult.detail; return result; }
+        }
+        context = { ...context, inventory: inventory.buildInventory({ project: context.inventory.project, env: context.env, data: context.data }) };
+        for (const finding of moves)
+            for (const kind of ['helper', 'bridge', 'serenaContext'] as const)
+            {
+                const file = path.join(finding.moveTo!, roots.FILES[kind]);
+                const state = roots.shippedState(kind, file);
+                if (state.state !== 'lower') continue;
+                const written = F.helperStaleFix({ id: 'helper-stale', name: file, scope: null, found: '', path: file, shipped: kind, from: state.number });
+                log(`${written.ok ? 'ok    ' : 'FAILED'} root-move: ${written.detail}`);
+                if (!written.ok) { result.failed = written.detail; return result; }
+            }
+        const now = detectAll(context).found;
+        const same = (left: Finding, right: Finding) => left.id === right.id && left.name === right.name && left.scope === right.scope && left.app === right.app;
+        const rest = todo.filter((finding) => finding.id !== 'root-move').map((finding) => now.find((candidate) => same(candidate, finding))).filter((finding): finding is Finding => Boolean(finding) && !finding!.blocked);
+        todo = [...rest, ...now.filter((finding) => finding.id === 'root-repoint' && !finding.blocked && !rest.some((candidate) => same(candidate, finding)))];
+        for (const finding of moves) { result.applied.push(finding); log(`fixed       root-move on ${where(finding)}`); }
+    }
 
     // registration fixes: one replace per registration, the fixes composed in the catalog's order
     const steps: McpReplaceStep[] = [];
@@ -334,6 +364,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         (left ? result.remaining : result.applied).push(finding);
         log(`${left ? 'STILL FOUND' : 'fixed      '} ${finding.id} on ${where(finding)}`);
     }
+    if (moves.length || result.applied.some((finding) => finding.id === 'root-repoint')) log('', 'RECHECK - the folders moved; checking again');
     if (result.applied.some((finding) => !noRestart.has(finding))) log('', `Restart Claude Code so the repaired registrations and the language server start fresh${result.fetchFile ? ' - after the fetch reports, so a session start does not download the same package beside it' : ''}.`);
     return result;
 }

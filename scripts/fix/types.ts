@@ -106,6 +106,9 @@ export interface Finding
     from?: number | null; // stored - do not rename
     fixes?: { secrets: boolean; helper: boolean; signIns: boolean; unignore: string[] }; // stored - do not rename
     tailOnly?: boolean; // stored - do not rename
+    moveFrom?: string; // stored - do not rename
+    moveTo?: string; // stored - do not rename
+    unmanaged?: string[]; // stored - do not rename
 }
 // A default root this plugin renamed: the folder under its former name and the one it is now (spec D3).
 export interface MovedRoot

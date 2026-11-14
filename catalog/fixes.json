@@ -3,6 +3,37 @@
   "note": "Known problems and their recorded fixes. `detect` and `fix` name functions in scripts/fix/. `verifiedOn` says where the fix was proved; a row not proved on this build says so. A new problem the user meets later becomes a new row. A row with `advice: true` has `fix: null`: every finding it returns is blocked - shown, never applied. A row with `upgrade` brings a registration an older alfred-tools wrote to the way that version passes data, and /alfred-tools:update offers it too.",
   "fixes": [
     {
+      "id": "root-move",
+      "tool": [
+        "atlassian",
+        "github",
+        "gitlab",
+        "context7",
+        "sentry",
+        "memory",
+        "serena",
+        "windows-control",
+        "macos-control",
+        "appium",
+        "playwright-chrome",
+        "playwright-msedge",
+        "playwright-firefox",
+        "playwright-webkit"
+      ],
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "kind": "machine",
+      "upgrade": "0.5.0",
+      "symptom": "a .preferred-tools folder this plugin made under its former name, in the project or the home folder",
+      "detect": "rootMoveDetect",
+      "fix": "rootMoveFix",
+      "verifiedOn": "this build: tests/fix.test.ts root-move (2026-11-14)",
+      "source": "docs/superpowers/specs/2026-11-14-alfred-tools-rename-design.md D3, D4"
+    },
+    {
       "id": "root-repoint",
       "tool": [
         "atlassian",

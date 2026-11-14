@@ -305,3 +305,40 @@ test('a copy an older version wrote reads lower under either prefix', () => {
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('pendingMoves: each state, project equal to home, a file named .preferred-tools', () => {
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-pending-')));
+    try
+    {
+        const project = path.join(dir, 'p');
+        const home = path.join(dir, 'h');
+        const ctx = { project, home, platform: process.platform };
+        const mk = (...parts: string[]) => fs.mkdirSync(path.join(...parts), { recursive: true });
+        const touch = (...parts: string[]) => { mk(path.dirname(path.join(...parts))); fs.writeFileSync(path.join(...parts), ''); };
+        mk(project); mk(home);
+        assert.deepStrictEqual(roots.pendingMoves(ctx), []);
+        mk(project, '.preferred-tools');
+        touch(home, '.preferred-tools', '.mcps-secrets');
+        mk(home, '.alfred-tools');
+        assert.deepStrictEqual(roots.pendingMoves(ctx), [
+            { families: ['project'], from: path.join(project, '.preferred-tools'), to: path.join(project, '.alfred-tools'), state: 'move' },
+            { families: ['global'], from: path.join(home, '.preferred-tools'), to: path.join(home, '.alfred-tools'), state: 'move' },
+        ], 'an absent or empty .alfred-tools is a move');
+        touch(home, '.alfred-tools', 'mcps.json');
+        assert.strictEqual(roots.pendingMoves(ctx)[1]!.state, 'both');
+        fs.rmSync(path.join(home, '.preferred-tools', '.mcps-secrets'));
+        mk(home, '.preferred-tools', 'memory');
+        assert.strictEqual(roots.pendingMoves(ctx)[1]!.state, 'came-back');
+        fs.rmSync(path.join(project, '.preferred-tools'), { recursive: true });
+        fs.writeFileSync(path.join(project, '.preferred-tools'), 'a file');
+        assert.deepStrictEqual(roots.pendingMoves(ctx).map((move) => move.families), [['global']], 'a file is no root');
+        if (process.platform !== 'win32')
+        {
+            fs.rmSync(path.join(project, '.preferred-tools'));
+            fs.symlinkSync(path.join(dir, 'elsewhere'), path.join(project, '.preferred-tools'));
+            assert.strictEqual(roots.pendingMoves(ctx)[0]!.state, 'link');
+        }
+        assert.deepStrictEqual(roots.pendingMoves({ project: home, home, platform: process.platform }).map((move) => move.families), [['project', 'global']]);
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

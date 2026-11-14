@@ -2125,3 +2125,163 @@ test('a Cursor copy changed by hand and naming the old root is still held and na
     }
     finally { w.clean(); }
 });
+
+// a 0.4.0 root under the former name: its record, helper 4 and a GitHub server through the helper
+const formerRoot = (base: string) => path.join(base, '.preferred-tools');
+function oldRoot(w: World, base = w.project, scope = 'local', name = 'github')
+{
+    const root = formerRoot(base);
+    put(path.join(root, 'preferred-tools.json'), '{"version":1,"servers":[]}\n');
+    put(path.join(root, '.gitignore'), '*\n!.gitignore\n!mcp-headers.js\n');
+    put(path.join(root, 'mcp-headers.js'), rootsLib.helperSource().replace(/^\/\/ alfred-tools mcp-headers \d+/, '// preferred-tools mcp-headers 4'));
+    seed(w, name, scope, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: helperCmd(path.join(root, 'mcp-headers.js'), 'ACME_GH', 'Bearer') });
+    return root;
+}
+const moveOf = (w: World, over = {}) => detect(ctxOf(w, over), 'root-move').found;
+const entryAt = (w: World, name: string, scope: string) => (scope === 'user' ? userEntry(w, name) : localEntry(w, name))!;
+
+test('root-move moves a root and re-points its registrations in one apply', () =>
+{
+    const w = world();
+    try
+    {
+        oldRoot(w);
+        const [f] = moveOf(w) as [Finding];
+        assert.deepStrictEqual([f.name, f.scope, Boolean(f.blocked)], ['project', null, false]);
+        assert.match(f.found, /renames .*\.preferred-tools to .*\.alfred-tools \(keys, list, helpers, sign-ins and data move unread\) and points 1 registration\(s\) at it; close other Claude Code and Cursor windows first/);
+        const l = logged();
+        const res = applyFixes(ctxOf(w), ['root-move'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.strictEqual(res.failed, null, l.text());
+        assert.ok(!fs.existsSync(formerRoot(w.project)) && fs.existsSync(ptRoot(w)));
+        assert.strictEqual(fs.readFileSync(path.join(ptRoot(w), 'mcp-headers.js'), 'utf8').split('\n')[0], `// alfred-tools mcp-headers ${HV}`);
+        assert.strictEqual(entryAt(w, 'github', 'local').headersHelper, helperCmd(path.join(ptRoot(w), 'mcp-headers.js'), 'ACME_GH', 'Bearer'));
+        assert.ok(fs.existsSync(path.join(ptRoot(w), 'preferred-tools.json')), 'the record moved unread');
+        assert.match(l.text(), /RECHECK - the folders moved; checking again/);
+        assert.strictEqual(l.lines.filter((line) => /^ok +root-move: renamed/.test(line)).length, 1, 'renamed once: the machine pass does not rename a second time');
+        assert.ok(res.applied.some((x) => x.id === 'root-move'), JSON.stringify(res.applied.map((x) => x.id)));
+        assert.deepStrictEqual(moveOf(w), []);
+        assert.deepStrictEqual(detect(ctxOf(w), 'root-repoint').found, []);
+    }
+    finally { w.clean(); }
+});
+
+test('a root holding only .gitignore and a data folder moves; so does a 0.1.x root holding only .secrets', () =>
+{
+    const w = world();
+    try
+    {
+        put(path.join(formerRoot(w.project), '.gitignore'), '*\n');
+        fs.mkdirSync(path.join(formerRoot(w.project), 'memory'));
+        put(path.join(formerRoot(w.home), '.secrets'), 'NAME=\n');
+        assert.deepStrictEqual(moveOf(w).map((f) => [f.name, Boolean(f.blocked)]), [['project', false], ['global', false]]);
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w), ['root-move'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.ok(fs.existsSync(path.join(ptRoot(w), 'memory')) && fs.existsSync(path.join(homeRoot(w), '.secrets')));
+    }
+    finally { w.clean(); }
+});
+
+test('an empty .alfred-tools is renamed over', () =>
+{
+    const w = world();
+    try
+    {
+        oldRoot(w);
+        fs.mkdirSync(ptRoot(w));
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w), ['root-move'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.ok(fs.existsSync(path.join(ptRoot(w), 'mcp-headers.js')) && !fs.existsSync(formerRoot(w.project)));
+    }
+    finally { w.clean(); }
+});
+
+test('both-present is blocked with the merge text; came-back is advice and root-repoint still runs', () =>
+{
+    const w = world();
+    try
+    {
+        oldRoot(w);
+        put(path.join(ptRoot(w), 'mcps.json'), '{"version":1,"servers":[],"own":[]}\n');
+        const [both] = moveOf(w) as [Finding];
+        assert.match(both.blocked!, /both \.preferred-tools and \.alfred-tools are in .*: move what you keep from \.preferred-tools into \.alfred-tools, delete \.preferred-tools, then run \/alfred-tools:fix/);
+        assert.deepStrictEqual(detect(ctxOf(w), 'root-repoint').found, [], 'nothing re-points while the old root holds root files');
+        for (const file of ['preferred-tools.json', 'mcp-headers.js', '.gitignore']) fs.rmSync(path.join(formerRoot(w.project), file));
+        fs.mkdirSync(path.join(formerRoot(w.project), 'memory'));
+        const [back] = moveOf(w) as [Finding];
+        assert.match(back.blocked!, /\.preferred-tools came back after the move and holds memory - a server started before the move wrote there; close the Claude Code and Cursor windows using it, move what you keep into \.alfred-tools, then delete it/);
+        put(path.join(ptRoot(w), 'mcp-headers.js'), rootsLib.helperSource());
+        assert.deepStrictEqual(detect(ctxOf(w), 'root-repoint').found.map((f) => [f.name, Boolean(f.blocked)]), [['github', false]]);
+    }
+    finally { w.clean(); }
+});
+
+test('a symlink is blocked; a rename that throws fails with nothing changed', { skip: process.platform === 'win32' }, (t) =>
+{
+    const w = world();
+    try
+    {
+        fs.mkdirSync(path.join(w.dir, 'target'));
+        fs.symlinkSync(path.join(w.dir, 'target'), formerRoot(w.project));
+        assert.match((moveOf(w) as [Finding])[0].blocked!, /a link - move its target by hand/);
+        fs.unlinkSync(formerRoot(w.project));
+        oldRoot(w);
+        t.mock.method(fs, 'renameSync', () => { throw Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' }); });
+        const l = logged();
+        const res = applyFixes(ctxOf(w), ['root-move'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        t.mock.restoreAll();
+        assert.match(res.failed!, /EBUSY.*a file in it is open - close Claude Code and Cursor, then run \/alfred-tools:update from a terminal session started fresh/);
+        assert.ok(fs.existsSync(path.join(formerRoot(w.project), 'mcp-headers.js')) && !fs.existsSync(ptRoot(w)));
+        assert.match(entryAt(w, 'github', 'local').headersHelper!, /\.preferred-tools/);
+    }
+    finally { w.clean(); }
+});
+
+test('a project registration naming the moved global root is re-pointed in the same apply', () =>
+{
+    const w = world();
+    try
+    {
+        oldRoot(w, w.home, 'local');
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w), ['root-move'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(entryAt(w, 'github', 'local').headersHelper, helperCmd(path.join(homeRoot(w), 'mcp-headers.js'), 'ACME_GH', 'Bearer'));
+    }
+    finally { w.clean(); }
+});
+
+test('an unmanaged registration naming the root is listed and left', () =>
+{
+    const w = world();
+    try
+    {
+        oldRoot(w);
+        const mine = { type: 'stdio', command: 'node', args: [path.join(formerRoot(w.project), 'mine.js')] } as ServerEntry;
+        seed(w, 'mine', 'local', mine);
+        const [f] = moveOf(w) as [Finding];
+        assert.match(f.note!, /mine \(local\) names .*mine\.js - not re-pointed, yours to change/);
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w), ['root-move'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.deepStrictEqual(entryAt(w, 'mine', 'local'), mine);
+    }
+    finally { w.clean(); }
+});
+
+test('project equal to home: one rename, both families re-pointed', () =>
+{
+    const w = world();
+    try
+    {
+        const env = { ...w.env, HOME: w.project, USERPROFILE: w.project };
+        const ww = { ...w, env };
+        oldRoot(ww, w.project, 'local', 'github');
+        oldRoot(ww, w.project, 'user', 'github-user');
+        const [f] = moveOf(ww) as [Finding];
+        assert.strictEqual(f.name, 'project+global');
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(ww), ['root-move'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(l.lines.filter((line) => /^ok +root-move: renamed/.test(line)).length, 1);
+        for (const [name, scope] of [['github', 'local'], ['github-user', 'user']] as const)
+            assert.match(entryAt(ww, name, scope).headersHelper!, /\.alfred-tools/, `${name} (${scope})`);
+    }
+    finally { w.clean(); }
+});
