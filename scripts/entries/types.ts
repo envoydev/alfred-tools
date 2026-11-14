@@ -80,7 +80,7 @@ export interface BridgeParts
     template: string;
     keyName: string | null;
     scheme: string | null;
-    pkg: string | null;
+    packageSpec: string | null;
     globalRoot: string | null;
 }
 

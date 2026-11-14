@@ -20,7 +20,7 @@ export const rowOf = (context: Pick<FixCtx, 'catalog'>, id: string): CatalogRow 
 // The registrations a fix row covers: matched to one of its tools by what they launch, not the user's own, not an
 // alfred-code leftover, not one left on its own (spec D6), and not inherited from a parent folder (fixed by running fix
 // there).
-export const registrationsOf = (context: Pick<FixCtx, 'catalog' | 'inv'>, fixId: string): InvRegistration[] => context.inv.registrations.filter((registration) => !registration.own && !registration.alfredRetired && registration.choice !== 'own' && registration.scope !== 'inherited' && fixOf(context, fixId)!.tool.includes(registration.rowId!));
+export const registrationsOf = (context: Pick<FixCtx, 'catalog' | 'inventory'>, fixId: string): InvRegistration[] => context.inventory.registrations.filter((registration) => !registration.own && !registration.alfredRetired && registration.choice !== 'own' && registration.scope !== 'inherited' && fixOf(context, fixId)!.tool.includes(registration.rowId!));
 export const routeOf = (context: Pick<FixCtx, 'catalog'>, registration: { rowId: string | null; route: string | null }): CatalogRoute | undefined => rowOf(context, registration.rowId!)!.routes[registration.route!];
 
 // The executable a registration launches, looking through a `cmd /c` wrapper.

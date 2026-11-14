@@ -25,7 +25,7 @@ const eachReg = (context: FixCtx, id: string, toFinding: (registration: InvRegis
 function windowsHomeOf(value: string, context: FixCtx): string
 {
     const expanded = value.replace(/\$\{(?:HOME|USERPROFILE)\}/g, context.home);
-    return path.win32.resolve(context.inv.project, expanded).replace(/\\+$/, '');
+    return path.win32.resolve(context.inventory.project, expanded).replace(/\\+$/, '');
 }
 
 export function serenaWindowsHomeDetect(context: FixCtx): Finding[]
@@ -222,7 +222,7 @@ export function serenaTelemetryFix(entry: ServerEntry): ServerEntry
 // file's write before the replace.
 export function serenaContextDetect(context: FixCtx): Finding[]
 {
-    const resolvedRoots = roots.resolve(context.inv, null, { project: context.inv.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
+    const resolvedRoots = roots.resolve(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
     return eachReg(context, 'serena-context', (registration) =>
     {
         const root = resolvedRoots[roots.familyOf(registration.scope)];
@@ -264,7 +264,7 @@ function keyIn(value: unknown, template: string, tokenVar: string): string
 
 function stdioChainOf(context: FixCtx, scope: string): string[]
 {
-    const resolvedRoots = roots.resolve(context.inv, null, { project: context.inv.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
+    const resolvedRoots = roots.resolve(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
     return keys.stdioChain({ scope, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global });
 }
 
@@ -298,7 +298,7 @@ export function tokenSyncDetect(context: FixCtx): Finding[]
 function cursorBehind(context: FixCtx, registration: InvRegistration, route: CatalogRoute, chain: string[], extra: { route: string | null; chain: string[] }): Finding | null
 {
     if (registration.scope !== 'user') return null;
-    const list = context.inv.lists && context.inv.lists.global;
+    const list = context.inventory.lists && context.inventory.lists.global;
     const server = list && !list.note && !list.old ? (list.servers || []).find((candidate) => candidate.name === registration.name && candidate.scope === 'user' && (candidate.clients || []).includes('cursor')) : null;
     if (!server || !server.key) return null;
     const file = cursorMcp.fileFor('global', context);
@@ -330,12 +330,12 @@ function windowsMcpDrop(server: WindowsMcp, context: FixCtx): string
 {
     if (server.kind === 'plugin') return `claude plugin disable ${server.name} --scope ${server.scope}`;
     const how = server.owner === 'catalog' ? '/preferred-tools:configure (Remove)' : `claude mcp remove ${server.name} -s ${server.scope === 'inherited' ? 'project' : server.scope}`;
-    return server.scope === 'inherited' ? `${how}, run in ${fromHere(context.inv, server.from!)}` : how;
+    return server.scope === 'inherited' ? `${how}, run in ${fromHere(context.inventory, server.from!)}` : how;
 }
 
 export function windowsMcpOneDetect(context: FixCtx): Finding[]
 {
-    const servers = windowsMcpServers(context.inv);
+    const servers = windowsMcpServers(context.inventory);
     if (servers.length < 2) return [];
     const at = servers.find((server) => server.owner === 'catalog') || servers[0];
     const list = servers.map((server) => `${server.name} (${server.scope})`).join(', ');

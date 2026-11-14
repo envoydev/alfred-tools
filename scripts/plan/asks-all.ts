@@ -47,7 +47,7 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
         const row = catalog.byId.get(id);
         if (!row) continue;
         // install only adds, so its questions never start from an installed registration
-        out.tools[id] = { route: row.kind === 'mcp' ? routeQuestion(row) : null, ...toolAsk(row, inventory, { route: routes[id], scope: scopes[id], name: names[id], ctx: context, catalog, copyOf: installedOf(inventory, id) }) };
+        out.tools[id] = { route: row.kind === 'mcp' ? routeQuestion(row) : null, ...toolAsk(row, inventory, { route: routes[id], scope: scopes[id], name: names[id], context: context, catalog, copyOf: installedOf(inventory, id) }) };
     }
     const own = new Map(ownItems(inventory, catalog).map((it) => [it.key, it]));
     for (const key of (picks && picks.targets) || [])
@@ -77,7 +77,7 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
             row: row.id, kind: target!.kind, current: { name: (target!.item as InvRegistration).name || (target!.item as { id?: string }).id, scope: target!.item.scope, route: current.route || null, ...(target!.kind === 'mcp' ? { clients: listed ? listed.clients : ['claude'] } : {}) },
             route: target!.kind === 'mcp' ? routeQuestion(row, current.route) : null,
             ...(target!.kind === 'mcp' ? { clients: targetClientsQuestion(key, (target!.item as InvRegistration).name, listed ? listed.clients : ['claude']) } : {}),
-            ...toolAsk(row, inventory, { route: routes[key], scope: scopes[key], name: names[key], current, ctx: context, catalog }),
+            ...toolAsk(row, inventory, { route: routes[key], scope: scopes[key], name: names[key], current, context: context, catalog }),
         };
     }
     out.roots = rootsBlock(inventory, picks, catalog, context);
@@ -94,7 +94,7 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
         if (!row || row.kind !== 'mcp') continue;
         const routeId = routes[id] || row.recommendedRoute;
         if (!row.routes[routeId]) continue;
-        const scope = scopes[id] || scopeOrder(row, inventory, { route: routeId, ctx: context, copyOf: installedOf(inventory, id) })[0]!;
+        const scope = scopes[id] || scopeOrder(row, inventory, { route: routeId, context: context, copyOf: installedOf(inventory, id) })[0]!;
         const k = keyNameQuestion(row, routeId, scope, context);
         if (k) out.keyNames[id] = k;
         const urlQuestions = urlNameQuestions(row, routeId, scope, context);

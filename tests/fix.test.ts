@@ -68,7 +68,7 @@ function ctxFor({ platform = 'darwin', arch = 'x64', registrations = [], plugins
     const P = win ? path.win32 : path.posix;
     const listOf = (family: string, root: string): InvList => ({ file: P.join(root, '.preferred-tools', 'mcps.json'), servers: registrations.filter((r) => r.scope !== 'inherited' && (family === 'global') === (r.scope === 'user')) as unknown as ListServer[], own: [] });
     inv.lists = { project: listOf('project', inv.project), global: listOf('global', home || (win ? 'C:\\Users\\dev' : '/home/dev')) };
-    return makeCtx({ inv, catalog, env: { ...env, HOME: home || (win ? 'C:\\Users\\dev' : '/home/dev') }, machine, platform, arch });
+    return makeCtx({ inventory: inv, catalog, env: { ...env, HOME: home || (win ? 'C:\\Users\\dev' : '/home/dev') }, machine, platform, arch });
 }
 
 // a fresh entry the way the catalog builds it, for the row's local route
@@ -531,7 +531,7 @@ test('retired-plugin offers an uninstall per installed id and scope', () =>
     assert.match(found[0]!.found, /no longer lists it - it works in Claude Code alone/);
     assert.deepStrictEqual(found[0]!.proposal, { command: `claude plugin uninstall ${RETIRED.ts} --scope project` });
     // alfred-code set up: each finding says it removes it for both
-    const both = detect({ ...ctx, inv: { ...ctx.inv, alfredCodeEnabled: true } }).found.filter((f) => f.id === 'retired-plugin');
+    const both = detect({ ...ctx, inventory: { ...ctx.inventory, alfredCodeEnabled: true } }).found.filter((f) => f.id === 'retired-plugin');
     assert.ok(both.every((f) => f.alfred === true));
     assert.match(both[0]!.found, new RegExp(`${RETIRED.ts} - alfred-code also installs it, and this removes it for both$`));
 });
@@ -542,7 +542,7 @@ test('fix reports a declined id with no apply step', () =>
     try
     {
         add(data, [{ id: RETIRED.hud, scope: 'user' }]);
-        const ctx = makeCtx({ ...ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }), inv: ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }).inv, catalog, machine: noMachine(), data });
+        const ctx = makeCtx({ ...ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }), inventory: ctxFor({ plugins: [plug(RETIRED.hud, 'user')] }).inventory, catalog, machine: noMachine(), data });
         const [f] = detect(ctx).found.filter((x) => x.id === 'retired-plugin') as [Finding];
         assert.strictEqual(f.declined, true);
         assert.strictEqual(f.blocked, `${RETIRED.hud} is kept at user; remove it with claude plugin uninstall ${RETIRED.hud} --scope user`);
@@ -673,7 +673,7 @@ function seed(w: World, name: string, scope: string, entry: ServerEntry)
     const r = cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env });
     assert.strictEqual(r.status, 0, r.stderr);
 }
-const ctxOf = (w: World, over: Partial<Parameters<typeof makeCtx>[0]> = {}) => makeCtx({ inv: inventory.buildInventory({ project: w.project, env: w.env }), env: w.env, machine: noMachine(), ...over });
+const ctxOf = (w: World, over: Partial<Parameters<typeof makeCtx>[0]> = {}) => makeCtx({ inventory: inventory.buildInventory({ project: w.project, env: w.env }), env: w.env, machine: noMachine(), ...over });
 const userEntry = (w: World, name: string) => account.readAccount(w.env, w.project).user[name];
 
 test('apply: two fixes on one registration are ONE replace, from the entry as read - the user\'s pin and extra args survive', () =>
@@ -786,7 +786,7 @@ test('apply: a blocked finding, and one that needs an answer, are named and skip
 
         const spaced = ctxFor({ platform: 'win32', home: 'C:\\Users\\Jo Doe', registrations: [reg('serena', { command: 'uvx', args: ['--python', '3.13'], env: { SERENA_HOME: 'C:\\Users\\Jo Doe\\.serena' } }, { scope: 'user' })] });
         const out: string[] = [];
-        const r2 = applyFixes({ ...spaced, env: w.env, inv: { ...spaced.inv, project: w.project } }, ['serena-windows-home'], { log: (...a) => out.push(a.join(' ')) });
+        const r2 = applyFixes({ ...spaced, env: w.env, inventory: { ...spaced.inventory, project: w.project } }, ['serena-windows-home'], { log: (...a) => out.push(a.join(' ')) });
         assert.match(out.join('\n'), /needs --input serenaHome=<value>/);
         assert.strictEqual(r2.applied.length, 0);
     }
@@ -962,7 +962,7 @@ const secretsAt = (root: string, pairs: Record<string, string>) => put(path.join
 const ptRoot = (w: World) => path.join(w.project, '.preferred-tools');
 const homeRoot = (w: World) => path.join(w.home, '.preferred-tools');
 const localEntry = (w: World, name: string) => account.readAccount(w.env, w.project).local[name];
-const ctxData = (w: World, data: string) => makeCtx({ inv: inventory.buildInventory({ project: w.project, env: w.env, data }), env: w.env, machine: noMachine(), data });
+const ctxData = (w: World, data: string) => makeCtx({ inventory: inventory.buildInventory({ project: w.project, env: w.env, data }), env: w.env, machine: noMachine(), data });
 const logged = () => { const lines: string[] = []; return { lines, log: (...a: string[]) => lines.push(a.join(' ')), text: () => lines.join('\n') }; };
 const gitInit = (dir: string) => { fsx.mkdirSync(dir, { recursive: true }); assert.strictEqual(spawnx('git', ['init', '-q', dir]).status, 0); };
 const helperAt = (root: string, number: number | string, extra = '') => put(path.join(root, 'mcp-headers.js'), rootsLib.helperSource().replace(/^\/\/ preferred-tools mcp-headers \d+/, `// preferred-tools mcp-headers ${number}`) + extra);
@@ -1266,7 +1266,7 @@ test('token-sync blocks an empty stdio key and never writes the default name\'s 
 test('fix notes an untrusted declaring folder', () =>
 {
     const helperReg = (scope: string) => reg('github', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: 'node /proj/.preferred-tools/mcp-headers.js X Bearer' }, { scope, route: 'remote' });
-    const at = (trusted: boolean, scope: string) => { const ctx = ctxFor({ registrations: [helperReg(scope)] }); ctx.inv.trusted = trusted; return detect(ctx); };
+    const at = (trusted: boolean, scope: string) => { const ctx = ctxFor({ registrations: [helperReg(scope)] }); ctx.inventory.trusted = trusted; return detect(ctx); };
     const d = at(false, 'local');
     assert.deepStrictEqual(d.notes, ['github (local): accept the trust dialog the next time Claude Code starts in /proj - until then the server connects without its key']);
     assert.match(renderFixes(d), /note: github \(local\): accept the trust dialog/);
@@ -1338,7 +1338,7 @@ test('appium-sdk-env at project scope finds and proposes the SDK homes as at loc
 
 const GH = { type: 'http', url: 'https://api.githubcopilot.com/mcp/' };
 const C7 = { type: 'http', url: 'https://mcp.context7.com/mcp' };
-const ctxIn = (w: World, dir: string, machine = noMachine()) => makeCtx({ inv: inventory.buildInventory({ project: dir, env: w.env }), env: w.env, machine });
+const ctxIn = (w: World, dir: string, machine = noMachine()) => makeCtx({ inventory: inventory.buildInventory({ project: dir, env: w.env }), env: w.env, machine });
 
 test('project-relative-path: relative, ${HOME}, ${USERPROFILE}\\.serena and a relative helper are found and fixed as read, a user arg kept', () =>
 {

@@ -284,7 +284,7 @@ test('scopes: every scope writes absolute paths with ~ expanded; project scope t
 });
 
 test('every MCP route offers user, project and local: recommended first, then user, project, local', () => {
-    const scopes = (id: string, route: string, base = MAC, home = '/Users/me') => scopeQuestion(catalog.byId.get(id)!, inv(base), { route, ctx: { project: base.project, platform: base.os, home, env: {}, exists: () => false } })!.options.map((o) => scopeOfLabel(o.label));
+    const scopes = (id: string, route: string, base = MAC, home = '/Users/me') => scopeQuestion(catalog.byId.get(id)!, inv(base), { route, context: { project: base.project, platform: base.os, home, env: {}, exists: () => false } })!.options.map((o) => scopeOfLabel(o.label));
     assert.deepStrictEqual(scopes('serena', 'local'), ['local', 'user', 'project']);
     assert.deepStrictEqual(scopes('context7', 'remote'), ['user', 'project', 'local']);
     assert.deepStrictEqual(scopes('context7', 'local'), ['local', 'user', 'project']);
@@ -555,7 +555,7 @@ test('every question has 2 to 4 options, one Recommended and first, and a call h
             {
                 // a row with a data folder asks scope and name first; its second call (the folder, an extra) may be empty,
                 // and an empty call is not made
-                const t = toolAsk(row, i, { route, ctx, catalog });
+                const t = toolAsk(row, i, { route, context: ctx, catalog });
                 const calls = [t.first, t.questions].filter((c) => c && c.length);
                 assert.ok(calls.length >= 1, `${row.id}: no question at all`);
                 for (const c of calls) { assert.ok(c!.length <= 4, `${row.id}: ${c!.length} questions in one call`); c!.forEach(checkQuestion); }
@@ -593,7 +593,7 @@ test('no ask names git or remote state: alfred-code\'s stop guard reads such a w
         for (const row of rows)
         {
             const ctx = { project: i.project, platform: i.os, arch: i.arch, home, env: {} };
-            for (const route of row.kind === 'mcp' ? Object.keys(row.routes) : [undefined]) toolQuestions(row, i, { route, ctx, catalog }).forEach(add);
+            for (const route of row.kind === 'mcp' ? Object.keys(row.routes) : [undefined]) toolQuestions(row, i, { route, context: ctx, catalog }).forEach(add);
         }
     }
     Object.values(STATIC).map((q) => (typeof q === 'function' ? (q as (...args: unknown[]) => Question)(1, 2, 3) : q)).forEach(add);
@@ -763,7 +763,7 @@ test('configure questions start from what is installed: its route, scope, name, 
 
 test('the scope question follows the route: its recommended scope first, then user, project, local', () => {
     const i = inv(MAC);
-    const scopes = (id: string, route: string) => scopeQuestion(catalog.byId.get(id)!, i, { route, ctx: { project: '/p', platform: 'darwin', home: '/h', env: {} } })!.options.map((o) => scopeOfLabel(o.label));
+    const scopes = (id: string, route: string) => scopeQuestion(catalog.byId.get(id)!, i, { route, context: { project: '/p', platform: 'darwin', home: '/h', env: {} } })!.options.map((o) => scopeOfLabel(o.label));
     assert.deepStrictEqual(scopes('serena', 'local'), ['local', 'user', 'project']);
     assert.deepStrictEqual(scopes('context7', 'remote'), ['user', 'project', 'local']);
     assert.deepStrictEqual(scopes('context7', 'local'), ['local', 'user', 'project']);
@@ -833,7 +833,7 @@ test('the remove asks carry what to remove in their descriptions, in a form the 
 
 test('location: alfred-code data on disk is a second answer, not the recommended one, and absent without the folder', () => {
     const ctx = (exists: (file: string) => boolean) => ({ project: '/work/shop', platform: 'darwin', arch: 'arm64', home: '/Users/me', env: {}, exists });
-    const loc = (exists: (file: string) => boolean) => toolQuestions(catalog.byId.get('playwright-chrome')!, inv(MAC), { route: 'local', ctx: ctx(exists), catalog }).find((q) => q.id === 'location-playwright-chrome');
+    const loc = (exists: (file: string) => boolean) => toolQuestions(catalog.byId.get('playwright-chrome')!, inv(MAC), { route: 'local', context: ctx(exists), catalog }).find((q) => q.id === 'location-playwright-chrome');
     const withData = loc((p: string) => p === '/work/shop/.alfred/chrome-control');
     checkQuestion(withData!);
     assert.strictEqual(withData!.options[0]!.label, "The project root's folder (Recommended)");
@@ -1039,22 +1039,22 @@ test('configure: a local .alfred folder moved to project scope stays absolute, p
 
 // ---- the location question (D4) and scope and name first (D5) -----------------------------------------------------
 test('location labels name the place; descriptions give the exact folder; the answers map covers every label', () => {
-    const q = (scope: string, alfred: boolean, cat = catalog) => locationQuestion(cat.byId.get('memory')!, inv(WIN, { alfredCodeEnabled: alfred }), { scope, ctx: { project: WIN.project, platform: 'win32', home: 'C:\\Users\\mac', env: {}, exists: (p) => alfred && p === 'C:\\work\\shop\\.alfred\\.gitignore' } });
+    const q = (scope: string, alfred: boolean, cat = catalog) => locationQuestion(cat.byId.get('memory')!, inv(WIN, { alfredCodeEnabled: alfred }), { scope, context: { project: WIN.project, platform: 'win32', home: 'C:\\Users\\mac', env: {}, exists: (p) => alfred && p === 'C:\\work\\shop\\.alfred\\.gitignore' } });
     // memory keeps its data in the root of its scope: one place, nothing to ask
     for (const scope of ['local', 'project']) assert.deepStrictEqual([q(scope, true).question, q(scope, true).only], [null, { side: 'project' }], scope);
     const unproven = q('project', true, withoutRelative('memory'));
     assert.deepStrictEqual([unproven.question, unproven.only], [null, { side: 'project' }], 'proven relative or not');
     // a tool with one place asks nothing
-    const pw = locationQuestion(catalog.byId.get('playwright-chrome')!, inv(MAC, { alfredCodeEnabled: true }), { scope: 'local', ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: ALFRED } });
+    const pw = locationQuestion(catalog.byId.get('playwright-chrome')!, inv(MAC, { alfredCodeEnabled: true }), { scope: 'local', context: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: ALFRED } });
     assert.deepStrictEqual([pw.question, pw.only], [null, { side: 'project' }]);
     // serena: a folder in each project downloads its language servers once per project
-    const serena = locationQuestion(catalog.byId.get('serena')!, inv(MAC, { alfredCodeEnabled: true }), { scope: 'local', current: { name: 'serena', scope: 'local', rootStr: '/Users/me/.serena' }, ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: ALFRED } });
+    const serena = locationQuestion(catalog.byId.get('serena')!, inv(MAC, { alfredCodeEnabled: true }), { scope: 'local', current: { name: 'serena', scope: 'local', rootStr: '/Users/me/.serena' }, context: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: ALFRED } });
     assert.deepStrictEqual(serena.question!.options.map((o) => o.label), ['The folder it uses now (Recommended)', "The project root's folder"]);
     assert.match(serena.question!.options[1]!.description, /^\/work\/shop\/\.alfred\/serena - this project's own; its language servers \(about 327MB\) download once per project$/);
 });
 
 test('serena on Windows: the root when it is space-free, the profile .serena when the root has a space, Another space-free folder', () => {
-    const q = (project: string, scope: string) => locationQuestion(catalog.byId.get('serena')!, inv({ ...WIN, project }, { alfredCodeEnabled: true }), { scope, ctx: { project, platform: 'win32', home: 'C:\\Users\\me', env: {}, exists: (p) => p === `${project}\\.alfred\\.gitignore` } });
+    const q = (project: string, scope: string) => locationQuestion(catalog.byId.get('serena')!, inv({ ...WIN, project }, { alfredCodeEnabled: true }), { scope, context: { project, platform: 'win32', home: 'C:\\Users\\me', env: {}, exists: (p) => p === `${project}\\.alfred\\.gitignore` } });
     assert.deepStrictEqual(q('C:\\work\\shop', 'local'), { question: null, answers: {}, only: { side: 'project' } });
     const spaced = q('C:\\my work\\shop', 'local');
     assert.deepStrictEqual(spaced.question!.options.map((o) => o.label), ["Your profile's .serena (Recommended)", 'Another space-free folder']);
@@ -1116,7 +1116,7 @@ test('every question has 2 to 4 options, one Recommended and first: each scope, 
                     for (const row of cat.tools.filter((r) => r.os.includes(base.os) && r.locations))
                         for (const scope of scopesFor(row, row.recommendedRoute, ctx))
                         {
-                            const l = locationQuestion(row, i, { scope, ctx });
+                            const l = locationQuestion(row, i, { scope, context: ctx });
                             const at = `${base.os} ${row.id} ${scope} alfred:${alfred} 2.x:${old}`;
                             if (!l.question) { assert.ok(l.only, at); continue; }
                             checkQuestion(l.question);
@@ -1124,7 +1124,7 @@ test('every question has 2 to 4 options, one Recommended and first: each scope, 
                         }
                     for (const row of cat.tools.filter((r) => r.os.includes(base.os)))
                     {
-                        const s = scopeQuestion(row, i, { ctx });
+                        const s = scopeQuestion(row, i, { context: ctx });
                         if (s) checkQuestion(s);
                     }
                 }
@@ -1200,7 +1200,7 @@ test('serena on Windows with a spaced root and profile: a space-free folder is o
     const home = 'C:\\Users\\Jane Doe';
     const project = 'C:\\my work\\shop';
     const ctx = { project, platform: 'win32', home, env: {}, exists: () => false };
-    const l = locationQuestion(catalog.byId.get('serena')!, inv({ ...WIN, project }), { scope: 'local', ctx });
+    const l = locationQuestion(catalog.byId.get('serena')!, inv({ ...WIN, project }), { scope: 'local', context: ctx });
     assert.ok(l.question, 'asked');
     checkQuestion(l.question);
     assert.strictEqual(l.question.options[0]!.label, 'A space-free folder (Recommended)');
@@ -1211,7 +1211,7 @@ test('serena on Windows with a spaced root and profile: a space-free folder is o
     assert.deepStrictEqual(p.errors, []);
     assert.strictEqual(addStep(p).entry.env!.SERENA_HOME, 'C:\\serena-home');
     // the system drive, when the environment names it
-    const d = locationQuestion(catalog.byId.get('serena')!, inv({ ...WIN, project }), { scope: 'local', ctx: { ...ctx, env: { SystemDrive: 'D:' } } });
+    const d = locationQuestion(catalog.byId.get('serena')!, inv({ ...WIN, project }), { scope: 'local', context: { ...ctx, env: { SystemDrive: 'D:' } } });
     assert.deepStrictEqual(d.answers['A space-free folder (Recommended)'], { side: 'path', path: 'D:\\serena-home' });
 });
 
@@ -1231,7 +1231,7 @@ test("the question's recommended folder and the plan's default write the same en
                         for (const scope of scopesFor(row, row.recommendedRoute, ctx))
                         {
                             const at = `${base.os} ${home} ${row.id} ${scope} alfred:${alfred} name:${name}`;
-                            const l = locationQuestion(row, i, { scope, name, ctx });
+                            const l = locationQuestion(row, i, { scope, name, context: ctx });
                             if (l.question) checkQuestion(l.question);
                             const rec = l.question ? l.answers[l.question.options[0]!.label] : l.only;
                             assert.ok(rec, `${at}: the recommended option has an answer`);
@@ -1334,7 +1334,7 @@ test('a pick\'s data folder is <root>/<name>, absolute at every scope', () => {
 });
 
 test('memory: its data in the root of its scope - the project root at project and local scope, the global root at user scope, nothing asked', () => {
-    const q = (scope: string, rootAnswers: Roots | null = null) => locationQuestion(catalog.byId.get('memory')!, inv(MAC), { scope, ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false, roots: rootAnswers } });
+    const q = (scope: string, rootAnswers: Roots | null = null) => locationQuestion(catalog.byId.get('memory')!, inv(MAC), { scope, context: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false, roots: rootAnswers } });
     for (const scope of ['local', 'project']) assert.deepStrictEqual([q(scope).question, q(scope).only], [null, { side: 'project' }], scope);
     const far = q('project', { project: '/work/shop/.preferred-tools', global: '/srv/keys', globalNamed: true });
     assert.deepStrictEqual([far.question, far.only], [null, { side: 'project' }]);
@@ -1350,12 +1350,12 @@ test('memory: its data in the root of its scope - the project root at project an
 test('serena on Windows: a spaced root gets the space-free folder recommended; project scope as local scope', () => {
     const serena = catalog.byId.get('serena');
     const ctxOf = (project: string, home: string) => ({ project, platform: 'win32', home, env: {}, exists: () => false });
-    const spaced = locationQuestion(serena!, inv({ ...WIN, project: 'C:\\my work\\shop' }), { scope: 'local', ctx: ctxOf('C:\\my work\\shop', 'C:\\Users\\me') });
+    const spaced = locationQuestion(serena!, inv({ ...WIN, project: 'C:\\my work\\shop' }), { scope: 'local', context: ctxOf('C:\\my work\\shop', 'C:\\Users\\me') });
     assert.deepStrictEqual(spaced.question!.options.map((o) => o.label), ["Your profile's .serena (Recommended)", 'Another space-free folder']);
     assert.match(spaced.question!.options[1]!.description, /asked next$/);
-    const both = locationQuestion(serena!, inv(WIN), { scope: 'user', ctx: ctxOf('C:\\work\\shop', 'C:\\Users\\Jo Doe') });
+    const both = locationQuestion(serena!, inv(WIN), { scope: 'user', context: ctxOf('C:\\work\\shop', 'C:\\Users\\Jo Doe') });
     assert.deepStrictEqual(both.question!.options.map((o) => o.label), ['A space-free folder (Recommended)', 'Another space-free folder']);
-    const clean = locationQuestion(serena!, inv(WIN), { scope: 'local', ctx: ctxOf('C:\\work\\shop', 'C:\\Users\\Jo Doe') });
+    const clean = locationQuestion(serena!, inv(WIN), { scope: 'local', context: ctxOf('C:\\work\\shop', 'C:\\Users\\Jo Doe') });
     assert.deepStrictEqual([clean.question, clean.only], [null, { side: 'project' }], 'a space-free root: <root>\\<name>, nothing to ask');
     const home = (base: { os: string; arch: string; project: string }, home: string, pick: PickAnswer = {}) => addStep(plan(inv(base), pickOne('serena', pick), opts(home))).entry.env!.SERENA_HOME;
     assert.strictEqual(home(WIN, 'C:\\Users\\Jo Doe'), 'C:\\work\\shop\\.preferred-tools\\serena');
@@ -1368,10 +1368,10 @@ test('serena on Windows: a spaced root gets the space-free folder recommended; p
 test('alfred-code 2.x data on disk adds \'Carry over alfred-code 2.x data\' beside <root>/<name>', () => {
     const pw = catalog.byId.get('playwright-chrome');
     const ctx = (present: string[]) => ({ project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: (p: string) => present.includes(p) });
-    const old = locationQuestion(pw!, inv(MAC), { scope: 'local', ctx: ctx(['/work/shop/.alfred/chrome-control']) });
+    const old = locationQuestion(pw!, inv(MAC), { scope: 'local', context: ctx(['/work/shop/.alfred/chrome-control']) });
     assert.deepStrictEqual(old.question!.options.map((o) => o.label), ["The project root's folder (Recommended)", 'Carry over alfred-code 2.x data']);
     assert.deepStrictEqual(Object.values(old.answers), [{ side: 'project' }, { side: 'alfred' }]);
-    const none = locationQuestion(pw!, inv(MAC), { scope: 'local', ctx: ctx([]) });
+    const none = locationQuestion(pw!, inv(MAC), { scope: 'local', context: ctx([]) });
     assert.deepStrictEqual([none.question, none.only], [null, { side: 'project' }]);
 });
 
@@ -1525,7 +1525,7 @@ test('no hosted entry holds Authorization or a ${VAR} for a key, at any scope', 
 });
 
 test('a hosted keyed route recommends global; a stdio keyed route is not offered at project scope', () => {
-    const labels = (id: string, route: string) => scopeQuestion(catalog.byId.get(id)!, inv(MAC), { route, ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } })!.options.map((o) => o.label);
+    const labels = (id: string, route: string) => scopeQuestion(catalog.byId.get(id)!, inv(MAC), { route, context: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } })!.options.map((o) => o.label);
     assert.deepStrictEqual(labels('github', 'remote'), ['Global (Recommended)', 'Project', 'Local']);
     assert.deepStrictEqual(labels('github', 'local'), ['Local (Recommended)', 'Global']);
     assert.deepStrictEqual(labels('sentry', 'local'), ['Local (Recommended)', 'Global']);
@@ -1539,8 +1539,8 @@ test('context7 hosted: global recommended and the key first, filled or not (spec
     {
         const ctx = () => ({ project: w.project, platform: process.platform, home: w.home, env: {} });
         const i = inv({ ...MAC, os: process.platform, project: w.project });
-        const scopeOf = () => scopeQuestion(catalog.byId.get('context7')!, i, { route: 'remote', ctx: ctx() })!.options[0]!.label;
-        const keyQ = (scope: string) => toolAsk(catalog.byId.get('context7')!, i, { route: 'remote', scope, ctx: ctx(), catalog }).questions.find((q) => q.id === 'token-context7');
+        const scopeOf = () => scopeQuestion(catalog.byId.get('context7')!, i, { route: 'remote', context: ctx() })!.options[0]!.label;
+        const keyQ = (scope: string) => toolAsk(catalog.byId.get('context7')!, i, { route: 'remote', scope, context: ctx(), catalog }).questions.find((q) => q.id === 'token-context7');
         assert.strictEqual(scopeOf(), 'Global (Recommended)');
         assert.deepStrictEqual(keyQ('project')!.options.map((o) => o.label), ['Use a key from .mcps-secrets (Recommended)', 'No key - lower rate limits']);
         const p0 = plan(i, pickOne('context7', { route: 'remote' }), { home: w.home, env: {} });
@@ -1561,7 +1561,7 @@ test('context7 hosted: global recommended and the key first, filled or not (spec
 
 test('sentry: a key recommended, with Sentry-Bearer; OAuth when picked', () => {
     const ctx = { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false };
-    const q = toolAsk(catalog.byId.get('sentry')!, inv(MAC), { route: 'remote', scope: 'project', ctx, catalog }).questions.find((x) => x.id === 'token-sentry');
+    const q = toolAsk(catalog.byId.get('sentry')!, inv(MAC), { route: 'remote', scope: 'project', context: ctx, catalog }).questions.find((x) => x.id === 'token-sentry');
     assert.deepStrictEqual(q!.options.map((o) => o.label), ['Use a key from .mcps-secrets (Recommended)', 'Sign in with OAuth']);
     const p = plan(inv(MAC), pickOne('sentry', { route: 'remote', token: false }), opts('/Users/me'));
     assert.deepStrictEqual([addStep(p).scope, addStep(p).entry.headersHelper, p.oauth.map((x) => x.row)], ['user', undefined, ['sentry']]);
@@ -2169,7 +2169,7 @@ test('configure: a 0.1.x project-scope github Docker registration keeps Project 
             assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'github', JSON.stringify(docker), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
             mcpsAt(path.join(w.project, '.preferred-tools'), [filled ? `${G}=${v}` : `${G}=`]);
             const i = inventoryLib.buildInventory({ project: w.project, env: w.env });
-            const ctx = fix.makeCtx({ inv: i, env: w.env, machine: { exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1 }) } as unknown as MachineProbe });
+            const ctx = fix.makeCtx({ inventory: i, env: w.env, machine: { exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1 }) } as unknown as MachineProbe });
             assert.deepStrictEqual(fix.detectAll(ctx).found.filter((f) => f.name === 'github'), [], 'fix leaves it as it is');
             const p = plan(i, { change: { 'mcp:github~project': { scope: 'local' } } }, { home: w.home, env: w.env, machine: { docker: true } });
             assert.deepStrictEqual(p.errors, []);
@@ -2232,7 +2232,7 @@ test('memory follows the root: the project root at project and local scope, the 
     assert.strictEqual(db('local'), '/work/shop/.preferred-tools/memory/memory.db');
     assert.strictEqual(db('project'), '/work/shop/.preferred-tools/memory/memory.db');
     assert.strictEqual(db('user'), '/Users/me/.preferred-tools/memory/memory.db');
-    const q = locationQuestion(catalog.byId.get('memory')!, inv(MAC), { scope: 'local', ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
+    const q = locationQuestion(catalog.byId.get('memory')!, inv(MAC), { scope: 'local', context: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
     assert.ok(!(q.question ? q.question.options : []).some((o) => o.label.startsWith("The global root's folder")));
 });
 
@@ -2285,7 +2285,7 @@ test('every scope question words Project as the folder\'s .mcp.json that names t
     const child = PARENT_HELPER_IN_CHILD ? '' : "; a session started in a child folder connects without the key - Claude Code does not run a parent folder's helper there";
     for (const [id, route, tail] of [['memory', 'local', ''], ['context7', 'remote', child], ['context7', 'local', ''], ['sentry', 'bridge', '']])
     {
-        const q = scopeQuestion(catalog.byId.get(id!)!, inv(MAC), { route, ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
+        const q = scopeQuestion(catalog.byId.get(id!)!, inv(MAC), { route, context: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
         assert.strictEqual(q!.options.find((o) => o.label.startsWith('Project'))!.description, `${want}${tail}`, `${id}/${route}`);
     }
 });
@@ -2325,7 +2325,7 @@ test('the project-scope helper note says why, once', () => {
     const child = p.notes.filter((n) => /child (folder|project)/.test(n));
     if (PARENT_HELPER_IN_CHILD) return assert.deepStrictEqual(child, []);
     assert.deepStrictEqual(child.sort(), [`context7: ${why}`, `github: ${why}`]);
-    const q = scopeQuestion(catalog.byId.get('github')!, inv(MAC), { route: 'remote', ctx: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
+    const q = scopeQuestion(catalog.byId.get('github')!, inv(MAC), { route: 'remote', context: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
     assert.match(q!.options.find((o) => o.label.startsWith('Project'))!.description, /; a session started in a child folder connects without the key - Claude Code does not run a parent folder's helper there$/);
 });
 
@@ -2354,7 +2354,7 @@ test('buildEntry for the sentry bridge at local, project and user scope', () => 
         assert.deepStrictEqual(cur.urlNames, urlNames, scope);
     }
     assert.deepStrictEqual(settingsOf(row!, 'bridge', local), [], 'the bridge passes no setting of the user\'s');
-    assert.deepStrictEqual(bridgeParts(local), { path: '/work/shop/.preferred-tools/mcp-bridge.js', template: 'https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}', keyName: 'SENTRY_ACCESS_TOKEN', scheme: 'Sentry-Bearer', pkg: 'mcp-remote@0.16.0', globalRoot: null });
+    assert.deepStrictEqual(bridgeParts(local), { path: '/work/shop/.preferred-tools/mcp-bridge.js', template: 'https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}', keyName: 'SENTRY_ACCESS_TOKEN', scheme: 'Sentry-Bearer', packageSpec: 'mcp-remote@0.16.0', globalRoot: null });
     assert.strictEqual(bridgeParts({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0'] }), null);
     assert.strictEqual(renameTemplate('https://h/mcp/{A}/{B?}', { A: 'X', B: 'Y' }), 'https://h/mcp/{X}/{Y?}');
 });

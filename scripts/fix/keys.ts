@@ -20,9 +20,9 @@ import type { ShippedKind } from '../roots/types.ts';
 import type { Finding, FixCtx, MachineFixResult, ShippedFile } from './types.ts';
 
 // What roots.js needs to place a root, from a fix ctx.
-const rootCtx = (context: FixCtx) => ({ project: context.inv.project, home: context.home, platform: context.platform, catalog: context.catalog });
+const rootCtx = (context: FixCtx) => ({ project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog });
 // The roots a fix writes into (R9): each family's root in use, else D2's recommended one.
-const rootsOf = (context: FixCtx) => roots.resolve(context.inv, null, rootCtx(context)).roots;
+const rootsOf = (context: FixCtx) => roots.resolve(context.inventory, null, rootCtx(context)).roots;
 
 // ---- key-to-helper --------------------------------------------------------------------------------------------------
 // A managed hosted registration whose Authorization header holds a ${VAR} or a key (0.1.x wrote both). The helper reads
@@ -56,7 +56,7 @@ export function keyToHelperDetect(context: FixCtx): Finding[]
             const name = one[1]!;
             const at = keys.valueIn(chain, name);
             if (at) { out.push(C.finding('key-to-helper', registration, `the Authorization header holds \${${name}} - the key moves to mcp-headers.js, which reads ${name} from ${at.file}`, { ...extra, keyName: name })); continue; }
-            const old = keys.oldHolding(context.inv.project, context.home, name);
+            const old = keys.oldHolding(context.inventory.project, context.home, name);
             out.push(C.finding('key-to-helper', registration, `the Authorization header holds \${${name}}`, { ...extra, blocked: `put ${name}'s value in ${chain[0]}, then run /preferred-tools:fix${old ? `; ${name} is in ${old}, which preferred-tools no longer reads` : ''}` }));
             continue;
         }
@@ -77,7 +77,7 @@ export function keyToHelperFix(entry: ServerEntry, finding: Finding, context: Fi
     if (auth) delete out.headers![auth.header];
     if (out.headers && !Object.keys(out.headers).length) delete out.headers;
     const route = C.rowOf(context, finding.row!)!.routes[finding.route!]!;
-    out.headersHelper = helperFor(route, finding.scope!, { project: context.inv.project, platform: context.platform, home: context.home, roots: finding.roots }, finding.keyName);
+    out.headersHelper = helperFor(route, finding.scope!, { project: context.inventory.project, platform: context.platform, home: context.home, roots: finding.roots }, finding.keyName);
     return out;
 }
 
@@ -90,7 +90,7 @@ function shippedFiles(context: FixCtx, fixId: string): ShippedFile[]
 {
     const pathApi = pathFor(context.platform);
     const seen = new Map<string, ShippedFile>();
-    const add = (file: string, kind: ShippedKind, registration: InvRegistration) => { if (!seen.has(file)) seen.set(file, { file, root: pathApi.dirname(file), kind, reg: registration }); };
+    const add = (file: string, kind: ShippedKind, registration: InvRegistration) => { if (!seen.has(file)) seen.set(file, { file, root: pathApi.dirname(file), kind, registration: registration }); };
     let familyRoots: Roots | null = null;
     for (const registration of C.registrationsOf(context, fixId))
     {
@@ -116,7 +116,7 @@ function shippedFiles(context: FixCtx, fixId: string): ShippedFile[]
 
 // `bridged`: found through a bridge registration, which did not start without the file - so its fix needs a new start,
 // where a hosted server's helper runs at each connect (review)
-const helperFinding = (fixId: string, shippedFile: ShippedFile, what: string, extra: Partial<Finding> = {}): Finding => ({ ...C.finding(fixId, shippedFile.reg, what, extra), name: shippedFile.file, path: shippedFile.file, shipped: shippedFile.kind, bridged: Boolean(bridgeParts(shippedFile.reg.entry)) || shippedFile.kind === 'serenaContext' });
+const helperFinding = (fixId: string, shippedFile: ShippedFile, what: string, extra: Partial<Finding> = {}): Finding => ({ ...C.finding(fixId, shippedFile.registration, what, extra), name: shippedFile.file, path: shippedFile.file, shipped: shippedFile.kind, bridged: Boolean(bridgeParts(shippedFile.registration.entry)) || shippedFile.kind === 'serenaContext' });
 const nameOf = (shippedFile: ShippedFile) => roots.FILES[shippedFile.kind];
 // the file this finding writes: 'helper' or 'bridge' (a finding from before 0.4.0 carries none: a helper)
 const kindOf = (finding: Finding): ShippedKind => (finding.shipped === 'bridge' || finding.shipped === 'serenaContext' ? finding.shipped : 'helper');
@@ -131,7 +131,7 @@ const withCommonjs = (root: string, result: MachineFixResult, kind: ShippedKind)
 export function helperMissingDetect(context: FixCtx): Finding[]
 {
     return shippedFiles(context, 'helper-missing').filter((shippedFile) => !fs.existsSync(shippedFile.file))
-        .map((shippedFile) => helperFinding('helper-missing', shippedFile, `${nameOf(shippedFile)} is missing - ${shippedFile.reg.name} (${shippedFile.reg.scope}) ${bridgeParts(shippedFile.reg.entry) || shippedFile.kind === 'serenaContext' ? 'does not start' : 'connects without its key'}`));
+        .map((shippedFile) => helperFinding('helper-missing', shippedFile, `${nameOf(shippedFile)} is missing - ${shippedFile.registration.name} (${shippedFile.registration.scope}) ${bridgeParts(shippedFile.registration.entry) || shippedFile.kind === 'serenaContext' ? 'does not start' : 'connects without its key'}`));
 }
 
 export function helperMissingFix(finding: Finding): MachineFixResult
@@ -176,7 +176,7 @@ export function rootIgnoreDetect(context: FixCtx): Finding[]
     const out: Finding[] = [];
     for (const family of ['project', 'global'] as const)
     {
-        const used = context.inv.roots && context.inv.roots[family];
+        const used = context.inventory.roots && context.inventory.roots[family];
         const root = used && used.path;
         if (!root || out.some((finding) => finding.name === root) || !fs.existsSync(root)) continue;
         const gap = roots.ignoreGap(root, family);

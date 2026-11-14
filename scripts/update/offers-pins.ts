@@ -20,11 +20,11 @@ export async function mcpOffers(context: UpdateCtx, out: UpdateCheck): Promise<v
         if (!cache.has(key)) cache.set(key, context.registry.versionsOf(registry, name));
         return cache.get(key)!;
     };
-    for (const registration of context.inv.registrations)
+    for (const registration of context.inventory.registrations)
     {
         if (registration.own || registration.alfredRetired) continue;
         if (registration.choice === 'own') { out.skipped.push(`${registration.name} (${registration.scope}): on its own - not checked`); continue; }
-        if (registration.scope === 'inherited') { out.skipped.push(`${registration.name} (inherited): inherited from ${inventory.fromHere(context.inv, registration.from!)} - update it there`); continue; }
+        if (registration.scope === 'inherited') { out.skipped.push(`${registration.name} (inherited): inherited from ${inventory.fromHere(context.inventory, registration.from!)} - update it there`); continue; }
         const row = context.catalog.byId.get(registration.rowId!)!;
         const routeDefinition = row.routes[registration.route!]!;
         const at = `${registration.name} (${registration.scope})`;
@@ -57,9 +57,9 @@ export async function cursorPinOffers(context: UpdateCtx, out: UpdateCheck): Pro
     let versions: Release[] | null = null;
     for (const family of ['project', 'global'] as const)
     {
-        const list = context.inv.lists && context.inv.lists[family];
+        const list = context.inventory.lists && context.inventory.lists[family];
         if (!list || list.note || list.old) continue;
-        const seen = (context.inv.cursor && context.inv.cursor[family]) || { entries: {} } as CursorOf;
+        const seen = (context.inventory.cursor && context.inventory.cursor[family]) || { entries: {} } as CursorOf;
         for (const server of list.servers || [])
         {
             if (!server.cursorEntry || !(server.clients || []).includes('cursor')) continue;

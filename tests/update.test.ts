@@ -592,7 +592,7 @@ test("update moves a bridge's mcp-remote pin and its cut-off", async () => {
         assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'sentry', JSON.stringify(e), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         const reg = fakeRegistry({ 'npm:mcp-remote': [{ version: '0.16.0', time: ago(25) }, { version: '0.16.4', time: ago(8) }] });
         const inv = inventory.buildInventory({ project: w.project, env: w.env });
-        const ctx = makeCtx({ inv, project: w.project, env: w.env, machine: noLsp, registry: reg, now: NOW, refresh: false });
+        const ctx = makeCtx({ inventory: inv, project: w.project, env: w.env, machine: noLsp, registry: reg, now: NOW, refresh: false });
         const out = await checkUpdates(ctx);
         const offers = out.offers.filter((o): o is McpOffer => o.kind === 'mcp');
         assert.strictEqual(offers.length, 1, JSON.stringify(out));

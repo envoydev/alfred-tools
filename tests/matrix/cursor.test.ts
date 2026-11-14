@@ -421,7 +421,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     const checkNow = async () =>
     {
         const inv = inventory.buildInventory({ project: p, env: hh.env, run: cli.runClaude, data: hh.data });
-        const ctx = makeCtx({ inv, project: p, env: hh.env, refresh: false, data: hh.data });
+        const ctx = makeCtx({ inventory: inv, project: p, env: hh.env, refresh: false, data: hh.data });
         return { ctx, found: await checkUpdates(ctx) };
     };
     const { ctx, found } = await checkNow();

@@ -200,8 +200,10 @@ const scan = (rel: string): void => {
 };
 scan('.');
 
-// Names that say what they hold (spec, Names): no one-letter binding in scripts/ but i, j, k as indexes and _.
+// Names that say what they hold (spec, Names): no one-letter binding or property in scripts/ but i, j, k as indexes and
+// _, and none of the abbreviations the plan names.
 const ONE_LETTER_OK = new Set(['i', 'j', 'k', '_']);
+const ABBREVIATIONS = new Set(['inv', 'res', 'ret', 'opts', 'cfg', 'fn', 'cb', 'obj', 'arr', 'str', 'val', 'acc', 'cur', 'idx', 'el', 'tmpl', 'rctx', 'ws', 'ctx']);
 const scriptFiles = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true })
     .flatMap((entry) => entry.isDirectory() ? scriptFiles(path.join(dir, entry.name)) : entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts') ? [path.join(dir, entry.name)] : []);
 for (const file of scriptFiles(path.join(root, 'scripts')))
@@ -209,11 +211,13 @@ for (const file of scriptFiles(path.join(root, 'scripts')))
     const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
     const visit = (node: ts.Node): void =>
     {
-        const binding = ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node) || ts.isFunctionDeclaration(node) ? node.name : undefined;
-        if (binding && ts.isIdentifier(binding) && binding.text.replace(/^_/, '').length === 1 && !ONE_LETTER_OK.has(binding.text))
+        const binding = ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node) || ts.isFunctionDeclaration(node)
+            || ts.isPropertySignature(node) || ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node) || ts.isPropertyDeclaration(node) ? node.name : undefined;
+        const bare = binding && ts.isIdentifier(binding) ? binding.text.replace(/^_/, '') : '';
+        if (binding && ((bare.length === 1 && !ONE_LETTER_OK.has(bare)) || ABBREVIATIONS.has(bare)))
         {
             const { line } = source.getLineAndCharacterOfPosition(binding.getStart(source));
-            problems.push(`${path.relative(root, file)}:${line + 1}: '${binding.text}' is a one-letter name - name what it holds`);
+            problems.push(`${path.relative(root, file)}:${line + 1}: '${bare}' is ${bare.length === 1 ? 'a one-letter name' : 'an abbreviation'} - name what it holds`);
         }
         ts.forEachChild(node, visit);
     };

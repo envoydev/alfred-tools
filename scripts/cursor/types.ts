@@ -13,7 +13,7 @@ export interface CursorRead
 {
     state: 'absent' | 'ok' | 'symlink' | 'bad' | 'shape';
     doc: CursorDoc | null;
-    eol: string;
+    lineEnd: string;
     error?: string | undefined;
     text?: string;
 }

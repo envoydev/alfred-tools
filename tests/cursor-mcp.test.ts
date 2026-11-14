@@ -126,7 +126,7 @@ test('cursor-mcp keeps CRLF and drops the BOM', () => {
     const d = fresh();
     const file = path.join(d, '.cursor', 'mcp.json');
     write(file, '﻿{\r\n  "mcpServers": {\r\n    "mine": { "command": "node" }\r\n  }\r\n}\r\n');
-    assert.strictEqual(C.readCursor(file).eol, '\r\n');
+    assert.strictEqual(C.readCursor(file).lineEnd, '\r\n');
     const r = C.cursorWrite(step(file, [{ file: listFile(d, [srv('serena', 'local', SERENA)]), scopes: ['local', 'project'] }]), ctx);
     assert.strictEqual(r.ok, true, r.detail);
     const text = fs.readFileSync(file, 'utf8');

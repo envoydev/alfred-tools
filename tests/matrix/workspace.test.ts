@@ -250,7 +250,7 @@ test('W4 - keys without alfred-code: the root and its ignores, a stdio key writt
 
         // token-sync: a changed stdio value is written in
         fake.fill(secrets, S, s2);
-        const ctx = () => makeCtx({ inv: h.inventory(api, { catalog }), catalog, env: h.env, data: h.data });
+        const ctx = () => makeCtx({ inventory: h.inventory(api, { catalog }), catalog, env: h.env, data: h.data });
         assert.ok(detectAll(ctx()).found.some((f) => f.id === 'token-sync' && f.name === 'sentry' && !f.blocked), 'token-sync names it');
         const lines: string[] = [];
         const log = (...a: unknown[]) => lines.push(a.join(' '));
@@ -341,7 +341,7 @@ test('W5 - a root\'s project-scope tool in alfred-code\'s folder, absolute: the 
     assert.ok(h.inventory(b.child!).registrations.some((x) => x.scope === 'inherited' && x.name === 'playwright-chrome' && x.from === b.root!), 'the child lists it inherited');
 
     // a session started in a child or a subfolder uses the root's folder: no copy is made there, so nothing is found
-    const ctxAt = (dir: string) => makeCtx({ inv: h.inventory(dir), env: h.env });
+    const ctxAt = (dir: string) => makeCtx({ inventory: h.inventory(dir), env: h.env });
     const findings = (dir: string) => detectAll(ctxAt(dir), { only: 'data-folder-ignore' }).found;
     const bare = gitDir(path.join(b.root!, 'bare'));
     const src = path.join(b.child!, 'src');

@@ -282,7 +282,7 @@ for (const f of FIXES)
         const name = `fix-${f.id}`; // a custom name: identity is the launch, and another case's registration in the shared account cannot match `--only`
         add(p, name, seeded, 'local');
         const mk = () => makeCtx({
-            inv: h.inventory(p), catalog, env: { ...h.env, ...(f.env || {}) }, platform: f.platform, arch: f.arch || 'x64',
+            inventory: h.inventory(p), catalog, env: { ...h.env, ...(f.env || {}) }, platform: f.platform, arch: f.arch || 'x64',
             machine: { exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1, stdout: '', stderr: '' }), nodeVersion: process.versions.node, ...(f.machine || {}) },
         });
         const found = detectAll(mk(), { only: name }).found.filter((x) => x.id === f.id);
@@ -310,7 +310,7 @@ test('fix windows-mcp-one-per-desktop: two real registrations on a simulated win
         add(p, 'wd-a', freshEntry('windows-control', 'win32', 'x64', 'local'), 'local');
         add(p, 'wd-b', freshEntry('windows-control', 'win32'), 'user');
         // x64 as the FIXES cases: an ARM64 host would fire windows-arm-python on the same entries
-        const mk = () => makeCtx({ inv: h.inventory(p), catalog, env: h.env, platform: 'win32', arch: 'x64',
+        const mk = () => makeCtx({ inventory: h.inventory(p), catalog, env: h.env, platform: 'win32', arch: 'x64',
             machine: { exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1, stdout: '', stderr: '' }), nodeVersion: process.versions.node } });
         const detected = detectAll(mk(), { only });
         assert.strictEqual(detected.found.length, 1, JSON.stringify(detected.found));

@@ -103,7 +103,7 @@ export function nextQuestion(inventory: Inventory, picks: Picks | null | undefin
             const rootStep = () =>
             {
                 if (!needsRoot(row, routeId)) return;
-                const scope = (picks.scopes || {})[id] || scopeOrder(row, inventory, { route: routeId, ctx: null, copyOf: installedOf(inventory, id) })[0]!;
+                const scope = (picks.scopes || {})[id] || scopeOrder(row, inventory, { route: routeId, context: null, copyOf: installedOf(inventory, id) })[0]!;
                 const family = roots.familyOf(scope);
                 if (asked.has(family)) return;
                 asked.add(family);

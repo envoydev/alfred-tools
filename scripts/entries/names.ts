@@ -36,10 +36,10 @@ function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: str
     const bridge = bridgeParts(entry);
     if (bridge)
     {
-        if (!bridge.pkg) return null;
-        const npmArgv = ['npm', 'exec', '--yes', '--package', bridge.pkg, '--', 'node', '-e', '0'];
+        if (!bridge.packageSpec) return null;
+        const npmArgv = ['npm', 'exec', '--yes', '--package', bridge.packageSpec, '--', 'node', '-e', '0'];
         const argv = /^[A-Za-z]:/.test(bridge.path) ? ['cmd', '/c', ...npmArgv] : npmArgv;
-        return { op: 'fetch', name, row: rowId, what: bridge.pkg, argv, env: entry.env || {}, why: `${rowId || name}: fetch ${bridge.pkg} so the first start answers in time` };
+        return { op: 'fetch', name, row: rowId, what: bridge.packageSpec, argv, env: entry.env || {}, why: `${rowId || name}: fetch ${bridge.packageSpec} so the first start answers in time` };
     }
     let cmd: string | undefined = entry.command;
     let args = (entry.args || []).slice();

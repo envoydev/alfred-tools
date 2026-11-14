@@ -18,7 +18,7 @@ export interface Registry
 // new way to pass data rewrote, and the names Cursor asks to approve again.
 export interface UpdateCtx
 {
-    inv: Inventory;
+    inventory: Inventory;
     project: string;
     catalog: Catalog;
     env: Env;

@@ -60,7 +60,7 @@ function updateMcp(context: UpdateCtx, offer: McpOffer, tmp: string, log: Log): 
     const now = inventory.buildInventory({ project: context.project, env: context.env, run: context.runCli, data: context.data, catalog: context.catalog });
     const tail = repairTail(now, { platform: now.os, project: context.project, home: account.homeDir(context.env), env: context.env, catalog: context.catalog, notes }, [replace]);
     for (const note of notes) log(`note   ${note}`);
-    const plan = { project: context.project, alfredCodeEnabled: Boolean(context.inv && context.inv.alfredCodeEnabled), steps: mcpOrder.withOrderStep([replace, ...(fetch ? [fetch] : []), ...tail], context.project, mcpOrder.ownProjectNames(context.inv || {})), expect: [{ kind: 'mcp', name: offer.name, scope: offer.scope, route: offer.route }] };
+    const plan = { project: context.project, alfredCodeEnabled: Boolean(context.inventory && context.inventory.alfredCodeEnabled), steps: mcpOrder.withOrderStep([replace, ...(fetch ? [fetch] : []), ...tail], context.project, mcpOrder.ownProjectNames(context.inventory || {})), expect: [{ kind: 'mcp', name: offer.name, scope: offer.scope, route: offer.route }] };
     const report = apply(plan, { env: context.env, tmp, runCli: context.runCli, fetchFile: false, log: (...parts: string[]) => log(parts.join(' ')) });
     if (report.fetch && report.fetch.fetch.length) context.fetches!.push(report.fetch);
     if (report.failed) return false;
@@ -77,7 +77,7 @@ function updateMcp(context: UpdateCtx, offer: McpOffer, tmp: string, log: Log): 
 function updateCursorPin(context: UpdateCtx, offer: CursorPinOffer, tmp: string, log: Log): boolean
 {
     const scopes = offer.family === 'global' ? ['user'] : ['local', 'project'];
-    const before = ((context.inv.lists![offer.family] || {} as Partial<InvList>).servers || []).filter((server) => (server.clients || []).includes('cursor')).map((server) => server.name);
+    const before = ((context.inventory.lists![offer.family] || {} as Partial<InvList>).servers || []).filter((server) => (server.clients || []).includes('cursor')).map((server) => server.name);
     const steps: PlanStep[] = [
         { op: 'list-write', file: offer.list, family: offer.family, upserts: [{ server: { ...offer.server, cursorEntry: offer.entry }, after: null, cursorFile: offer.file }], drops: [], own: null, why: `${offer.list}: Cursor's copy of ${offer.name} at ${offer.package} ${offer.to}` },
         { op: 'cursor-write', file: offer.file, family: offer.family, lists: [{ file: offer.list, scopes }], before, skip: [], replace: [], why: `${offer.file}: ${offer.name} at ${offer.package} ${offer.to}` },
@@ -113,7 +113,7 @@ function updateHelper(offer: FileOffer, log: Log): boolean
 function updateUpgrade(context: UpdateCtx, offer: UpgradeOffer, dir: string, log: Log): boolean
 {
     const projectInventory = inventory.buildInventory({ project: context.project, env: context.env, run: context.runCli, data: context.data, catalog: context.catalog });
-    const fctx = fixLib.makeCtx({ inv: projectInventory, catalog: upgradeCatalog(context.catalog), env: context.env, machine: context.machine, data: context.data });
+    const fctx = fixLib.makeCtx({ inventory: projectInventory, catalog: upgradeCatalog(context.catalog), env: context.env, machine: context.machine, data: context.data });
     const result = fixLib.applyFixes(fctx, [offer.fix], { only: offer.name, name: offer.name, scope: offer.scope || undefined, tmp: dir, log, runCli: context.runCli, fetchFile: false });
     if (result.fetch && result.fetch.fetch.length) context.fetches!.push(result.fetch);
     for (const finding of result.applied.filter((candidate) => candidate.kind === 'registration')) { context.restart = true; context.touched!.add(`${finding.name}~${finding.scope}`); }

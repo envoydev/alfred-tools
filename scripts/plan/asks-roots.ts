@@ -36,7 +36,7 @@ export function rootFamilies(inventory: Inventory, picks: Picks | null | undefin
         if (!row) continue;
         const routeId = routes[id] || row.recommendedRoute;
         if (!needsRoot(row, routeId)) continue;
-        const scope = scopes[id] || scopeOrder(row, inventory, { route: routeId, ctx: context, copyOf: installedOf(inventory, id) })[0]!;
+        const scope = scopes[id] || scopeOrder(row, inventory, { route: routeId, context: context, copyOf: installedOf(inventory, id) })[0]!;
         out.add(roots.familyOf(scope));
     }
     return (['project', 'global'] as Family[]).filter((family) => out.has(family));

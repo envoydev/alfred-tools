@@ -17,12 +17,12 @@ import type { UpdateCheck, UpdateCtx } from './types.ts';
 // offered; a hand edit or a newer copy is left to /preferred-tools:fix, with a note.
 export function helperOffers(context: UpdateCtx, out: UpdateCheck): void
 {
-    const pathApi = pathFor(context.inv.os);
-    const rootContext = { project: context.project, home: homeDir(context.env), platform: context.inv.os, catalog: context.catalog };
-    const dirs = new Set((['project', 'global'] as const).map((family) => context.inv.roots && context.inv.roots[family] && context.inv.roots[family].path).filter(Boolean) as string[]);
+    const pathApi = pathFor(context.inventory.os);
+    const rootContext = { project: context.project, home: homeDir(context.env), platform: context.inventory.os, catalog: context.catalog };
+    const dirs = new Set((['project', 'global'] as const).map((family) => context.inventory.roots && context.inventory.roots[family] && context.inventory.roots[family].path).filter(Boolean) as string[]);
     const bridgeDirs = new Set<string>();
     const contextDirs = new Set<string>();
-    for (const registration of context.inv.registrations || [])
+    for (const registration of context.inventory.registrations || [])
     {
         if (!registration.rowId || registration.own || registration.alfredRetired || registration.choice === 'own' || registration.scope === 'inherited') continue;
         // serena's context file (0.5.0, D7), where the entry names this plugin's
@@ -64,7 +64,7 @@ export function upgradeOffers(context: UpdateCtx, out: UpdateCheck): void
 {
     const catalog = upgradeCatalog(context.catalog);
     if (!catalog.fixes.length) return;
-    const fctx = fixLib.makeCtx({ inv: context.inv, catalog, env: context.env, machine: context.machine, data: context.data });
+    const fctx = fixLib.makeCtx({ inventory: context.inventory, catalog, env: context.env, machine: context.machine, data: context.data });
     for (const finding of fixLib.detectAll(fctx).found)
     {
         // an uninstall the user turned down is theirs to keep: no offer, no note, nothing waiting (spec D9)

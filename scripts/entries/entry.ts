@@ -195,7 +195,7 @@ export function bridgeParts(entry: ServerEntry | null | undefined): BridgeParts 
     const at = args.findIndex((argument) => argument.replace(/\\/g, '/').split('/').pop() === 'mcp-bridge.js');
     if (at < 0 || !args[at + 1]) return null;
     const [template, keyName = null, scheme = null, packageSpec = null, globalRoot = null] = args.slice(at + 1);
-    return { path: args[at]!, template: template!, keyName, scheme, pkg: packageSpec, globalRoot };
+    return { path: args[at]!, template: template!, keyName, scheme, packageSpec: packageSpec, globalRoot };
 }
 
 // A template with each catalog name replaced by the user's: { SENTRY_ORG: 'SENTRY_SLUG' } turns {SENTRY_ORG} into

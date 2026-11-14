@@ -45,10 +45,10 @@ import type { DriftAsk, ListCtx, McpReplaceStep, PlanStep, Question, Reconnect, 
 import type { Roots } from '../entries/types.ts';
 import type { Detected, Detector, DriftQuestion, FileSteps, Finding, FixCtx, FixOptions, FixQuestions, FixRun, MachineFix, MachineProbe, RegistrationFix } from './types.ts';
 
-export function makeCtx({ inv: projectInventory, catalog = catalogLib.load(), env = process.env, machine, platform, arch, data = null }: { inv: Inventory; catalog?: Catalog; env?: Env; machine?: MachineProbe | undefined; platform?: string; arch?: string; data?: string | null }): FixCtx
+export function makeCtx({ inventory: projectInventory, catalog = catalogLib.load(), env = process.env, machine, platform, arch, data = null }: { inventory: Inventory; catalog?: Catalog; env?: Env; machine?: MachineProbe | undefined; platform?: string; arch?: string; data?: string | null }): FixCtx
 {
     const resolvedPlatform = platform || projectInventory.os;
-    return { inv: projectInventory, catalog, platform: resolvedPlatform, arch: arch || projectInventory.arch, env, home: account.homeDir(env), rules: catalog.rules, machine: machine || realMachine({ env, platform: resolvedPlatform }), data };
+    return { inventory: projectInventory, catalog, platform: resolvedPlatform, arch: arch || projectInventory.arch, env, home: account.homeDir(env), rules: catalog.rules, machine: machine || realMachine({ env, platform: resolvedPlatform }), data };
 }
 
 const matches = (finding: Finding, only: string | undefined) => !only || [finding.id, finding.row, finding.name].includes(only);
@@ -57,7 +57,7 @@ const matches = (finding: Finding, only: string | undefined) => !only || [findin
 // scope fills it (spec F3) - the same reconnect line the plan prints.
 function reconnectOf(context: FixCtx, steps: McpReplaceStep[]): Pick<Reconnect, 'name' | 'variable' | 'file' | 'filled' | 'anonymous'>[]
 {
-    const resolvedRoots = roots.resolve(context.inv, null, { project: context.inv.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
+    const resolvedRoots = roots.resolve(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
     return steps.filter((step) => step.entry && step.entry.headersHelper && helperNameOf(step.entry.headersHelper)).map((step) =>
     {
         const variable = helperNameOf(step.entry.headersHelper)!;
@@ -71,18 +71,18 @@ function reconnectOf(context: FixCtx, steps: McpReplaceStep[]): Pick<Reconnect, 
 // connects without its key. Not a fix - nothing here can accept it. -> [line]
 function trustNotes(context: FixCtx, only: string | undefined): string[]
 {
-    if (context.inv.trusted !== false) return [];
-    return (context.inv.registrations || [])
+    if (context.inventory.trusted !== false) return [];
+    return (context.inventory.registrations || [])
         .filter((registration) => registration.rowId && !registration.own && !registration.alfredRetired && registration.choice !== 'own' && ['project', 'local'].includes(registration.scope) && registration.entry && registration.entry.headersHelper)
         .filter((registration) => !only || [registration.name, registration.rowId].includes(only))
-        .map((registration) => `${registration.name} (${registration.scope}): accept the trust dialog the next time Claude Code starts in ${context.inv.project} - until then the server connects without its key`);
+        .map((registration) => `${registration.name} (${registration.scope}): accept the trust dialog the next time Claude Code starts in ${context.inventory.project} - until then the server connects without its key`);
 }
 
 // -> { found: [finding + { kind, symptom }], held: [{ id, why }], own: [{ name, scope }], notes: [line] } - `own`: the
 // registrations left on their own (spec D6), which no detector reads
 export function detectAll(context: FixCtx, { only }: { only?: string | undefined } = {}): Detected
 {
-    const own = (context.inv.registrations || []).filter((registration) => registration.choice === 'own' && (!only || [registration.name, registration.rowId].includes(only)));
+    const own = (context.inventory.registrations || []).filter((registration) => registration.choice === 'own' && (!only || [registration.name, registration.rowId].includes(only)));
     const out: Detected = { found: [], held: [], own: own.map((registration) => ({ name: registration.name, scope: registration.scope })), notes: trustNotes(context, only) };
     for (const fix of context.catalog.fixes)
     {
@@ -230,13 +230,13 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     const order = context.catalog.fixes.map((fixRow) => fixRow.id);
     const groups = new Map<string, Finding[]>();
     // R9: a fix that gives a registration a helper brings its root's file steps - the .gitignore and the helper - first
-    const fileCtx: { platform: string; project: string; roots: Roots | null; uses: RootUse[] } = { platform: context.platform, project: context.inv.project, roots: null, uses: [] };
+    const fileCtx: { platform: string; project: string; roots: Roots | null; uses: RootUse[] } = { platform: context.platform, project: context.inventory.project, roots: null, uses: [] };
     for (const finding of todo.filter((candidate) => candidate.kind === 'registration')) groups.set(`${finding.scope}\u0000${finding.name}`, [...(groups.get(`${finding.scope}\u0000${finding.name}`) || []), finding]);
     for (const list of groups.values())
     {
         const withRoots = list.find((candidate) => candidate.roots);
         if (withRoots) fileCtx.roots = fileCtx.roots || withRoots.roots!;
-        const registration = context.inv.registrations.find((candidate) => candidate.name === list[0]!.name && candidate.scope === list[0]!.scope)!;
+        const registration = context.inventory.registrations.find((candidate) => candidate.name === list[0]!.name && candidate.scope === list[0]!.scope)!;
         let entry = clone(registration.entry);
         try
         {
@@ -255,7 +255,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     // key token-sync found behind is refilled with the list as it is
     const refresh = todo.filter((finding) => finding.id === 'token-sync' && finding.cursorOnly).map((finding) => ({ name: finding.name, scope: finding.scope! }));
     const tailNotes: string[] = [];
-    const tail = steps.length || refresh.length ? repairTail(context.inv, { platform: context.platform, project: context.inv.project, home: context.home, env: context.env, catalog: context.catalog, notes: tailNotes }, steps, { refresh }) : [];
+    const tail = steps.length || refresh.length ? repairTail(context.inventory, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, notes: tailNotes }, steps, { refresh }) : [];
     if (steps.length || tail.length)
     {
         // a fix that changes what is fetched (a python request, a cut-off, cmd /c) is fetched once it is written
@@ -265,10 +265,10 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
             return fetchJobStep ? [step, fetchJobStep] : [step];
         });
         const fileNotes: string[] = [];
-        const files = fileCtx.uses.length ? fileSteps(context.inv, fileCtx as ListCtx, { notes: fileNotes }) : { before: [] };
+        const files = fileCtx.uses.length ? fileSteps(context.inventory, fileCtx as ListCtx, { notes: fileNotes }) : { before: [] };
         for (const rootUse of [...new Map(fileCtx.uses.map((usage) => [usage.root, usage] as const)).values()]) log(`the key helper goes in the ${rootUse.family} root ${rootUse.root}`);
         for (const note of [...fileNotes, ...tailNotes]) log(`note: ${note}`);
-        const plan = { version: 1, project: context.inv.project, os: context.platform, alfredCodeEnabled: Boolean(context.inv.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch, ...tail], context.inv.project, mcpOrder.ownProjectNames(context.inv)), notes: [], errors: [], expect: steps.map((step) => ({ kind: 'mcp', name: step.name, scope: step.scope, route: context.inv.registrations.find((candidate) => candidate.name === step.name && candidate.scope === step.scope)!.route })) };
+        const plan = { version: 1, project: context.inventory.project, os: context.platform, alfredCodeEnabled: Boolean(context.inventory.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch, ...tail], context.inventory.project, mcpOrder.ownProjectNames(context.inventory)), notes: [], errors: [], expect: steps.map((step) => ({ kind: 'mcp', name: step.name, scope: step.scope, route: context.inventory.registrations.find((candidate) => candidate.name === step.name && candidate.scope === step.scope)!.route })) };
         result.tmp = tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
         const report = apply(plan, { env: context.env, tmp: result.tmp, runCli, log, fetchFile });
         result.fetchFile = report.fetchFile;
@@ -283,7 +283,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     const filePicked = todo.filter((finding) => finding.kind === 'file');
     if (filePicked.length)
     {
-        const fctx = steps.length ? { ...context, inv: inventory.buildInventory({ project: context.inv.project, env: context.env, data: context.data }) } : context;
+        const fctx = steps.length ? { ...context, inventory: inventory.buildInventory({ project: context.inventory.project, env: context.env, data: context.data }) } : context;
         const now = detectAll(fctx, { only }).found.filter((finding) => finding.kind === 'file' && !finding.blocked && filePicked.some((pickedFinding) => pickedFinding.id === finding.id && pickedFinding.name === finding.name && pickedFinding.scope === finding.scope && pickedFinding.app === finding.app));
         const planned: PlanStep[] = [];
         for (const row of context.catalog.fixes.filter((candidate) => candidate.kind === 'file'))
@@ -294,7 +294,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
             }
         if (planned.length)
         {
-            const plan = { version: 1, project: context.inv.project, os: context.platform, alfredCodeEnabled: Boolean(context.inv.alfredCodeEnabled), steps: planned, notes: [], errors: [], expect: [] };
+            const plan = { version: 1, project: context.inventory.project, os: context.platform, alfredCodeEnabled: Boolean(context.inventory.alfredCodeEnabled), steps: planned, notes: [], errors: [], expect: [] };
             result.tmp = result.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
             const report = apply(plan, { env: context.env, tmp: result.tmp, runCli, log, fetchFile: false, data: context.data });
             if (report.failed) { result.failed = report.failed.detail; return result; }
@@ -317,12 +317,12 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     {
         // beside a fetch file a registration fix already wrote, or in a new one
         result.tmp = result.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
-        result.fetchFile = writeJob(result.fetchFile || path.join(result.tmp, 'fetch.json'), fetchJob(context.inv.project, refetch, refetch.map((jobStep) => jobStep.name)), { append: true });
+        result.fetchFile = writeJob(result.fetchFile || path.join(result.tmp, 'fetch.json'), fetchJob(context.inventory.project, refetch, refetch.map((jobStep) => jobStep.name)), { append: true });
         log('', ...nextLines(result.fetchFile, JSON.parse(fs.readFileSync(result.fetchFile, 'utf8'))));
     }
 
     // read back: the same detectors, run again on what is installed now
-    const after = detectAll({ ...context, inv: inventory.buildInventory({ project: context.inv.project, env: context.env, data: context.data }) }, { only });
+    const after = detectAll({ ...context, inventory: inventory.buildInventory({ project: context.inventory.project, env: context.env, data: context.data }) }, { only });
     for (const finding of todo)
     {
         const left = after.found.some((candidate) => candidate.id === finding.id && candidate.name === finding.name && candidate.scope === finding.scope && candidate.app === finding.app);

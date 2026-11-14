@@ -21,11 +21,11 @@ export async function refresh(tools: ToolsFile, { registry, now = Date.now() }: 
 {
     const next = JSON.parse(JSON.stringify(tools)) as ToolsFile;
     const out: Refresh = { next, changes: [], held: [], errors: [] };
-    const cache = new Map<string, Promise<{ v: Release[]; e?: undefined } | { e: Error; v?: undefined }>>();
+    const cache = new Map<string, Promise<{ releases: Release[]; error?: undefined } | { error: Error; releases?: undefined }>>();
     const versions = (registryName: string, name: string) =>
     {
         const key = `${registryName}:${name}`;
-        if (!cache.has(key)) cache.set(key, registry.versionsOf(registryName, name).then((releases) => ({ v: releases }), (error: Error) => ({ e: error })));
+        if (!cache.has(key)) cache.set(key, registry.versionsOf(registryName, name).then((releases) => ({ releases: releases }), (error: Error) => ({ error: error })));
         return cache.get(key)!;
     };
     for (const row of next.tools)
@@ -35,8 +35,8 @@ export async function refresh(tools: ToolsFile, { registry, now = Date.now() }: 
             if (!packageSpec) continue;
             const lookup = await versions(packageSpec.registry, packageSpec.name);
             const at = `${row.id}/${routeId}`;
-            if (lookup.e) { out.errors.push(`${at}: ${packageSpec.registry} lookup for ${packageSpec.name} failed - ${lookup.e.message}`); continue; }
-            const pick = registryLib.choose(lookup.v!, { registry: packageSpec.registry, now, current: packageSpec.version });
+            if (lookup.error) { out.errors.push(`${at}: ${packageSpec.registry} lookup for ${packageSpec.name} failed - ${lookup.error.message}`); continue; }
+            const pick = registryLib.choose(lookup.releases!, { registry: packageSpec.registry, now, current: packageSpec.version });
             if (pick.held.length) out.held.push(`${at}: ${registryLib.heldLine(packageSpec.name, pick.held)}`);
             if (!pick.offer) continue;
             out.changes.push({ row: row.id, route: routeId, package: packageSpec.name, from: packageSpec.version, to: pick.offer.version, ageDays: pick.offer.ageDays });

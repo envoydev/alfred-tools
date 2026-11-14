@@ -26,8 +26,8 @@ export function retiredPluginDetect(context: FixCtx): Finding[]
 {
     const ids = C.fixOf(context, 'retired-plugin')!.ids || [];
     const declined = declines.read(context.data);
-    const alfred = Boolean(context.inv.alfredCodeEnabled);
-    return (context.inv.plugins || []).filter((plugin) => ids.includes(plugin.id)).map((plugin) =>
+    const alfred = Boolean(context.inventory.alfredCodeEnabled);
+    return (context.inventory.plugins || []).filter((plugin) => ids.includes(plugin.id)).map((plugin) =>
     {
         const base = {
             id: 'retired-plugin', name: plugin.id, scope: plugin.scope, alfred,
@@ -44,9 +44,9 @@ export function retiredPluginDetect(context: FixCtx): Finding[]
 export function retiredPluginFix(finding: Finding, context: FixCtx): MachineFixResult
 {
     const command = `claude plugin uninstall ${finding.name} --scope ${finding.scope}`;
-    const result = cli.runClaude(['plugin', 'uninstall', finding.name, '--scope', finding.scope!], { cwd: context.inv.project, env: context.env });
+    const result = cli.runClaude(['plugin', 'uninstall', finding.name, '--scope', finding.scope!], { cwd: context.inventory.project, env: context.env });
     if (result.error || result.status !== 0) return { ok: false, detail: `${command} failed - ${String(`${result.stderr || ''}${result.stdout || ''}` || (result.error && result.error.message) || 'no output').trim().split('\n').slice(-1)[0]}` };
-    const left = inventory.buildInventory({ project: context.inv.project, env: context.env, data: context.data }).plugins;
+    const left = inventory.buildInventory({ project: context.inventory.project, env: context.env, data: context.data }).plugins;
     if (left.some((plugin) => plugin.id === finding.name && plugin.scope === finding.scope)) return { ok: false, detail: `${finding.name} is still listed at ${finding.scope} after ${command}` };
     let detail = `uninstalled ${finding.name} (${finding.scope})`;
     if (finding.name.startsWith('claude-hud@'))
@@ -67,7 +67,7 @@ export function retiredPluginFix(finding: Finding, context: FixCtx): MachineFixR
 const PROBE = 'preferred-tools-probe';
 function ignoredByGit(context: FixCtx, rel: string): boolean | null
 {
-    const result = context.machine.run('git', ['check-ignore', '-q', `${rel}/${PROBE}`], { cwd: context.inv.project });
+    const result = context.machine.run('git', ['check-ignore', '-q', `${rel}/${PROBE}`], { cwd: context.inventory.project });
     return result && (result.status === 0 || result.status === 1) ? result.status === 0 : null;
 }
 
@@ -77,7 +77,7 @@ export function dataFolderIgnoreDetect(context: FixCtx): Finding[]
     const tools = C.fixOf(context, 'data-folder-ignore')!.tool;
     const seen = new Set<string>();
     const out: Finding[] = [];
-    for (const registration of context.inv.registrations)
+    for (const registration of context.inventory.registrations)
     {
         if (registration.own || registration.alfredRetired || registration.choice === 'own' || !tools.includes(registration.rowId!)) continue;
         // starts here: a project-scope one not rejected, or a parent's not rejected and not shadowed by a nearer one
@@ -92,14 +92,14 @@ export function dataFolderIgnoreDetect(context: FixCtx): Finding[]
             continue;
         }
         const rel = root.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
-        const folder = pathApi.resolve(context.inv.project, ...rel.split('/'));
+        const folder = pathApi.resolve(context.inventory.project, ...rel.split('/'));
         if (seen.has(folder)) continue;
         seen.add(folder);
         const own = pathApi.join(folder, '.gitignore');
         const gitIgnores = ignoredByGit(context, rel);
         if (gitIgnores === true) continue;
         if (gitIgnores === null && context.machine.exists(own)) continue;
-        if (gitIgnores === null && /^\.alfred\//.test(rel) && context.machine.exists(pathApi.join(context.inv.project, '.alfred', '.gitignore'))) continue;
+        if (gitIgnores === null && /^\.alfred\//.test(rel) && context.machine.exists(pathApi.join(context.inventory.project, '.alfred', '.gitignore'))) continue;
         // a .gitignore of the user's that leaves the data out is theirs to change: the fix never writes over it
         if (gitIgnores === false && context.machine.exists(own))
         {
@@ -124,16 +124,16 @@ export function dataFolderIgnoreDetect(context: FixCtx): Finding[]
 // copy is on disk and git does not ignore it; the fix gives it the same .gitignore. Its data is never moved or deleted.
 function leftoverCopy(context: FixCtx, registration: InvRegistration, root: string, pathApi: path.PlatformPath): { folder: string; finding: Finding } | null
 {
-    const declared = registration.scope === 'inherited' ? registration.from : context.inv.project;
-    if (!declared || pathApi.resolve(declared) === pathApi.resolve(context.inv.project)) return null;
+    const declared = registration.scope === 'inherited' ? registration.from : context.inventory.project;
+    if (!declared || pathApi.resolve(declared) === pathApi.resolve(context.inventory.project)) return null;
     const rel = pathApi.relative(declared, root);
     if (!rel || rel.startsWith('..') || pathApi.isAbsolute(rel)) return null;
-    const folder = pathApi.join(context.inv.project, rel);
+    const folder = pathApi.join(context.inventory.project, rel);
     if (!context.machine.exists(folder)) return null;
     const slashed = rel.split(pathApi.sep).join('/');
     const gitIgnores = ignoredByGit(context, slashed);
     if (gitIgnores === true) return null;
-    if (gitIgnores === null && (context.machine.exists(pathApi.join(folder, '.gitignore')) || (/^\.alfred\//.test(slashed) && context.machine.exists(pathApi.join(context.inv.project, '.alfred', '.gitignore'))))) return null;
+    if (gitIgnores === null && (context.machine.exists(pathApi.join(folder, '.gitignore')) || (/^\.alfred\//.test(slashed) && context.machine.exists(pathApi.join(context.inventory.project, '.alfred', '.gitignore'))))) return null;
     return {
         folder,
         finding: {
@@ -190,7 +190,7 @@ function npmCacheOf(context: FixCtx, registration: InvRegistration, memo: Map<st
     if (own) return C.expandVars(own[1], context.env);
     const inEnv = cacheVar(context.env);
     if (inEnv) return inEnv[1];
-    if (!memo.has('cache')) memo.set('cache', cacheInForce(context.machine.run('npm', ['config', 'ls', '-l'], { cwd: context.inv.project })));
+    if (!memo.has('cache')) memo.set('cache', cacheInForce(context.machine.run('npm', ['config', 'ls', '-l'], { cwd: context.inventory.project })));
     return memo.get('cache')!;
 }
 
@@ -206,7 +206,7 @@ export function npxCacheEntryDetect(context: FixCtx): Finding[]
     const memo = new Map<string, string | null>();
     const seen = new Set<string>();
     const out: Finding[] = [];
-    for (const registration of context.inv.registrations)
+    for (const registration of context.inventory.registrations)
     {
         // npx, or a bridge (0.4.0), which runs its pinned mcp-remote through npx
         if (!startsHere(context, registration) || (C.launcher(registration.entry) !== 'npx' && !bridgeParts(registration.entry))) continue;
@@ -231,7 +231,7 @@ export function npxCacheEntryFix(finding: Finding, context: FixCtx): MachineFixR
     if (!NPX_FOLDER.test(pathApi.basename(folder)) || pathApi.basename(pathApi.dirname(folder)) !== '_npx') return { ok: false, detail: `${folder} is not an npx cache folder - left as it is` };
     try { fs.rmSync(folder, { recursive: true, force: true }); }
     catch (caught) { const error = caught as NodeJS.ErrnoException; return { ok: false, detail: `could not remove ${folder}: ${error.message}` }; }
-    const registration = context.inv.registrations.find((candidate) => candidate.name === finding.name && candidate.scope === finding.scope && !candidate.shadowed);
+    const registration = context.inventory.registrations.find((candidate) => candidate.name === finding.name && candidate.scope === finding.scope && !candidate.shadowed);
     const step = registration ? fetchStep(registration.name, registration.entry, registration.rowId) : null;
     // a parent's server is read from the parent's .mcp.json and started here, as this folder's session starts it
     const where = registration && registration.scope === 'inherited' ? { scope: 'project', from: registration.from } : { scope: registration && registration.scope };

@@ -110,7 +110,7 @@ test('X4 - fix on a 0.2.0 project file: relative paths and helper written absolu
     const before = servers(dir);
     const cutoff = arg(before.serena, '--exclude-newer');
     const lines: string[] = [];
-    const fctx = makeCtx({ inv: h.inventory(dir), env: h.env, data: h.data });
+    const fctx = makeCtx({ inventory: h.inventory(dir), env: h.env, data: h.data });
     const found = detectAll(fctx).found.map((f) => f.id);
     for (const id of ['project-relative-path', 'mcp-order']) assert.ok(found.includes(id), `${id} found: ${found.join(', ')}`);
     const res = applyFixes(fctx, ['all'], { tmp: path.join(h.root, 'tmp', 'fix'), log: (...a) => lines.push(a.join(' ')) });
@@ -125,7 +125,7 @@ test('X4 - fix on a 0.2.0 project file: relative paths and helper written absolu
     assert.strictEqual(arg(after.serena, '--exclude-newer'), cutoff, 'the cut-off as seeded');
     assert.deepStrictEqual(after.serena.args, before.serena.args, 'serena\'s args as seeded');
     assert.strictEqual(after.context7.headersHelper, `node ${shellArg(path.join(root, roots.FILES.helper), style)} CONTEXT7_API_KEY Bearer`);
-    const left = detectAll(makeCtx({ inv: h.inventory(dir), env: h.env, data: h.data })).found.map((f) => f.id);
+    const left = detectAll(makeCtx({ inventory: h.inventory(dir), env: h.env, data: h.data })).found.map((f) => f.id);
     assert.ok(!left.includes('project-relative-path') && !left.includes('mcp-order'), left.join(', '));
 });
 
@@ -157,9 +157,9 @@ test('X6 - configure answered \'Leave it on its own\': one own entry in the fami
     assert.deepStrictEqual(readJson(list).own.map((e: { name: string; scope: string; choice: string }) => [e.name, e.scope, e.choice]), [['context7', 'project', 'own']]);
     assert.ok(!fs.existsSync(path.join(h.home, '.preferred-tools', roots.FILES.list)), 'no list in the global root');
     const inv = h.inventory(dir);
-    const d = detectAll(makeCtx({ inv, env: h.env, data: h.data }));
+    const d = detectAll(makeCtx({ inventory: inv, env: h.env, data: h.data }));
     assert.ok(renderFixes(d).includes('context7 (project): on its own - not checked'), renderFixes(d));
-    const out = await update.checkUpdates(update.makeCtx({ inv, project: dir, env: h.env, refresh: false }));
+    const out = await update.checkUpdates(update.makeCtx({ inventory: inv, project: dir, env: h.env, refresh: false }));
     assert.ok(out.skipped.includes('context7 (project): on its own - not checked'), out.skipped.join('\n'));
 });
 

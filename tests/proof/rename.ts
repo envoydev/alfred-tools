@@ -97,7 +97,7 @@ function storedAt(program: ts.Program, file: string, start: number): boolean
     while (node && !ts.isInterfaceDeclaration(node) && !ts.isTypeAliasDeclaration(node)) node = node.parent;
     return !!node && source.text.slice(node.getFullStart(), node.getStart(source)).includes(STORED);
 }
-// Where a location sees another binding already named `to` - the rename service does not check, and the renamed
+// Where a location sees another binding already named `to` (bindings only) - the rename service does not check, and the renamed
 // binding would shadow it or be shadowed by it: '<file>:<line>:<column>', or null.
 function clashAt(program: ts.Program, root: string, locations: readonly ts.RenameLocation[], file: string, position: number, to: string): string | null
 {
@@ -105,6 +105,8 @@ function clashAt(program: ts.Program, root: string, locations: readonly ts.Renam
     const at = program.getSourceFile(file);
     const renamed = at && findNode(at, position);
     const symbol = renamed && checker.getSymbolAtLocation(renamed);
+    // a property is not a scoped binding: `{ pkg: packageSpec }` may become `{ packageSpec: packageSpec }`
+    if (symbol && symbol.flags & ts.SymbolFlags.Property) return null;
     for (const location of locations)
     {
         const source = program.getSourceFile(location.fileName);

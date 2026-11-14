@@ -41,17 +41,17 @@ export function readCursor(file: string): CursorRead
 {
     let stats: fs.Stats;
     try { stats = fs.lstatSync(file); }
-    catch (caught) { const err = caught as NodeJS.ErrnoException;  return err.code === 'ENOENT' || err.code === 'ENOTDIR' ? { state: 'absent', doc: { mcpServers: {} }, eol: '\n' } : { state: 'bad', doc: null, eol: '\n', error: err.code }; }
-    if (stats.isSymbolicLink()) return { state: 'symlink', doc: null, eol: '\n' };
+    catch (caught) { const err = caught as NodeJS.ErrnoException;  return err.code === 'ENOENT' || err.code === 'ENOTDIR' ? { state: 'absent', doc: { mcpServers: {} }, lineEnd: '\n' } : { state: 'bad', doc: null, lineEnd: '\n', error: err.code }; }
+    if (stats.isSymbolicLink()) return { state: 'symlink', doc: null, lineEnd: '\n' };
     let text: string;
     try { text = fs.readFileSync(file, 'utf8'); }
-    catch (caught) { const err = caught as NodeJS.ErrnoException;  return { state: 'bad', doc: null, eol: '\n', error: err.code }; }
+    catch (caught) { const err = caught as NodeJS.ErrnoException;  return { state: 'bad', doc: null, lineEnd: '\n', error: err.code }; }
     const lineEnd = text.includes('\r\n') ? '\r\n' : '\n';
     let doc: CursorDoc | null;
     try { doc = JSON.parse(stripBom(text)) as CursorDoc | null; }
-    catch { return { state: 'bad', doc: null, eol: lineEnd }; }
-    if (!doc || typeof doc !== 'object' || Array.isArray(doc) || !doc.mcpServers || typeof doc.mcpServers !== 'object' || Array.isArray(doc.mcpServers)) return { state: 'shape', doc, eol: lineEnd };
-    return { state: 'ok', doc, eol: lineEnd, text };
+    catch { return { state: 'bad', doc: null, lineEnd: lineEnd }; }
+    if (!doc || typeof doc !== 'object' || Array.isArray(doc) || !doc.mcpServers || typeof doc.mcpServers !== 'object' || Array.isArray(doc.mcpServers)) return { state: 'shape', doc, lineEnd: lineEnd };
+    return { state: 'ok', doc, lineEnd: lineEnd, text };
 }
 
 // Why a file is left as it is, or null when it can be written.
@@ -127,7 +127,7 @@ export function cursorWrite(step: CursorWriteStep, context: CursorCtx | null | u
     const skip = [...new Set([...(step.skip || []), ...theirs, ...others])];
     const order = (context && context.catalog && context.catalog.order) || [];
     const doc = compose(read.doc, managed, { before, skip, order });
-    const text = textOf(doc, read.eol);
+    const text = textOf(doc, read.lineEnd);
     const said = notes.length ? `; ${notes.join('; ')}` : '';
     if (read.state === 'ok' && read.text === text) return { ok: true, detail: `${step.file} already holds these servers - left as it is${said}` };
     fs.mkdirSync(path.dirname(step.file), { recursive: true });
@@ -229,11 +229,11 @@ export function bridgeFormOf(entry: ServerEntry | null | undefined, catalog: Cat
     const own = [pathApi.join(pathApi.dirname(helper.path), 'mcp-bridge.js'), entry.url!, helper.args[0]!, helper.args[1]!];
     const globalRoot = helper.args[2] ? [helper.args[2]] : [];
     const priorParts = prior ? bridgeParts(prior) : null;
-    if (priorParts && priorParts.pkg)
+    if (priorParts && priorParts.packageSpec)
     {
         const at = prior!.args!.findIndex((argument) => String(argument) === priorParts.path);
         const rest = priorParts.globalRoot !== null ? prior!.args!.slice(at + 6) : [];
-        return { ...prior, command: 'node', args: [...prior!.args!.slice(0, at), ...own, priorParts.pkg, ...globalRoot, ...rest], env: { ...(prior!.env || {}) } };
+        return { ...prior, command: 'node', args: [...prior!.args!.slice(0, at), ...own, priorParts.packageSpec, ...globalRoot, ...rest], env: { ...(prior!.env || {}) } };
     }
     const packageSpec = catalog.byId.get('sentry')!.routes.bridge!.package!;
     return { command: 'node', args: [...own, `${packageSpec.name}@${packageSpec.version}`, ...globalRoot], env: { npm_config_before: packageSpec.cutoff } };

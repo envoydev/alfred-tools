@@ -51,7 +51,7 @@ test('the fix engine against the REAL CLI: detect, apply as one replace, read ba
     for (const [name, entry] of [['serena', theirs], ['my-own-server', own]] as [string, ServerEntry][])
         assert.strictEqual(h.claude(project, ['mcp', 'add-json', name, JSON.stringify(entry), '-s', 'user']).status, 0);
     const machine = { exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1 } as RunResult), nodeVersion: process.versions.node };
-    const ctx = () => makeCtx({ inv: h.inventory(project), env: h.env, machine });
+    const ctx = () => makeCtx({ inventory: h.inventory(project), env: h.env, machine });
     const found = detectAll(ctx()).found;
     // and the 0.4.x install moves onto the list
     assert.deepStrictEqual(found.map((f) => f.id).sort(), ['list-import', 'serena-context', 'serena-telemetry', 'uvx-python']);

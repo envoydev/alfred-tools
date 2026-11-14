@@ -474,7 +474,7 @@ export interface PickItem
     label: string;
     description: string;
     row?: CatalogRow;
-    h?: (Installed & { key?: undefined }) | { kind: 'own' | 'root'; key: string; name?: undefined; scope?: undefined };
+    target?: (Installed & { key?: undefined }) | { kind: 'own' | 'root'; key: string; name?: undefined; scope?: undefined };
 }
 
 // What one tool's questions start from: the route, scope and name answered so far, the registration configure changes,
@@ -485,7 +485,7 @@ export interface ToolOpts
     scope?: string | null | undefined;
     name?: string | null | undefined;
     current?: Partial<Current> | null | undefined;
-    ctx?: AskCtx | null | undefined;
+    context?: AskCtx | null | undefined;
     catalog?: Catalog | undefined;
     copyOf?: Installed[] | undefined;
 }

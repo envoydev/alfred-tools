@@ -28,7 +28,7 @@ function installIn(w: World, project: string, answers: Answers)
     assert.strictEqual(apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
 }
 const install = (w: World, answers: Answers) => installIn(w, w.project, answers);
-const ctxOf = (w: World, project = w.project) => makeCtx({ inv: inventory.buildInventory({ project, env: w.env }), env: w.env, machine: noMachine() });
+const ctxOf = (w: World, project = w.project) => makeCtx({ inventory: inventory.buildInventory({ project, env: w.env }), env: w.env, machine: noMachine() });
 const drifts = (w: World, project?: string) => detectAll(ctxOf(w, project), { only: 'client-drift' }).found;
 function run(w: World, ids: string[], input: Record<string, string> = {}, project = w.project)
 {

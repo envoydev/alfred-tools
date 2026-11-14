@@ -175,3 +175,18 @@ test('a name already in scope at any use is refused and no file changes', () =>
     }
     finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test('a property may take the name of a local at its use, and a shorthand use keeps its local', () =>
+{
+    const root = tree({
+        'types.ts': 'export interface Shape\n{\n    pkg: string;\n}\n',
+        'a.ts': "import type { Shape } from './types.ts';\nconst packageSpec = 'x';\nconst pkg = 'y';\nexport const one: Shape = { pkg: packageSpec };\nexport const two: Shape = { pkg };\nexport const read = (shape: Shape) => shape.pkg;\n",
+    });
+    try
+    {
+        const r = rename(root, [{ file: 'types.ts', line: 3, column: 5, name: 'pkg', to: 'packageSpec' }]);
+        assert.equal(r.status, 0, r.stderr);
+        assert.equal(read(root, 'a.ts'), "import type { Shape } from './types.ts';\nconst packageSpec = 'x';\nconst pkg = 'y';\nexport const one: Shape = { packageSpec: packageSpec };\nexport const two: Shape = { packageSpec: pkg };\nexport const read = (shape: Shape) => shape.packageSpec;\n");
+    }
+    finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

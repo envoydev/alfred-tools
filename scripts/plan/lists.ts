@@ -71,8 +71,8 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
     const current = (family: string) => (inventory.lists && inventory.lists[family] && !inventory.lists[family].note ? inventory.lists[family] : null);
 
     // every list file this run may touch, with the family it belongs to
-    const found = new Map<string, { rec: FoundList | null; family: string }>();
-    const seen = (file: string | null | undefined, family: string) => { if (file && !found.has(file)) found.set(file, { rec: foundList(inventory, file, pathApi), family }); };
+    const found = new Map<string, { list: FoundList | null; family: string }>();
+    const seen = (file: string | null | undefined, family: string) => { if (file && !found.has(file)) found.set(file, { list: foundList(inventory, file, pathApi), family }); };
     for (const family of Object.keys(targets)) seen(targets[family], family);
     if (context.recordLive)
         for (const family of ['project', 'global'])
@@ -115,7 +115,7 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
         const server: PlannedServer = { ...was, name: to.name, scope: to.scope, row: step.row || was.row || null, route: step.route || was.route || null, clients, entry: null, key: was.key === undefined ? null : was.key, ...(form !== undefined ? { form } : {}) };
         const keyFiles = keys.stdioChain({ scope: to.scope, projectRoot: context.roots && context.roots.project, globalRoot: context.roots && context.roots.global });
         at(file, family).upserts.push({ server, after, cursorFile: null, ...(keyFiles.length ? { keyFiles } : {}) });
-        if (!found.has(file)) found.set(file, { rec: foundList(inventory, file, pathApi), family: family });
+        if (!found.has(file)) found.set(file, { list: foundList(inventory, file, pathApi), family: family });
     }
 
     // a configure change of the apps alone (spec D3): the list entry with its new clients, no registration step - the
@@ -141,16 +141,16 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
         }
         if (form !== undefined) server.form = form;
         at(file, family).upserts.push({ server, after: null, cursorFile: null });
-        if (!found.has(file)) found.set(file, { rec: foundList(inventory, file, pathApi), family: family });
+        if (!found.has(file)) found.set(file, { list: foundList(inventory, file, pathApi), family: family });
     }
 
     // the servers left on their own (spec F4): each list's own entries, with this run's answers applied, go to their
     // family's list; a project entry in a list that is not this project's own stays where it is, named in a note
     if (context.recordLive)
     {
-        const entries = new Map<string, { e: OwnEntry; from: string | null }>();
+        const entries = new Map<string, { ownEntry: OwnEntry; from: string | null }>();
         const keep = new Map<string, OwnEntry[]>();
-        for (const [file, { rec: foundEntry }] of found)
+        for (const [file, { list: foundEntry }] of found)
         {
             if (!foundEntry || foundEntry.state) continue;
             for (const ownEntry of roots.ownOnly(foundEntry.own))
@@ -163,18 +163,18 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
                     out.notes.push(`${file} holds ${ownEntry.name || `${ownEntry.plugin}/${ownEntry.server}`} (${ownEntry.scope || 'a plugin'}), left on its own in another project - it stays there; remove it there to hand it back`);
                     continue;
                 }
-                entries.set(key, { e: ownEntry, from: file });
+                entries.set(key, { ownEntry: ownEntry, from: file });
             }
         }
         for (const family of ['project', 'global'])
             for (const ownEntry of (context.recordEntries && context.recordEntries[family]) || [])
             {
                 const key = roots.recordKey(ownEntry);
-                if (ownEntry.choice === 'own') entries.set(key!, { e: ownEntry, from: null });
+                if (ownEntry.choice === 'own') entries.set(key!, { ownEntry: ownEntry, from: null });
                 else entries.delete(key!);
             }
         const planned = new Map([...found.keys()].map((file): [string, { entries: OwnEntry[]; keep: OwnEntry[] }] => [file, { entries: [], keep: keep.get(file) || [] }]));
-        for (const { e: ownEntry, from } of entries.values())
+        for (const { ownEntry: ownEntry, from } of entries.values())
         {
             // a family with no root this run (the roots answer's error is in the plan): the entry stays in its file
             const file = targets[roots.recordFamily(ownEntry)] || from;
@@ -184,7 +184,7 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
         {
             const own = { entries: want.entries, keep: want.keep, live: context.recordLive };
             const next = lists.ownOf(own);
-            const { rec: foundEntry, family } = found.get(file)!;
+            const { list: foundEntry, family } = found.get(file)!;
             if (ownChanged(foundEntry, next)) at(file, family).own = own;
             if (plans.has(file)) plans.get(file)!.next = next;
         }
@@ -208,7 +208,7 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
     const steps: ListWriteStep[] = [];
     for (const [file, listPlan] of plans)
     {
-        const { rec: foundEntry } = found.get(file) || { rec: null };
+        const { list: foundEntry } = found.get(file) || { list: null };
         const target = targets[listPlan.family] === file;
         const dropped = new Set(listPlan.drops.map((drop) => drop.key));
         const left = ((foundEntry && foundEntry.servers) || []).filter((server) => !dropped.has(lists.serverKey(server)));

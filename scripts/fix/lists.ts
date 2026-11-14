@@ -28,7 +28,7 @@ const pathOf = (context: { platform: string }) => (context.platform === 'win32' 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 // The family's roots as install would take them: the root in use, else the recommended one.
-const rootsOf = (context: FixCtx) => roots.resolve(context.inv, null, { project: context.inv.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
+const rootsOf = (context: FixCtx) => roots.resolve(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
 
 // -> [{ id, name: <list file>, scope: null, family, servers, record: <preferred-tools.json> | null, found }]
 export function listImportDetect(context: FixCtx): Finding[]
@@ -38,10 +38,10 @@ export function listImportDetect(context: FixCtx): Finding[]
     const out: Finding[] = [];
     for (const family of ['project', 'global'] as const)
     {
-        const list = context.inv.lists && context.inv.lists[family];
+        const list = context.inventory.lists && context.inventory.lists[family];
         // a list or record this plugin cannot read, or one a newer plugin wrote, is left as it is
         if (list && list.note) continue;
-        const servers = importUnlisted(context.inv, family, context.catalog, { roots: resolvedRoots });
+        const servers = importUnlisted(context.inventory, family, context.catalog, { roots: resolvedRoots });
         const file = list ? list.file : resolvedRoots[family] ? pathApi.join(resolvedRoots[family]!, roots.FILES.list) : null;
         if (!file) continue;
         const beside = pathApi.join(pathApi.dirname(file), roots.FILES.record);
@@ -75,9 +75,9 @@ export function listImportSteps(finding: Finding, context: FixCtx): PlanStep[]
         why: `${finding.name}: the servers preferred-tools manages, as read, and the ones left on their own`,
     });
     if (finding.record) steps.push({ op: 'retire-record', file: finding.record, why: `${finding.record}: the 0.4.x record - its entries are in ${finding.name} now` });
-    const map = (context.inv.roots && context.inv.roots.map) || null;
-    const mapped = !map ? null : finding.family === 'global' ? map.global : (map.projects || {})[roots.mapKey(context.inv.project)];
-    if (mapped !== root) steps.push({ op: 'record-root', family: finding.family!, project: context.inv.project, root, why: `the ${finding.family} root ${root}: written to the roots map, so the commands find it again` });
+    const map = (context.inventory.roots && context.inventory.roots.map) || null;
+    const mapped = !map ? null : finding.family === 'global' ? map.global : (map.projects || {})[roots.mapKey(context.inventory.project)];
+    if (mapped !== root) steps.push({ op: 'record-root', family: finding.family!, project: context.inventory.project, root, why: `the ${finding.family} root ${root}: written to the roots map, so the commands find it again` });
     return steps;
 }
 
@@ -111,7 +111,7 @@ export function serenaBaseModesDetect(context: FixCtx): Finding[]
 {
     const out: Finding[] = [];
     const seen = new Set<string>();
-    for (const registration of (context.inv.registrations || []).filter((candidate) => candidate.rowId === 'serena' && !candidate.own && !candidate.alfredRetired && candidate.choice !== 'own' && candidate.scope !== 'inherited'))
+    for (const registration of (context.inventory.registrations || []).filter((candidate) => candidate.rowId === 'serena' && !candidate.own && !candidate.alfredRetired && candidate.choice !== 'own' && candidate.scope !== 'inherited'))
     {
         const home = registration.entry && registration.entry.env && registration.entry.env.SERENA_HOME;
         if (!home) continue;
@@ -133,8 +133,8 @@ export const serenaBaseModesSteps = (finding: Finding): SerenaBaseModesStep[] =>
 // value while the list holds the marker is not drift. Never applied without an answer: --input drift:<app>:<name>~<scope>.
 
 const APP_LABELS: Record<string, string> = { claude: 'Claude Code', cursor: 'Cursor' };
-const cursorCtx = (context: FixCtx) => ({ platform: context.platform, project: context.inv.project, home: context.home, env: context.env || {} });
-const usableList = (context: FixCtx, family: 'project' | 'global') => { const list = context.inv.lists && context.inv.lists[family]; return list && !list.note && !list.old ? list : null; };
+const cursorCtx = (context: FixCtx) => ({ platform: context.platform, project: context.inventory.project, home: context.home, env: context.env || {} });
+const usableList = (context: FixCtx, family: 'project' | 'global') => { const list = context.inventory.lists && context.inventory.lists[family]; return list && !list.note && !list.old ? list : null; };
 
 // Does a copy hold a key-shaped string outside its route's key field? Tested here, never returned.
 function keyGuardOf(copy: ServerEntry, row: CatalogRow | null | undefined, routeId: string | null | undefined): boolean
@@ -180,7 +180,7 @@ export function clientDriftDetect(context: FixCtx): Finding[]
     const catalog = context.catalog;
     const cctx = cursorCtx(context);
     const out: Finding[] = [];
-    const regs = (context.inv.registrations || []).filter((registration) => registration.scope !== 'inherited');
+    const regs = (context.inventory.registrations || []).filter((registration) => registration.scope !== 'inherited');
     const same = (left: unknown, right: unknown) => deepEqual(left, right);
     const compare = (copy: ServerEntry | undefined, want: ServerEntry, server: ListServer, app: string, where: DriftWhere) =>
     {
@@ -212,7 +212,7 @@ export function clientDriftDetect(context: FixCtx): Finding[]
         }
     }
     // a workspace member's copies of the folders above's project servers (D4a): compared with the folder above's entry
-    const workspaceRecord = context.inv.workspace !== undefined ? context.inv.workspace : workspace.workspaceOf(context.inv.project, context.env || {});
+    const workspaceRecord = context.inventory.workspace !== undefined ? context.inventory.workspace : workspace.workspaceOf(context.inventory.project, context.env || {});
     if (workspaceRecord && workspaceRecord.root && (workspaceRecord.ancestors || []).length)
     {
         const file = cursorMcp.fileFor('project', cctx);
@@ -223,7 +223,7 @@ export function clientDriftDetect(context: FixCtx): Finding[]
             const seen = new Set<string>(own ? cursorMcp.managedSet([{ file: own.file, scopes: SCOPES.project, servers: own.servers || [] }]).keys() : []);
             for (const up of workspaceRecord.ancestors)
             {
-                const ancestorList = folderList(context.inv, up, cctx);
+                const ancestorList = folderList(context.inventory, up, cctx);
                 if (!ancestorList) continue;
                 for (const [name, managed] of cursorMcp.managedSet([{ file: ancestorList.file, scopes: ['project'], servers: ancestorList.servers }]))
                 {
@@ -256,7 +256,7 @@ export function clientDriftSteps(finding: Finding, context: FixCtx, input: Recor
     const listStep = (server: PlannedServer | null): ListWriteStep => ({ op: 'list-write', file: finding.list!, family: finding.family!, upserts: server ? [{ server, after: null, cursorFile: null }] : [], drops: server ? [] : [{ key, after: null }], own: null, why: `${finding.list}: ${why}` });
     // Cursor's copy of this one name, the file's other entries as they are
     const cursorStep = (): CursorWritePlanStep => ({ op: 'cursor-write', file: finding.file || cursorMcp.fileFor(finding.family!, cursorCtx(context)), family: finding.family!, lists: [{ file: finding.list!, scopes: finding.inherited ? ['project'] : SCOPES[finding.family as keyof typeof SCOPES] }], before: [finding.name], only: [finding.name], skip: [], replace: [], why: `${finding.file || 'Cursor'}: ${why}` });
-    const registration = (context.inv.registrations || []).find((candidate) => candidate.name === finding.name && candidate.scope === finding.scope && candidate.scope !== 'inherited');
+    const registration = (context.inventory.registrations || []).find((candidate) => candidate.name === finding.name && candidate.scope === finding.scope && candidate.scope !== 'inherited');
     const claudeStep = (entry: ServerEntry): McpReplaceStep | McpAddStep => (registration
         ? { op: 'mcp-replace', name: finding.name, scope: finding.scope!, old: registration.entry, entry, row: finding.row!, route: finding.route!, why }
         : { op: 'mcp-add', name: finding.name, scope: finding.scope!, entry, row: finding.row!, route: finding.route!, why });
@@ -270,7 +270,7 @@ export function clientDriftSteps(finding: Finding, context: FixCtx, input: Recor
         if (kept.holdsKept(entry) && registration) { const restored = kept.restore(entry, registration.entry, row); if (!restored.error) entry = restored.entry!; }
         if (kept.holdsKept(entry) && listServer.key && row && row.routes[listServer.route!] && row.routes[listServer.route!]!.tokenVar)
         {
-            const resolvedRoots = roots.resolve(context.inv, null, { project: context.inv.project, home: context.home, platform: context.platform, catalog }).roots;
+            const resolvedRoots = roots.resolve(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog }).roots;
             const at = keys.valueIn(keys.stdioChain({ scope: finding.scope!, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global }), listServer.key);
             if (at) entry = keys.fillKeys(entry, row, listServer.route!, finding.scope!, { [row.routes[listServer.route!]!.tokenVar!]: at.value });
         }

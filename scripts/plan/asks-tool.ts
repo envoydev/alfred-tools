@@ -27,17 +27,17 @@ export function changeQuestions(inventory: Inventory, catalog: Catalog, context:
     {
         const label = it.kind === 'mcp' ? `${it.name} (${it.label}, ${it.scope}) - on its own` : it.kind === 'plugin' ? `${it.server} (${it.label}, from ${X.ownerOf(it)}) - on its own` : `${it.connector} (${it.label}, claude.ai) - on its own`;
         const description = it.kind === 'mcp' ? 'left on its own at install - pick it to keep it so or let preferred-tools manage it' : `left with ${X.ownerOf(it)} - pick it to keep it so or let install offer preferred-tools' own beside it`;
-        items.push({ group, label, description, h: { kind: 'own', key: it.key } });
+        items.push({ group, label, description, target: { kind: 'own', key: it.key } });
     }
     const rootGroup = { id: 'roots', label: 'Root folders' };
     for (const family of ['project', 'global'] as Family[])
     {
         const used = rootInUse(inventory, family, { ...context, catalog });
-        if (used) items.push({ group: rootGroup, label: ROOT_LABEL[family]!, description: `${used.path} - pick it to move ${ROOT_MOVES[family]} to another folder`, h: { kind: 'root', key: `root:${family}` } });
+        if (used) items.push({ group: rootGroup, label: ROOT_LABEL[family]!, description: `${used.path} - pick it to move ${ROOT_MOVES[family]} to another folder`, target: { kind: 'root', key: `root:${family}` } });
     }
     return {
         calls: packed(items, { id: 'change', question: 'which do you want to change?', none: 'change nothing' }),
-        keys: Object.fromEntries(items.map((i) => [i.label, i.h!.key || keyOf(i.h!.kind, i.h!.name!, i.h!.scope!)])),
+        keys: Object.fromEntries(items.map((i) => [i.label, i.target!.key || keyOf(i.target!.kind, i.target!.name!, i.target!.scope!)])),
     };
 }
 
@@ -69,7 +69,7 @@ export function scopesFor(row: CatalogRow, routeId: string, _context: AskCtx | n
 
 // The scopes offered, the recommended one first. `current` is the registration configure changes; for an install,
 // `copyOf` lists this row's registrations at other scopes (the copy for every project), whose scopes are not offered again.
-export function scopeOrder(row: CatalogRow, _inventory: Inventory | null, { route, current = null, copyOf = [], ctx: context = null }: ToolOpts = {}): string[]
+export function scopeOrder(row: CatalogRow, _inventory: Inventory | null, { route, current = null, copyOf = [], context: context = null }: ToolOpts = {}): string[]
 {
     const routeId = route || (current && current.route) || row.recommendedRoute;
     const all = scopesFor(row, routeId, context);
@@ -92,10 +92,10 @@ const STRANDED_TEXT = 'the scope it has now - it reads its key from the environm
 const CHILD_NO_KEY = PARENT_HELPER_IN_CHILD ? '' : "; a session started in a child folder connects without the key - Claude Code does not run a parent folder's helper there";
 const hostedKeyed = (row: CatalogRow, routeId: string) => Boolean(row.routes && row.routes[routeId] && row.routes[routeId].helper && row.routes[routeId].runtime !== 'bridge');
 
-export function scopeQuestion(row: CatalogRow, inventory: Inventory, { route, current = null, copyOf = [], ctx: context = null }: ToolOpts = {}): Question | null
+export function scopeQuestion(row: CatalogRow, inventory: Inventory, { route, current = null, copyOf = [], context: context = null }: ToolOpts = {}): Question | null
 {
     const routeId = route || (current && current.route) || row.recommendedRoute;
-    const order = scopeOrder(row, inventory, { route: routeId, current, copyOf, ctx: context });
+    const order = scopeOrder(row, inventory, { route: routeId, current, copyOf, context: context });
     if (order.length < 2) return null;
     return {
         id: `scope-${row.id}`, header: 'Scope', multiSelect: false,
@@ -115,7 +115,7 @@ export function nameFor(row: CatalogRow, name: string | null | undefined, curren
     return name === 'prefixed' ? perProjectName(row, context) : name;
 }
 
-export function nameQuestion(row: CatalogRow, inventory: Inventory, { current = null, copyOf = [], ctx: context = null }: ToolOpts = {}): Question
+export function nameQuestion(row: CatalogRow, inventory: Inventory, { current = null, copyOf = [], context: context = null }: ToolOpts = {}): Question
 {
     const orig = row.name;
     const shadows = copyOf.find((copy) => copy.name === orig);

@@ -131,7 +131,7 @@ test('K3 - an untrusted folder: no header reaches the server, and fix notes the 
         ok(r);
         fill(path.join(dir, '.preferred-tools', roots.FILES.secrets), G, KEY);
         assert.strictEqual((await fake.authOnGet(s, dir, 'github', h.env)).auth, 'none');
-        const notes = detectAll(makeCtx({ inv: h.inventory(dir, { catalog }), catalog, env: h.env, data: h.data })).notes;
+        const notes = detectAll(makeCtx({ inventory: h.inventory(dir, { catalog }), catalog, env: h.env, data: h.data })).notes;
         assert.ok(notes.some((n) => n.startsWith('github (project): accept the trust dialog')), notes.join('\n'));
         trust(h, dir);
         assert.strictEqual((await fake.authOnGet(s, dir, 'github', h.env)).auth, 'expected', 'trusted: the key reaches the server');
@@ -153,7 +153,7 @@ test('K4 - the helper deleted: connects without the header; fix finds helper-mis
         fs.rmSync(path.join(root, roots.FILES.helper));
         const got = await fake.authOnGet(s, dir, 'github', h.env);
         assert.strictEqual(got.auth, 'none', 'a missing helper: connected without the header');
-        const ctx = () => makeCtx({ inv: h.inventory(dir, { catalog }), catalog, env: h.env, data: h.data });
+        const ctx = () => makeCtx({ inventory: h.inventory(dir, { catalog }), catalog, env: h.env, data: h.data });
         const found = detectAll(ctx(), { only: 'helper-missing' }).found;
         assert.deepStrictEqual(found.map((f) => [f.id, f.path]), [['helper-missing', path.join(root, roots.FILES.helper)]]);
         const lines: string[] = [];
@@ -184,7 +184,7 @@ test('K5 - a server matching atlassian at global scope, recorded on its own: upd
 
     const inv = h.inventory(dir);
     assert.strictEqual(inv.registrations.find((x) => x.name === 'atl')!.choice, 'own', 'the inventory reads the record');
-    const ctx = makeCtx({ inv, env: h.env, data: h.data });
+    const ctx = makeCtx({ inventory: inv, env: h.env, data: h.data });
     const d = detectAll(ctx);
     assert.deepStrictEqual(d.own, [{ name: 'atl', scope: 'user' }]);
     assert.ok(!d.found.some((f) => f.name === 'atl'), 'no detector reads it');
@@ -193,7 +193,7 @@ test('K5 - a server matching atlassian at global scope, recorded on its own: upd
     const res = applyFixes(ctx, ['all'], { only: 'atl', tmp: path.join(h.root, 'tmp', 'fix'), log: (...a) => lines.push(a.join(' ')) });
     assert.strictEqual(res.failed, null, lines.join('\n'));
 
-    const uctx = update.makeCtx({ inv, project: dir, env: h.env, refresh: false });
+    const uctx = update.makeCtx({ inventory: inv, project: dir, env: h.env, refresh: false });
     const out = await update.checkUpdates(uctx);
     assert.ok(out.skipped.includes('atl (user): on its own - not checked'), out.skipped.join('\n'));
     assert.ok(!out.offers.some((o) => o.id === 'mcp:atl~user'), 'not offered');
@@ -215,7 +215,7 @@ test('K6 - update moves a 0.1.x key header to the helper and keeps the key file 
         const root = path.join(dir, '.preferred-tools');
         fs.mkdirSync(root, { recursive: true });
         fill(path.join(root, roots.FILES.secrets), G, KEY);
-        const uctx = update.makeCtx({ inv: h.inventory(dir, { catalog }), project: dir, catalog, env: h.env, refresh: false, data: h.data });
+        const uctx = update.makeCtx({ inventory: h.inventory(dir, { catalog }), project: dir, catalog, env: h.env, refresh: false, data: h.data });
         const out = await update.checkUpdates(uctx);
         // the project is a git work tree and the root a 0.1.x folder with no .gitignore: both ways are offered, beside
         // 0.5.0's list-import (github is on no list yet) and read-guard (the key file is in the root)
@@ -234,7 +234,7 @@ test('K6 - update moves a 0.1.x key header to the helper and keeps the key file 
         const got = await fake.authOnGet(s, dir, 'github', h.env);
         assert.strictEqual(got.auth, 'expected', `the key reached the server through the helper (${got.status})`);
         assert.ok(!lines.join('\n').includes(KEY), 'no key printed');
-        const again = await update.checkUpdates(update.makeCtx({ inv: h.inventory(dir, { catalog }), project: dir, catalog, env: h.env, refresh: false, data: h.data }));
+        const again = await update.checkUpdates(update.makeCtx({ inventory: h.inventory(dir, { catalog }), project: dir, catalog, env: h.env, refresh: false, data: h.data }));
         assert.deepStrictEqual(again.offers.filter((o) => o.kind === 'upgrade').map((o) => `${o.id}: ${o.found}`), [], 'nothing left to move');
     }
     finally { await s.close(); }

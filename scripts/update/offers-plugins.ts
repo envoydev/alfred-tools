@@ -54,7 +54,7 @@ export function listedVersion(installLocation: string | null | undefined, plugin
 export function pluginOffers(context: UpdateCtx, out: UpdateCheck): void
 {
     const refreshed = new Map<string, string | null>();
-    for (const plugin of context.inv.plugins)
+    for (const plugin of context.inventory.plugins)
     {
         if (!refreshed.has(plugin.marketplace))
         {
@@ -66,7 +66,7 @@ export function pluginOffers(context: UpdateCtx, out: UpdateCheck): void
             }
             if (refreshed.get(plugin.marketplace)) out.notes.push(refreshed.get(plugin.marketplace)!);
         }
-        const market = context.inv.marketplaces.find((marketplace) => marketplace.name === plugin.marketplace);
+        const market = context.inventory.marketplaces.find((marketplace) => marketplace.name === plugin.marketplace);
         const to = listedVersion(market && market.installLocation, plugin.plugin);
         const base: Omit<PluginOffer, 'to'> = { kind: 'plugin', id: `plugin:${plugin.id}~${plugin.scope}`, plugin: plugin.id, scope: plugin.scope, from: plugin.version || null, group: plugin.rowId ? 'catalog' : 'other', label: `${plugin.id} (${plugin.scope})` };
         if (!market) { out.skipped.push(`${plugin.id} (${plugin.scope}): its marketplace '${plugin.marketplace}' is not registered, so nothing to compare against`); continue; }

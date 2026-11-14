@@ -116,7 +116,7 @@ export function installedItems(inventory: Inventory, catalog: Catalog, describe:
     for (const group of catalog.groups)
         for (const row of catalog.tools.filter((toolRow) => toolRow.group === group.id))
             for (const installed of installedOf(inventory, row.id).filter((candidate) => candidate.scope !== 'inherited' && !leftAlone(inventory, candidate)))
-                items.push({ group: group, row, h: installed, label: `${installed.name} (${row.label}, ${installed.scope})`, description: describe(row, installed) });
+                items.push({ group: group, row, target: installed, label: `${installed.name} (${row.label}, ${installed.scope})`, description: describe(row, installed) });
     return items;
 }
 

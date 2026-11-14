@@ -31,7 +31,7 @@ export interface MachineProbe
 // What a detector, a fix and a steps function read.
 export interface FixCtx
 {
-    inv: Inventory;
+    inventory: Inventory;
     catalog: Catalog;
     platform: string;
     arch: string;
@@ -134,7 +134,7 @@ export interface ShippedFile
     file: string;
     root: string;
     kind: ShippedKind;
-    reg: InvRegistration;
+    registration: InvRegistration;
 }
 
 // A registration fix: the entry as read, edited; a machine fix: what it did; a file fix: the plan steps that repair it.

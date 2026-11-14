@@ -25,7 +25,7 @@ export function makeRunner({ project, env, runCli }: Pick<ApplyCtx, 'project' | 
     return (argv: string[]) =>
     {
         const result = runCli(argv, { cwd: project, env });
-        return { ok: !result.error && result.status === 0, out: `${result.stdout}${result.stderr}`.trim().split('\n').slice(-3).join(' | '), r: result };
+        return { ok: !result.error && result.status === 0, out: `${result.stdout}${result.stderr}`.trim().split('\n').slice(-3).join(' | '), result: result };
     };
 }
 

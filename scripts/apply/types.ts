@@ -20,7 +20,7 @@ export interface CallResult
 {
     ok: boolean;
     out: string;
-    r: CliResult;
+    result: CliResult;
 }
 export type Call = (argv: string[]) => CallResult;
 

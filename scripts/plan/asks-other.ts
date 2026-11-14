@@ -12,11 +12,11 @@ import type { Asked, DriftAsk, LocationAnswer, Question, QuestionOption, Taken, 
 // `scope` and `name`, else the recommended scope and the name it has now or the original) and one tool-specific extra,
 // and `answers` maps each location label to its entry; `only` is the location when one place is left and none is
 // asked. Any other row has `first` null and asks scope, name and its extra in one call, as before.
-export function toolAsk(row: CatalogRow, inventory: Inventory, { route, scope = null, name = null, current = null, ctx: context = null, catalog: _catalog, copyOf = [] }: ToolOpts = {}): ToolAsk
+export function toolAsk(row: CatalogRow, inventory: Inventory, { route, scope = null, name = null, current = null, context: context = null, catalog: _catalog, copyOf = [] }: ToolOpts = {}): ToolAsk
 {
     const routeId = route || (current && current.route) || row.recommendedRoute;
-    const scopeQ = scopeQuestion(row, inventory, { route: routeId, current, copyOf, ctx: context });
-    const nameQ = nameQuestion(row, inventory, { current, copyOf, ctx: context });
+    const scopeQ = scopeQuestion(row, inventory, { route: routeId, current, copyOf, context: context });
+    const nameQ = nameQuestion(row, inventory, { current, copyOf, context: context });
     const located = Boolean(row.locations && context);
     const questions = located ? [] : [scopeQ, nameQ].filter(Boolean) as Question[];
     let answers: Record<string, LocationAnswer> = {};
@@ -24,10 +24,10 @@ export function toolAsk(row: CatalogRow, inventory: Inventory, { route, scope = 
     // 'keep' where the folder it uses now cannot stay)
     let only: LocationAnswer | null = null;
     // the scope the questions are built for: the one asked first, else the recommended one
-    const at = context ? scope || scopeOrder(row, inventory, { route: routeId, current, copyOf, ctx: context })[0] || (current && current.scope) : scope;
+    const at = context ? scope || scopeOrder(row, inventory, { route: routeId, current, copyOf, context: context })[0] || (current && current.scope) : scope;
     if (located)
     {
-        const locationAsk = locationQuestion(row, inventory, { scope: at!, name: nameFor(row, name, current, context), current, copyOf, ctx: context! });
+        const locationAsk = locationQuestion(row, inventory, { scope: at!, name: nameFor(row, name, current, context), current, copyOf, context: context! });
         if (locationAsk.question) questions.push(locationAsk.question);
         else only = locationAsk.only;
         answers = locationAsk.answers;

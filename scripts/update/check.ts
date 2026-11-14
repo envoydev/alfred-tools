@@ -38,10 +38,10 @@ import type { Offer, Registry, UpdateCheck, UpdateCtx } from './types.ts';
 
 // ---- check -----------------------------------------------------------------------------------------------------------
 
-export function makeCtx({ inv: inventory, project, catalog = catalogLib.load(), env = process.env, machine, runCli = cli.runClaude, registry, now = Date.now(), refresh = true, data = null }: { inv: Inventory; project: string; catalog?: Catalog; env?: Env; machine?: MachineProbe | undefined; runCli?: RunCli; registry?: Registry | undefined; now?: number | undefined; refresh?: boolean; data?: string | null }): UpdateCtx
+export function makeCtx({ inventory: inventory, project, catalog = catalogLib.load(), env = process.env, machine, runCli = cli.runClaude, registry, now = Date.now(), refresh = true, data = null }: { inventory: Inventory; project: string; catalog?: Catalog; env?: Env; machine?: MachineProbe | undefined; runCli?: RunCli; registry?: Registry | undefined; now?: number | undefined; refresh?: boolean; data?: string | null }): UpdateCtx
 {
     return {
-        inv: inventory, project, catalog, env, runCli, now, refresh, data,
+        inventory: inventory, project, catalog, env, runCli, now, refresh, data,
         machine: machine || realMachine({ env, platform: inventory.os }),
         registry: registry || { versionsOf: (registryKind, name) => registryLib.versionsOf(registryKind, name, { env }) },
     };
@@ -50,7 +50,7 @@ export function makeCtx({ inv: inventory, project, catalog = catalogLib.load(), 
 // -> { offers, unchecked, skipped, held, errors, notes, waiting }
 export async function checkUpdates(context: UpdateCtx): Promise<UpdateCheck>
 {
-    const out: UpdateCheck = { offers: [], unchecked: [], skipped: [], held: [], errors: [], notes: [], waiting: 0, outside: changedOutside(context.inv, context.catalog), cursorOffers: [] };
+    const out: UpdateCheck = { offers: [], unchecked: [], skipped: [], held: [], errors: [], notes: [], waiting: 0, outside: changedOutside(context.inventory, context.catalog), cursorOffers: [] };
     pluginOffers(context, out);
     await mcpOffers(context, out);
     await cursorPinOffers(context, out);
@@ -72,11 +72,11 @@ export async function checkUpdates(context: UpdateCtx): Promise<UpdateCheck>
 function cursorOffers(context: UpdateCtx, out: UpdateCheck): void
 {
     const home = account.homeDir(context.env);
-    const cctx = { platform: context.inv.os, env: context.env, home, project: context.project };
-    if (!cursorMcp.cursorFound(cctx, context.inv)) return;
+    const cctx = { platform: context.inventory.os, env: context.env, home, project: context.project };
+    if (!cursorMcp.cursorFound(cctx, context.inventory)) return;
     for (const family of ['project', 'global'] as const)
     {
-        const list = context.inv.lists && context.inv.lists[family];
+        const list = context.inventory.lists && context.inventory.lists[family];
         if (list && (list.note || list.cursorOffer === 'declined')) continue;
         const listed = list && !list.old ? (list.servers || []) : [];
         if (listed.some((server) => (server.clients || []).includes('cursor'))) continue;
@@ -87,7 +87,7 @@ function cursorOffers(context: UpdateCtx, out: UpdateCheck): void
         if (!servers.length || !file) continue;
         const root = path.dirname(file);
         const upserts = servers.map((server) => ({ server: { ...server, clients: ['claude', 'cursor'] }, cursorFile: null }));
-        const taken = takenNames(context.inv, { ...cctx, catalog: context.catalog }, upserts);
+        const taken = takenNames(context.inventory, { ...cctx, catalog: context.catalog }, upserts);
         out.cursorOffers.push({ id: `cursor-offer:${root}`, family, root, list: file, servers: servers.map((server) => ({ name: server.name, scope: server.scope })), taken, needs: brought.length ? pending!.id : null });
     }
 }
@@ -99,7 +99,7 @@ export function ordered(picked: (Offer | string)[], catalog: Catalog): (Offer | 
     const order = catalog.fixes.map((fixRow) => fixRow.id);
     const rank = (choice: Offer | string) => (typeof choice === 'string' || choice.kind !== 'upgrade' ? 3 : choice.fix === 'list-import' ? 0 : choice.fixKind === 'registration' ? 1 : 2);
     const at = (choice: Offer | string) => (typeof choice === 'string' || choice.kind !== 'upgrade' ? 0 : order.indexOf(choice.fix!));
-    return picked.map((choice, i) => ({ c: choice, i })).sort((left, right) => rank(left.c) - rank(right.c) || at(left.c) - at(right.c) || left.i - right.i).map((entry) => entry.c);
+    return picked.map((choice, i) => ({ choice: choice, i })).sort((left, right) => rank(left.choice) - rank(right.choice) || at(left.choice) - at(right.choice) || left.i - right.i).map((entry) => entry.choice);
 }
 
 export const behind = (out: UpdateCheck): boolean => out.offers.length + out.unchecked.length > 0;
