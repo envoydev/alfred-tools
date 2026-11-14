@@ -38,30 +38,30 @@ import type { Offer, Registry, UpdateCheck, UpdateCtx } from './types.ts';
 
 // ---- check -----------------------------------------------------------------------------------------------------------
 
-export function makeCtx({ inv, project, catalog = catalogLib.load(), env = process.env, machine, runCli = cli.runClaude, registry, now = Date.now(), refresh = true, data = null }: { inv: Inventory; project: string; catalog?: Catalog; env?: Env; machine?: MachineProbe | undefined; runCli?: RunCli; registry?: Registry | undefined; now?: number | undefined; refresh?: boolean; data?: string | null }): UpdateCtx
+export function makeCtx({ inv: inventory, project, catalog = catalogLib.load(), env = process.env, machine, runCli = cli.runClaude, registry, now = Date.now(), refresh = true, data = null }: { inv: Inventory; project: string; catalog?: Catalog; env?: Env; machine?: MachineProbe | undefined; runCli?: RunCli; registry?: Registry | undefined; now?: number | undefined; refresh?: boolean; data?: string | null }): UpdateCtx
 {
     return {
-        inv, project, catalog, env, runCli, now, refresh, data,
-        machine: machine || realMachine({ env, platform: inv.os }),
-        registry: registry || { versionsOf: (reg, name) => registryLib.versionsOf(reg, name, { env }) },
+        inv: inventory, project, catalog, env, runCli, now, refresh, data,
+        machine: machine || realMachine({ env, platform: inventory.os }),
+        registry: registry || { versionsOf: (registryKind, name) => registryLib.versionsOf(registryKind, name, { env }) },
     };
 }
 
 // -> { offers, unchecked, skipped, held, errors, notes, waiting }
-export async function check(ctx: UpdateCtx): Promise<UpdateCheck>
+export async function checkUpdates(context: UpdateCtx): Promise<UpdateCheck>
 {
-    const out: UpdateCheck = { offers: [], unchecked: [], skipped: [], held: [], errors: [], notes: [], waiting: 0, outside: changedOutside(ctx.inv, ctx.catalog), cursorOffers: [] };
-    pluginOffers(ctx, out);
-    await mcpOffers(ctx, out);
-    await cursorPinOffers(ctx, out);
-    helperOffers(ctx, out);
-    upgradeOffers(ctx, out);
+    const out: UpdateCheck = { offers: [], unchecked: [], skipped: [], held: [], errors: [], notes: [], waiting: 0, outside: changedOutside(context.inv, context.catalog), cursorOffers: [] };
+    pluginOffers(context, out);
+    await mcpOffers(context, out);
+    await cursorPinOffers(context, out);
+    helperOffers(context, out);
+    upgradeOffers(context, out);
     // a plugin offered for uninstall is not offered an update beside it
-    const leaving = new Set(out.offers.filter((o) => o.fix === 'retired-plugin').map((o) => `${o.name}~${o.scope}`));
-    const stays = (o: Offer) => !(o.kind === 'plugin' && leaving.has(`${o.plugin}~${o.scope}`));
+    const leaving = new Set(out.offers.filter((offer) => offer.fix === 'retired-plugin').map((offer) => `${offer.name}~${offer.scope}`));
+    const stays = (offer: Offer) => !(offer.kind === 'plugin' && leaving.has(`${offer.plugin}~${offer.scope}`));
     out.offers = out.offers.filter(stays);
     out.unchecked = out.unchecked.filter(stays);
-    cursorOffers(ctx, out);
+    cursorOffers(context, out);
     return out;
 }
 
@@ -69,26 +69,26 @@ export async function check(ctx: UpdateCtx): Promise<UpdateCheck>
 // and its 'Not now' is not recorded. Each names the servers set up for Claude Code, and the names Cursor's file already
 // holds as its own (asked before the offer is taken). A 0.4.x root has no list until this update's list-import writes
 // it, so the servers that import brings in count too, and the offer then `needs` that import picked in the same run.
-function cursorOffers(ctx: UpdateCtx, out: UpdateCheck): void
+function cursorOffers(context: UpdateCtx, out: UpdateCheck): void
 {
-    const home = account.homeDir(ctx.env);
-    const cctx = { platform: ctx.inv.os, env: ctx.env, home, project: ctx.project };
-    if (!cursorMcp.cursorFound(cctx, ctx.inv)) return;
+    const home = account.homeDir(context.env);
+    const cctx = { platform: context.inv.os, env: context.env, home, project: context.project };
+    if (!cursorMcp.cursorFound(cctx, context.inv)) return;
     for (const family of ['project', 'global'] as const)
     {
-        const l = ctx.inv.lists && ctx.inv.lists[family];
-        if (l && (l.note || l.cursorOffer === 'declined')) continue;
-        const listed = l && !l.old ? (l.servers || []) : [];
-        if (listed.some((x) => (x.clients || []).includes('cursor'))) continue;
-        const pending = out.offers.find((o) => o.fix === 'list-import' && o.family === family);
-        const brought = ((pending && pending.servers) || []).filter((x) => !listed.some((y) => y.name === x.name && y.scope === x.scope));
-        const servers = [...listed, ...brought].filter((x) => (x.clients || ['claude']).includes('claude'));
-        const file = l && !l.old ? l.file : pending ? pending.listFile : null;
+        const list = context.inv.lists && context.inv.lists[family];
+        if (list && (list.note || list.cursorOffer === 'declined')) continue;
+        const listed = list && !list.old ? (list.servers || []) : [];
+        if (listed.some((server) => (server.clients || []).includes('cursor'))) continue;
+        const pending = out.offers.find((offer) => offer.fix === 'list-import' && offer.family === family);
+        const brought = ((pending && pending.servers) || []).filter((server) => !listed.some((listedServer) => listedServer.name === server.name && listedServer.scope === server.scope));
+        const servers = [...listed, ...brought].filter((server) => (server.clients || ['claude']).includes('claude'));
+        const file = list && !list.old ? list.file : pending ? pending.listFile : null;
         if (!servers.length || !file) continue;
         const root = path.dirname(file);
-        const upserts = servers.map((x) => ({ server: { ...x, clients: ['claude', 'cursor'] }, cursorFile: null }));
-        const taken = takenNames(ctx.inv, { ...cctx, catalog: ctx.catalog }, upserts);
-        out.cursorOffers.push({ id: `cursor-offer:${root}`, family, root, list: file, servers: servers.map((x) => ({ name: x.name, scope: x.scope })), taken, needs: brought.length ? pending!.id : null });
+        const upserts = servers.map((server) => ({ server: { ...server, clients: ['claude', 'cursor'] }, cursorFile: null }));
+        const taken = takenNames(context.inv, { ...cctx, catalog: context.catalog }, upserts);
+        out.cursorOffers.push({ id: `cursor-offer:${root}`, family, root, list: file, servers: servers.map((server) => ({ name: server.name, scope: server.scope })), taken, needs: brought.length ? pending!.id : null });
     }
 }
 
@@ -96,15 +96,15 @@ function cursorOffers(ctx: UpdateCtx, out: UpdateCheck): void
 // then every other offer; ties keep catalog/fixes.json's order.
 export function ordered(picked: (Offer | string)[], catalog: Catalog): (Offer | string)[]
 {
-    const order = catalog.fixes.map((f) => f.id);
-    const rank = (c: Offer | string) => (typeof c === 'string' || c.kind !== 'upgrade' ? 3 : c.fix === 'list-import' ? 0 : c.fixKind === 'registration' ? 1 : 2);
-    const at = (c: Offer | string) => (typeof c === 'string' || c.kind !== 'upgrade' ? 0 : order.indexOf(c.fix!));
-    return picked.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || at(a.c) - at(b.c) || a.i - b.i).map((x) => x.c);
+    const order = catalog.fixes.map((fixRow) => fixRow.id);
+    const rank = (choice: Offer | string) => (typeof choice === 'string' || choice.kind !== 'upgrade' ? 3 : choice.fix === 'list-import' ? 0 : choice.fixKind === 'registration' ? 1 : 2);
+    const at = (choice: Offer | string) => (typeof choice === 'string' || choice.kind !== 'upgrade' ? 0 : order.indexOf(choice.fix!));
+    return picked.map((choice, i) => ({ c: choice, i })).sort((left, right) => rank(left.c) - rank(right.c) || at(left.c) - at(right.c) || left.i - right.i).map((entry) => entry.c);
 }
 
 export const behind = (out: UpdateCheck): boolean => out.offers.length + out.unchecked.length > 0;
 
-export function render(out: UpdateCheck): string
+export function renderUpdates(out: UpdateCheck): string
 {
     const lines = [...(out.outside || [])];
     if (lines.length) lines.push('');
@@ -112,29 +112,29 @@ export function render(out: UpdateCheck): string
     {
         if (!items.length) return;
         lines.push(title);
-        const w = Math.max(...items.map((i) => i.label.length));
-        for (const i of items) lines.push(`  ${i.label.padEnd(w)}  ${i.from || '?'} -> ${i.to || '(not listed)'}${i.ageDays !== undefined ? `  (${i.ageDays} days old)` : ''}`);
+        const labelWidth = Math.max(...items.map((i) => i.label.length));
+        for (const i of items) lines.push(`  ${i.label.padEnd(labelWidth)}  ${i.from || '?'} -> ${i.to || '(not listed)'}${i.ageDays !== undefined ? `  (${i.ageDays} days old)` : ''}`);
     };
-    table('Catalog plugins:', out.offers.filter((o) => o.kind === 'plugin' && o.group === 'catalog'));
-    table('Other plugins:', out.offers.filter((o) => o.kind === 'plugin' && o.group === 'other'));
-    table('MCP servers (pin -> newest release at least 7 days old):', out.offers.filter((o) => o.kind === 'mcp' || o.kind === 'cursor-pin'));
-    table('Key helpers:', out.offers.filter((o) => o.kind === 'helper' || o.kind === 'bridge' || o.kind === 'context'));
-    const ups = out.offers.filter((o) => o.kind === 'upgrade');
-    if (ups.length)
+    table('Catalog plugins:', out.offers.filter((offer) => offer.kind === 'plugin' && offer.group === 'catalog'));
+    table('Other plugins:', out.offers.filter((offer) => offer.kind === 'plugin' && offer.group === 'other'));
+    table('MCP servers (pin -> newest release at least 7 days old):', out.offers.filter((offer) => offer.kind === 'mcp' || offer.kind === 'cursor-pin'));
+    table('Key helpers:', out.offers.filter((offer) => offer.kind === 'helper' || offer.kind === 'bridge' || offer.kind === 'context'));
+    const upgrades = out.offers.filter((offer) => offer.kind === 'upgrade');
+    if (upgrades.length)
     {
         lines.push('New ways to pass data:');
-        const w = Math.max(...ups.map((u) => u.label.length));
-        for (const u of ups) lines.push(`  ${u.label.padEnd(w)}  ${u.fix}: ${u.found}`);
+        const labelWidth = Math.max(...upgrades.map((upgrade) => upgrade.label.length));
+        for (const upgrade of upgrades) lines.push(`  ${upgrade.label.padEnd(labelWidth)}  ${upgrade.fix}: ${upgrade.found}`);
     }
     if (out.unchecked.length)
     {
         lines.push('Plugins whose marketplace lists no version (`claude plugin update` is the check; each is offered on its own):');
-        for (const u of out.unchecked) lines.push(`  ${u.label}  ${u.from || '?'}`);
+        for (const offer of out.unchecked) lines.push(`  ${offer.label}  ${offer.from || '?'}`);
     }
     for (const [title, list] of [['Held back', out.held], ['Skipped', out.skipped], ['Could not check', out.errors], ['Notes', out.notes]] as [string, string[]][])
-        if (list.length) lines.push(`${title}:`, ...list.map((l) => `  ${l}`));
+        if (list.length) lines.push(`${title}:`, ...list.map((line) => `  ${line}`));
     const offered = out.cursorOffers || [];
-    if (offered.length) lines.push('Cursor (asked after the updates):', ...offered.map((o) => `  ${o.servers.length} servers in ${o.root} are set up for Claude Code only`));
+    if (offered.length) lines.push('Cursor (asked after the updates):', ...offered.map((cursorOffer) => `  ${cursorOffer.servers.length} servers in ${cursorOffer.root} are set up for Claude Code only`));
     // a note that waits on the user is never 'everything current' (a key to fill, a key file git would commit)
     if (!behind(out) && out.waiting) lines.push('', `preferred-tools: nothing to update - ${out.waiting} wait${out.waiting === 1 ? 's' : ''} on you first (the notes above)`);
     else if (!behind(out) && offered.length) lines.push('', 'preferred-tools: nothing to update - Cursor can be set up (asked next)');

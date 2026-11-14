@@ -10,13 +10,13 @@ import { plan } from '../scripts/plan/plan.ts';
 import { apply } from '../scripts/apply/run.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
 import { bumpEntry } from '../scripts/update/offers-plugins.ts';
-import { makeCtx, check, ordered } from '../scripts/update/check.ts';
+import { makeCtx, checkUpdates, ordered } from '../scripts/update/check.ts';
 import { questions } from '../scripts/update/asks.ts';
 import * as update from '../scripts/update/command.ts';
 import * as registry from '../scripts/catalog/registry.ts';
 import { pinnedVersion } from '../scripts/fix/common.ts';
 import { add } from '../scripts/core/declines.ts';
-import { main } from '../scripts/fix/command.ts';
+import { runFixCommand } from '../scripts/fix/command.ts';
 import * as roots from '../scripts/roots/roots.ts';
 import { HELPER_VERSION as HV } from '../scripts/copied/mcp-headers.js';
 import { BRIDGE_VERSION as BV } from '../scripts/copied/mcp-bridge.js';
@@ -33,7 +33,7 @@ import type { McpOffer, Offer, UpdateCheck } from '../scripts/update/types.ts';
 import type { PlanStep, CursorWritePlanStep } from '../scripts/plan/types.ts';
 import type { ServerEntry, ServerMap } from '../scripts/core/types.ts';
 
-type MainOpts = NonNullable<Parameters<typeof update.main>[1]>;
+type MainOpts = NonNullable<Parameters<typeof update.runUpdateCommand>[1]>;
 
 const DAY = 86400000;
 const NOW = Date.parse('2026-10-27T12:00:00Z');
@@ -58,7 +58,7 @@ async function run(w: World, argv: string[], opts: MainOpts = {})
     const lines: string[] = [];
     // an apply that hands a fetch file on keeps its <tmp> for the command's next step: inside the world, w.clean() takes it
     const tmp = argv.includes('--apply') && !argv.includes('--tmp') ? ['--tmp', fs.mkdtempSync(path.join(w.dir, 'preferred-tools-'))] : [];
-    const code = await update.main([...argv, ...tmp, '--project', w.project], { env: w.env, out: (s) => lines.push(s), machine: noLsp, now: NOW, registry: fakeRegistry({}), ...opts });
+    const code = await update.runUpdateCommand([...argv, ...tmp, '--project', w.project], { env: w.env, out: (s) => lines.push(s), machine: noLsp, now: NOW, registry: fakeRegistry({}), ...opts });
     return { code, text: lines.join('\n') };
 }
 
@@ -513,7 +513,7 @@ test('fix and update take --data after their read-only flag', async () =>
         ownRecord(named);
         writeJson(path.join(data, 'roots.json'), { version: 1, global: null, projects: { [roots.mapKey(w.project)]: named } });
         const lines: string[] = [];
-        assert.strictEqual(main(['--detect', '--data', data, '--project', w.project], { env: w.env, out: (s) => lines.push(s) }), 0, lines.join('\n'));
+        assert.strictEqual(runFixCommand(['--detect', '--data', data, '--project', w.project], { env: w.env, out: (s) => lines.push(s) }), 0, lines.join('\n'));
         assert.match(lines.join('\n'), /context7 \(local\): on its own - not checked/);
         const c = await run(w, ['--check', '--no-refresh', '--data', data], { registry: C7_AHEAD() });
         assert.strictEqual(c.code, 0, c.text);
@@ -521,7 +521,7 @@ test('fix and update take --data after their read-only flag', async () =>
         assert.doesNotMatch(c.text, /2\.0\.0 -> 9\.0\.0/);
         // without --data the named root's record is not found: managed, so offered
         assert.match((await run(w, ['--check', '--no-refresh'], { registry: C7_AHEAD() })).text, /2\.0\.0 -> 9\.0\.0/);
-        assert.strictEqual(main(['--detect', '--data'], { env: w.env, out: () => {} }), 2, 'a flag without its value');
+        assert.strictEqual(runFixCommand(['--detect', '--data'], { env: w.env, out: () => {} }), 2, 'a flag without its value');
     }
     finally { w.clean(); }
 });
@@ -593,7 +593,7 @@ test("update moves a bridge's mcp-remote pin and its cut-off", async () => {
         const reg = fakeRegistry({ 'npm:mcp-remote': [{ version: '0.16.0', time: ago(25) }, { version: '0.16.4', time: ago(8) }] });
         const inv = inventory.buildInventory({ project: w.project, env: w.env });
         const ctx = makeCtx({ inv, project: w.project, env: w.env, machine: noLsp, registry: reg, now: NOW, refresh: false });
-        const out = await check(ctx);
+        const out = await checkUpdates(ctx);
         const offers = out.offers.filter((o): o is McpOffer => o.kind === 'mcp');
         assert.strictEqual(offers.length, 1, JSON.stringify(out));
         assert.strictEqual(offers[0]!.entry.args![4], 'mcp-remote@0.16.4');

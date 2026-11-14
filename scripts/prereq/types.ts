@@ -26,7 +26,7 @@ export interface CheckResult
     install?: Install;
     machine?: { docker?: boolean };
 }
-export type PrereqCheck = (ctx: PrereqCtx) => CheckResult;
+export type PrereqCheck = (context: PrereqCtx) => CheckResult;
 
 // A tool to check, on its route.
 export interface PrereqPick

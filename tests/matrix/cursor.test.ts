@@ -22,7 +22,7 @@ import type { ServerEntry } from '../../scripts/core/types.ts';
 import type { McpsList } from '../../scripts/mcps-list/types.ts';
 import { Harness } from '../harness.ts';
 import { keepWritten } from '../proof/matrix-keep.ts';
-import { makeCtx, check } from '../../scripts/update/check.ts';
+import { makeCtx, checkUpdates } from '../../scripts/update/check.ts';
 import { applyUpdates } from '../../scripts/update/apply.ts';
 import * as inventory from '../../scripts/inventory/inventory.ts';
 
@@ -422,7 +422,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     {
         const inv = inventory.buildInventory({ project: p, env: hh.env, run: cli.runClaude, data: hh.data });
         const ctx = makeCtx({ inv, project: p, env: hh.env, refresh: false, data: hh.data });
-        return { ctx, found: await check(ctx) };
+        return { ctx, found: await checkUpdates(ctx) };
     };
     const { ctx, found } = await checkNow();
     const retired = found.offers.filter((o) => o.fix === 'retired-plugin').map((o) => `${o.name}~${o.scope}`).sort();

@@ -15,30 +15,30 @@ import type { UpdateCheck, UpdateCtx } from './types.ts';
 
 // Each mcp-headers.js a managed registration names, or a root in use holds, with a lower number than this plugin's is
 // offered; a hand edit or a newer copy is left to /preferred-tools:fix, with a note.
-export function helperOffers(ctx: UpdateCtx, out: UpdateCheck): void
+export function helperOffers(context: UpdateCtx, out: UpdateCheck): void
 {
-    const P = pathFor(ctx.inv.os);
-    const rctx = { project: ctx.project, home: homeDir(ctx.env), platform: ctx.inv.os, catalog: ctx.catalog };
-    const dirs = new Set((['project', 'global'] as const).map((f) => ctx.inv.roots && ctx.inv.roots[f] && ctx.inv.roots[f].path).filter(Boolean) as string[]);
+    const pathApi = pathFor(context.inv.os);
+    const rootContext = { project: context.project, home: homeDir(context.env), platform: context.inv.os, catalog: context.catalog };
+    const dirs = new Set((['project', 'global'] as const).map((family) => context.inv.roots && context.inv.roots[family] && context.inv.roots[family].path).filter(Boolean) as string[]);
     const bridgeDirs = new Set<string>();
     const contextDirs = new Set<string>();
-    for (const r of ctx.inv.registrations || [])
+    for (const registration of context.inv.registrations || [])
     {
-        if (!r.rowId || r.own || r.alfredRetired || r.choice === 'own' || r.scope === 'inherited') continue;
+        if (!registration.rowId || registration.own || registration.alfredRetired || registration.choice === 'own' || registration.scope === 'inherited') continue;
         // serena's context file (0.5.0, D7), where the entry names this plugin's
-        const at = contextArgAt(r.entry);
-        if (at >= 0) contextDirs.add(P.dirname(roots.absOf(r.entry.args![at], rctx)));
-        const named = roots.helperPathOf(r.entry && r.entry.headersHelper);
-        if (named) dirs.add(P.dirname(roots.absOf(named, rctx)));
+        const at = contextArgAt(registration.entry);
+        if (at >= 0) contextDirs.add(pathApi.dirname(roots.absOf(registration.entry.args![at], rootContext)));
+        const named = roots.helperPathOf(registration.entry && registration.entry.headersHelper);
+        if (named) dirs.add(pathApi.dirname(roots.absOf(named, rootContext)));
         // a bridge's folder holds its bridge and the helper it requires (0.4.0)
-        const bridge = bridgeParts(r.entry);
-        if (bridge) bridgeDirs.add(P.dirname(roots.absOf(bridge.path, rctx)));
+        const bridge = bridgeParts(registration.entry);
+        if (bridge) bridgeDirs.add(pathApi.dirname(roots.absOf(bridge.path, rootContext)));
     }
     for (const root of bridgeDirs) dirs.add(root);
     const offer = (kind: ShippedKind, root: string, version: number) =>
     {
         const name = roots.FILES[kind];
-        const file = P.join(root, name);
+        const file = pathApi.join(root, name);
         const { state, number } = roots.shippedState(kind, file);
         const idKind = kind === 'serenaContext' ? 'context' : kind;
         if (state === 'lower') out.offers.push({ kind: idKind, id: `${idKind}:${file}`, file, root, from: String(number), to: String(version), group: 'helper', label: `${name} in ${root}` });
@@ -57,37 +57,37 @@ export function helperOffers(ctx: UpdateCtx, out: UpdateCheck): void
 // absolute project paths (project-relative-path), the root's .gitignore (root-ignore), the .mcp.json order (mcp-order).
 // Only those detectors run. A finding that cannot apply alone - blocked, or needing a folder - is a note naming
 // /preferred-tools:fix, counted in `waiting`.
-export const upgradeCatalog = (catalog: Catalog): Catalog => ({ ...catalog, fixes: catalog.fixes.filter((f) => f.upgrade) });
-const upgradeLabel = (f: Finding) => (f.kind === 'registration' ? `${f.name} (${f.scope})` : f.name);
+export const upgradeCatalog = (catalog: Catalog): Catalog => ({ ...catalog, fixes: catalog.fixes.filter((fixRow) => fixRow.upgrade) });
+const upgradeLabel = (finding: Finding) => (finding.kind === 'registration' ? `${finding.name} (${finding.scope})` : finding.name);
 
-export function upgradeOffers(ctx: UpdateCtx, out: UpdateCheck): void
+export function upgradeOffers(context: UpdateCtx, out: UpdateCheck): void
 {
-    const catalog = upgradeCatalog(ctx.catalog);
+    const catalog = upgradeCatalog(context.catalog);
     if (!catalog.fixes.length) return;
-    const fctx = fixLib.makeCtx({ inv: ctx.inv, catalog, env: ctx.env, machine: ctx.machine, data: ctx.data });
-    for (const f of fixLib.detectAll(fctx).found)
+    const fctx = fixLib.makeCtx({ inv: context.inv, catalog, env: context.env, machine: context.machine, data: context.data });
+    for (const finding of fixLib.detectAll(fctx).found)
     {
         // an uninstall the user turned down is theirs to keep: no offer, no note, nothing waiting (spec D9)
-        if (f.declined) continue;
-        if (f.id === 'retired-plugin')
+        if (finding.declined) continue;
+        if (finding.id === 'retired-plugin')
         {
             // one offer per id and scope, so picking one uninstalls only that scope; where alfred-code is set up it is
             // named and kept out of 'All of them'
-            out.offers.push({ kind: 'upgrade', id: `upgrade:retired-plugin:${f.name}~${f.scope}`, fix: f.id, fixKind: f.kind, name: f.name, scope: f.scope, found: f.found, group: 'upgrade', label: f.alfred ? `${f.name} - alfred-code also installs it, and this removes it for both` : `${f.name} (${f.scope})`, alfred: f.alfred });
+            out.offers.push({ kind: 'upgrade', id: `upgrade:retired-plugin:${finding.name}~${finding.scope}`, fix: finding.id, fixKind: finding.kind, name: finding.name, scope: finding.scope, found: finding.found, group: 'upgrade', label: finding.alfred ? `${finding.name} - alfred-code also installs it, and this removes it for both` : `${finding.name} (${finding.scope})`, alfred: finding.alfred });
             continue;
         }
-        const label = upgradeLabel(f);
-        if (f.blocked || f.input)
+        const label = upgradeLabel(finding);
+        if (finding.blocked || finding.input)
         {
-            const why = f.blocked || `needs a folder from you (${f.input!.prompt})`;
-            out.notes.push(`${label}: ${f.found} - not applied here: ${why}${/\/preferred-tools:fix/.test(why) ? '' : '; then run /preferred-tools:fix'}`);
+            const why = finding.blocked || `needs a folder from you (${finding.input!.prompt})`;
+            out.notes.push(`${label}: ${finding.found} - not applied here: ${why}${/\/preferred-tools:fix/.test(why) ? '' : '; then run /preferred-tools:fix'}`);
             out.waiting += 1;
             continue;
         }
-        const machine = f.kind !== 'registration';
+        const machine = finding.kind !== 'registration';
         // list-import also names its family, its list and the servers it brings in, for the Cursor offer below
-        const imports = f.id === 'list-import' ? { family: f.family, listFile: f.name, servers: f.servers } : {};
-        out.offers.push({ kind: 'upgrade', id: `upgrade:${f.id}:${machine ? f.name : `${f.name}~${f.scope}`}`, fix: f.id, fixKind: f.kind, name: f.name, scope: machine ? null : f.scope, found: f.found, group: 'upgrade', label, ...imports });
+        const imports = finding.id === 'list-import' ? { family: finding.family, listFile: finding.name, servers: finding.servers } : {};
+        out.offers.push({ kind: 'upgrade', id: `upgrade:${finding.id}:${machine ? finding.name : `${finding.name}~${finding.scope}`}`, fix: finding.id, fixKind: finding.kind, name: finding.name, scope: machine ? null : finding.scope, found: finding.found, group: 'upgrade', label, ...imports });
     }
 }
 

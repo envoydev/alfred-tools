@@ -18,116 +18,116 @@ import type { InvRegistration } from '../inventory/types.ts';
 import type { OldRecord } from '../mcps-list/types.ts';
 import type { Finding, FixCtx, MachineFixResult, PathChange } from './types.ts';
 
-const pathOf = (ctx: { platform: string }) => (ctx.platform === 'win32' ? path.win32 : path.posix);
-const styleOf = (ctx: { platform: string }) => (ctx.platform === 'win32' ? 'win32' : 'posix');
-const runThere = (ctx: FixCtx, dir: string) => `run /preferred-tools:fix in ${fromHere(ctx.inv, dir)}`;
+const pathOf = (context: { platform: string }) => (context.platform === 'win32' ? path.win32 : path.posix);
+const styleOf = (context: { platform: string }) => (context.platform === 'win32' ? 'win32' : 'posix');
+const runThere = (context: FixCtx, dir: string) => `run /preferred-tools:fix in ${fromHere(context.inv, dir)}`;
 const HOME_FORM = /^\$\{(HOME|USERPROFILE)\}(?=[\\/]|$)/;
-const isAbsolute = (p: string) => path.posix.isAbsolute(p) || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(p);
+const isAbsolute = (filePath: string) => path.posix.isAbsolute(filePath) || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(filePath);
 
 // ---- project-relative-path ------------------------------------------------------------------------------------------
 
 // What a path written by 0.2.0 means on this machine: a relative one against the project, a ${HOME} / ${USERPROFILE}
 // one in the environment. -> { to } | { unset } | null (absolute, `~`, another variable: not this row's)
-function absoluteOf(value: unknown, ctx: FixCtx)
+function absoluteOf(value: unknown, context: FixCtx)
 {
     if (typeof value !== 'string' || !value) return null;
-    const P = pathOf(ctx);
+    const pathApi = pathOf(context);
     if (HOME_FORM.test(value))
     {
-        const to = C.expandVars(value, ctx.env);
-        return to === null ? { unset: C.firstUnset(value, ctx.env) } : { to: P.normalize(to) };
+        const to = C.expandVars(value, context.env);
+        return to === null ? { unset: C.firstUnset(value, context.env) } : { to: pathApi.normalize(to) };
     }
     if (value.includes('${') || value.startsWith('~') || isAbsolute(value)) return null;
-    return { to: P.resolve(ctx.inv.project, value) };
+    return { to: pathApi.resolve(context.inv.project, value) };
 }
 
 // serena on Windows: 0.2.0 wrote ${USERPROFILE}\.serena; its home is now <project root>\serena when that folder is one
 // serena takes (absolute, backslashes, no space), else the profile's .serena written out.
-function serenaHome(to: string, ctx: FixCtx): string
+function serenaHome(to: string, context: FixCtx): string
 {
-    const root = roots.resolve(ctx.inv, null, { project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog }).roots.project;
+    const root = roots.resolve(context.inv, null, { project: context.inv.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots.project;
     const home = root ? path.win32.join(root, 'serena') : null;
     return home && validWindowsSerenaHome(home) ? home : to;
 }
 
 // Every path of a registration this row writes out: its derived data paths, and its helper. -> { paths, unset }
-function changesOf(entry: ServerEntry, rowId: string | null | undefined, ctx: FixCtx): { paths: PathChange[]; unset: (string | null)[] }
+function changesOf(entry: ServerEntry, rowId: string | null | undefined, context: FixCtx): { paths: PathChange[]; unset: (string | null)[] }
 {
-    const row = C.rowOf(ctx, rowId!)!;
+    const row = C.rowOf(context, rowId!)!;
     const paths: PathChange[] = [];
     const unset: (string | null)[] = [];
-    for (const d of (row.locations && row.locations.derived) || [])
+    for (const derived of (row.locations && row.locations.derived) || [])
     {
         let from: string | undefined;
-        if (d.in === 'env') from = (entry.env || {} as Record<string, string>)[d.key];
+        if (derived.in === 'env') from = (entry.env || {} as Record<string, string>)[derived.key];
         else
         {
             const args = entry.args || [];
-            const i = args.indexOf(d.key);
+            const i = args.indexOf(derived.key);
             from = i >= 0 ? args[i + 1] : undefined;
         }
         // a relative serena home on Windows is serena-windows-home's; 0.2.0 wrote only the ${USERPROFILE} form
-        const serena = rowId === 'serena' && ctx.platform === 'win32';
+        const serena = rowId === 'serena' && context.platform === 'win32';
         if (serena && typeof from === 'string' && !HOME_FORM.test(from)) continue;
-        const a = absoluteOf(from, ctx);
-        if (!a) continue;
-        if (a.unset) { unset.push(a.unset); continue; }
-        paths.push({ in: d.in, key: d.key, from: from!, to: serena ? serenaHome(a.to!, ctx) : a.to!, was: a.to! });
+        const absolute = absoluteOf(from, context);
+        if (!absolute) continue;
+        if (absolute.unset) { unset.push(absolute.unset); continue; }
+        paths.push({ in: derived.in, key: derived.key, from: from!, to: serena ? serenaHome(absolute.to!, context) : absolute.to!, was: absolute.to! });
     }
     const parts = helperParts(entry.headersHelper);
     if (parts)
     {
-        const a = absoluteOf(parts.path, ctx);
-        if (a && a.unset) unset.push(a.unset);
-        else if (a) paths.push({ in: 'helper', key: 'headersHelper', from: parts.path, to: a.to!, was: a.to! });
+        const absolute = absoluteOf(parts.path, context);
+        if (absolute && absolute.unset) unset.push(absolute.unset);
+        else if (absolute) paths.push({ in: 'helper', key: 'headersHelper', from: parts.path, to: absolute.to!, was: absolute.to! });
     }
     return { paths, unset: [...new Set(unset)] };
 }
 
 function relativeText(paths: PathChange[], rowId: string | null): string
 {
-    const each = paths.map((p) => `${p.key} '${p.from}' -> ${p.to}${p.to === p.was ? '' : ` - the old data stays at ${p.was} - moving the path moves no data${rowId === 'serena' ? ', and serena downloads its language servers there once (about 327MB)' : ''}`}`);
+    const each = paths.map((change) => `${change.key} '${change.from}' -> ${change.to}${change.to === change.was ? '' : ` - the old data stays at ${change.was} - moving the path moves no data${rowId === 'serena' ? ', and serena downloads its language servers there once (about 327MB)' : ''}`}`);
     return `named relative or through \${HOME}/\${USERPROFILE}, so a session started in a child folder uses its own copy: ${each.join('; ')}; a copy in a child folder is kept out of git by /preferred-tools:fix run there`;
 }
 
-export function projectRelativePathDetect(ctx: FixCtx): Finding[]
+export function projectRelativePathDetect(context: FixCtx): Finding[]
 {
     const out: Finding[] = [];
-    for (const r of C.registrationsOf(ctx, 'project-relative-path').filter((x) => x.scope === 'project'))
+    for (const registration of C.registrationsOf(context, 'project-relative-path').filter((candidate) => candidate.scope === 'project'))
     {
-        const { paths, unset } = changesOf(r.entry, r.rowId, ctx);
-        if (unset.length) out.push(C.finding('project-relative-path', r, `a path names \${${unset[0]}}`, { blocked: `${unset[0]} is not set here - there is no value to write the path as; set it, or pick the folder again with /preferred-tools:configure, Location` }));
-        else if (paths.length) out.push(C.finding('project-relative-path', r, relativeText(paths, r.rowId), { proposal: { paths: paths.map(({ key, from, to }) => ({ key, from, to })) } }));
+        const { paths, unset } = changesOf(registration.entry, registration.rowId, context);
+        if (unset.length) out.push(C.finding('project-relative-path', registration, `a path names \${${unset[0]}}`, { blocked: `${unset[0]} is not set here - there is no value to write the path as; set it, or pick the folder again with /preferred-tools:configure, Location` }));
+        else if (paths.length) out.push(C.finding('project-relative-path', registration, relativeText(paths, registration.rowId), { proposal: { paths: paths.map(({ key, from, to }) => ({ key, from, to })) } }));
     }
     // a parent's .mcp.json: one finding per folder, fixed by running fix there
-    const tools = C.fixOf(ctx, 'project-relative-path')!.tool;
+    const tools = C.fixOf(context, 'project-relative-path')!.tool;
     const parents = new Map<string, InvRegistration[]>();
-    for (const r of inheritedOf(ctx, tools))
+    for (const registration of inheritedOf(context, tools))
     {
-        if (!changesOf(r.entry, r.rowId, { ...ctx, inv: { ...ctx.inv, project: r.from! } }).paths.length) continue;
-        parents.set(r.from!, [...(parents.get(r.from!) || []), r]);
+        if (!changesOf(registration.entry, registration.rowId, { ...context, inv: { ...context.inv, project: registration.from! } }).paths.length) continue;
+        parents.set(registration.from!, [...(parents.get(registration.from!) || []), registration]);
     }
     for (const [dir, list] of parents)
-        out.push(C.finding('project-relative-path', { ...list[0]!, name: list.map((r) => r.name).join(', ') }, `${fromHere(ctx.inv, dir)}/.mcp.json names a data folder or key helper relative or through \${HOME}/\${USERPROFILE}, so a session started here uses its own copy`, { blocked: runThere(ctx, dir) }));
+        out.push(C.finding('project-relative-path', { ...list[0]!, name: list.map((registration) => registration.name).join(', ') }, `${fromHere(context.inv, dir)}/.mcp.json names a data folder or key helper relative or through \${HOME}/\${USERPROFILE}, so a session started here uses its own copy`, { blocked: runThere(context, dir) }));
     return out;
 }
 
 // The entry as read, with only this row's paths absolute: the pin, the cut-off and the user's args and env kept.
-export function projectRelativePathFix(entry: ServerEntry, f: Finding, ctx: FixCtx): ServerEntry
+export function projectRelativePathFix(entry: ServerEntry, finding: Finding, context: FixCtx): ServerEntry
 {
-    const reg = ctx.inv.registrations.find((r) => r.name === f.name && r.scope === f.scope);
-    const { paths } = changesOf(entry, (reg && reg.rowId) || f.row, ctx);
+    const registration = context.inv.registrations.find((candidate) => candidate.name === finding.name && candidate.scope === finding.scope);
+    const { paths } = changesOf(entry, (registration && registration.rowId) || finding.row, context);
     const out = { ...entry, ...(entry.env ? { env: { ...entry.env } } : {}), ...(entry.args ? { args: [...entry.args] } : {}) };
-    for (const p of paths)
+    for (const change of paths)
     {
-        if (p.in === 'env') out.env![p.key] = p.to;
-        else if (p.in === 'arg') out.args![out.args!.indexOf(p.key) + 1] = p.to;
+        if (change.in === 'env') out.env![change.key] = change.to;
+        else if (change.in === 'arg') out.args![out.args!.indexOf(change.key) + 1] = change.to;
         else
         {
             const argv = helperArgv(entry.headersHelper);
-            const at = argv.findIndex((a) => /mcp-headers\.js$/.test(a));
-            const style = styleOf(ctx);
-            out.headersHelper = [...argv.slice(0, at), shellArg(p.to, style), ...argv.slice(at + 1).map((a) => shellArg(a, style))].join(' ');
+            const at = argv.findIndex((argument) => /mcp-headers\.js$/.test(argument));
+            const style = styleOf(context);
+            out.headersHelper = [...argv.slice(0, at), shellArg(change.to, style), ...argv.slice(at + 1).map((argument) => shellArg(argument, style))].join(' ');
         }
     }
     return out;
@@ -137,82 +137,82 @@ export function projectRelativePathFix(entry: ServerEntry, f: Finding, ctx: FixC
 
 // The servers a parent folder left on its own at project scope: read from the lists in its standard roots, or a 0.4.x
 // record where a root has no list yet.
-function parentOwn(ctx: FixCtx, dir: string): Set<string>
+function parentOwn(context: FixCtx, dir: string): Set<string>
 {
     const names = new Set<string>();
-    for (const s of roots.standard('project', { project: dir, home: ctx.home, platform: ctx.platform }))
+    for (const standardRoot of roots.standard('project', { project: dir, home: context.home, platform: context.platform }))
     {
-        const P = pathOf(ctx);
-        const list = lists.readList(P.join(s.root, roots.FILES.list));
-        const own = list ? list.own : ((lists.readOldRecord(P.join(s.root, roots.FILES.record)) || {} as Partial<OldRecord>).servers || []);
-        for (const e of own) if (e.scope === 'project' && e.choice === 'own' && typeof e.name === 'string') names.add(e.name);
+        const pathApi = pathOf(context);
+        const list = lists.readList(pathApi.join(standardRoot.root, roots.FILES.list));
+        const own = list ? list.own : ((lists.readOldRecord(pathApi.join(standardRoot.root, roots.FILES.record)) || {} as Partial<OldRecord>).servers || []);
+        for (const ownEntry of own) if (ownEntry.scope === 'project' && ownEntry.choice === 'own' && typeof ownEntry.name === 'string') names.add(ownEntry.name);
     }
     return names;
 }
 
 // A parent's registrations of these tools (each read from a parent's file): not the user's own, not alfred-code's, not left on its own there.
-function inheritedOf(ctx: FixCtx, tools: string[]): InvRegistration[]
+function inheritedOf(context: FixCtx, tools: string[]): InvRegistration[]
 {
     const own = new Map<string, Set<string>>();
-    const ownIn = (dir: string) => { if (!own.has(dir)) own.set(dir, parentOwn(ctx, dir)); return own.get(dir)!; };
-    return ctx.inv.registrations.filter((r) => r.scope === 'inherited' && r.from && !r.own && !r.alfredRetired && tools.includes(r.rowId!) && !ownIn(r.from).has(r.name));
+    const ownIn = (dir: string) => { if (!own.has(dir)) own.set(dir, parentOwn(context, dir)); return own.get(dir)!; };
+    return context.inv.registrations.filter((registration) => registration.scope === 'inherited' && registration.from && !registration.own && !registration.alfredRetired && tools.includes(registration.rowId!) && !ownIn(registration.from).has(registration.name));
 }
 
 // ---- mcp-order ------------------------------------------------------------------------------------------------------
 
 // A .mcp.json out of order. -> { names, order, row } | null (in order, not there, or not plain JSON - left as it is)
-function outOfOrder(file: string, ctx: FixCtx, own: Set<string>): { names: string[]; order: string[]; row: string | null } | null
+function outOfOrder(file: string, context: FixCtx, own: Set<string>): { names: string[]; order: string[]; row: string | null } | null
 {
     let text: string;
     try { text = fs.readFileSync(file, 'utf8'); }
     catch { return null; }
-    const r = mcpOrder.reorderText(text, ctx.catalog, own);
-    if (r.error || !r.changed) return null;
+    const reordered = mcpOrder.reorderText(text, context.catalog, own);
+    if (reordered.error || !reordered.changed) return null;
     const servers = JSON.parse(text).mcpServers;
     const names = Object.keys(servers);
-    const order = mcpOrder.sortedNames(servers, ctx.catalog, own);
-    const first = order.find((n, i) => n !== names[i]);
-    const m = matchEntry(servers[first!], ctx.catalog);
-    return { names, order, row: m ? m.rowId : null };
+    const order = mcpOrder.sortedNames(servers, context.catalog, own);
+    const first = order.find((name, i) => name !== names[i]);
+    const match = matchEntry(servers[first!], context.catalog);
+    return { names, order, row: match ? match.rowId : null };
 }
 
-const orderText = (o: { names: string[]; order: string[] }) => `the catalog servers are not in your order: ${o.names.join(', ')} - in order: ${o.order.join(', ')}`;
+const orderText = (ordering: { names: string[]; order: string[] }) => `the catalog servers are not in your order: ${ordering.names.join(', ')} - in order: ${ordering.order.join(', ')}`;
 
-export function mcpOrderDetect(ctx: FixCtx): Finding[]
+export function mcpOrderDetect(context: FixCtx): Finding[]
 {
-    const P = pathOf(ctx);
+    const pathApi = pathOf(context);
     const out: Finding[] = [];
-    const own = mcpOrder.ownProjectNames(ctx.inv);
-    const file = P.join(ctx.inv.project, '.mcp.json');
-    const here = outOfOrder(file, ctx, new Set(own));
+    const own = mcpOrder.ownProjectNames(context.inv);
+    const file = pathApi.join(context.inv.project, '.mcp.json');
+    const here = outOfOrder(file, context, new Set(own));
     if (here) out.push({ id: 'mcp-order', row: here.row, name: '.mcp.json', scope: 'project', found: orderText(here), proposal: { file, own } });
-    const parents = new Map(ctx.inv.registrations.filter((r) => r.scope === 'inherited' && r.file).map((r) => [r.from, r.file] as [string, string]));
-    for (const [dir, f] of parents)
+    const parents = new Map(context.inv.registrations.filter((registration) => registration.scope === 'inherited' && registration.file).map((registration) => [registration.from, registration.file] as [string, string]));
+    for (const [dir, parentFile] of parents)
     {
-        const o = outOfOrder(f, ctx, parentOwn(ctx, dir));
-        if (o) out.push({ id: 'mcp-order', row: o.row, name: `${fromHere(ctx.inv, dir)}/.mcp.json`, scope: 'inherited', found: orderText(o), blocked: runThere(ctx, dir) });
+        const parentOrder = outOfOrder(parentFile, context, parentOwn(context, dir));
+        if (parentOrder) out.push({ id: 'mcp-order', row: parentOrder.row, name: `${fromHere(context.inv, dir)}/.mcp.json`, scope: 'inherited', found: orderText(parentOrder), blocked: runThere(context, dir) });
     }
     return out;
 }
 
 // The same step install and configure append: only the order of mcpServers changes. A warning is a fix not made.
-export function mcpOrderFix(f: Finding, ctx: FixCtx): MachineFixResult
+export function mcpOrderFix(finding: Finding, context: FixCtx): MachineFixResult
 {
-    const r = mcpOrder.orderFile(f.proposal!.file!, ctx.catalog, new Set(f.proposal!.own || []));
-    return { ok: !/^warning: /.test(r.detail), restart: false, detail: r.detail };
+    const result = mcpOrder.orderFile(finding.proposal!.file!, context.catalog, new Set(finding.proposal!.own || []));
+    return { ok: !/^warning: /.test(result.detail), restart: false, detail: result.detail };
 }
 
 // ---- helper-child-folder (docs/sources.md M1: a parent folder's helper does not run in a child folder) ----------------
 
-export function helperChildFolderDetect(ctx: FixCtx): Finding[]
+export function helperChildFolderDetect(context: FixCtx): Finding[]
 {
-    const tools = C.fixOf(ctx, 'helper-child-folder')!.tool;
-    return inheritedOf(ctx, tools)
-        .filter((r) => r.entry && typeof r.entry.headersHelper === 'string' && r.approval !== 'rejected' && !r.shadowed)
-        .map((r) =>
+    const tools = C.fixOf(context, 'helper-child-folder')!.tool;
+    return inheritedOf(context, tools)
+        .filter((registration) => registration.entry && typeof registration.entry.headersHelper === 'string' && registration.approval !== 'rejected' && !registration.shadowed)
+        .map((registration) =>
         {
-            const there = fromHere(ctx.inv, r.from!);
-            return C.finding('helper-child-folder', r, `${r.name} comes from ${there}/.mcp.json, and Claude Code does not run a parent folder's key helper in a child folder - it connects here without its key`,
+            const there = fromHere(context.inv, registration.from!);
+            return C.finding('helper-child-folder', registration, `${registration.name} comes from ${there}/.mcp.json, and Claude Code does not run a parent folder's key helper in a child folder - it connects here without its key`,
                 { blocked: `move it to Global with /preferred-tools:configure in ${there}, or start Claude in ${there}` });
         });
 }

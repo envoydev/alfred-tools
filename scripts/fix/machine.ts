@@ -22,37 +22,37 @@ import type { Finding, FixCtx, MachineFixResult, RunResult } from './types.ts';
 // kept in <plugin data>/retired-declined.json (declines.js); a declined one is shown as advice, never applied. Where
 // alfred-code is set up it installs the same plugins, so fix.js keeps those out of 'Apply all found' (`alfred`).
 
-export function retiredPluginDetect(ctx: FixCtx): Finding[]
+export function retiredPluginDetect(context: FixCtx): Finding[]
 {
-    const ids = C.fixOf(ctx, 'retired-plugin')!.ids || [];
-    const declined = declines.read(ctx.data);
-    const alfred = Boolean(ctx.inv.alfredCodeEnabled);
-    return (ctx.inv.plugins || []).filter((p) => ids.includes(p.id)).map((p) =>
+    const ids = C.fixOf(context, 'retired-plugin')!.ids || [];
+    const declined = declines.read(context.data);
+    const alfred = Boolean(context.inv.alfredCodeEnabled);
+    return (context.inv.plugins || []).filter((plugin) => ids.includes(plugin.id)).map((plugin) =>
     {
         const base = {
-            id: 'retired-plugin', name: p.id, scope: p.scope, alfred,
-            found: `${p.id} is installed at ${p.scope} scope; preferred-tools no longer lists it - it works in Claude Code alone${alfred ? `; ${p.id} - alfred-code also installs it, and this removes it for both` : ''}`,
-            proposal: { command: `claude plugin uninstall ${p.id} --scope ${p.scope}` },
+            id: 'retired-plugin', name: plugin.id, scope: plugin.scope, alfred,
+            found: `${plugin.id} is installed at ${plugin.scope} scope; preferred-tools no longer lists it - it works in Claude Code alone${alfred ? `; ${plugin.id} - alfred-code also installs it, and this removes it for both` : ''}`,
+            proposal: { command: `claude plugin uninstall ${plugin.id} --scope ${plugin.scope}` },
         };
-        if (!declined.some((d) => declines.same(d, p))) return base;
-        return { ...base, declined: true, blocked: `${p.id} is kept at ${p.scope}; remove it with claude plugin uninstall ${p.id} --scope ${p.scope}` };
+        if (!declined.some((declinedPlugin) => declines.same(declinedPlugin, plugin))) return base;
+        return { ...base, declined: true, blocked: `${plugin.id} is kept at ${plugin.scope}; remove it with claude plugin uninstall ${plugin.id} --scope ${plugin.scope}` };
     });
 }
 
 // `claude plugin uninstall <id> --scope <scope>`, read back from the plugin list. claude-hud's statusLine goes with the
 // last claude-hud: the account line is shared by every scope, so it stays while another scope still has the plugin.
-export function retiredPluginFix(f: Finding, ctx: FixCtx): MachineFixResult
+export function retiredPluginFix(finding: Finding, context: FixCtx): MachineFixResult
 {
-    const command = `claude plugin uninstall ${f.name} --scope ${f.scope}`;
-    const r = cli.runClaude(['plugin', 'uninstall', f.name, '--scope', f.scope!], { cwd: ctx.inv.project, env: ctx.env });
-    if (r.error || r.status !== 0) return { ok: false, detail: `${command} failed - ${String(`${r.stderr || ''}${r.stdout || ''}` || (r.error && r.error.message) || 'no output').trim().split('\n').slice(-1)[0]}` };
-    const left = inventory.buildInventory({ project: ctx.inv.project, env: ctx.env, data: ctx.data }).plugins;
-    if (left.some((p) => p.id === f.name && p.scope === f.scope)) return { ok: false, detail: `${f.name} is still listed at ${f.scope} after ${command}` };
-    let detail = `uninstalled ${f.name} (${f.scope})`;
-    if (f.name.startsWith('claude-hud@'))
+    const command = `claude plugin uninstall ${finding.name} --scope ${finding.scope}`;
+    const result = cli.runClaude(['plugin', 'uninstall', finding.name, '--scope', finding.scope!], { cwd: context.inv.project, env: context.env });
+    if (result.error || result.status !== 0) return { ok: false, detail: `${command} failed - ${String(`${result.stderr || ''}${result.stdout || ''}` || (result.error && result.error.message) || 'no output').trim().split('\n').slice(-1)[0]}` };
+    const left = inventory.buildInventory({ project: context.inv.project, env: context.env, data: context.data }).plugins;
+    if (left.some((plugin) => plugin.id === finding.name && plugin.scope === finding.scope)) return { ok: false, detail: `${finding.name} is still listed at ${finding.scope} after ${command}` };
+    let detail = `uninstalled ${finding.name} (${finding.scope})`;
+    if (finding.name.startsWith('claude-hud@'))
     {
-        if (left.some((p) => p.id === f.name)) detail += `; claude-hud's statusLine is kept - claude-hud is still installed at ${left.filter((p) => p.id === f.name).map((p) => p.scope).join(', ')}`;
-        else detail += `; ${hud.removeHudStatusLine(hud.resolveConfigDir({ env: ctx.env }), { platform: ctx.platform, env: ctx.env }).detail}`;
+        if (left.some((plugin) => plugin.id === finding.name)) detail += `; claude-hud's statusLine is kept - claude-hud is still installed at ${left.filter((plugin) => plugin.id === finding.name).map((plugin) => plugin.scope).join(', ')}`;
+        else detail += `; ${hud.removeHudStatusLine(hud.resolveConfigDir({ env: context.env }), { platform: context.platform, env: context.env }).detail}`;
     }
     return { ok: true, detail };
 }
@@ -65,53 +65,53 @@ export function retiredPluginFix(f: Finding, ctx: FixCtx): MachineFixResult
 // git work tree git decides (`git check-ignore` on a file inside the folder, as keys.js tests a key file); where git
 // cannot answer, the folder's own .gitignore, or alfred-code's .alfred/.gitignore under .alfred/, counts as covering.
 const PROBE = 'preferred-tools-probe';
-function ignoredByGit(ctx: FixCtx, rel: string): boolean | null
+function ignoredByGit(context: FixCtx, rel: string): boolean | null
 {
-    const r = ctx.machine.run('git', ['check-ignore', '-q', `${rel}/${PROBE}`], { cwd: ctx.inv.project });
-    return r && (r.status === 0 || r.status === 1) ? r.status === 0 : null;
+    const result = context.machine.run('git', ['check-ignore', '-q', `${rel}/${PROBE}`], { cwd: context.inv.project });
+    return result && (result.status === 0 || result.status === 1) ? result.status === 0 : null;
 }
 
-export function dataFolderIgnoreDetect(ctx: FixCtx): Finding[]
+export function dataFolderIgnoreDetect(context: FixCtx): Finding[]
 {
-    const P = ctx.platform === 'win32' ? path.win32 : path.posix;
-    const tools = C.fixOf(ctx, 'data-folder-ignore')!.tool;
+    const pathApi = context.platform === 'win32' ? path.win32 : path.posix;
+    const tools = C.fixOf(context, 'data-folder-ignore')!.tool;
     const seen = new Set<string>();
     const out: Finding[] = [];
-    for (const r of ctx.inv.registrations)
+    for (const registration of context.inv.registrations)
     {
-        if (r.own || r.alfredRetired || r.choice === 'own' || !tools.includes(r.rowId!)) continue;
+        if (registration.own || registration.alfredRetired || registration.choice === 'own' || !tools.includes(registration.rowId!)) continue;
         // starts here: a project-scope one not rejected, or a parent's not rejected and not shadowed by a nearer one
-        if (r.scope === 'inherited' ? r.approval === 'rejected' || r.shadowed : r.scope !== 'project' || r.approval === 'rejected') continue;
-        const row = C.rowOf(ctx, r.rowId!)!;
-        const root = row.locations ? rootOfEntry(row, r.entry) : null;
+        if (registration.scope === 'inherited' ? registration.approval === 'rejected' || registration.shadowed : registration.scope !== 'project' || registration.approval === 'rejected') continue;
+        const row = C.rowOf(context, registration.rowId!)!;
+        const root = row.locations ? rootOfEntry(row, registration.entry) : null;
         if (!root || root.includes('${') || root.startsWith('~')) continue;
         if (path.posix.isAbsolute(root) || path.win32.isAbsolute(root))
         {
-            const copy = leftoverCopy(ctx, r, root, P);
+            const copy = leftoverCopy(context, registration, root, pathApi);
             if (copy && !seen.has(copy.folder)) { seen.add(copy.folder); out.push(copy.finding); }
             continue;
         }
         const rel = root.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
-        const folder = P.resolve(ctx.inv.project, ...rel.split('/'));
+        const folder = pathApi.resolve(context.inv.project, ...rel.split('/'));
         if (seen.has(folder)) continue;
         seen.add(folder);
-        const own = P.join(folder, '.gitignore');
-        const git = ignoredByGit(ctx, rel);
-        if (git === true) continue;
-        if (git === null && ctx.machine.exists(own)) continue;
-        if (git === null && /^\.alfred\//.test(rel) && ctx.machine.exists(P.join(ctx.inv.project, '.alfred', '.gitignore'))) continue;
+        const own = pathApi.join(folder, '.gitignore');
+        const gitIgnores = ignoredByGit(context, rel);
+        if (gitIgnores === true) continue;
+        if (gitIgnores === null && context.machine.exists(own)) continue;
+        if (gitIgnores === null && /^\.alfred\//.test(rel) && context.machine.exists(pathApi.join(context.inv.project, '.alfred', '.gitignore'))) continue;
         // a .gitignore of the user's that leaves the data out is theirs to change: the fix never writes over it
-        if (git === false && ctx.machine.exists(own))
+        if (gitIgnores === false && context.machine.exists(own))
         {
             out.push({
-                id: 'data-folder-ignore', row: r.rowId, name: r.name, scope: r.scope,
+                id: 'data-folder-ignore', row: registration.rowId, name: registration.name, scope: registration.scope,
                 found: `${rel} - its data folder when Claude starts here - is not git-ignored`,
                 blocked: `${rel}/.gitignore is there but does not ignore the folder's data - add * to it, or ignore ${rel}/ in the project's .gitignore`,
             });
             continue;
         }
         out.push({
-            id: 'data-folder-ignore', row: r.rowId, name: r.name, scope: r.scope,
+            id: 'data-folder-ignore', row: registration.rowId, name: registration.name, scope: registration.scope,
             found: `${rel} - its data folder when Claude starts here - is not git-ignored: ${folder} gets no .gitignore of its own${/^\.alfred\//.test(rel) ? ' and no .alfred/.gitignore covers it' : ''}`,
             proposal: { path: folder },
         });
@@ -122,22 +122,22 @@ export function dataFolderIgnoreDetect(ctx: FixCtx): Finding[]
 // A data root written absolute under the folder that declares it (0.3.0, spec F7): a session started in a child folder
 // under 0.2.0, when the path was relative, made its own copy there. Found when this folder is not the declaring one, the
 // copy is on disk and git does not ignore it; the fix gives it the same .gitignore. Its data is never moved or deleted.
-function leftoverCopy(ctx: FixCtx, r: InvRegistration, root: string, P: path.PlatformPath): { folder: string; finding: Finding } | null
+function leftoverCopy(context: FixCtx, registration: InvRegistration, root: string, pathApi: path.PlatformPath): { folder: string; finding: Finding } | null
 {
-    const declared = r.scope === 'inherited' ? r.from : ctx.inv.project;
-    if (!declared || P.resolve(declared) === P.resolve(ctx.inv.project)) return null;
-    const rel = P.relative(declared, root);
-    if (!rel || rel.startsWith('..') || P.isAbsolute(rel)) return null;
-    const folder = P.join(ctx.inv.project, rel);
-    if (!ctx.machine.exists(folder)) return null;
-    const slashed = rel.split(P.sep).join('/');
-    const git = ignoredByGit(ctx, slashed);
-    if (git === true) return null;
-    if (git === null && (ctx.machine.exists(P.join(folder, '.gitignore')) || (/^\.alfred\//.test(slashed) && ctx.machine.exists(P.join(ctx.inv.project, '.alfred', '.gitignore'))))) return null;
+    const declared = registration.scope === 'inherited' ? registration.from : context.inv.project;
+    if (!declared || pathApi.resolve(declared) === pathApi.resolve(context.inv.project)) return null;
+    const rel = pathApi.relative(declared, root);
+    if (!rel || rel.startsWith('..') || pathApi.isAbsolute(rel)) return null;
+    const folder = pathApi.join(context.inv.project, rel);
+    if (!context.machine.exists(folder)) return null;
+    const slashed = rel.split(pathApi.sep).join('/');
+    const gitIgnores = ignoredByGit(context, slashed);
+    if (gitIgnores === true) return null;
+    if (gitIgnores === null && (context.machine.exists(pathApi.join(folder, '.gitignore')) || (/^\.alfred\//.test(slashed) && context.machine.exists(pathApi.join(context.inv.project, '.alfred', '.gitignore'))))) return null;
     return {
         folder,
         finding: {
-            id: 'data-folder-ignore', row: r.rowId, name: r.name, scope: r.scope,
+            id: 'data-folder-ignore', row: registration.rowId, name: registration.name, scope: registration.scope,
             found: `${slashed} - a 0.2.0 copy no server uses any more - its data is left, never moved or deleted; it is not git-ignored`,
             proposal: { path: folder },
         },
@@ -145,17 +145,17 @@ function leftoverCopy(ctx: FixCtx, r: InvRegistration, root: string, P: path.Pla
 }
 
 // Create the folder with a .gitignore holding `*`, as the plan's ensure-dir step does; a .gitignore already there is left.
-export function dataFolderIgnoreFix(f: Finding, _ctx: FixCtx): MachineFixResult
+export function dataFolderIgnoreFix(finding: Finding, _context: FixCtx): MachineFixResult
 {
-    const file = path.join(f.proposal!.path!, '.gitignore');
+    const file = path.join(finding.proposal!.path!, '.gitignore');
     try
     {
         if (fs.existsSync(file)) return { ok: true, restart: false, detail: `${file} exists - left as it is` };
-        fs.mkdirSync(f.proposal!.path!, { recursive: true });
+        fs.mkdirSync(finding.proposal!.path!, { recursive: true });
         fs.writeFileSync(file, '*\n');
         return { ok: true, restart: false, detail: `wrote ${file} holding *` };
     }
-    catch (caught) { const e = caught as NodeJS.ErrnoException; return { ok: false, detail: `could not write ${file}: ${e.message}` }; }
+    catch (caught) { const error = caught as NodeJS.ErrnoException; return { ok: false, detail: `could not write ${file}: ${error.message}` }; }
 }
 
 // ---- npx-cache-entry ------------------------------------------------------------------------------------------------
@@ -170,71 +170,71 @@ const NPX_FOLDER = /^[0-9a-f]{16}$/;
 // protected'), and the long list prints each source's value as a JSON string, all but the one in force commented out
 // (measured, docs/sources.md). npm prints a UUID-shaped part of a path as ***, so a redacted value is no folder.
 // -> the folder, or null when npm cannot say
-function cacheInForce(r: RunResult | null): string | null
+function cacheInForce(result: RunResult | null): string | null
 {
-    if (!r || r.status !== 0) return null;
-    const line = String(r.stdout || '').split('\n').map((l) => l.trim()).find((l) => l.startsWith('cache = '));
+    if (!result || result.status !== 0) return null;
+    const line = String(result.stdout || '').split('\n').map((rawLine) => rawLine.trim()).find((trimmedLine) => trimmedLine.startsWith('cache = '));
     let value: unknown = null;
     try { value = line ? JSON.parse(line.slice('cache = '.length)) : null; } catch { /* not a JSON string: npm cannot say */ }
     return typeof value === 'string' && value && !value.includes('***') ? value : null;
 }
 
 // npm_config_cache in an environment, as npm reads it: the name in any case, an empty value skipped
-const cacheVar = (env: object | null | undefined) => Object.entries(env || {}).find(([k, v]) => k.toLowerCase() === 'npm_config_cache' && v !== '');
+const cacheVar = (env: object | null | undefined) => Object.entries(env || {}).find(([k, value]) => k.toLowerCase() === 'npm_config_cache' && value !== '');
 
 // The npm cache a registration's npx uses: its own npm_config_cache, else the environment's (npm's first source, ahead
 // of any .npmrc), else npm's, asked once per run.
-function npmCacheOf(ctx: FixCtx, reg: InvRegistration, memo: Map<string, string | null>): string | null
+function npmCacheOf(context: FixCtx, registration: InvRegistration, memo: Map<string, string | null>): string | null
 {
-    const own = cacheVar(reg.entry.env);
-    if (own) return C.expandVars(own[1], ctx.env);
-    const inEnv = cacheVar(ctx.env);
+    const own = cacheVar(registration.entry.env);
+    if (own) return C.expandVars(own[1], context.env);
+    const inEnv = cacheVar(context.env);
     if (inEnv) return inEnv[1];
-    if (!memo.has('cache')) memo.set('cache', cacheInForce(ctx.machine.run('npm', ['config', 'ls', '-l'], { cwd: ctx.inv.project })));
+    if (!memo.has('cache')) memo.set('cache', cacheInForce(context.machine.run('npm', ['config', 'ls', '-l'], { cwd: context.inv.project })));
     return memo.get('cache')!;
 }
 
 // Every server that starts in this folder, a parent folder's included: the npx cache is the machine's, so fix run in a
 // child folder repairs the parent's server too. One rejected here, or a parent's that a nearer server of its name
 // shadows, does not start here.
-const startsHere = (ctx: FixCtx, r: InvRegistration) => !r.own && !r.alfredRetired && r.choice !== 'own' && r.approval !== 'rejected' && !(r.scope === 'inherited' && r.shadowed)
-    && C.fixOf(ctx, 'npx-cache-entry')!.tool.includes(r.rowId!);
+const startsHere = (context: FixCtx, registration: InvRegistration) => !registration.own && !registration.alfredRetired && registration.choice !== 'own' && registration.approval !== 'rejected' && !(registration.scope === 'inherited' && registration.shadowed)
+    && C.fixOf(context, 'npx-cache-entry')!.tool.includes(registration.rowId!);
 
-export function npxCacheEntryDetect(ctx: FixCtx): Finding[]
+export function npxCacheEntryDetect(context: FixCtx): Finding[]
 {
-    const P = ctx.platform === 'win32' ? path.win32 : path.posix;
+    const pathApi = context.platform === 'win32' ? path.win32 : path.posix;
     const memo = new Map<string, string | null>();
     const seen = new Set<string>();
     const out: Finding[] = [];
-    for (const reg of ctx.inv.registrations)
+    for (const registration of context.inv.registrations)
     {
         // npx, or a bridge (0.4.0), which runs its pinned mcp-remote through npx
-        if (!startsHere(ctx, reg) || (C.launcher(reg.entry) !== 'npx' && !bridgeParts(reg.entry))) continue;
-        const step = fetchStep(reg.name, reg.entry, reg.rowId);
+        if (!startsHere(context, registration) || (C.launcher(registration.entry) !== 'npx' && !bridgeParts(registration.entry))) continue;
+        const step = fetchStep(registration.name, registration.entry, registration.rowId);
         if (!step) continue;
-        const cache = npmCacheOf(ctx, reg, memo);
+        const cache = npmCacheOf(context, registration, memo);
         if (!cache) continue;
-        const folder = P.join(cache, '_npx', crypto.createHash('sha512').update(step.what).digest('hex').slice(0, 16));
-        if (seen.has(folder) || !ctx.machine.exists(folder) || ctx.machine.exists(P.join(folder, 'package.json'))) continue;
+        const folder = pathApi.join(cache, '_npx', crypto.createHash('sha512').update(step.what).digest('hex').slice(0, 16));
+        if (seen.has(folder) || !context.machine.exists(folder) || context.machine.exists(pathApi.join(folder, 'package.json'))) continue;
         seen.add(folder);
         // the finding carries no env: a key can sit in it, and --detect --json prints findings
-        out.push(C.finding('npx-cache-entry', reg, `npx's cache folder for ${step.what}, ${folder}, has no package.json - every start fails with ENOENT until it is removed`, { proposal: { path: folder, what: step.what } }));
+        out.push(C.finding('npx-cache-entry', registration, `npx's cache folder for ${step.what}, ${folder}, has no package.json - every start fails with ENOENT until it is removed`, { proposal: { path: folder, what: step.what } }));
     }
     return out;
 }
 
 // Remove that folder, never another: it must be a 16-hex folder directly under an _npx folder. -> { ok, detail, fetch }
-export function npxCacheEntryFix(f: Finding, ctx: FixCtx): MachineFixResult
+export function npxCacheEntryFix(finding: Finding, context: FixCtx): MachineFixResult
 {
-    const P = ctx.platform === 'win32' ? path.win32 : path.posix;
-    const folder = f.proposal!.path!;
-    if (!NPX_FOLDER.test(P.basename(folder)) || P.basename(P.dirname(folder)) !== '_npx') return { ok: false, detail: `${folder} is not an npx cache folder - left as it is` };
+    const pathApi = context.platform === 'win32' ? path.win32 : path.posix;
+    const folder = finding.proposal!.path!;
+    if (!NPX_FOLDER.test(pathApi.basename(folder)) || pathApi.basename(pathApi.dirname(folder)) !== '_npx') return { ok: false, detail: `${folder} is not an npx cache folder - left as it is` };
     try { fs.rmSync(folder, { recursive: true, force: true }); }
-    catch (caught) { const e = caught as NodeJS.ErrnoException; return { ok: false, detail: `could not remove ${folder}: ${e.message}` }; }
-    const reg = ctx.inv.registrations.find((r) => r.name === f.name && r.scope === f.scope && !r.shadowed);
-    const step = reg ? fetchStep(reg.name, reg.entry, reg.rowId) : null;
+    catch (caught) { const error = caught as NodeJS.ErrnoException; return { ok: false, detail: `could not remove ${folder}: ${error.message}` }; }
+    const registration = context.inv.registrations.find((candidate) => candidate.name === finding.name && candidate.scope === finding.scope && !candidate.shadowed);
+    const step = registration ? fetchStep(registration.name, registration.entry, registration.rowId) : null;
     // a parent's server is read from the parent's .mcp.json and started here, as this folder's session starts it
-    const where = reg && reg.scope === 'inherited' ? { scope: 'project', from: reg.from } : { scope: reg && reg.scope };
-    return { ok: true, detail: `removed ${folder} - npx installs ${f.proposal!.what} into it again`, fetch: step ? { ...step, ...where } : null };
+    const where = registration && registration.scope === 'inherited' ? { scope: 'project', from: registration.from } : { scope: registration && registration.scope };
+    return { ok: true, detail: `removed ${folder} - npx installs ${finding.proposal!.what} into it again`, fetch: step ? { ...step, ...where } : null };
 }
 

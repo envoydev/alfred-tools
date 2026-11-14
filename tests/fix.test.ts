@@ -12,8 +12,8 @@ import { buildEntry } from '../scripts/entries/entry.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
 import * as account from '../scripts/core/account.ts';
 import * as F from '../scripts/fix/fix-functions.ts';
-import { makeCtx, detectAll, applyFixes, questions, render } from '../scripts/fix/fix.ts';
-import { main } from '../scripts/fix/command.ts';
+import { makeCtx, detectAll, applyFixes, questions, renderFixes } from '../scripts/fix/fix.ts';
+import { runFixCommand } from '../scripts/fix/command.ts';
 import * as C from '../scripts/fix/common.ts';
 import fs from 'node:fs';
 import fsx from 'node:fs';
@@ -547,7 +547,7 @@ test('fix reports a declined id with no apply step', () =>
         assert.strictEqual(f.declined, true);
         assert.strictEqual(f.blocked, `${RETIRED.hud} is kept at user; remove it with claude plugin uninstall ${RETIRED.hud} --scope user`);
         assert.ok(!(questions(detect(ctx)).pick.flat().flatMap((q) => q.options.map((o) => o.label))).includes('retired-plugin'), 'no apply step is offered');
-        assert.match(render(detect(ctx)), /NOT APPLICABLE: claude-hud@claude-hud is kept at user/);
+        assert.match(renderFixes(detect(ctx)), /NOT APPLICABLE: claude-hud@claude-hud is kept at user/);
     }
     finally { fs.rmSync(data, { recursive: true, force: true }); }
 });
@@ -637,10 +637,10 @@ test('--only narrows by fix id, tool or registration name; the table names the h
     assert.strictEqual(detect(ctx, 'memory').found.length, 1);
     assert.strictEqual(detect(ctx, 'serena-telemetry').found.length, 1);
     assert.deepStrictEqual(detect(ctx, 'nope').found, []);
-    const text = render(detect(ctx));
+    const text = renderFixes(detect(ctx));
     assert.match(text, /Known problems found \(3\):/);
     assert.match(text, /uvx-python +serena \(local\) +no --python/);
-    assert.match(render(detect(ctxFor({ platform: 'win32' }))), /^No known problem found\.\n\nHeld, not checked: serena-windows-ts-shim - left out by the user's ruling/);
+    assert.match(renderFixes(detect(ctxFor({ platform: 'win32' }))), /^No known problem found\.\n\nHeld, not checked: serena-windows-ts-shim - left out by the user's ruling/);
 });
 
 test('the asks stay inside the AskUserQuestion limits: one Recommended, first; four options a question; four questions a call', () =>
@@ -928,18 +928,18 @@ test('CLI: --detect and --questions print; --apply applies; bad arguments exit 2
         seed(w, 'serena', 'user', bare);
         let text = '';
         const out = (s: string) => { text += `${s}\n`; };
-        assert.strictEqual(main(['--detect', '--project', w.project], { env: w.env, out, machine: noMachine() }), 0);
+        assert.strictEqual(runFixCommand(['--detect', '--project', w.project], { env: w.env, out, machine: noMachine() }), 0);
         assert.match(text, /serena-telemetry +serena \(user\)/);
         text = '';
-        assert.strictEqual(main(['--questions', '--project', w.project], { env: w.env, out, machine: noMachine() }), 0);
+        assert.strictEqual(runFixCommand(['--questions', '--project', w.project], { env: w.env, out, machine: noMachine() }), 0);
         assert.strictEqual(JSON.parse(text).choose.options[0].label, 'Apply all found (Recommended)');
         text = '';
-        assert.strictEqual(main(['--apply', 'serena-telemetry', '--project', w.project, '--tmp', path.join(w.dir, 'tmp')], { env: w.env, out, machine: noMachine() }), 0);
+        assert.strictEqual(runFixCommand(['--apply', 'serena-telemetry', '--project', w.project, '--tmp', path.join(w.dir, 'tmp')], { env: w.env, out, machine: noMachine() }), 0);
         assert.strictEqual(userEntry(w, 'serena')!.env!.SERENA_USAGE_REPORTING, 'false');
         for (const bad of [[], ['--detect', '--apply', 'x'], ['--bogus'], ['--apply'], ['--detect', '--only'], ['--input', 'novalue', '--detect'], ['--detect', '--project', 'a', '--project', 'b']])
         {
             text = '';
-            assert.strictEqual(main(bad, { env: w.env, out, machine: noMachine() }), 2, JSON.stringify(bad));
+            assert.strictEqual(runFixCommand(bad, { env: w.env, out, machine: noMachine() }), 2, JSON.stringify(bad));
             assert.match(text, /^fix: /);
         }
         const missing = readJson(account.accountFile(w.env));
@@ -966,7 +966,7 @@ const ctxData = (w: World, data: string) => makeCtx({ inv: inventory.buildInvent
 const logged = () => { const lines: string[] = []; return { lines, log: (...a: string[]) => lines.push(a.join(' ')), text: () => lines.join('\n') }; };
 const gitInit = (dir: string) => { fsx.mkdirSync(dir, { recursive: true }); assert.strictEqual(spawnx('git', ['init', '-q', dir]).status, 0); };
 const helperAt = (root: string, number: number | string, extra = '') => put(path.join(root, 'mcp-headers.js'), rootsLib.helperSource().replace(/^\/\/ preferred-tools mcp-headers \d+/, `// preferred-tools mcp-headers ${number}`) + extra);
-const shownOf = (d: Detected) => `${render(d)}${JSON.stringify(d)}`;
+const shownOf = (d: Detected) => `${renderFixes(d)}${JSON.stringify(d)}`;
 
 test('key-to-helper: a ${VAR} filled in the chain is moved to the helper under that name', () =>
 {
@@ -1269,7 +1269,7 @@ test('fix notes an untrusted declaring folder', () =>
     const at = (trusted: boolean, scope: string) => { const ctx = ctxFor({ registrations: [helperReg(scope)] }); ctx.inv.trusted = trusted; return detect(ctx); };
     const d = at(false, 'local');
     assert.deepStrictEqual(d.notes, ['github (local): accept the trust dialog the next time Claude Code starts in /proj - until then the server connects without its key']);
-    assert.match(render(d), /note: github \(local\): accept the trust dialog/);
+    assert.match(renderFixes(d), /note: github \(local\): accept the trust dialog/);
     assert.deepStrictEqual(at(true, 'local').notes, []);
     assert.deepStrictEqual(at(false, 'user').notes, [], 'a global helper needs no folder trust');
     assert.ok(!at(false, 'local').found.some((f) => /trust/.test(f.id)), 'not a fix');
@@ -1302,7 +1302,7 @@ test('fix: a registration on its own is not checked and is listed once', () =>
     const own = detect(ctxFor({ platform: 'win32', registrations: [{ ...r, choice: 'own' }, { ...r, name: 'c7-managed', choice: 'manage' }] }));
     assert.deepStrictEqual(own.found.map((f) => [f.id, f.name]), [['windows-npx-cmd', 'c7-managed']], 'only the one on its own is left out');
     assert.deepStrictEqual(own.own, [{ name: 'context7', scope: 'local' }]);
-    const text = render(own);
+    const text = renderFixes(own);
     assert.deepStrictEqual(text.split('\n').filter((l) => l.includes('on its own - not checked')), ['context7 (local): on its own - not checked']);
     assert.deepStrictEqual(detect(ctxFor({ platform: 'win32', registrations: [r] })).own, []);
 });
@@ -1396,7 +1396,7 @@ test('project-relative-path and mcp-order in a child folder name the parent', ()
         const ours = (d: Detected) => d.found.filter((f) => ['project-relative-path', 'mcp-order'].includes(f.id));
         const d = detect(ctxIn(w, child));
         assert.deepStrictEqual(ours(d).map((f) => [f.id, f.blocked]), [['project-relative-path', 'run /preferred-tools:fix in ..'], ['mcp-order', 'run /preferred-tools:fix in ..']]);
-        const text = render(d);
+        const text = renderFixes(d);
         assert.match(text, /project-relative-path .* NOT APPLICABLE: run \/preferred-tools:fix in \.\./);
         assert.match(text, /mcp-order .* NOT APPLICABLE: run \/preferred-tools:fix in \.\./);
         // in the parent itself, both apply

@@ -16,7 +16,7 @@ import * as account from '../../scripts/core/account.ts';
 import * as catalogLib from '../../scripts/catalog/catalog.ts';
 import { buildEntry } from '../../scripts/entries/entry.ts';
 import { makeCtx, detectAll, applyFixes, questions } from '../../scripts/fix/fix.ts';
-import { main } from '../../scripts/update/command.ts';
+import { runUpdateCommand } from '../../scripts/update/command.ts';
 import { pinnedVersion } from '../../scripts/fix/common.ts';
 import type { InvRegistration } from '../../scripts/inventory/types.ts';
 import type { ServerEntry } from '../../scripts/core/types.ts';
@@ -141,7 +141,7 @@ test('an update with a stale pin: the registry\'s newer, old-enough release is w
     const lines: string[] = [];
     // a fetch file is handed on, so update keeps its <tmp>: under the root, which test.after removes
     const tmp = fs.mkdtempSync(path.join(root, 'update-'));
-    const code = await main(['--apply', 'mcp:serena~user', '--no-refresh', '--tmp', tmp, '--project', p], { env: h.env, out: (s) => lines.push(s), registry, now, machine: { which: () => null, run: () => ({ status: 1 }), nodeVersion: process.versions.node } as unknown as MachineProbe });
+    const code = await runUpdateCommand(['--apply', 'mcp:serena~user', '--no-refresh', '--tmp', tmp, '--project', p], { env: h.env, out: (s) => lines.push(s), registry, now, machine: { which: () => null, run: () => ({ status: 1 }), nodeVersion: process.versions.node } as unknown as MachineProbe });
     assert.strictEqual(code, 0, lines.join('\n'));
     const got = reg(p, 'serena', 'user');
     assert.strictEqual(pinnedVersion(got.entry, 'serena-agent'), '1.5.0', 'the 2-day-old 1.6.0 is held back');

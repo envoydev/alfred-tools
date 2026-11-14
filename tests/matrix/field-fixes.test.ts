@@ -22,7 +22,7 @@ import * as roots from '../../scripts/roots/roots.ts';
 import * as catalogLib from '../../scripts/catalog/catalog.ts';
 import { shellArg, buildEntry } from '../../scripts/entries/entry.ts';
 import * as existing from '../../scripts/inventory/existing.ts';
-import { makeCtx, detectAll, applyFixes, render } from '../../scripts/fix/fix.ts';
+import { makeCtx, detectAll, applyFixes, renderFixes } from '../../scripts/fix/fix.ts';
 import * as update from '../../scripts/update/check.ts';
 import { REFUSED } from '../../scripts/apply/run.ts';
 import * as fake from '../fake-mcp-http.ts';
@@ -158,8 +158,8 @@ test('X6 - configure answered \'Leave it on its own\': one own entry in the fami
     assert.ok(!fs.existsSync(path.join(h.home, '.preferred-tools', roots.FILES.list)), 'no list in the global root');
     const inv = h.inventory(dir);
     const d = detectAll(makeCtx({ inv, env: h.env, data: h.data }));
-    assert.ok(render(d).includes('context7 (project): on its own - not checked'), render(d));
-    const out = await update.check(update.makeCtx({ inv, project: dir, env: h.env, refresh: false }));
+    assert.ok(renderFixes(d).includes('context7 (project): on its own - not checked'), renderFixes(d));
+    const out = await update.checkUpdates(update.makeCtx({ inv, project: dir, env: h.env, refresh: false }));
     assert.ok(out.skipped.includes('context7 (project): on its own - not checked'), out.skipped.join('\n'));
 });
 

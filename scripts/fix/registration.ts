@@ -17,107 +17,107 @@ import type { Root } from '../entries/types.ts';
 import type { InvRegistration, WindowsMcp } from '../inventory/types.ts';
 import type { Finding, FixCtx, MachineProbe } from './types.ts';
 
-const eachReg = (ctx: FixCtx, id: string, fn: (reg: InvRegistration, route: CatalogRoute) => Finding | null): Finding[] => C.registrationsOf(ctx, id).map((reg) => fn(reg, C.routeOf(ctx, reg)!)).filter(Boolean) as Finding[];
+const eachReg = (context: FixCtx, id: string, toFinding: (registration: InvRegistration, route: CatalogRoute) => Finding | null): Finding[] => C.registrationsOf(context, id).map((registration) => toFinding(registration, C.routeOf(context, registration)!)).filter(Boolean) as Finding[];
 
 // ---- serena-windows-home --------------------------------------------------------------------------------------------
 // SERENA_HOME absolute, in backslashes and space-free. A value that is only wrong in its slashes keeps its folder (so the
 // ~327MB of language servers serena already fetched are found again); a value with a space needs another folder.
-function windowsHomeOf(value: string, ctx: FixCtx): string
+function windowsHomeOf(value: string, context: FixCtx): string
 {
-    const expanded = value.replace(/\$\{(?:HOME|USERPROFILE)\}/g, ctx.home);
-    return path.win32.resolve(ctx.inv.project, expanded).replace(/\\+$/, '');
+    const expanded = value.replace(/\$\{(?:HOME|USERPROFILE)\}/g, context.home);
+    return path.win32.resolve(context.inv.project, expanded).replace(/\\+$/, '');
 }
 
-export function serenaWindowsHomeDetect(ctx: FixCtx): Finding[]
+export function serenaWindowsHomeDetect(context: FixCtx): Finding[]
 {
-    if (ctx.platform !== 'win32') return [];
-    return eachReg(ctx, 'serena-windows-home', (reg) =>
+    if (context.platform !== 'win32') return [];
+    return eachReg(context, 'serena-windows-home', (registration) =>
     {
-        const value = (reg.entry.env || {}).SERENA_HOME;
+        const value = (registration.entry.env || {}).SERENA_HOME;
         // none set (a registration made by hand): serena's default home is <profile>\.serena, cut at a space in the
         // profile path like any other; the space-free folder install offers takes its place
-        if (value === undefined) return unsetSerenaHome(reg, ctx);
+        if (value === undefined) return unsetSerenaHome(registration, context);
         if (typeof value !== 'string' || validWindowsSerenaHome(value)) return null;
         // a ${VAR} form in this folder's .mcp.json is 0.2.0's: project-relative-path writes it out absolute
-        if (reg.scope === 'project' && value.includes('${')) return null;
+        if (registration.scope === 'project' && value.includes('${')) return null;
         const faults = [!path.win32.isAbsolute(value) && 'not absolute', value.includes('/') && 'forward slashes', /\s/.test(value) && 'a space'].filter(Boolean);
         const what = `SERENA_HOME is '${value}' (${faults.join(', ')})`;
-        const same = windowsHomeOf(value, ctx);
-        if (validWindowsSerenaHome(same)) return C.finding('serena-windows-home', reg, what, { proposal: { SERENA_HOME: same }, note: `same folder, written absolute with backslashes: ${same}` });
-        const fresh = serenaWindowsHome({ home: ctx.home });
-        if (fresh.root) return C.finding('serena-windows-home', reg, what, { proposal: { SERENA_HOME: (fresh.root as Extract<Root, { kind: 'abs' }>).path }, note: `a new home, ${(fresh.root as Extract<Root, { kind: 'abs' }>).path} - serena's data in '${value}' is not moved and its language servers download again (~327MB)` });
-        if (reg.scope === 'project') return C.finding('serena-windows-home', reg, what, { blocked: SPACED_PROJECT });
-        return C.finding('serena-windows-home', reg, what, { input: { id: 'serenaHome', prompt: fresh.needsInput } });
+        const same = windowsHomeOf(value, context);
+        if (validWindowsSerenaHome(same)) return C.finding('serena-windows-home', registration, what, { proposal: { SERENA_HOME: same }, note: `same folder, written absolute with backslashes: ${same}` });
+        const fresh = serenaWindowsHome({ home: context.home });
+        if (fresh.root) return C.finding('serena-windows-home', registration, what, { proposal: { SERENA_HOME: (fresh.root as Extract<Root, { kind: 'abs' }>).path }, note: `a new home, ${(fresh.root as Extract<Root, { kind: 'abs' }>).path} - serena's data in '${value}' is not moved and its language servers download again (~327MB)` });
+        if (registration.scope === 'project') return C.finding('serena-windows-home', registration, what, { blocked: SPACED_PROJECT });
+        return C.finding('serena-windows-home', registration, what, { input: { id: 'serenaHome', prompt: fresh.needsInput } });
     });
 }
 
 // serena's home in this folder's .mcp.json when no space-free folder is in reach (F7)
 const SPACED_PROJECT = "serena's home on Windows must be space-free - pick a space-free folder with /preferred-tools:configure, Location";
 
-function unsetSerenaHome(reg: InvRegistration, ctx: FixCtx): Finding | null
+function unsetSerenaHome(registration: InvRegistration, context: FixCtx): Finding | null
 {
-    const profile = ctx.home || '';
+    const profile = context.home || '';
     if (!/\s/.test(profile)) return null;
     const what = `no SERENA_HOME: serena's default home, ${path.win32.join(profile, '.serena')}, has a space`;
-    if (reg.scope === 'project') return C.finding('serena-windows-home', reg, what, { blocked: SPACED_PROJECT });
-    const free = (serenaSpaceFree(ctx) as Extract<Root, { kind: 'abs' }>).path;
-    return C.finding('serena-windows-home', reg, what, { proposal: { SERENA_HOME: free }, note: `a new home, ${free} - serena's data in ${path.win32.join(profile, '.serena')} is not moved and its language servers download again (~327MB)` });
+    if (registration.scope === 'project') return C.finding('serena-windows-home', registration, what, { blocked: SPACED_PROJECT });
+    const free = (serenaSpaceFree(context) as Extract<Root, { kind: 'abs' }>).path;
+    return C.finding('serena-windows-home', registration, what, { proposal: { SERENA_HOME: free }, note: `a new home, ${free} - serena's data in ${path.win32.join(profile, '.serena')} is not moved and its language servers download again (~327MB)` });
 }
 
-export function serenaWindowsHomeFix(entry: ServerEntry, f: Finding, _ctx: FixCtx, input: Record<string, string> & { serenaHome?: string } = {}): ServerEntry
+export function serenaWindowsHomeFix(entry: ServerEntry, finding: Finding, _context: FixCtx, input: Record<string, string> & { serenaHome?: string } = {}): ServerEntry
 {
-    const home = (f.proposal && f.proposal.SERENA_HOME) || input.serenaHome;
+    const home = (finding.proposal && finding.proposal.SERENA_HOME) || input.serenaHome;
     if (!home || !validWindowsSerenaHome(home)) throw new Error(`serena's home must be an absolute Windows folder in backslashes with no space; '${home || ''}' is not (pass --input serenaHome=<folder>)`);
     return { ...entry, env: { ...(entry.env || {}), SERENA_HOME: home } };
 }
 
 // ---- uvx-python / windows-arm-python --------------------------------------------------------------------------------
-const pythonAt = (args: string[]) => args.findIndex((a) => a === '--python' || a === '-p' || a.startsWith('--python='));
+const pythonAt = (args: string[]) => args.findIndex((argument) => argument === '--python' || argument === '-p' || argument.startsWith('--python='));
 
-export function uvxPythonDetect(ctx: FixCtx): Finding[]
+export function uvxPythonDetect(context: FixCtx): Finding[]
 {
-    return eachReg(ctx, 'uvx-python', (reg) =>
+    return eachReg(context, 'uvx-python', (registration) =>
     {
-        if (C.launcher(reg.entry) !== 'uvx' || pythonAt(C.launchArgs(reg.entry)) >= 0) return null;
-        const want = pythonRequest(C.routeOf(ctx, reg)!, ctx, ctx.rules);
-        return C.finding('uvx-python', reg, `no --python: uvx picks the newest CPython, which has no wheel for some dependencies`, { proposal: { python: want } });
+        if (C.launcher(registration.entry) !== 'uvx' || pythonAt(C.launchArgs(registration.entry)) >= 0) return null;
+        const want = pythonRequest(C.routeOf(context, registration)!, context, context.rules);
+        return C.finding('uvx-python', registration, `no --python: uvx picks the newest CPython, which has no wheel for some dependencies`, { proposal: { python: want } });
     });
 }
 
-export function uvxPythonFix(entry: ServerEntry, f: Finding, _ctx: FixCtx): ServerEntry
+export function uvxPythonFix(entry: ServerEntry, finding: Finding, _context: FixCtx): ServerEntry
 {
-    return { ...entry, args: ['--python', f.proposal!.python!, ...entry.args!] };
+    return { ...entry, args: ['--python', finding.proposal!.python!, ...entry.args!] };
 }
 
-export function windowsArmPythonDetect(ctx: FixCtx): Finding[]
+export function windowsArmPythonDetect(context: FixCtx): Finding[]
 {
-    if (!isWindowsArm(ctx)) return [];
-    return eachReg(ctx, 'windows-arm-python', (reg) =>
+    if (!isWindowsArm(context)) return [];
+    return eachReg(context, 'windows-arm-python', (registration) =>
     {
-        if (C.launcher(reg.entry) !== 'uvx') return null;
-        const args = C.launchArgs(reg.entry);
+        if (C.launcher(registration.entry) !== 'uvx') return null;
+        const args = C.launchArgs(registration.entry);
         const at = args.indexOf('--python');
         const minor = at >= 0 ? args[at + 1] : null;
         if (!minor || !/^\d+\.\d+$/.test(minor)) return null; // none (uvx-python's), or a build the user chose
-        return C.finding('windows-arm-python', reg, `--python ${minor} on Windows ARM64: several dependencies ship no ARM64 wheel`, { proposal: { python: ctx.rules.windowsArmPython.replace('{minor}', minor), from: minor } });
+        return C.finding('windows-arm-python', registration, `--python ${minor} on Windows ARM64: several dependencies ship no ARM64 wheel`, { proposal: { python: context.rules.windowsArmPython.replace('{minor}', minor), from: minor } });
     });
 }
 
-export function windowsArmPythonFix(entry: ServerEntry, f: Finding): ServerEntry
+export function windowsArmPythonFix(entry: ServerEntry, finding: Finding): ServerEntry
 {
     const args = [...entry.args!];
-    args[args.indexOf('--python') + 1] = f.proposal!.python!;
+    args[args.indexOf('--python') + 1] = finding.proposal!.python!;
     return { ...entry, args };
 }
 
 // ---- windows-npx-cmd ------------------------------------------------------------------------------------------------
-export function windowsNpxCmdDetect(ctx: FixCtx): Finding[]
+export function windowsNpxCmdDetect(context: FixCtx): Finding[]
 {
-    if (ctx.platform !== 'win32') return [];
-    return eachReg(ctx, 'windows-npx-cmd', (reg) =>
+    if (context.platform !== 'win32') return [];
+    return eachReg(context, 'windows-npx-cmd', (registration) =>
     {
-        if (path.basename(String(reg.entry.command || '')).replace(/\.(exe|cmd)$/i, '') !== 'npx') return null;
-        return C.finding('windows-npx-cmd', reg, 'npx is launched directly on native Windows', { note: 'a precaution: Claude Code no longer documents the cmd /c wrapper and this build has not proved it on a Windows machine' });
+        if (path.basename(String(registration.entry.command || '')).replace(/\.(exe|cmd)$/i, '') !== 'npx') return null;
+        return C.finding('windows-npx-cmd', registration, 'npx is launched directly on native Windows', { note: 'a precaution: Claude Code no longer documents the cmd /c wrapper and this build has not proved it on a Windows machine' });
     });
 }
 
@@ -130,15 +130,15 @@ export function windowsNpxCmdFix(entry: ServerEntry): ServerEntry
 // The release whose README documents --no-webmcp (catalog/fixes.json verifiedOn): a fixed floor, never the catalog's pin,
 // which moves on every refresh and would block a registration that already has the flag.
 const NO_WEBMCP_SINCE = '0.0.83';
-export function playwrightWebmcpDetect(ctx: FixCtx): Finding[]
+export function playwrightWebmcpDetect(context: FixCtx): Finding[]
 {
-    return eachReg(ctx, 'playwright-webmcp', (reg) =>
+    return eachReg(context, 'playwright-webmcp', (registration) =>
     {
-        if (C.launchArgs(reg.entry).includes('--no-webmcp')) return null;
-        const pin = C.pinnedVersion(reg.entry, '@playwright/mcp');
+        if (C.launchArgs(registration.entry).includes('--no-webmcp')) return null;
+        const pin = C.pinnedVersion(registration.entry, '@playwright/mcp');
         const documented = NO_WEBMCP_SINCE;
         const older = pin && C.compareVersions(pin, documented) === -1;
-        return C.finding('playwright-webmcp', reg, 'page-registered WebMCP tools are not switched off (no --no-webmcp)',
+        return C.finding('playwright-webmcp', registration, 'page-registered WebMCP tools are not switched off (no --no-webmcp)',
             older ? { blocked: `pinned @${pin} is older than ${documented}, the version whose README documents --no-webmcp - update it first (/preferred-tools:update), then fix` } : {});
     });
 }
@@ -153,62 +153,62 @@ export function playwrightWebmcpFix(entry: ServerEntry): ServerEntry
 
 // ---- appium-sdk-env -------------------------------------------------------------------------------------------------
 const SDK_ENV = ['ANDROID_HOME', 'JAVA_HOME'];
-export function androidSdk(ctx: { env: Env; machine: MachineProbe; platform: string; home: string }): string | null
+export function androidSdk(context: { env: Env; machine: MachineProbe; platform: string; home: string }): string | null
 {
-    const { env, machine: m } = ctx;
-    for (const v of [env.ANDROID_HOME, env.ANDROID_SDK_ROOT]) if (v && m.exists(v)) return v;
-    const P = pathFor(ctx.platform);
-    const defaults = ctx.platform === 'darwin' ? [P.join(ctx.home, 'Library', 'Android', 'sdk')]
-        : ctx.platform === 'win32' ? [P.join(env.LOCALAPPDATA || P.join(ctx.home, 'AppData', 'Local'), 'Android', 'Sdk')]
-            : [P.join(ctx.home, 'Android', 'Sdk'), P.join(ctx.home, 'Android', 'sdk')];
-    return defaults.find((d) => m.exists(d)) || null;
+    const { env, machine: machine } = context;
+    for (const sdkFolder of [env.ANDROID_HOME, env.ANDROID_SDK_ROOT]) if (sdkFolder && machine.exists(sdkFolder)) return sdkFolder;
+    const pathApi = pathFor(context.platform);
+    const defaults = context.platform === 'darwin' ? [pathApi.join(context.home, 'Library', 'Android', 'sdk')]
+        : context.platform === 'win32' ? [pathApi.join(env.LOCALAPPDATA || pathApi.join(context.home, 'AppData', 'Local'), 'Android', 'Sdk')]
+            : [pathApi.join(context.home, 'Android', 'Sdk'), pathApi.join(context.home, 'Android', 'sdk')];
+    return defaults.find((candidate) => machine.exists(candidate)) || null;
 }
 
-export function javaHome(ctx: { env: Env; machine: MachineProbe; platform: string }): string | null
+export function javaHome(context: { env: Env; machine: MachineProbe; platform: string }): string | null
 {
-    const { env, machine: m } = ctx;
-    if (env.JAVA_HOME && m.exists(env.JAVA_HOME)) return env.JAVA_HOME;
-    if (ctx.platform === 'darwin')
+    const { env, machine: machine } = context;
+    if (env.JAVA_HOME && machine.exists(env.JAVA_HOME)) return env.JAVA_HOME;
+    if (context.platform === 'darwin')
     {
-        const r = m.run('/usr/libexec/java_home', []);
-        if (r && r.status === 0 && String(r.stdout).trim()) return String(r.stdout).trim();
+        const result = machine.run('/usr/libexec/java_home', []);
+        if (result && result.status === 0 && String(result.stdout).trim()) return String(result.stdout).trim();
     }
-    const java = m.which('java');
-    const real = java && m.realpath(java);
+    const java = machine.which('java');
+    const real = java && machine.realpath(java);
     if (!real) return null;
-    const P = pathFor(ctx.platform);
-    const home = P.dirname(P.dirname(real));
-    return m.exists(P.join(home, 'bin', ctx.platform === 'win32' ? 'java.exe' : 'java')) ? home : null;
+    const pathApi = pathFor(context.platform);
+    const home = pathApi.dirname(pathApi.dirname(real));
+    return machine.exists(pathApi.join(home, 'bin', context.platform === 'win32' ? 'java.exe' : 'java')) ? home : null;
 }
 
-export function appiumSdkEnvDetect(ctx: FixCtx): Finding[]
+export function appiumSdkEnvDetect(context: FixCtx): Finding[]
 {
-    return eachReg(ctx, 'appium-sdk-env', (reg) =>
+    return eachReg(context, 'appium-sdk-env', (registration) =>
     {
-        const env = reg.entry.env || {};
+        const env = registration.entry.env || {};
         // every scope holds this machine's SDK homes since 0.3.0, this folder's .mcp.json included
         const missing = SDK_ENV.filter((k) => !env[k]);
         if (!missing.length) return null;
         const what = `${missing.join(' and ')} not set in the registration`;
-        const lookup = { ANDROID_HOME: missing.includes('ANDROID_HOME') ? androidSdk(ctx) : null, JAVA_HOME: missing.includes('JAVA_HOME') ? javaHome(ctx) : null };
-        const proposal = Object.fromEntries(Object.entries(lookup).filter(([, v]) => v));
+        const lookup = { ANDROID_HOME: missing.includes('ANDROID_HOME') ? androidSdk(context) : null, JAVA_HOME: missing.includes('JAVA_HOME') ? javaHome(context) : null };
+        const proposal = Object.fromEntries(Object.entries(lookup).filter(([, value]) => value));
         const notFound = missing.filter((k) => !proposal[k]);
-        if (!Object.keys(proposal).length) return C.finding('appium-sdk-env', reg, what, { blocked: `${notFound.join(' and ')} not found on this machine - install the Android SDK / a JDK first` });
-        return C.finding('appium-sdk-env', reg, what, { proposal, note: notFound.length ? `${notFound.join(' and ')} not found on this machine and left unset` : undefined });
+        if (!Object.keys(proposal).length) return C.finding('appium-sdk-env', registration, what, { blocked: `${notFound.join(' and ')} not found on this machine - install the Android SDK / a JDK first` });
+        return C.finding('appium-sdk-env', registration, what, { proposal, note: notFound.length ? `${notFound.join(' and ')} not found on this machine and left unset` : undefined });
     });
 }
 
-export function appiumSdkEnvFix(entry: ServerEntry, f: Finding): ServerEntry
+export function appiumSdkEnvFix(entry: ServerEntry, finding: Finding): ServerEntry
 {
-    return { ...entry, env: { ...(entry.env || {}), ...(f.proposal as Record<string, string>) } };
+    return { ...entry, env: { ...(entry.env || {}), ...(finding.proposal as Record<string, string>) } };
 }
 
 // ---- serena-telemetry -----------------------------------------------------------------------------------------------
 // Only an ABSENT variable is a finding: a user who set it to something else chose that.
-export function serenaTelemetryDetect(ctx: FixCtx): Finding[]
+export function serenaTelemetryDetect(context: FixCtx): Finding[]
 {
-    return eachReg(ctx, 'serena-telemetry', (reg) =>
-        (reg.entry.env || {}).SERENA_USAGE_REPORTING === undefined ? C.finding('serena-telemetry', reg, 'SERENA_USAGE_REPORTING is not set - serena sends a usage ping at every start') : null);
+    return eachReg(context, 'serena-telemetry', (registration) =>
+        (registration.entry.env || {}).SERENA_USAGE_REPORTING === undefined ? C.finding('serena-telemetry', registration, 'SERENA_USAGE_REPORTING is not set - serena sends a usage ping at every start') : null);
 }
 
 export function serenaTelemetryFix(entry: ServerEntry): ServerEntry
@@ -220,28 +220,28 @@ export function serenaTelemetryFix(entry: ServerEntry): ServerEntry
 // A managed serena whose --context is not the context file in its family's root: 0.4.x ran Serena's own claude-code
 // context, whose instructions name Claude Code's tools. The fix points it at <root>/serena-context.yml; fix.js plans the
 // file's write before the replace.
-export function serenaContextDetect(ctx: FixCtx): Finding[]
+export function serenaContextDetect(context: FixCtx): Finding[]
 {
-    const r = roots.resolve(ctx.inv, null, { project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog }).roots;
-    return eachReg(ctx, 'serena-context', (reg) =>
+    const resolvedRoots = roots.resolve(context.inv, null, { project: context.inv.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
+    return eachReg(context, 'serena-context', (registration) =>
     {
-        const root = r[roots.familyOf(reg.scope)];
+        const root = resolvedRoots[roots.familyOf(registration.scope)];
         if (!root) return null;
-        const want = pathFor(ctx.platform).join(root, roots.FILES.serenaContext);
-        const args = reg.entry.args || [];
+        const want = pathFor(context.platform).join(root, roots.FILES.serenaContext);
+        const args = registration.entry.args || [];
         const i = args.indexOf('--context');
         const now = i >= 0 ? args[i + 1] : null;
         if (now === want) return null;
-        return C.finding('serena-context', reg, `serena runs with ${now ? `the context ${now}` : 'no --context'} - this plugin's ${want} gives it code navigation only, for Claude Code and Cursor`, { want, roots: r });
+        return C.finding('serena-context', registration, `serena runs with ${now ? `the context ${now}` : 'no --context'} - this plugin's ${want} gives it code navigation only, for Claude Code and Cursor`, { want, roots: resolvedRoots });
     });
 }
 
-export function serenaContextFix(entry: ServerEntry, f: Finding): ServerEntry
+export function serenaContextFix(entry: ServerEntry, finding: Finding): ServerEntry
 {
     const args = [...(entry.args || [])];
     const i = args.indexOf('--context');
-    if (i >= 0 && i + 1 < args.length) args[i + 1] = f.want!;
-    else args.push('--context', f.want!);
+    if (i >= 0 && i + 1 < args.length) args[i + 1] = finding.want!;
+    else args.push('--context', finding.want!);
     return { ...entry, args };
 }
 
@@ -255,91 +255,91 @@ const PICK_NAME = "pick the key's name with /preferred-tools:configure";
 const ONE_VAR = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
 
 // The key inside a token field: the field's text less the route template's text around ${VAR}.
-function keyIn(value: unknown, template: string, v: string): string
+function keyIn(value: unknown, template: string, tokenVar: string): string
 {
-    const [pre, post = ''] = template.split(`\${${v}}`) as [string, string?];
-    const s = String(value);
-    return s.length >= pre.length + post.length && s.startsWith(pre) && s.endsWith(post) ? s.slice(pre.length, s.length - post.length) : s;
+    const [prefix, post = ''] = template.split(`\${${tokenVar}}`) as [string, string?];
+    const text = String(value);
+    return text.length >= prefix.length + post.length && text.startsWith(prefix) && text.endsWith(post) ? text.slice(prefix.length, text.length - post.length) : text;
 }
 
-function stdioChainOf(ctx: FixCtx, scope: string): string[]
+function stdioChainOf(context: FixCtx, scope: string): string[]
 {
-    const r = roots.resolve(ctx.inv, null, { project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog }).roots;
-    return keys.stdioChain({ scope, projectRoot: r.project, globalRoot: r.global });
+    const resolvedRoots = roots.resolve(context.inv, null, { project: context.inv.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
+    return keys.stdioChain({ scope, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global });
 }
 
-export function tokenSyncDetect(ctx: FixCtx): Finding[]
+export function tokenSyncDetect(context: FixCtx): Finding[]
 {
-    return eachReg(ctx, 'token-sync', (reg, route) =>
+    return eachReg(context, 'token-sync', (registration, route) =>
     {
-        if (reg.route === 'remote' || !['local', 'user'].includes(reg.scope)) return null;
-        const fields = keys.tokenFields(reg.entry, route);
+        if (registration.route === 'remote' || !['local', 'user'].includes(registration.scope)) return null;
+        const fields = keys.tokenFields(registration.entry, route);
         if (!fields.length) return null;
-        const v = route.tokenVar!;
-        const key = keyIn(fields[0]!.at.reduce<unknown>((o, k) => (o as Record<string | number, unknown>)[k], reg.entry), fields[0]!.template, v);
-        const chain = stdioChainOf(ctx, reg.scope);
-        const extra = { route: reg.route, chain };
-        if (key === '') return C.finding('token-sync', reg, `the registration's ${v} is empty`, { ...extra, blocked: PICK_NAME });
+        const tokenVar = route.tokenVar!;
+        const key = keyIn(fields[0]!.at.reduce<unknown>((node, k) => (node as Record<string | number, unknown>)[k], registration.entry), fields[0]!.template, tokenVar);
+        const chain = stdioChainOf(context, registration.scope);
+        const extra = { route: registration.route, chain };
+        if (key === '') return C.finding('token-sync', registration, `the registration's ${tokenVar} is empty`, { ...extra, blocked: PICK_NAME });
         const one = ONE_VAR.exec(key);
         if (one)
         {
             const at = keys.valueIn(chain, one[1]!);
-            return at ? C.finding('token-sync', reg, `the registration holds \${${one[1]}} while ${at.file} has the key`, { ...extra, keyName: one[1]! }) : null;
+            return at ? C.finding('token-sync', registration, `the registration holds \${${one[1]}} while ${at.file} has the key`, { ...extra, keyName: one[1]! }) : null;
         }
-        if (keys.nameOfValue(chain, key)) return cursorBehind(ctx, reg, route, chain, extra);
+        if (keys.nameOfValue(chain, key)) return cursorBehind(context, registration, route, chain, extra);
         const what = `the key in the registration matches no name in ${chain.join(', ')}`;
-        return C.finding('token-sync', reg, what, keys.valueIn(chain, v) ? { ...extra, keyName: v } : { ...extra, blocked: PICK_NAME });
+        return C.finding('token-sync', registration, what, keys.valueIn(chain, tokenVar) ? { ...extra, keyName: tokenVar } : { ...extra, blocked: PICK_NAME });
     });
 }
 
 // At user scope a server set up for Cursor holds its key in ~/.cursor/mcp.json too (spec D6): its copy is behind when
 // its value is not the one its list's key name has in the chain. The fix refills that copy alone, from .mcps-secrets
 // at apply (plan-lists.js repairTail), with Claude Code's registration as it is. -> finding | null
-function cursorBehind(ctx: FixCtx, reg: InvRegistration, route: CatalogRoute, chain: string[], extra: { route: string | null; chain: string[] }): Finding | null
+function cursorBehind(context: FixCtx, registration: InvRegistration, route: CatalogRoute, chain: string[], extra: { route: string | null; chain: string[] }): Finding | null
 {
-    if (reg.scope !== 'user') return null;
-    const l = ctx.inv.lists && ctx.inv.lists.global;
-    const s = l && !l.note && !l.old ? (l.servers || []).find((x) => x.name === reg.name && x.scope === 'user' && (x.clients || []).includes('cursor')) : null;
-    if (!s || !s.key) return null;
-    const file = cursorMcp.fileFor('global', ctx);
+    if (registration.scope !== 'user') return null;
+    const list = context.inv.lists && context.inv.lists.global;
+    const server = list && !list.note && !list.old ? (list.servers || []).find((candidate) => candidate.name === registration.name && candidate.scope === 'user' && (candidate.clients || []).includes('cursor')) : null;
+    if (!server || !server.key) return null;
+    const file = cursorMcp.fileFor('global', context);
     const read = cursorMcp.readCursor(file);
-    const copy = read.state === 'ok' ? read.doc!.mcpServers[reg.name] : null;
+    const copy = read.state === 'ok' ? read.doc!.mcpServers[registration.name] : null;
     const fields = copy ? keys.tokenFields(copy, route) : [];
-    const at = keys.valueIn(chain, s.key);
+    const at = keys.valueIn(chain, server.key);
     if (!fields.length || !at) return null;
-    const held = keyIn(fields[0]!.at.reduce<unknown>((o, k) => (o == null ? o : (o as Record<string | number, unknown>)[k]), copy), fields[0]!.template, route.tokenVar!);
+    const held = keyIn(fields[0]!.at.reduce<unknown>((node, k) => (node == null ? node : (node as Record<string | number, unknown>)[k]), copy), fields[0]!.template, route.tokenVar!);
     if (held === at.value) return null;
-    return C.finding('token-sync', reg, `Cursor's copy in ${file} holds a key other than ${s.key} in ${at.file}`, { ...extra, keyName: s.key, cursorOnly: true });
+    return C.finding('token-sync', registration, `Cursor's copy in ${file} holds a key other than ${server.key} in ${at.file}`, { ...extra, keyName: server.key, cursorOnly: true });
 }
 
-export function tokenSyncFix(entry: ServerEntry, f: Finding, ctx: FixCtx): ServerEntry
+export function tokenSyncFix(entry: ServerEntry, finding: Finding, context: FixCtx): ServerEntry
 {
     // Cursor's copy alone: Claude Code's registration stays as it is
-    if (f.cursorOnly) return entry;
-    const at = keys.valueIn(f.chain!, f.keyName!);
-    if (!at) throw new Error(`${f.keyName} is filled in none of ${f.chain!.join(', ')} any more - nothing written`);
-    const row = C.rowOf(ctx, f.row!)!;
-    return keys.fillKeys(entry, row, f.route!, f.scope!, { [row.routes[f.route!]!.tokenVar!]: at.value });
+    if (finding.cursorOnly) return entry;
+    const at = keys.valueIn(finding.chain!, finding.keyName!);
+    if (!at) throw new Error(`${finding.keyName} is filled in none of ${finding.chain!.join(', ')} any more - nothing written`);
+    const row = C.rowOf(context, finding.row!)!;
+    return keys.fillKeys(entry, row, finding.route!, finding.scope!, { [row.routes[finding.route!]!.tokenVar!]: at.value });
 }
 
 // ---- windows-mcp-one-per-desktop ------------------------------------------------------------------------------------
 // Advice only (`fix: null`): windows-mcp 0.8.8 makes one missed overlay confirmation permanent for its process, and a
 // second server on the same desktop is the likely cause. The finding is always blocked: each server is dropped by its
 // owner's own command, and preferred-tools changes none of them.
-function windowsMcpDrop(s: WindowsMcp, ctx: FixCtx): string
+function windowsMcpDrop(server: WindowsMcp, context: FixCtx): string
 {
-    if (s.kind === 'plugin') return `claude plugin disable ${s.name} --scope ${s.scope}`;
-    const how = s.owner === 'catalog' ? '/preferred-tools:configure (Remove)' : `claude mcp remove ${s.name} -s ${s.scope === 'inherited' ? 'project' : s.scope}`;
-    return s.scope === 'inherited' ? `${how}, run in ${fromHere(ctx.inv, s.from!)}` : how;
+    if (server.kind === 'plugin') return `claude plugin disable ${server.name} --scope ${server.scope}`;
+    const how = server.owner === 'catalog' ? '/preferred-tools:configure (Remove)' : `claude mcp remove ${server.name} -s ${server.scope === 'inherited' ? 'project' : server.scope}`;
+    return server.scope === 'inherited' ? `${how}, run in ${fromHere(context.inv, server.from!)}` : how;
 }
 
-export function windowsMcpOneDetect(ctx: FixCtx): Finding[]
+export function windowsMcpOneDetect(context: FixCtx): Finding[]
 {
-    const servers = windowsMcpServers(ctx.inv);
+    const servers = windowsMcpServers(context.inv);
     if (servers.length < 2) return [];
-    const at = servers.find((s) => s.owner === 'catalog') || servers[0];
-    const list = servers.map((s) => `${s.name} (${s.scope})`).join(', ');
-    const drop = servers.map((s) => `${s.name} (${s.scope}): ${windowsMcpDrop(s, ctx)}`).join('; ');
+    const at = servers.find((server) => server.owner === 'catalog') || servers[0];
+    const list = servers.map((server) => `${server.name} (${server.scope})`).join(', ');
+    const drop = servers.map((server) => `${server.name} (${server.scope}): ${windowsMcpDrop(server, context)}`).join('; ');
     // `row` set by hand: a server is not a registration row, and --only narrows by it
     return [C.finding('windows-mcp-one-per-desktop', { ...at, rowId: 'windows-control' } as { rowId: string; name: string; scope: string }, `${servers.length} windows-mcp servers start in this project: ${list}`,
         { blocked: `keep one per Windows desktop - ${drop}; a stuck one recovers only in a new Claude Code session` })];

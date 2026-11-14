@@ -20,7 +20,7 @@ import * as cli from '../../scripts/core/claude-cli.ts';
 import * as account from '../../scripts/core/account.ts';
 import * as roots from '../../scripts/roots/roots.ts';
 import { shellArg } from '../../scripts/entries/entry.ts';
-import { detectAll, makeCtx, applyFixes, render } from '../../scripts/fix/fix.ts';
+import { detectAll, makeCtx, applyFixes, renderFixes } from '../../scripts/fix/fix.ts';
 import * as update from '../../scripts/update/check.ts';
 import { applyUpdates } from '../../scripts/update/apply.ts';
 import * as fake from '../fake-mcp-http.ts';
@@ -188,13 +188,13 @@ test('K5 - a server matching atlassian at global scope, recorded on its own: upd
     const d = detectAll(ctx);
     assert.deepStrictEqual(d.own, [{ name: 'atl', scope: 'user' }]);
     assert.ok(!d.found.some((f) => f.name === 'atl'), 'no detector reads it');
-    assert.ok(render(d).includes('atl (user): on its own - not checked'));
+    assert.ok(renderFixes(d).includes('atl (user): on its own - not checked'));
     const lines: string[] = [];
     const res = applyFixes(ctx, ['all'], { only: 'atl', tmp: path.join(h.root, 'tmp', 'fix'), log: (...a) => lines.push(a.join(' ')) });
     assert.strictEqual(res.failed, null, lines.join('\n'));
 
     const uctx = update.makeCtx({ inv, project: dir, env: h.env, refresh: false });
-    const out = await update.check(uctx);
+    const out = await update.checkUpdates(uctx);
     assert.ok(out.skipped.includes('atl (user): on its own - not checked'), out.skipped.join('\n'));
     assert.ok(!out.offers.some((o) => o.id === 'mcp:atl~user'), 'not offered');
     const u = applyUpdates(uctx, ['mcp:atl~user'], out, { tmp: path.join(h.root, 'tmp', 'update'), log: () => {} });
@@ -216,13 +216,13 @@ test('K6 - update moves a 0.1.x key header to the helper and keeps the key file 
         fs.mkdirSync(root, { recursive: true });
         fill(path.join(root, roots.FILES.secrets), G, KEY);
         const uctx = update.makeCtx({ inv: h.inventory(dir, { catalog }), project: dir, catalog, env: h.env, refresh: false, data: h.data });
-        const out = await update.check(uctx);
+        const out = await update.checkUpdates(uctx);
         // the project is a git work tree and the root a 0.1.x folder with no .gitignore: both ways are offered, beside
         // 0.5.0's list-import (github is on no list yet) and read-guard (the key file is in the root)
         const ids = out.offers.filter((o) => o.kind === 'upgrade').map((o) => o.id);
-        assert.deepStrictEqual([...ids].sort(), [`upgrade:list-import:${path.join(root, roots.FILES.list)}`, `upgrade:read-guard:${path.join(h.account, 'settings.json')}`, 'upgrade:key-to-helper:github~local', `upgrade:root-ignore:${root}`].sort(), update.render(out));
-        assert.match(update.render(out), /New ways to pass data:\n/);
-        assert.match(update.render(out), /\n {2}github \(local\) +key-to-helper: /);
+        assert.deepStrictEqual([...ids].sort(), [`upgrade:list-import:${path.join(root, roots.FILES.list)}`, `upgrade:read-guard:${path.join(h.account, 'settings.json')}`, 'upgrade:key-to-helper:github~local', `upgrade:root-ignore:${root}`].sort(), update.renderUpdates(out));
+        assert.match(update.renderUpdates(out), /New ways to pass data:\n/);
+        assert.match(update.renderUpdates(out), /\n {2}github \(local\) +key-to-helper: /);
         const lines: string[] = [];
         const res = applyUpdates(uctx, ids, out, { tmp: path.join(h.root, 'tmp', 'update'), log: (...a) => lines.push(a.join(' ')) });
         assert.deepStrictEqual([...res.applied].sort(), [...ids].sort(), lines.join('\n'));
@@ -234,7 +234,7 @@ test('K6 - update moves a 0.1.x key header to the helper and keeps the key file 
         const got = await fake.authOnGet(s, dir, 'github', h.env);
         assert.strictEqual(got.auth, 'expected', `the key reached the server through the helper (${got.status})`);
         assert.ok(!lines.join('\n').includes(KEY), 'no key printed');
-        const again = await update.check(update.makeCtx({ inv: h.inventory(dir, { catalog }), project: dir, catalog, env: h.env, refresh: false, data: h.data }));
+        const again = await update.checkUpdates(update.makeCtx({ inv: h.inventory(dir, { catalog }), project: dir, catalog, env: h.env, refresh: false, data: h.data }));
         assert.deepStrictEqual(again.offers.filter((o) => o.kind === 'upgrade').map((o) => `${o.id}: ${o.found}`), [], 'nothing left to move');
     }
     finally { await s.close(); }

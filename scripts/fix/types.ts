@@ -138,8 +138,8 @@ export interface ShippedFile
 }
 
 // A registration fix: the entry as read, edited; a machine fix: what it did; a file fix: the plan steps that repair it.
-export type Detector = (ctx: FixCtx) => Finding[];
-export type RegistrationFix = (entry: ServerEntry, finding: Finding, ctx: FixCtx, input: Record<string, string>) => ServerEntry;
+export type Detector = (context: FixCtx) => Finding[];
+export type RegistrationFix = (entry: ServerEntry, finding: Finding, context: FixCtx, input: Record<string, string>) => ServerEntry;
 export interface MachineFixResult
 {
     ok: boolean;
@@ -147,8 +147,8 @@ export interface MachineFixResult
     restart?: boolean;
     fetch?: JobStep | null;
 }
-export type MachineFix = (finding: Finding, ctx: FixCtx) => MachineFixResult;
-export type FileSteps = (finding: Finding, ctx: FixCtx, input: Record<string, string>) => PlanStep[];
+export type MachineFix = (finding: Finding, context: FixCtx) => MachineFixResult;
+export type FileSteps = (finding: Finding, context: FixCtx, input: Record<string, string>) => PlanStep[];
 // fix-functions.ts read by the name a fixes.json row gives.
 export type FixFunction = Detector | RegistrationFix | MachineFix | FileSteps;
 

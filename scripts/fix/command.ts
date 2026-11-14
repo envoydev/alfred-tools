@@ -2,7 +2,7 @@
 import path from 'node:path';
 import * as inventory from '../inventory/inventory.ts';
 import * as tmpdir from '../core/tmpdir.ts';
-import { makeCtx, applyFixes, detectAll, questions, render } from './fix.ts';
+import { makeCtx, applyFixes, detectAll, questions, renderFixes } from './fix.ts';
 import type { Env } from '../core/types.ts';
 import type { FixArgs, MachineProbe } from './types.ts';
 
@@ -13,55 +13,55 @@ export function parseArgs(argv: string[]): FixArgs
     const args: FixArgs = { input: {} };
     const value = (i: number, flag: string) =>
     {
-        const v = argv[i + 1];
-        if (v === undefined || v === '' || v.startsWith('--')) throw new Error(`${flag} needs a value`);
-        return v;
+        const flagValue = argv[i + 1];
+        if (flagValue === undefined || flagValue === '' || flagValue.startsWith('--')) throw new Error(`${flag} needs a value`);
+        return flagValue;
     };
     for (let i = 0; i < argv.length; i++)
     {
-        const a = argv[i]!;
-        if (['--detect', '--questions', '--json'].includes(a)) { args[a.slice(2)] = true; continue; }
-        if (!['--apply', '--only', '--input', '--project', '--tmp', '--data'].includes(a)) throw new Error(`unknown argument '${a}'`);
-        const v = value(i, a);
+        const argument = argv[i]!;
+        if (['--detect', '--questions', '--json'].includes(argument)) { args[argument.slice(2)] = true; continue; }
+        if (!['--apply', '--only', '--input', '--project', '--tmp', '--data'].includes(argument)) throw new Error(`unknown argument '${argument}'`);
+        const flagValue = value(i, argument);
         i++;
-        if (a === '--input')
+        if (argument === '--input')
         {
-            const eq = v.indexOf('=');
-            if (eq < 1) throw new Error('--input needs key=value');
-            args.input[v.slice(0, eq)] = v.slice(eq + 1);
+            const separatorIndex = flagValue.indexOf('=');
+            if (separatorIndex < 1) throw new Error('--input needs key=value');
+            args.input[flagValue.slice(0, separatorIndex)] = flagValue.slice(separatorIndex + 1);
         }
         else
         {
-            if (Object.hasOwn(args, a.slice(2))) throw new Error(`${a} is given twice`);
-            args[a.slice(2)] = v;
+            if (Object.hasOwn(args, argument.slice(2))) throw new Error(`${argument} is given twice`);
+            args[argument.slice(2)] = flagValue;
         }
     }
-    const modes = ['detect', 'questions', 'apply'].filter((m) => args[m]);
+    const modes = ['detect', 'questions', 'apply'].filter((mode) => args[mode]);
     if (modes.length !== 1) throw new Error('give exactly one of --detect, --questions or --apply');
     return args;
 }
 
-export function main(argv: string[], { env = process.env, out = (s: string) => process.stdout.write(`${s}\n`), machine }: { env?: Env; out?: (line: string) => unknown; machine?: MachineProbe } = {}): number
+export function runFixCommand(argv: string[], { env = process.env, out = (line: string) => process.stdout.write(`${line}\n`), machine }: { env?: Env; out?: (line: string) => unknown; machine?: MachineProbe } = {}): number
 {
     let args: FixArgs;
     try { args = parseArgs(argv); }
-    catch (caught) { const e = caught as NodeJS.ErrnoException; out(`fix: ${e.message}\nusage: node scripts/fix.ts --detect | --questions | --apply <id,id|all> [--only <x>] [--input key=value] [--project <dir>] [--data <dir>]`); return 2; }
+    catch (caught) { const error = caught as NodeJS.ErrnoException; out(`fix: ${error.message}\nusage: node scripts/fix.ts --detect | --questions | --apply <id,id|all> [--only <x>] [--input key=value] [--project <dir>] [--data <dir>]`); return 2; }
     const project = path.resolve(args.project || process.cwd());
     const data = args.data || null;
-    const inv = inventory.buildInventory({ project, env, data });
-    if (!inv.cli!.ok) { out('preferred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
-    const ctx = makeCtx({ inv, env, machine, data });
+    const projectInventory = inventory.buildInventory({ project, env, data });
+    if (!projectInventory.cli!.ok) { out('preferred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
+    const context = makeCtx({ inv: projectInventory, env, machine, data });
     if (args.apply)
     {
-        const log = (...a: string[]) => out(a.join('\n'));
-        const res = applyFixes(ctx, args.apply.split(',').filter(Boolean), { only: args.only, input: args.input, tmp: args.tmp, log });
+        const log = (...lines: string[]) => out(lines.join('\n'));
+        const result = applyFixes(context, args.apply.split(',').filter(Boolean), { only: args.only, input: args.input, tmp: args.tmp, log });
         // the last script on <tmp> removes it, unless fetch.js takes it on
-        if (!res.fetchFile) tmpdir.releaseTempDir(res.tmp, log);
-        return res.failed ? 1 : 0;
+        if (!result.fetchFile) tmpdir.releaseTempDir(result.tmp, log);
+        return result.failed ? 1 : 0;
     }
-    const detected = detectAll(ctx, { only: args.only });
+    const detected = detectAll(context, { only: args.only });
     if (args.questions) out(JSON.stringify(questions(detected), null, 2));
-    else out(args.json ? JSON.stringify(detected, null, 2) : render(detected));
+    else out(args.json ? JSON.stringify(detected, null, 2) : renderFixes(detected));
     return 0;
 }
 

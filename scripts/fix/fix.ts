@@ -45,63 +45,63 @@ import type { DriftAsk, ListCtx, McpReplaceStep, PlanStep, Question, Reconnect, 
 import type { Roots } from '../entries/types.ts';
 import type { Detected, Detector, DriftQuestion, FileSteps, Finding, FixCtx, FixOptions, FixQuestions, FixRun, MachineFix, MachineProbe, RegistrationFix } from './types.ts';
 
-export function makeCtx({ inv, catalog = catalogLib.load(), env = process.env, machine, platform, arch, data = null }: { inv: Inventory; catalog?: Catalog; env?: Env; machine?: MachineProbe | undefined; platform?: string; arch?: string; data?: string | null }): FixCtx
+export function makeCtx({ inv: projectInventory, catalog = catalogLib.load(), env = process.env, machine, platform, arch, data = null }: { inv: Inventory; catalog?: Catalog; env?: Env; machine?: MachineProbe | undefined; platform?: string; arch?: string; data?: string | null }): FixCtx
 {
-    const p = platform || inv.os;
-    return { inv, catalog, platform: p, arch: arch || inv.arch, env, home: account.homeDir(env), rules: catalog.rules, machine: machine || realMachine({ env, platform: p }), data };
+    const resolvedPlatform = platform || projectInventory.os;
+    return { inv: projectInventory, catalog, platform: resolvedPlatform, arch: arch || projectInventory.arch, env, home: account.homeDir(env), rules: catalog.rules, machine: machine || realMachine({ env, platform: resolvedPlatform }), data };
 }
 
-const matches = (f: Finding, only: string | undefined) => !only || [f.id, f.row, f.name].includes(only);
+const matches = (finding: Finding, only: string | undefined) => !only || [finding.id, finding.row, finding.name].includes(only);
 
 // Each rewritten hosted registration that sends a key through the helper: its name, and whether the hosted chain at its
 // scope fills it (spec F3) - the same reconnect line the plan prints.
-function reconnectOf(ctx: FixCtx, steps: McpReplaceStep[]): Pick<Reconnect, 'name' | 'variable' | 'file' | 'filled' | 'anonymous'>[]
+function reconnectOf(context: FixCtx, steps: McpReplaceStep[]): Pick<Reconnect, 'name' | 'variable' | 'file' | 'filled' | 'anonymous'>[]
 {
-    const r = roots.resolve(ctx.inv, null, { project: ctx.inv.project, home: ctx.home, platform: ctx.platform, catalog: ctx.catalog }).roots;
-    return steps.filter((s) => s.entry && s.entry.headersHelper && helperNameOf(s.entry.headersHelper)).map((s) =>
+    const resolvedRoots = roots.resolve(context.inv, null, { project: context.inv.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
+    return steps.filter((step) => step.entry && step.entry.headersHelper && helperNameOf(step.entry.headersHelper)).map((step) =>
     {
-        const variable = helperNameOf(s.entry.headersHelper)!;
-        const route = ctx.catalog.byId.get(s.row!)!.routes[s.route!] || {} as Partial<CatalogRoute>;
-        const files = keys.hostedChain({ scope: s.scope, projectRoot: r.project, globalRoot: r.global, globalNamed: r.globalNamed, home: ctx.home });
-        return { name: s.name, variable, file: files[0]!, filled: keys.filledNames(files).some((f) => f.names.includes(variable)), anonymous: route.authMode === 'optional-token' && !route.keyless };
+        const variable = helperNameOf(step.entry.headersHelper)!;
+        const route = context.catalog.byId.get(step.row!)!.routes[step.route!] || {} as Partial<CatalogRoute>;
+        const files = keys.hostedChain({ scope: step.scope, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global, globalNamed: resolvedRoots.globalNamed, home: context.home });
+        return { name: step.name, variable, file: files[0]!, filled: keys.filledNames(files).some((filledFile) => filledFile.names.includes(variable)), anonymous: route.authMode === 'optional-token' && !route.keyless };
     });
 }
 
 // A project or local helper runs only once its declaring folder's trust dialog is accepted (spec D4): until then the server
 // connects without its key. Not a fix - nothing here can accept it. -> [line]
-function trustNotes(ctx: FixCtx, only: string | undefined): string[]
+function trustNotes(context: FixCtx, only: string | undefined): string[]
 {
-    if (ctx.inv.trusted !== false) return [];
-    return (ctx.inv.registrations || [])
-        .filter((r) => r.rowId && !r.own && !r.alfredRetired && r.choice !== 'own' && ['project', 'local'].includes(r.scope) && r.entry && r.entry.headersHelper)
-        .filter((r) => !only || [r.name, r.rowId].includes(only))
-        .map((r) => `${r.name} (${r.scope}): accept the trust dialog the next time Claude Code starts in ${ctx.inv.project} - until then the server connects without its key`);
+    if (context.inv.trusted !== false) return [];
+    return (context.inv.registrations || [])
+        .filter((registration) => registration.rowId && !registration.own && !registration.alfredRetired && registration.choice !== 'own' && ['project', 'local'].includes(registration.scope) && registration.entry && registration.entry.headersHelper)
+        .filter((registration) => !only || [registration.name, registration.rowId].includes(only))
+        .map((registration) => `${registration.name} (${registration.scope}): accept the trust dialog the next time Claude Code starts in ${context.inv.project} - until then the server connects without its key`);
 }
 
 // -> { found: [finding + { kind, symptom }], held: [{ id, why }], own: [{ name, scope }], notes: [line] } - `own`: the
 // registrations left on their own (spec D6), which no detector reads
-export function detectAll(ctx: FixCtx, { only }: { only?: string | undefined } = {}): Detected
+export function detectAll(context: FixCtx, { only }: { only?: string | undefined } = {}): Detected
 {
-    const own = (ctx.inv.registrations || []).filter((r) => r.choice === 'own' && (!only || [r.name, r.rowId].includes(only)));
-    const out: Detected = { found: [], held: [], own: own.map((r) => ({ name: r.name, scope: r.scope })), notes: trustNotes(ctx, only) };
-    for (const fix of ctx.catalog.fixes)
+    const own = (context.inv.registrations || []).filter((registration) => registration.choice === 'own' && (!only || [registration.name, registration.rowId].includes(only)));
+    const out: Detected = { found: [], held: [], own: own.map((registration) => ({ name: registration.name, scope: registration.scope })), notes: trustNotes(context, only) };
+    for (const fix of context.catalog.fixes)
     {
         if (fix.hold) { out.held.push({ id: fix.id, why: fix.hold }); continue; }
-        if (!fix.os.includes(ctx.platform)) continue;
+        if (!fix.os.includes(context.platform)) continue;
         const detect = (F as unknown as Record<string, Detector | undefined>)[fix.detect];
         if (typeof detect !== 'function') throw new Error(`fix row ${fix.id}: no function ${fix.detect} in scripts/fix/`);
         // a file row plans its repair: one that is not advice names the function that does
         if (fix.kind === 'file' && !fix.advice && typeof (F as unknown as Record<string, unknown>)[fix.steps!] !== 'function') throw new Error(`fix row ${fix.id}: no steps function ${fix.steps} in scripts/fix/`);
         // an advice row has no fix: its finding is shown and never offered, whatever its detector returned
-        const advice = (f: Finding) => (fix.advice && !f.blocked ? { blocked: 'advice only - nothing here is applied' } : {});
-        for (const f of detect(ctx)) if (matches(f, only)) out.found.push({ ...f, ...advice(f), kind: fix.kind, symptom: fix.symptom, documented: fix.documented !== false });
+        const advice = (finding: Finding) => (fix.advice && !finding.blocked ? { blocked: 'advice only - nothing here is applied' } : {});
+        for (const finding of detect(context)) if (matches(finding, only)) out.found.push({ ...finding, ...advice(finding), kind: fix.kind, symptom: fix.symptom, documented: fix.documented !== false });
     }
     return out;
 }
 
-const where = (f: Finding): string => (f.kind === 'registration' || f.id === 'client-drift' ? `${f.name} (${f.scope})` : f.name);
+const where = (finding: Finding): string => (finding.kind === 'registration' || finding.id === 'client-drift' ? `${finding.name} (${finding.scope})` : finding.name);
 
-export function render(detected: Detected): string
+export function renderFixes(detected: Detected): string
 {
     const lines: string[] = [];
     const { found, held } = detected;
@@ -109,19 +109,19 @@ export function render(detected: Detected): string
     else
     {
         lines.push(`Known problems found (${found.length}):`, '');
-        const w = (k: (f: Finding) => string) => Math.max(...found.map((f) => k(f).length));
-        const idW = w((f) => f.id);
-        const toolW = w(where);
-        for (const f of found)
+        const columnWidth = (k: (finding: Finding) => string) => Math.max(...found.map((finding) => k(finding).length));
+        const idWidth = columnWidth((finding) => finding.id);
+        const toolW = columnWidth(where);
+        for (const finding of found)
         {
-            const tail = f.blocked ? ` - NOT APPLICABLE: ${f.blocked}` : f.input ? ` - needs a folder from you: ${f.input.prompt}` : '';
-            lines.push(`  ${f.id.padEnd(idW)}  ${where(f).padEnd(toolW)}  ${f.found}${tail}`);
-            if (f.note) lines.push(`  ${' '.repeat(idW)}  ${' '.repeat(toolW)}  note: ${f.note}`);
+            const tail = finding.blocked ? ` - NOT APPLICABLE: ${finding.blocked}` : finding.input ? ` - needs a folder from you: ${finding.input.prompt}` : '';
+            lines.push(`  ${finding.id.padEnd(idWidth)}  ${where(finding).padEnd(toolW)}  ${finding.found}${tail}`);
+            if (finding.note) lines.push(`  ${' '.repeat(idWidth)}  ${' '.repeat(toolW)}  note: ${finding.note}`);
         }
     }
-    if ((detected.notes || []).length) lines.push('', ...detected.notes.map((n) => `note: ${n}`));
-    for (const h of held) lines.push('', `Held, not checked: ${h.id} - ${h.why}`);
-    if ((detected.own || []).length) lines.push('', ...detected.own.map((o) => `${o.name} (${o.scope}): on its own - not checked`));
+    if ((detected.notes || []).length) lines.push('', ...detected.notes.map((note) => `note: ${note}`));
+    for (const heldFix of held) lines.push('', `Held, not checked: ${heldFix.id} - ${heldFix.why}`);
+    if ((detected.own || []).length) lines.push('', ...detected.own.map((ownEntry) => `${ownEntry.name} (${ownEntry.scope}): on its own - not checked`));
     return lines.join('\n');
 }
 
@@ -130,23 +130,23 @@ export function questions(detected: Detected): FixQuestions
 {
     // a drifted copy is never in 'Apply all found' or 'Pick which': each is its own question, four a call (spec D9);
     // when both apps drifted, Cursor's is put only after a Restore or Leave in Claude Code
-    const drifted = detected.found.filter((f) => f.id === 'client-drift' && !f.blocked);
-    const driftQs = drifted.map((f) =>
+    const drifted = detected.found.filter((finding) => finding.id === 'client-drift' && !finding.blocked);
+    const driftQs = drifted.map((finding) =>
     {
-        const q = driftQuestion(f as DriftAsk);
-        const first = f.app === 'cursor' && drifted.find((x) => x.app === 'claude' && x.name === f.name && x.scope === f.scope);
-        return { ...q.question, answers: q.answers, ...(first ? { askAfter: { id: `drift-claude-${f.name}~${f.scope}`, answers: ['restore', 'leave'] } } : {}) };
+        const driftAsk = driftQuestion(finding as DriftAsk);
+        const first = finding.app === 'cursor' && drifted.find((candidate) => candidate.app === 'claude' && candidate.name === finding.name && candidate.scope === finding.scope);
+        return { ...driftAsk.question, answers: driftAsk.answers, ...(first ? { askAfter: { id: `drift-claude-${finding.name}~${finding.scope}`, answers: ['restore', 'leave'] } } : {}) };
     });
     const drift: DriftQuestion[][] = [];
     for (let i = 0; i < driftQs.length; i += 4) drift.push(driftQs.slice(i, i + 4));
-    const applicable = detected.found.filter((f) => !f.blocked && f.id !== 'client-drift');
-    const ids = [...new Set(applicable.map((f) => f.id))];
+    const applicable = detected.found.filter((finding) => !finding.blocked && finding.id !== 'client-drift');
+    const ids = [...new Set(applicable.map((finding) => finding.id))];
     if (!ids.length) return { choose: null, pick: [], drift }; // nothing can be applied: the NOT APPLICABLE lines are the advice
     const pick: Question[] = [];
     for (let i = 0; i < ids.length; i += 4)
         pick.push({
             id: 'fix-pick', header: 'Fixes', multiSelect: true, question: 'Which fixes do you want to apply?',
-            options: ids.slice(i, i + 4).map((id) => ({ label: id, description: applicable.filter((f) => f.id === id).map((f) => `${where(f)}: ${f.found}`).join('; ').slice(0, 300) })),
+            options: ids.slice(i, i + 4).map((id) => ({ label: id, description: applicable.filter((finding) => finding.id === id).map((finding) => `${where(finding)}: ${finding.found}`).join('; ').slice(0, 300) })),
         });
     const choose = {
         id: 'fix-choice', header: 'Fixes', multiSelect: false, question: `${ids.length} known problem${ids.length === 1 ? '' : 's'} found. Apply?`,
@@ -164,16 +164,16 @@ export function questions(detected: Detected): FixQuestions
 // ---- apply ----------------------------------------------------------------------------------------------------------
 
 // Why an answered or unanswered drift finding is not applied: null applies it, 'left' is the user's Leave.
-function driftSkip(f: Finding, picked: Finding[], input: Record<string, string>): string | null
+function driftSkip(finding: Finding, picked: Finding[], input: Record<string, string>): string | null
 {
-    const answer = input[f.driftKey!];
-    if (answer === undefined) return `needs --input ${f.driftKey}=<answer>`;
-    const allowed = f.inherited ? ['restore', 'leave'] : f.change === 'missing' ? ['drop', 'restore'] : f.keyGuard || f.keyEmpty ? ['restore', 'leave'] : ['keep', 'restore', 'leave'];
-    if (answer === 'keep' && f.keyGuard) return 'the copy holds what looks like a key outside its key field, so Keep is not offered - answer restore or leave';
-    if (answer === 'keep' && f.keyEmpty) return 'its key field is empty, so Keep is not offered - answer restore or leave';
+    const answer = input[finding.driftKey!];
+    if (answer === undefined) return `needs --input ${finding.driftKey}=<answer>`;
+    const allowed = finding.inherited ? ['restore', 'leave'] : finding.change === 'missing' ? ['drop', 'restore'] : finding.keyGuard || finding.keyEmpty ? ['restore', 'leave'] : ['keep', 'restore', 'leave'];
+    if (answer === 'keep' && finding.keyGuard) return 'the copy holds what looks like a key outside its key field, so Keep is not offered - answer restore or leave';
+    if (answer === 'keep' && finding.keyEmpty) return 'its key field is empty, so Keep is not offered - answer restore or leave';
     if (!allowed.includes(answer)) return `'${answer}' is not an answer here - ${allowed.join(', ')}`;
     if (answer === 'leave') return 'left';
-    const claude = f.app === 'cursor' && picked.find((x) => x.id === 'client-drift' && x.app === 'claude' && x.name === f.name && x.scope === f.scope);
+    const claude = finding.app === 'cursor' && picked.find((candidate) => candidate.id === 'client-drift' && candidate.app === 'claude' && candidate.name === finding.name && candidate.scope === finding.scope);
     if (claude && input[claude.driftKey!] === 'keep') return "Cursor's answer is not used - Claude Code's copy was kept, and Cursor takes it";
     return null;
 }
@@ -182,122 +182,122 @@ function driftSkip(f: Finding, picked: Finding[], input: Record<string, string>)
 // servers of one row would both match) - update applies one at a time; `fetchFile: false` writes no fetch file and
 // returns the launches to fetch as `fetch`, for update to hand on in its own (apply.js). `gone`: nothing picked is found
 // any more - an earlier step did it.
-export function applyFixes(ctx: FixCtx, ids: string[], { only, name, scope, input = {}, tmp, log = console.log, runCli = cli.runClaude, fetchFile }: FixOptions = {}): FixRun
+export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, input = {}, tmp, log = console.log, runCli = cli.runClaude, fetchFile }: FixOptions = {}): FixRun
 {
-    const res: FixRun = { applied: [], skipped: [], failed: null, remaining: [], steps: 0, fetchFile: null, fetch: null, gone: false, tmp: tmp || null };
-    const known = new Set(ctx.catalog.fixes.map((f) => f.id));
+    const result: FixRun = { applied: [], skipped: [], failed: null, remaining: [], steps: 0, fetchFile: null, fetch: null, gone: false, tmp: tmp || null };
+    const known = new Set(context.catalog.fixes.map((fixRow) => fixRow.id));
     const unknown = ids.filter((id) => id !== 'all' && id !== 'none' && !known.has(id));
-    if (unknown.length) { res.failed = `unknown fix id${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}`; log(res.failed); return res; }
+    if (unknown.length) { result.failed = `unknown fix id${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}`; log(result.failed); return result; }
     // the uninstall offers the user turned down (spec D9): those shown and left unpicked, and those kept out of 'Apply all
     // found' for alfred-code - the command passes them, recorded once the findings are read; 'Skip' passes none, so the
     // offer comes back
     let turnedDown: Declined[] = [];
     try { turnedDown = declines.parse(input['retired-declined']); }
-    catch (caught) { const e = caught as NodeJS.ErrnoException; res.failed = e.message; log(res.failed); return res; }
-    const detected = detectAll(ctx, { only });
-    let picked = ids.includes('none') ? [] : detected.found.filter((f) => (ids.includes('all') || ids.includes(f.id)) && (!name || f.name === name) && (!scope || f.scope === scope));
+    catch (caught) { const error = caught as NodeJS.ErrnoException; result.failed = error.message; log(result.failed); return result; }
+    const detected = detectAll(context, { only });
+    let picked = ids.includes('none') ? [] : detected.found.filter((finding) => (ids.includes('all') || ids.includes(finding.id)) && (!name || finding.name === name) && (!scope || finding.scope === scope));
     // a drifted copy with its answer is applied whatever else was picked (spec D9)
-    const answered = detected.found.filter((f) => f.id === 'client-drift' && input[f.driftKey!] !== undefined && !picked.includes(f));
+    const answered = detected.found.filter((finding) => finding.id === 'client-drift' && input[finding.driftKey!] !== undefined && !picked.includes(finding));
     picked = [...picked, ...answered];
     // where alfred-code is set up it installs the retired plugins too: 'Apply all found' leaves them, only a pick reaches them
     if (ids.includes('all') && !ids.includes('retired-plugin'))
     {
-        const kept = picked.filter((f) => f.id === 'retired-plugin' && f.alfred && !f.blocked);
-        for (const f of kept) log(`${f.name} kept - alfred-code installs it; fix lists it`);
-        picked = picked.filter((f) => !kept.includes(f));
+        const kept = picked.filter((finding) => finding.id === 'retired-plugin' && finding.alfred && !finding.blocked);
+        for (const finding of kept) log(`${finding.name} kept - alfred-code installs it; fix lists it`);
+        picked = picked.filter((finding) => !kept.includes(finding));
     }
-    if (turnedDown.length) log(declines.add(ctx.data, turnedDown).detail);
-    if (ids.includes('none') && !answered.length) { log('Nothing picked to apply.'); return res; }
-    if (!picked.length) { res.gone = true; log('Nothing to apply: no picked problem is found any more.'); return res; }
+    if (turnedDown.length) log(declines.add(context.data, turnedDown).detail);
+    if (ids.includes('none') && !answered.length) { log('Nothing picked to apply.'); return result; }
+    if (!picked.length) { result.gone = true; log('Nothing to apply: no picked problem is found any more.'); return result; }
 
-    for (const f of picked.filter((x) => x.blocked || (x.input && !input[x.input.id])))
+    for (const finding of picked.filter((candidate) => candidate.blocked || (candidate.input && !input[candidate.input.id])))
     {
-        res.skipped.push(f);
-        log(`skipped ${f.id} on ${where(f)}: ${f.blocked || `needs --input ${f.input!.id}=<value> (${f.input!.prompt})`}`);
+        result.skipped.push(finding);
+        log(`skipped ${finding.id} on ${where(finding)}: ${finding.blocked || `needs --input ${finding.input!.id}=<value> (${finding.input!.prompt})`}`);
     }
-    for (const f of picked.filter((x) => x.id === 'client-drift' && !x.blocked))
+    for (const finding of picked.filter((candidate) => candidate.id === 'client-drift' && !candidate.blocked))
     {
-        const why = driftSkip(f, picked, input);
+        const why = driftSkip(finding, picked, input);
         if (!why) continue;
-        if (why === 'left') { res.skipped.push(f); log(`left    client-drift on ${where(f)}: ${f.app === 'cursor' ? 'Cursor' : 'Claude Code'}'s copy as it is`); continue; }
-        res.skipped.push(f);
-        log(`skipped client-drift on ${where(f)}: ${why}`);
+        if (why === 'left') { result.skipped.push(finding); log(`left    client-drift on ${where(finding)}: ${finding.app === 'cursor' ? 'Cursor' : 'Claude Code'}'s copy as it is`); continue; }
+        result.skipped.push(finding);
+        log(`skipped client-drift on ${where(finding)}: ${why}`);
     }
-    const todo = picked.filter((x) => !res.skipped.includes(x));
+    const todo = picked.filter((candidate) => !result.skipped.includes(candidate));
 
     // registration fixes: one replace per registration, the fixes composed in the catalog's order
     const steps: McpReplaceStep[] = [];
-    const order = ctx.catalog.fixes.map((x) => x.id);
+    const order = context.catalog.fixes.map((fixRow) => fixRow.id);
     const groups = new Map<string, Finding[]>();
     // R9: a fix that gives a registration a helper brings its root's file steps - the .gitignore and the helper - first
-    const fileCtx: { platform: string; project: string; roots: Roots | null; uses: RootUse[] } = { platform: ctx.platform, project: ctx.inv.project, roots: null, uses: [] };
-    for (const f of todo.filter((x) => x.kind === 'registration')) groups.set(`${f.scope}\u0000${f.name}`, [...(groups.get(`${f.scope}\u0000${f.name}`) || []), f]);
+    const fileCtx: { platform: string; project: string; roots: Roots | null; uses: RootUse[] } = { platform: context.platform, project: context.inv.project, roots: null, uses: [] };
+    for (const finding of todo.filter((candidate) => candidate.kind === 'registration')) groups.set(`${finding.scope}\u0000${finding.name}`, [...(groups.get(`${finding.scope}\u0000${finding.name}`) || []), finding]);
     for (const list of groups.values())
     {
-        const withRoots = list.find((x) => x.roots);
+        const withRoots = list.find((candidate) => candidate.roots);
         if (withRoots) fileCtx.roots = fileCtx.roots || withRoots.roots!;
-        const reg = ctx.inv.registrations.find((r) => r.name === list[0]!.name && r.scope === list[0]!.scope)!;
-        let entry = clone(reg.entry);
+        const registration = context.inv.registrations.find((candidate) => candidate.name === list[0]!.name && candidate.scope === list[0]!.scope)!;
+        let entry = clone(registration.entry);
         try
         {
-            for (const f of list.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)))
-                entry = (F as unknown as Record<string, RegistrationFix>)[ctx.catalog.fixes.find((x) => x.id === f.id)!.fix!]!(entry, f, ctx, input);
+            for (const finding of list.sort((left, right) => order.indexOf(left.id) - order.indexOf(right.id)))
+                entry = (F as unknown as Record<string, RegistrationFix>)[context.catalog.fixes.find((fixRow) => fixRow.id === finding.id)!.fix!]!(entry, finding, context, input);
         }
-        catch (caught) { const e = caught as NodeJS.ErrnoException; res.failed = `${list[0]!.name}: ${e.message}`; log(`FAILED ${res.failed}`); return res; }
-        if (deepEqual(entry, reg.entry)) continue;
-        steps.push({ op: 'mcp-replace', name: reg.name, scope: reg.scope, entry, old: reg.entry, row: reg.rowId, route: reg.route, why: `${list.map((x) => x.id).join(' + ')}: rewrite '${reg.name}' from the registration as read` });
-        if (entry.headersHelper && !reg.entry.headersHelper && fileCtx.roots) useRoots(fileCtx, reg.scope, { helper: true, keyFile: null, keyName: null, data: null });
+        catch (caught) { const error = caught as NodeJS.ErrnoException; result.failed = `${list[0]!.name}: ${error.message}`; log(`FAILED ${result.failed}`); return result; }
+        if (deepEqual(entry, registration.entry)) continue;
+        steps.push({ op: 'mcp-replace', name: registration.name, scope: registration.scope, entry, old: registration.entry, row: registration.rowId, route: registration.route, why: `${list.map((finding) => finding.id).join(' + ')}: rewrite '${registration.name}' from the registration as read` });
+        if (entry.headersHelper && !registration.entry.headersHelper && fileCtx.roots) useRoots(fileCtx, registration.scope, { helper: true, keyFile: null, keyName: null, data: null });
         // serena's context file (D7) is written into its root before the registration names it
-        if (contextArgAt(entry) >= 0 && fileCtx.roots) useRoots(fileCtx, reg.scope, { serenaContext: true });
+        if (contextArgAt(entry) >= 0 && fileCtx.roots) useRoots(fileCtx, registration.scope, { serenaContext: true });
     }
-    res.steps = steps.length;
+    result.steps = steps.length;
     // each list the repaired servers sit in, and Cursor's files from them, in the same run (spec D1); a Cursor copy whose
     // key token-sync found behind is refilled with the list as it is
-    const refresh = todo.filter((x) => x.id === 'token-sync' && x.cursorOnly).map((x) => ({ name: x.name, scope: x.scope! }));
+    const refresh = todo.filter((finding) => finding.id === 'token-sync' && finding.cursorOnly).map((finding) => ({ name: finding.name, scope: finding.scope! }));
     const tailNotes: string[] = [];
-    const tail = steps.length || refresh.length ? repairTail(ctx.inv, { platform: ctx.platform, project: ctx.inv.project, home: ctx.home, env: ctx.env, catalog: ctx.catalog, notes: tailNotes }, steps, { refresh }) : [];
+    const tail = steps.length || refresh.length ? repairTail(context.inv, { platform: context.platform, project: context.inv.project, home: context.home, env: context.env, catalog: context.catalog, notes: tailNotes }, steps, { refresh }) : [];
     if (steps.length || tail.length)
     {
         // a fix that changes what is fetched (a python request, a cut-off, cmd /c) is fetched once it is written
-        const withFetch = steps.flatMap((s) =>
+        const withFetch = steps.flatMap((step) =>
         {
-            const f = fetchStep(s.name, s.entry, s.row, s.old);
-            return f ? [s, f] : [s];
+            const fetchJobStep = fetchStep(step.name, step.entry, step.row, step.old);
+            return fetchJobStep ? [step, fetchJobStep] : [step];
         });
         const fileNotes: string[] = [];
-        const files = fileCtx.uses.length ? fileSteps(ctx.inv, fileCtx as ListCtx, { notes: fileNotes }) : { before: [] };
-        for (const u of [...new Map(fileCtx.uses.map((x) => [x.root, x] as const)).values()]) log(`the key helper goes in the ${u.family} root ${u.root}`);
-        for (const n of [...fileNotes, ...tailNotes]) log(`note: ${n}`);
-        const plan = { version: 1, project: ctx.inv.project, os: ctx.platform, alfredCodeEnabled: Boolean(ctx.inv.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch, ...tail], ctx.inv.project, mcpOrder.ownProjectNames(ctx.inv)), notes: [], errors: [], expect: steps.map((s) => ({ kind: 'mcp', name: s.name, scope: s.scope, route: ctx.inv.registrations.find((r) => r.name === s.name && r.scope === s.scope)!.route })) };
-        res.tmp = tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
-        const report = apply(plan, { env: ctx.env, tmp: res.tmp, runCli, log, fetchFile });
-        res.fetchFile = report.fetchFile;
-        res.fetch = report.fetch;
-        if (report.failed) { res.failed = report.failed.detail; return res; }
-        const lines = reconnectOf(ctx, steps).map(reconnectLine);
+        const files = fileCtx.uses.length ? fileSteps(context.inv, fileCtx as ListCtx, { notes: fileNotes }) : { before: [] };
+        for (const rootUse of [...new Map(fileCtx.uses.map((usage) => [usage.root, usage] as const)).values()]) log(`the key helper goes in the ${rootUse.family} root ${rootUse.root}`);
+        for (const note of [...fileNotes, ...tailNotes]) log(`note: ${note}`);
+        const plan = { version: 1, project: context.inv.project, os: context.platform, alfredCodeEnabled: Boolean(context.inv.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch, ...tail], context.inv.project, mcpOrder.ownProjectNames(context.inv)), notes: [], errors: [], expect: steps.map((step) => ({ kind: 'mcp', name: step.name, scope: step.scope, route: context.inv.registrations.find((candidate) => candidate.name === step.name && candidate.scope === step.scope)!.route })) };
+        result.tmp = tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
+        const report = apply(plan, { env: context.env, tmp: result.tmp, runCli, log, fetchFile });
+        result.fetchFile = report.fetchFile;
+        result.fetch = report.fetch;
+        if (report.failed) { result.failed = report.failed.detail; return result; }
+        const lines = reconnectOf(context, steps).map(reconnectLine);
         if (lines.length) log('', ...lines);
     }
 
     // file fixes (spec D9): detected again on what the registration pass left, their steps in the catalog's row order
     // as one plan through apply.js, read back below like the rest
-    const filePicked = todo.filter((x) => x.kind === 'file');
+    const filePicked = todo.filter((finding) => finding.kind === 'file');
     if (filePicked.length)
     {
-        const fctx = steps.length ? { ...ctx, inv: inventory.buildInventory({ project: ctx.inv.project, env: ctx.env, data: ctx.data }) } : ctx;
-        const now = detectAll(fctx, { only }).found.filter((f) => f.kind === 'file' && !f.blocked && filePicked.some((p) => p.id === f.id && p.name === f.name && p.scope === f.scope && p.app === f.app));
+        const fctx = steps.length ? { ...context, inv: inventory.buildInventory({ project: context.inv.project, env: context.env, data: context.data }) } : context;
+        const now = detectAll(fctx, { only }).found.filter((finding) => finding.kind === 'file' && !finding.blocked && filePicked.some((pickedFinding) => pickedFinding.id === finding.id && pickedFinding.name === finding.name && pickedFinding.scope === finding.scope && pickedFinding.app === finding.app));
         const planned: PlanStep[] = [];
-        for (const row of ctx.catalog.fixes.filter((x) => x.kind === 'file'))
-            for (const f of now.filter((x) => x.id === row.id))
+        for (const row of context.catalog.fixes.filter((candidate) => candidate.kind === 'file'))
+            for (const finding of now.filter((candidate) => candidate.id === row.id))
             {
-                try { planned.push(...(F as unknown as Record<string, FileSteps>)[row.steps!]!(f, fctx, input)); }
-                catch (caught) { const e = caught as NodeJS.ErrnoException; res.failed = e.message; log(`FAILED ${f.id} on ${where(f)}: ${e.message}`); return res; }
+                try { planned.push(...(F as unknown as Record<string, FileSteps>)[row.steps!]!(finding, fctx, input)); }
+                catch (caught) { const error = caught as NodeJS.ErrnoException; result.failed = error.message; log(`FAILED ${finding.id} on ${where(finding)}: ${error.message}`); return result; }
             }
         if (planned.length)
         {
-            const plan = { version: 1, project: ctx.inv.project, os: ctx.platform, alfredCodeEnabled: Boolean(ctx.inv.alfredCodeEnabled), steps: planned, notes: [], errors: [], expect: [] };
-            res.tmp = res.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
-            const report = apply(plan, { env: ctx.env, tmp: res.tmp, runCli, log, fetchFile: false, data: ctx.data });
-            if (report.failed) { res.failed = report.failed.detail; return res; }
+            const plan = { version: 1, project: context.inv.project, os: context.platform, alfredCodeEnabled: Boolean(context.inv.alfredCodeEnabled), steps: planned, notes: [], errors: [], expect: [] };
+            result.tmp = result.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
+            const report = apply(plan, { env: context.env, tmp: result.tmp, runCli, log, fetchFile: false, data: context.data });
+            if (report.failed) { result.failed = report.failed.detail; return result; }
         }
     }
 
@@ -305,31 +305,31 @@ export function applyFixes(ctx: FixCtx, ids: string[], { only, name, scope, inpu
     // that returns `fetch` (an npx cache folder removed) leaves a package for fetch.js to download again
     const noRestart = new Set<Finding>();
     const refetch: JobStep[] = [];
-    for (const f of todo.filter((x) => x.kind === 'machine'))
+    for (const finding of todo.filter((candidate) => candidate.kind === 'machine'))
     {
-        const r = (F as unknown as Record<string, MachineFix>)[ctx.catalog.fixes.find((x) => x.id === f.id)!.fix!]!(f, ctx);
-        log(`${r.ok ? 'ok    ' : 'FAILED'} ${f.id}: ${r.detail}`);
-        if (!r.ok) { res.failed = r.detail; return res; }
-        if (r.restart === false) noRestart.add(f);
-        if (r.fetch) refetch.push(r.fetch);
+        const machineResult = (F as unknown as Record<string, MachineFix>)[context.catalog.fixes.find((candidate) => candidate.id === finding.id)!.fix!]!(finding, context);
+        log(`${machineResult.ok ? 'ok    ' : 'FAILED'} ${finding.id}: ${machineResult.detail}`);
+        if (!machineResult.ok) { result.failed = machineResult.detail; return result; }
+        if (machineResult.restart === false) noRestart.add(finding);
+        if (machineResult.fetch) refetch.push(machineResult.fetch);
     }
     if (refetch.length)
     {
         // beside a fetch file a registration fix already wrote, or in a new one
-        res.tmp = res.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
-        res.fetchFile = writeJob(res.fetchFile || path.join(res.tmp, 'fetch.json'), fetchJob(ctx.inv.project, refetch, refetch.map((s) => s.name)), { append: true });
-        log('', ...nextLines(res.fetchFile, JSON.parse(fs.readFileSync(res.fetchFile, 'utf8'))));
+        result.tmp = result.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'preferred-tools-fix-'));
+        result.fetchFile = writeJob(result.fetchFile || path.join(result.tmp, 'fetch.json'), fetchJob(context.inv.project, refetch, refetch.map((jobStep) => jobStep.name)), { append: true });
+        log('', ...nextLines(result.fetchFile, JSON.parse(fs.readFileSync(result.fetchFile, 'utf8'))));
     }
 
     // read back: the same detectors, run again on what is installed now
-    const after = detectAll({ ...ctx, inv: inventory.buildInventory({ project: ctx.inv.project, env: ctx.env, data: ctx.data }) }, { only });
-    for (const f of todo)
+    const after = detectAll({ ...context, inv: inventory.buildInventory({ project: context.inv.project, env: context.env, data: context.data }) }, { only });
+    for (const finding of todo)
     {
-        const left = after.found.some((a) => a.id === f.id && a.name === f.name && a.scope === f.scope && a.app === f.app);
-        (left ? res.remaining : res.applied).push(f);
-        log(`${left ? 'STILL FOUND' : 'fixed      '} ${f.id} on ${where(f)}`);
+        const left = after.found.some((candidate) => candidate.id === finding.id && candidate.name === finding.name && candidate.scope === finding.scope && candidate.app === finding.app);
+        (left ? result.remaining : result.applied).push(finding);
+        log(`${left ? 'STILL FOUND' : 'fixed      '} ${finding.id} on ${where(finding)}`);
     }
-    if (res.applied.some((f) => !noRestart.has(f))) log('', `Restart Claude Code so the repaired registrations and the language server start fresh${res.fetchFile ? ' - after the fetch reports, so a session start does not download the same package beside it' : ''}.`);
-    return res;
+    if (result.applied.some((finding) => !noRestart.has(finding))) log('', `Restart Claude Code so the repaired registrations and the language server start fresh${result.fetchFile ? ' - after the fetch reports, so a session start does not download the same package beside it' : ''}.`);
+    return result;
 }
 

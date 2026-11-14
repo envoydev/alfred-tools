@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
+import ts from 'typescript';
 import { parseAskBlocks, problemsOf } from './ask-blocks.ts';
 import { sendsToOther, walkTexts } from './ask-texts.ts';
 
@@ -198,6 +199,26 @@ const scan = (rel: string): void => {
     }
 };
 scan('.');
+
+// Names that say what they hold (spec, Names): no one-letter binding in scripts/ but i, j, k as indexes and _.
+const ONE_LETTER_OK = new Set(['i', 'j', 'k', '_']);
+const scriptFiles = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true })
+    .flatMap((entry) => entry.isDirectory() ? scriptFiles(path.join(dir, entry.name)) : entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts') ? [path.join(dir, entry.name)] : []);
+for (const file of scriptFiles(path.join(root, 'scripts')))
+{
+    const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+    const visit = (node: ts.Node): void =>
+    {
+        const binding = ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node) || ts.isFunctionDeclaration(node) ? node.name : undefined;
+        if (binding && ts.isIdentifier(binding) && binding.text.replace(/^_/, '').length === 1 && !ONE_LETTER_OK.has(binding.text))
+        {
+            const { line } = source.getLineAndCharacterOfPosition(binding.getStart(source));
+            problems.push(`${path.relative(root, file)}:${line + 1}: '${binding.text}' is a one-letter name - name what it holds`);
+        }
+        ts.forEachChild(node, visit);
+    };
+    visit(source);
+}
 
 if (problems.length) { console.error(problems.join('\n')); process.exit(1); }
 console.log(`lint: ${jsonFiles.length} JSON files parse; ${textFiles.length} command/skill files checked`);

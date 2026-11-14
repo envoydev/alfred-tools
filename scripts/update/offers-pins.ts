@@ -11,76 +11,76 @@ import type { UpdateCheck, UpdateCtx } from './types.ts';
 
 // ---- MCP pins --------------------------------------------------------------------------------------------------------
 
-export async function mcpOffers(ctx: UpdateCtx, out: UpdateCheck): Promise<void>
+export async function mcpOffers(context: UpdateCtx, out: UpdateCheck): Promise<void>
 {
     const cache = new Map<string, Promise<Release[]>>();
     const latest = (registry: string, name: string) =>
     {
         const key = `${registry}:${name}`;
-        if (!cache.has(key)) cache.set(key, ctx.registry.versionsOf(registry, name));
+        if (!cache.has(key)) cache.set(key, context.registry.versionsOf(registry, name));
         return cache.get(key)!;
     };
-    for (const r of ctx.inv.registrations)
+    for (const registration of context.inv.registrations)
     {
-        if (r.own || r.alfredRetired) continue;
-        if (r.choice === 'own') { out.skipped.push(`${r.name} (${r.scope}): on its own - not checked`); continue; }
-        if (r.scope === 'inherited') { out.skipped.push(`${r.name} (inherited): inherited from ${inventory.fromHere(ctx.inv, r.from!)} - update it there`); continue; }
-        const row = ctx.catalog.byId.get(r.rowId!)!;
-        const def = row.routes[r.route!]!;
-        const at = `${r.name} (${r.scope})`;
+        if (registration.own || registration.alfredRetired) continue;
+        if (registration.choice === 'own') { out.skipped.push(`${registration.name} (${registration.scope}): on its own - not checked`); continue; }
+        if (registration.scope === 'inherited') { out.skipped.push(`${registration.name} (inherited): inherited from ${inventory.fromHere(context.inv, registration.from!)} - update it there`); continue; }
+        const row = context.catalog.byId.get(registration.rowId!)!;
+        const routeDefinition = row.routes[registration.route!]!;
+        const at = `${registration.name} (${registration.scope})`;
         // the shared sign-in form (0.5.0, D5) runs mcp-remote at a pin, the bridge route's package
-        const signIn = r.route === 'remote' && signInParts(r.entry);
-        if (r.route === 'remote' && !signIn) { out.skipped.push(`${at}: a hosted URL has no pin`); continue; }
-        if (def.runtime === 'docker') { out.skipped.push(`${at}: the Docker image tag is not checked - change it with /preferred-tools:configure`); continue; }
-        const pkg = signIn ? ctx.catalog.byId.get('sentry')!.routes.bridge!.package : def.package;
-        if (!pkg) continue;
-        const from = pinnedVersion(r.entry, pkg.name);
-        if (!from) { out.skipped.push(`${at}: ${pkg.name} is launched with no version, so it follows the registry already`); continue; }
+        const signIn = registration.route === 'remote' && signInParts(registration.entry);
+        if (registration.route === 'remote' && !signIn) { out.skipped.push(`${at}: a hosted URL has no pin`); continue; }
+        if (routeDefinition.runtime === 'docker') { out.skipped.push(`${at}: the Docker image tag is not checked - change it with /preferred-tools:configure`); continue; }
+        const packageSpec = signIn ? context.catalog.byId.get('sentry')!.routes.bridge!.package : routeDefinition.package;
+        if (!packageSpec) continue;
+        const from = pinnedVersion(registration.entry, packageSpec.name);
+        if (!from) { out.skipped.push(`${at}: ${packageSpec.name} is launched with no version, so it follows the registry already`); continue; }
         let versions: Release[];
-        try { versions = await latest(pkg.registry, pkg.name); }
-        catch (caught) { const e = caught as NodeJS.ErrnoException; out.errors.push(`${at}: ${pkg.registry} lookup for ${pkg.name} failed - ${e.message}`); continue; }
-        const pick = registryLib.choose(versions, { registry: pkg.registry, now: ctx.now, current: from });
-        if (pick.held.length) out.held.push(`${at}: ${registryLib.heldLine(pkg.name, pick.held)}`);
+        try { versions = await latest(packageSpec.registry, packageSpec.name); }
+        catch (caught) { const error = caught as NodeJS.ErrnoException; out.errors.push(`${at}: ${packageSpec.registry} lookup for ${packageSpec.name} failed - ${error.message}`); continue; }
+        const pick = registryLib.choose(versions, { registry: packageSpec.registry, now: context.now, current: from });
+        if (pick.held.length) out.held.push(`${at}: ${registryLib.heldLine(packageSpec.name, pick.held)}`);
         if (!pick.offer) continue;
-        const entry = bumpEntry(r.entry, pkg.name, pick.offer.version, registryLib.cutoffOf(ctx.now));
-        if (!entry) { out.errors.push(`${at}: could not move the pin of ${pkg.name} in the registration as it is written - change it with /preferred-tools:configure`); continue; }
-        out.offers.push({ kind: 'mcp', id: `mcp:${r.name}~${r.scope}`, name: r.name, scope: r.scope, row: r.rowId, route: r.route, package: pkg.name, from, to: pick.offer.version, ageDays: pick.offer.ageDays, cutoff: registryLib.cutoffOf(ctx.now), old: r.entry, entry, group: 'mcp', label: `${r.name} (${r.scope})` });
+        const entry = bumpEntry(registration.entry, packageSpec.name, pick.offer.version, registryLib.cutoffOf(context.now));
+        if (!entry) { out.errors.push(`${at}: could not move the pin of ${packageSpec.name} in the registration as it is written - change it with /preferred-tools:configure`); continue; }
+        out.offers.push({ kind: 'mcp', id: `mcp:${registration.name}~${registration.scope}`, name: registration.name, scope: registration.scope, row: registration.rowId, route: registration.route, package: packageSpec.name, from, to: pick.offer.version, ageDays: pick.offer.ageDays, cutoff: registryLib.cutoffOf(context.now), old: registration.entry, entry, group: 'mcp', label: `${registration.name} (${registration.scope})` });
     }
 }
 
 // Cursor's bridge copy of a two-form entry (D5): its mcp-remote pin, which mcpOffers never sees (Claude Code's side is a
 // hosted URL). One offer per list server with a cursorEntry, from Cursor's copy as read; a copy that is missing or drifted
 // from the list is named and left to fix.
-export async function cursorPinOffers(ctx: UpdateCtx, out: UpdateCheck): Promise<void>
+export async function cursorPinOffers(context: UpdateCtx, out: UpdateCheck): Promise<void>
 {
-    const pkg = ctx.catalog.byId.get('sentry')!.routes.bridge!.package!;
+    const packageSpec = context.catalog.byId.get('sentry')!.routes.bridge!.package!;
     let versions: Release[] | null = null;
     for (const family of ['project', 'global'] as const)
     {
-        const l = ctx.inv.lists && ctx.inv.lists[family];
-        if (!l || l.note || l.old) continue;
-        const seen = (ctx.inv.cursor && ctx.inv.cursor[family]) || { entries: {} } as CursorOf;
-        for (const s of l.servers || [])
+        const list = context.inv.lists && context.inv.lists[family];
+        if (!list || list.note || list.old) continue;
+        const seen = (context.inv.cursor && context.inv.cursor[family]) || { entries: {} } as CursorOf;
+        for (const server of list.servers || [])
         {
-            if (!s.cursorEntry || !(s.clients || []).includes('cursor')) continue;
-            const at = `${s.name} (${s.scope})`;
-            const copy = seen.entries[s.name];
+            if (!server.cursorEntry || !(server.clients || []).includes('cursor')) continue;
+            const at = `${server.name} (${server.scope})`;
+            const copy = seen.entries[server.name];
             if (!copy) { out.skipped.push(`${at}: Cursor's copy is not in ${seen.file} - not checked; /preferred-tools:fix settles it`); continue; }
-            const row = ctx.catalog.byId.get(s.row!);
-            if (JSON.stringify(copy) !== JSON.stringify(kept.keep(s.cursorEntry, row))) { out.skipped.push(`${at}: Cursor's copy in ${seen.file} differs from the list - not checked; /preferred-tools:fix settles it`); continue; }
-            const from = pinnedVersion(s.cursorEntry, pkg.name);
+            const row = context.catalog.byId.get(server.row!);
+            if (JSON.stringify(copy) !== JSON.stringify(kept.keep(server.cursorEntry, row))) { out.skipped.push(`${at}: Cursor's copy in ${seen.file} differs from the list - not checked; /preferred-tools:fix settles it`); continue; }
+            const from = pinnedVersion(server.cursorEntry, packageSpec.name);
             if (!from) continue;
             if (!versions)
             {
-                try { versions = await ctx.registry.versionsOf(pkg.registry, pkg.name); }
-                catch (caught) { const e = caught as NodeJS.ErrnoException; out.errors.push(`${at} in Cursor: ${pkg.registry} lookup for ${pkg.name} failed - ${e.message}`); return; }
+                try { versions = await context.registry.versionsOf(packageSpec.registry, packageSpec.name); }
+                catch (caught) { const error = caught as NodeJS.ErrnoException; out.errors.push(`${at} in Cursor: ${packageSpec.registry} lookup for ${packageSpec.name} failed - ${error.message}`); return; }
             }
-            const pick = registryLib.choose(versions, { registry: pkg.registry, now: ctx.now, current: from });
-            if (pick.held.length) out.held.push(`${at} in Cursor: ${registryLib.heldLine(pkg.name, pick.held)}`);
+            const pick = registryLib.choose(versions, { registry: packageSpec.registry, now: context.now, current: from });
+            if (pick.held.length) out.held.push(`${at} in Cursor: ${registryLib.heldLine(packageSpec.name, pick.held)}`);
             if (!pick.offer) continue;
-            const entry = bumpEntry(s.cursorEntry, pkg.name, pick.offer.version, registryLib.cutoffOf(ctx.now));
+            const entry = bumpEntry(server.cursorEntry, packageSpec.name, pick.offer.version, registryLib.cutoffOf(context.now));
             if (!entry) continue;
-            out.offers.push({ kind: 'cursor-pin', id: `cursor-pin:${s.name}~${s.scope}`, name: s.name, scope: s.scope, row: s.row, family, list: l.file, file: seen.file, server: s, package: pkg.name, from, to: pick.offer.version, ageDays: pick.offer.ageDays, cutoff: registryLib.cutoffOf(ctx.now), old: s.cursorEntry, entry, group: 'mcp', label: `${s.name} (${s.scope}, Cursor)` });
+            out.offers.push({ kind: 'cursor-pin', id: `cursor-pin:${server.name}~${server.scope}`, name: server.name, scope: server.scope, row: server.row, family, list: list.file, file: seen.file, server: server, package: packageSpec.name, from, to: pick.offer.version, ageDays: pick.offer.ageDays, cutoff: registryLib.cutoffOf(context.now), old: server.cursorEntry, entry, group: 'mcp', label: `${server.name} (${server.scope}, Cursor)` });
         }
     }
 }

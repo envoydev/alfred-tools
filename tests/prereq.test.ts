@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
-import { CHECKS, check, render } from '../scripts/prereq/prereq.ts';
-import { main } from '../scripts/prereq/command.ts';
+import { CHECKS, checkPrereqs, renderPrereqs } from '../scripts/prereq/prereq.ts';
+import { runPrereqCommand } from '../scripts/prereq/command.ts';
 import type { PrereqCtx, ToolCheck } from '../scripts/prereq/types.ts';
 import type { MachineProbe, RunResult } from '../scripts/fix/types.ts';
 import type { Env } from '../scripts/core/types.ts';
@@ -85,13 +85,13 @@ test('android-sdk and jdk: looked up as the appium fix looks them up', () =>
 test('check: each pick on its own route; a remote route needs nothing; the machine facts come back for the plan', () =>
 {
     const m = machine({ bins: { npx: '/usr/bin/npx' } });
-    const res = check([{ row: 'context7', route: 'remote' }, { row: 'context7', route: 'local' }, { row: 'github', route: 'local' }], ctx(m), catalog);
+    const res = checkPrereqs([{ row: 'context7', route: 'remote' }, { row: 'context7', route: 'local' }, { row: 'github', route: 'local' }], ctx(m), catalog);
     assert.deepStrictEqual(res.tools.map((t) => [t.row, t.route, t.needs.map((n) => `${n.id}:${n.ok}`)]), [
         ['context7', 'remote', []], ['context7', 'local', ['npx:true']], ['github', 'local', ['docker-or-github-binary:false']],
     ]);
     assert.strictEqual(res.missing, 1);
     assert.deepStrictEqual(res.machine, { docker: true });
-    const text = render(res);
+    const text = renderPrereqs(res);
     assert.match(text, /^context7 \(remote\): nothing to check$/m);
     assert.match(text, /^github \(local\): docker-or-github-binary - MISSING$/m);
     assert.match(text, /prereq: 1 missing$/);
@@ -107,21 +107,21 @@ test('main: an answers file, --rows, --json; a bad argument exits 2 and checks n
         const m = machine({ bins: { uvx: '/bin/uvx' } });
         let text = '';
         const out = (s: string) => { text += `${s}\n`; };
-        assert.strictEqual(main([file], { env: {}, machine: m, platform: 'darwin', out }), 0);
+        assert.strictEqual(runPrereqCommand([file], { env: {}, machine: m, platform: 'darwin', out }), 0);
         assert.match(text, /serena \(local\): uvx - ok/);
         text = '';
-        main(['--rows', 'serena,context7', '--json'], { env: {}, machine: m, platform: 'darwin', out });
+        runPrereqCommand(['--rows', 'serena,context7', '--json'], { env: {}, machine: m, platform: 'darwin', out });
         const json = JSON.parse(text);
         assert.deepStrictEqual(json.tools.map((t: ToolCheck) => [t.row, t.route]), [['serena', 'local'], ['context7', 'remote']]);
         // configure: only a change to another route is checked
         fs.writeFileSync(file, JSON.stringify({ change: { 'mcp:c7~project': { row: 'context7', route: 'local' }, 'mcp:serena~user': { row: 'serena', name: 'nav' } } }));
         text = '';
-        main([file, '--json'], { env: {}, machine: m, platform: 'darwin', out });
+        runPrereqCommand([file, '--json'], { env: {}, machine: m, platform: 'darwin', out });
         assert.deepStrictEqual(JSON.parse(text).tools.map((t: ToolCheck) => [t.row, t.route]), [['context7', 'local']]);
         for (const bad of [[], ['--rows', 'no-such-tool'], [path.join(dir, 'missing.json')]])
         {
             text = '';
-            assert.strictEqual(main(bad, { env: {}, machine: m, platform: 'darwin', out }), 2, JSON.stringify(bad));
+            assert.strictEqual(runPrereqCommand(bad, { env: {}, machine: m, platform: 'darwin', out }), 2, JSON.stringify(bad));
         }
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
@@ -140,23 +140,23 @@ test('audit: the package is audited in a temp folder with --ignore-scripts and t
         },
     });
     const pick = [{ row: 'appium', route: 'local' }];
-    const res = check(pick, ctx(mk()), catalog, { withAudit: true });
+    const res = checkPrereqs(pick, ctx(mk()), catalog, { withAudit: true });
     assert.deepStrictEqual(res.tools[0]!.audit, { package: 'appium-mcp@1.99.3', ok: true, counts: { critical: 3, high: 17, moderate: 0, low: 2, total: 22 } });
     const install = seen.find((s) => /^npm install/.test(s.line));
     assert.match(install!.line, /--package-lock-only --ignore-scripts/);
     assert.strictEqual(install!.before, '2026-11-11T23:59:59Z', 'resolved at the row\'s cut-off, as npx will');
     assert.deepStrictEqual((install!.pkg as { dependencies: unknown }).dependencies, { 'appium-mcp': '1.99.3' });
     assert.ok(!fs.existsSync(install!.cwd!), 'the temp folder is removed');
-    assert.match(render(res), /^appium: audit - appium-mcp@1\.99\.3 has 22 known vulnerabilities in its dependency tree \(3 critical, 17 high, 0 moderate, 2 low\)$/m);
+    assert.match(renderPrereqs(res), /^appium: audit - appium-mcp@1\.99\.3 has 22 known vulnerabilities in its dependency tree \(3 critical, 17 high, 0 moderate, 2 low\)$/m);
     // not asked for: not run, no npm call
     seen.length = 0;
-    assert.strictEqual(check(pick, ctx(mk()), catalog).tools[0]!.audit, undefined);
+    assert.strictEqual(checkPrereqs(pick, ctx(mk()), catalog).tools[0]!.audit, undefined);
     assert.strictEqual(seen.filter((x) => /^npm /.test(x.line)).length, 0, 'no npm call without --audit');
     // offline, or output that is not npm's JSON: 'not run', never 'clean'
-    const offline = check(pick, ctx(mk({ lock: 1 })), catalog, { withAudit: true }).tools[0]!.audit;
+    const offline = checkPrereqs(pick, ctx(mk({ lock: 1 })), catalog, { withAudit: true }).tools[0]!.audit;
     assert.strictEqual(offline!.ok, false);
     assert.match(offline!.note!, /audit not run: npm install --package-lock-only failed: ENOTFOUND/);
-    assert.match(check(pick, ctx(mk({ json: 'oops' })), catalog, { withAudit: true }).tools[0]!.audit!.note!, /audit not run: npm audit gave no result/);
+    assert.match(checkPrereqs(pick, ctx(mk({ json: 'oops' })), catalog, { withAudit: true }).tools[0]!.audit!.note!, /audit not run: npm audit gave no result/);
     // a row that is not marked for audit is not audited
-    assert.strictEqual(check([{ row: 'sentry', route: 'local' }], ctx(mk()), catalog, { withAudit: true }).tools[0]!.audit, undefined);
+    assert.strictEqual(checkPrereqs([{ row: 'sentry', route: 'local' }], ctx(mk()), catalog, { withAudit: true }).tools[0]!.audit, undefined);
 });

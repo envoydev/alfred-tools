@@ -14,14 +14,14 @@ import type { CatalogRoute, CatalogRow, FixRow } from '../catalog/types.ts';
 import type { InvRegistration } from '../inventory/types.ts';
 import type { Finding, FixCtx, MachineProbe } from './types.ts';
 
-export const fixOf = (ctx: Pick<FixCtx, 'catalog'>, id: string): FixRow | undefined => ctx.catalog.fixes.find((f) => f.id === id);
-export const rowOf = (ctx: Pick<FixCtx, 'catalog'>, id: string): CatalogRow | undefined => ctx.catalog.byId.get(id);
+export const fixOf = (context: Pick<FixCtx, 'catalog'>, id: string): FixRow | undefined => context.catalog.fixes.find((fixRow) => fixRow.id === id);
+export const rowOf = (context: Pick<FixCtx, 'catalog'>, id: string): CatalogRow | undefined => context.catalog.byId.get(id);
 
 // The registrations a fix row covers: matched to one of its tools by what they launch, not the user's own, not an
 // alfred-code leftover, not one left on its own (spec D6), and not inherited from a parent folder (fixed by running fix
 // there).
-export const registrationsOf = (ctx: Pick<FixCtx, 'catalog' | 'inv'>, fixId: string): InvRegistration[] => ctx.inv.registrations.filter((r) => !r.own && !r.alfredRetired && r.choice !== 'own' && r.scope !== 'inherited' && fixOf(ctx, fixId)!.tool.includes(r.rowId!));
-export const routeOf = (ctx: Pick<FixCtx, 'catalog'>, reg: { rowId: string | null; route: string | null }): CatalogRoute | undefined => rowOf(ctx, reg.rowId!)!.routes[reg.route!];
+export const registrationsOf = (context: Pick<FixCtx, 'catalog' | 'inv'>, fixId: string): InvRegistration[] => context.inv.registrations.filter((registration) => !registration.own && !registration.alfredRetired && registration.choice !== 'own' && registration.scope !== 'inherited' && fixOf(context, fixId)!.tool.includes(registration.rowId!));
+export const routeOf = (context: Pick<FixCtx, 'catalog'>, registration: { rowId: string | null; route: string | null }): CatalogRoute | undefined => rowOf(context, registration.rowId!)!.routes[registration.route!];
 
 // The executable a registration launches, looking through a `cmd /c` wrapper.
 export const launcher = (entry: ServerEntry): string => path.basename(launchTokens(entry).command).replace(/\.(exe|cmd)$/i, '');
@@ -29,35 +29,35 @@ export const launchArgs = (entry: ServerEntry): string[] => launchTokens(entry).
 
 // A committed value read against an environment, as Claude Code expands .mcp.json from the one it starts with
 // (entries.js expandVars). -> the expanded text, or null when a ${NAME} with no fallback is unset (`firstUnset` names it).
-export const expandVars = (text: unknown, env: Env): string | null => { const r = E.expandVars(text, env); return r.unset.length ? null : r.value; };
+export const expandVars = (text: unknown, env: Env): string | null => { const expanded = E.expandVars(text, env); return expanded.unset.length ? null : expanded.value; };
 export const firstUnset = (text: unknown, env: Env): string | null => E.expandVars(text, env).unset[0] || null;
 
-export const finding = (fixId: string, reg: { rowId: string | null; name: string; scope: string }, what: string, extra: Partial<Finding> = {}): Finding => ({ id: fixId, row: reg.rowId, name: reg.name, scope: reg.scope, found: what, ...extra });
+export const finding = (fixId: string, registration: { rowId: string | null; name: string; scope: string }, what: string, extra: Partial<Finding> = {}): Finding => ({ id: fixId, row: registration.rowId, name: registration.name, scope: registration.scope, found: what, ...extra });
 export const clone = <Value>(value: Value): Value => JSON.parse(JSON.stringify(value));
 
 // '0.0.83' vs '0.0.9': numeric, part by part. Anything that is not dotted numbers (a dist-tag) compares as unknown (null).
-export function compareVersions(a: string, b: string): number | null
+export function compareVersions(left: string, right: string): number | null
 {
-    const parts = (v: string) => (/^\d+(\.\d+)*$/.test(v) ? v.split('.').map(Number) : null);
-    const [x, y] = [parts(a), parts(b)];
-    if (!x || !y) return null;
-    for (let i = 0; i < Math.max(x.length, y.length); i++)
+    const parts = (version: string) => (/^\d+(\.\d+)*$/.test(version) ? version.split('.').map(Number) : null);
+    const [leftParts, rightParts] = [parts(left), parts(right)];
+    if (!leftParts || !rightParts) return null;
+    for (let i = 0; i < Math.max(leftParts.length, rightParts.length); i++)
     {
-        const d = (x[i] || 0) - (y[i] || 0);
-        if (d) return d < 0 ? -1 : 1;
+        const difference = (leftParts[i] || 0) - (rightParts[i] || 0);
+        if (difference) return difference < 0 ? -1 : 1;
     }
     return 0;
 }
 
 // The version a launch pins for a package: '@playwright/mcp@0.0.83' -> '0.0.83', '--from serena-agent@2.1.0' -> '2.1.0',
 // 'mcp-memory-service[sqlite]==12.1.1' -> '12.1.1'. null when the launch names the package with no version.
-export function pinnedVersion(entry: ServerEntry, pkg: string): string | null
+export function pinnedVersion(entry: ServerEntry, packageSpec: string): string | null
 {
-    for (const a of launchArgs(entry).filter((x) => !x.startsWith('-')))
+    for (const argument of launchArgs(entry).filter((token) => !token.startsWith('-')))
     {
-        if (bareName(a) !== pkg) continue;
-        const m = /(?:==|@)([^@=\s]+)$/.exec(a.slice(pkg.length));
-        return m ? m[1]! : null;
+        if (bareName(argument) !== packageSpec) continue;
+        const match = /(?:==|@)([^@=\s]+)$/.exec(argument.slice(packageSpec.length));
+        return match ? match[1]! : null;
     }
     return null;
 }
@@ -70,10 +70,10 @@ export function onPath(name: string, env: Env, platform: string): string | null
     const win = platform === 'win32';
     const names = win ? [name, `${name}.exe`, `${name}.cmd`, `${name}.bat`] : [name];
     for (const dir of String((key && env[key]) || '').split(win ? ';' : ':').filter(Boolean))
-        for (const n of names)
+        for (const candidate of names)
         {
-            const f = (win ? path.win32 : path.posix).join(dir, n);
-            try { if (fs.statSync(f).isFile()) return f; } catch { /* next */ }
+            const file = (win ? path.win32 : path.posix).join(dir, candidate);
+            try { if (fs.statSync(file).isFile()) return file; } catch { /* next */ }
         }
     return null;
 }
@@ -81,12 +81,12 @@ export function onPath(name: string, env: Env, platform: string): string | null
 export function realMachine({ env = process.env, platform = process.platform }: { env?: Env; platform?: string } = {}): MachineProbe
 {
     return {
-        exists: (p: string) => fs.existsSync(p),
-        realpath: (p: string) => { try { return fs.realpathSync(p); } catch { return null; } },
+        exists: (file: string) => fs.existsSync(file),
+        realpath: (file: string) => { try { return fs.realpathSync(file); } catch { return null; } },
         which: (name: string) => onPath(name, env, platform),
         // npm and npx are .cmd shims on Windows; a shell is what runs them
         // `opts.cwd` and `opts.env` (merged over the machine's) are for the audit, which runs in a temp folder
-        run: (cmd: string, args: string[], opts: { cwd?: string; env?: Env } = {}) => spawnSync(cmd, args, { encoding: 'utf8', env: { ...env, ...(opts.env || {}) }, cwd: opts.cwd, shell: platform === 'win32' && /^(npm|npx)$/.test(cmd) }),
+        run: (cmd: string, args: string[], options: { cwd?: string; env?: Env } = {}) => spawnSync(cmd, args, { encoding: 'utf8', env: { ...env, ...(options.env || {}) }, cwd: options.cwd, shell: platform === 'win32' && /^(npm|npx)$/.test(cmd) }),
         nodeVersion: process.versions.node,
     };
 }
