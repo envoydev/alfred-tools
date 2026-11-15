@@ -148,7 +148,7 @@ test('M1 install for both: each entry is the same in its app files and its list;
     assert.ok(!k7.headersHelper && k7.command === 'node' && path.basename(k7.args[0]) === 'mcp-bridge.js', `context7 in Cursor: the bridge form ${JSON.stringify(k7)}`);
     assert.ok(cursorEntry(hh, p, { name: 'playwright-chrome', scope: 'local' }), 'the local entry is in .cursor/mcp.json');
     assert.match(r.rendered, /\.cursor\/mcp\.json now holds this machine's local servers; add it to \.gitignore/);
-    assert.ok(hh.realUntouched().ok, 'the real home and account are untouched');
+    assert.deepStrictEqual(hh.realUntouched().changed, [], 'the real home and account are untouched');
 });
 
 // The one sign-in for both apps (spec M3, D5, F13): mcp-remote's real package, a stub vendor, and a stand-in browser
@@ -225,7 +225,7 @@ test('M3 one sign-in for both apps: one /authorize for two starts, one refresh f
         t.diagnostic(`second account: ${status}; hits ${JSON.stringify(s.hits)}`);
         assert.match(status, /Connected/, got.out);
         assert.strictEqual(s.hits['/authorize'], 1, 'the second account signed in with none');
-        assert.ok(hh.realUntouched().ok, 'the real home and account are untouched');
+        assert.deepStrictEqual(hh.realUntouched().changed, [], 'the real home and account are untouched');
     }
     finally { await s.close(); }
 });
@@ -325,7 +325,7 @@ test('M2 Cursor CLI: each server enabled starts and lists its tools; serena list
         assert.strictEqual(c7.status, 0, c7.out);
         const seen = s.seen.slice(s0);
         assert.ok(seen.some((x) => x.rpc === 'tools/list' && x.auth === 'expected'), `context7 reached the stub through the bridge with its key: ${JSON.stringify(seen)}`);
-        assert.ok(hh.realUntouched().ok, 'the real home and account are untouched');
+        assert.deepStrictEqual(hh.realUntouched().changed, [], 'the real home and account are untouched');
     }
     finally { await s.close(); }
 });
@@ -365,7 +365,7 @@ test('M7 a workspace under Cursor CLI: each child lists the root\'s serena, the 
             assert.match(own.rendered, /is a folder of .*'s git repo; Cursor's CLI reads .*\.cursor\/mcp\.json there/);
         }
     }
-    assert.ok(hh.realUntouched().ok, 'the real home and account are untouched');
+    assert.deepStrictEqual(hh.realUntouched().changed, [], 'the real home and account are untouched');
 });
 
 // The last release before 0.5.0 (0.4.0, main at 2026-11-13): M6 installs with its own code, taken from git
@@ -475,7 +475,7 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     // 4. serena's base modes, emptied by the serena-base-modes upgrade
     if (started) return t.skip(started);
     assert.ok(/^base_modes: \[\]\r?$/m.test(fs.readFileSync(path.join(projRoot, path.relative(oldRoot, config)), 'utf8')), `base_modes: [] (only that key is read, never printed)\n${text}`);
-    assert.ok(hh.realUntouched().ok, 'the real home and account are untouched');
+    assert.deepStrictEqual(hh.realUntouched().changed, [], 'the real home and account are untouched');
 });
 
 // F7: the six the context allows

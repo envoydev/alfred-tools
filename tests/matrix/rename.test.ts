@@ -167,7 +167,7 @@ test('R1 - a 0.4.0 machine: one update moves both folders, imports the record in
     const helper = spawnSync(process.execPath, [path.join(dir, NEW, roots.FILES.helper), 'GITLAB_TOKEN', 'Bearer'], { cwd: dir, env: { ...h.env, CLAUDE_CODE_MCP_SERVER_NAME: 'gitlab' }, encoding: 'utf8' });
     assert.strictEqual(helper.status, 0, 'the helper runs');
     assert.ok(helper.stdout.includes(`Bearer ${gitlabKey}`), 'the moved helper finds the key in the moved .mcps-secrets');
-    assert.ok(h.realUntouched().ok, 'the real home and account are untouched');
+    assert.deepStrictEqual(h.realUntouched().changed, [], 'the real home and account are untouched');
 });
 
 test('R2 - a pre-rename 0.5.0 machine: lists, Cursor\'s copies, the old kept marker and serena\'s context 1, moved by one update', T, async () =>
@@ -196,5 +196,5 @@ test('R2 - a pre-rename 0.5.0 machine: lists, Cursor\'s copies, the old kept mar
         assert.strictEqual(firstLine(path.join(root, roots.FILES.helper)), '// alfred-tools mcp-headers 5');
     const cursorProject = readJson(path.join(dir, '.cursor', 'mcp.json')).mcpServers;
     assert.ok(JSON.stringify(cursorProject.serena).includes(path.join(dir, NEW)), JSON.stringify(cursorProject.serena));
-    assert.ok(h.realUntouched().ok, 'the real home and account are untouched');
+    assert.deepStrictEqual(h.realUntouched().changed, [], 'the real home and account are untouched');
 });

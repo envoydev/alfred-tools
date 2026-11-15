@@ -88,7 +88,7 @@ test('B1 - the bridge starts for real, follows a changed slug after a restart, a
         for (const out of [first.out, second.out, inChild.out]) assert.ok(!out.includes(KEY), 'the CLI printed the key');
         const holders = h.files().filter((file) => file !== secrets && fs.statSync(file).size < 5e6 && fs.readFileSync(file, 'utf8').includes(KEY));
         assert.deepStrictEqual(holders.filter((file) => !file.includes(`${path.sep}.npm${path.sep}`)), [], 'the key is in no other file of the world');
-        assert.ok(h.realUntouched().ok, 'the real account is untouched');
+        assert.deepStrictEqual(h.realUntouched().changed, [], 'the real account is untouched');
     }
     finally { await s.close(); }
 });
