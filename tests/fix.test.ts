@@ -2201,9 +2201,20 @@ async function holdFolder(parent: string, root: string): Promise<{ code: string;
         fs.chmodSync(parent, 0o555);
         return { code: 'EACCES', release: async () => { fs.chmodSync(parent, 0o755); } };
     }
-    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { cwd: root, stdio: 'ignore' });
-    await once(child, 'spawn');
-    return { code: '(?:EPERM|EBUSY)', release: async () => { const exited = once(child, 'exit'); child.kill(); await exited; } };
+    return { code: WINDOWS_IN_USE, release: await heldByChild('', root) };
+}
+
+// Windows' answer to a rename of a folder in use: EPERM on Windows 11, EBUSY on the windows-2025 runner (A7)
+const WINDOWS_IN_USE = '(?:EPERM|EBUSY)';
+
+// A child process, started in `cwd`, that runs `script` (with `args` as process.argv[1..]) and then stays alive: it says
+// 'held' once the script has run, so the caller knows the hold is in place. -> how to let go
+async function heldByChild(script: string, cwd: string, args: string[] = []): Promise<() => Promise<void>>
+{
+    const child = spawn(process.execPath, ['-e', `${script};process.stdout.write('held');setInterval(() => {}, 1000)`, ...args], { cwd, stdio: ['ignore', 'pipe', 'inherit'] });
+    const [chunk] = await once(child.stdout, 'data') as [Buffer];
+    assert.strictEqual(String(chunk), 'held');
+    return async () => { const exited = once(child, 'exit'); child.kill(); await exited; };
 }
 
 test('a rename Windows refuses names the servers that keep files in the folder, and how to stop them first', async () =>
@@ -2225,6 +2236,28 @@ test('a rename Windows refuses names the servers that keep files in the folder, 
             assert.doesNotMatch(posix.detail, /a file in it is open/, 'the open-file advice is for Windows only');
         }
         finally { await hold.release(); }
+    }
+    finally { w.clean(); }
+});
+
+test('a rename Windows refuses while another process holds a file open in the folder gives the same advice', { skip: process.platform !== 'win32' && 'POSIX renames a folder whose files are open: the refusal exists on Windows only' }, async () =>
+{
+    const w = world();
+    try
+    {
+        const root = oldRoot(w);
+        seed(w, 'mine', 'local', { type: 'stdio', command: 'node', args: [path.join(root, 'server.js')] });
+        const [f] = moveOf(w) as [Finding];
+        // a Node fs.openSync handle in another process, the first case A7 measured (EPERM on Windows 11)
+        const release = await heldByChild("require('node:fs').openSync(process.argv[1], 'r')", w.project, [path.join(root, 'preferred-tools.json')]);
+        try
+        {
+            const held = F.rootMoveFix(f, ctxOf(w));
+            assert.strictEqual(held.ok, false, held.detail);
+            assert.match(held.detail, new RegExp(`not moved: a file in it is open \\(${WINDOWS_IN_USE}\\) - in /mcp disable mine \\(a server that keeps files in it\\), close Claude Code and Cursor`));
+        }
+        finally { await release(); }
+        assert.ok(F.rootMoveFix(f, ctxOf(w)).ok, 'the move goes through once the process has let go');
     }
     finally { w.clean(); }
 });
