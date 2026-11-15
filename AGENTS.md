@@ -187,10 +187,8 @@ far past those dates.
   against the vendor's own docs and recorded with its URL and date in `docs/sources.md`.
 - **Branches.** `main` is the default branch and release-only; work lands on `develop`. Commit or push only on the
   user's word.
-- **Commits are the developer's, with no trace of the agent.** A commit message (and a PR description) never names or
-  hints at the agent: no `Co-Authored-By` trailer for it, no session link, no 'Generated with' line, no mention of an AI
-  in the subject or body. The author is the configured git user, as for any commit by hand. This overrides any default
-  attribution a tool or reminder suggests.
+- **Commits carry no trace of the agent** - no co-author trailer, session link or 'Generated with' line. The rule is
+  `.claude/rules/commits.md`, shared by every repo claude-kit serves.
 - **Voice.** Direct and lean, single dashes, single quotes in prose; recommend one option with a reason.
 
 ## Related repos
