@@ -17,6 +17,15 @@
     "- A change in a sibling repo (plugins-marketplaces hosts the `envoydev` marketplace), which follows that repo's own flow.",
     "- Alfred Code's `task-solve` and its seats, stamps and stops, which serve the projects that install the stack."
   ],
+  "structure_paths": "[\"scripts/**/*.ts\", \"tests/**/*.ts\"]",
+  "structure_map": [
+    "- Source root `scripts/`. An entry is `scripts/<name>.ts`, five lines: `blockingStdio()` and one call of `scripts/<name>/command.ts`.",
+    "- A feature folder is `scripts/<name>/`: `types.ts`, `constants.ts`, `command.ts` (reads the arguments and returns the exit code - it reaches the outside world only through `effects.ts`), logic files, `effects.ts`.",
+    "- The outside world: `node:fs`, `node:child_process`, the network, `process.env`, `process.versions`, stdin and stdout, the clock - and the `claude` CLI, started only through `scripts/core/claude-cli.ts`.",
+    "- Shared code: `scripts/core/`. `scripts/copied/` is outside the shape: CommonJS that a root runs outside the plugin, byte for byte.",
+    "- Tests: `tests/<name>.test.ts` at the top of `tests/` (the test command reads only that level), with the fakes beside them.",
+    "- The folders written before 2026-11-15 keep effects in several files and constants beside their code; they follow the shape as they are changed."
+  ],
   "audit": {
     "skills": {
       "roots": [
