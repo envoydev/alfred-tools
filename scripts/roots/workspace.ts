@@ -192,7 +192,7 @@ export function membersBelow(workspace: Workspace, folder: string): { folder: st
 // The git top-level folder of `dir`, real path, or null (no git, not a repo).
 export function gitTop(dir: string): string | null
 {
-    const result = spawnSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' });
+    const result = spawnSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], { encoding: 'utf8', windowsHide: true });
     if (result.error || result.status !== 0) return null;
     try { return fs.realpathSync(result.stdout.trim()); } catch { return null; }
 }

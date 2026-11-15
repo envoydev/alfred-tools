@@ -86,7 +86,7 @@ export function realMachine({ env = process.env, platform = process.platform }: 
         which: (name: string) => onPath(name, env, platform),
         // npm and npx are .cmd shims on Windows; a shell is what runs them
         // `opts.cwd` and `opts.env` (merged over the machine's) are for the audit, which runs in a temp folder
-        run: (cmd: string, args: string[], options: { cwd?: string; env?: Env } = {}) => spawnSync(cmd, args, { encoding: 'utf8', env: { ...env, ...(options.env || {}) }, cwd: options.cwd, shell: platform === 'win32' && /^(npm|npx)$/.test(cmd) }),
+        run: (cmd: string, args: string[], options: { cwd?: string; env?: Env } = {}) => spawnSync(cmd, args, { encoding: 'utf8', env: { ...env, ...(options.env || {}) }, cwd: options.cwd, shell: platform === 'win32' && /^(npm|npx)$/.test(cmd), windowsHide: true }),
         nodeVersion: process.versions.node,
     };
 }
