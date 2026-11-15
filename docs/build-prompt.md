@@ -753,7 +753,7 @@ catalog/plugin-settings.json  the recommended plugin settings, ported from alfre
 scripts/                      inventory.js, table.js, prereq.js, plan.js, apply.js, fetch.js, fix.js, fixes/, update.js, plugin-settings.js, hud-statusline.js, json-file.js, account.js, refresh-pins.js - Node 22, no dependencies
 tests/                        node:test, one file per script
 docs/sources.md               every external fact with its URL and the date read
-.claude/CLAUDE.md             EXISTS - this repo's invariants and the plugin facts it relies on; keep it current, never replace it
+AGENTS.md                     EXISTS - this repo's invariants and the plugin facts it relies on; keep it current, never replace it
 .claude/skills/plugin-authoring/  EXISTS - the plugin authoring skill, copied from alfred-code; load it before writing any plugin file
 docs/plugin-cli-evidence.md   EXISTS - measured plugin CLI behaviour (install over installed, the list flag, renames)
 README.md
@@ -771,7 +771,7 @@ Each step ends with its check; the next step starts only when it passes.
    oraios/serena#311 is fixed on the current serena pin. Write `docs/sources.md`.
    Check: every catalog row and every (verify) item has a source line; anything that changed is changed in the
    catalog, not left in the prompt.
-2. **Scaffold** the layout and `plugin.json`. Read `.claude/CLAUDE.md` and `docs/plugin-cli-evidence.md`, and load the
+2. **Scaffold** the layout and `plugin.json`. Read `AGENTS.md` and `docs/plugin-cli-evidence.md`, and load the
    `plugin-authoring` skill first. Check: `claude plugin validate . --strict` passes.
 3. **Catalog** - `catalog/tools.json` and `catalog/fixes.json`, plus a test that every row has the fields its kind needs
    and every fingerprint is unique. Check: `npm test` green.

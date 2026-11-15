@@ -9,7 +9,7 @@ paths:
 
 # Plugin handling
 
-Adding, changing, renaming or removing anything the plugin ships. `.claude/CLAUDE.md` holds the why; this is the order of work.
+Adding, changing, renaming or removing anything the plugin ships. `AGENTS.md` holds the why; this is the order of work.
 
 ## One home per item
 

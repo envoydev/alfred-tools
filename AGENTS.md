@@ -1,4 +1,4 @@
-# CLAUDE.md - alfred-tools
+# AGENTS.md - alfred-tools
 
 ## What this repo is
 
@@ -35,13 +35,41 @@ The build brief, with every design decision, its reason and the user's rulings, 
 before changing the design.
 
 **This file is not loaded by installs.** The repo root is the plugin root, so this file ships in every install's cache
-but Claude Code never loads a plugin's `CLAUDE.md`. It is for working IN this repo only, and it lives in `.claude/`
-because `claude plugin validate --strict` fails on a `CLAUDE.md` at the plugin root; a session in this repo loads
-`.claude/CLAUDE.md` the same way (https://code.claude.com/docs/en/memory.md). Anything the plugin needs at runtime goes
-in a command or a script.
+but Claude Code never loads a plugin's instruction file. It is for working IN this repo only. It is `AGENTS.md` at the
+root (the user's ruling, 2026-11-15): `claude plugin validate --strict` passes with it there and fails on a root
+`CLAUDE.md` (measured on 2.1.325). **Never add a `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md`:** Claude Code
+reads `AGENTS.md` only while none of the three exists and says nothing when one switches it off
+(https://code.claude.com/docs/en/memory.md); `npm run kit:check` fails when one appears. Anything the plugin needs at
+runtime goes in a command or a script.
 
 **Public repo.** Everything here ships to every machine that installs the plugin (the cache is the whole repo). No
 private project names, no absolute local paths, no tokens, nothing from a user's machine.
+
+## Commands
+
+```bash
+npm install          # first in a fresh clone: typecheck, lint and test import the pinned typescript
+npm run typecheck    # tsc -p .
+npm run lint         # tests/lint.ts - the repo's own rules (allowed-tools, names, types)
+npm run validate     # claude plugin validate --profile directory --strict on a copy of the files git ships
+npm test             # node --test tests/*.test.ts - the whole suite, minutes; run it in the background
+npm run kit:check    # the files claude-kit manages are unedited, and no CLAUDE.md hides this file
+npm run matrix       # real-CLI cases - by hand only, on a throwaway project and account, never in CI
+```
+
+The first five plus `kit:check` are what CI runs, in that order.
+
+## Layout
+
+- `commands/` - the four commands: `install`, `configure`, `fix`, `update`.
+- `catalog/` - `tools.json` (the tools and their routes), `fixes.json` (the problems fix knows), `reserved-names.json`.
+- `scripts/` - the entry scripts a command calls (`plan.ts`, `apply.ts`, `fix.ts`, `update.ts`, `inventory.ts`,
+  `fetch.ts`, `prereq.ts`), each with a folder of its parts; `core/` holds what they share (`claude-cli.ts` is the one
+  way the `claude` CLI is started); `copied/` is the CommonJS a root runs outside the plugin.
+- `tests/` - `*.test.ts` beside their fakes (`fake-claude.ts`, `fake-mcp-server.ts`), `lint.ts`,
+  `validate-plugin.ts`, `matrix/` (the by-hand real-CLI cases) and `proof/`.
+- `docs/` - `build-prompt.md` (the design and the rulings), `sources.md` (outside facts with URL and date),
+  `plugin-cli-evidence.md` (measured CLI behaviour).
 
 ## Invariants
 
@@ -111,9 +139,9 @@ private project names, no absolute local paths, no tokens, nothing from a user's
 
 ## Plugin facts this repo relies on
 
-From `.claude/skills/plugin-packaging/` (checked against the Claude Code plugin docs on 2026-09-12) and
-`docs/plugin-cli-evidence.md` (measured). Re-verify a fact against the docs when Claude Code has moved far past
-those dates.
+From `.claude/skills/plugin-packaging/` (each of its references carries the date and Claude Code version it was
+checked on) and `docs/plugin-cli-evidence.md` (measured). Re-verify a fact against the docs when Claude Code has moved
+far past those dates.
 
 - **One version, in `.claude-plugin/plugin.json`.** It silently overrides a version in the marketplace entry. A source
   change without a version bump is not delivered, so bump on every user-visible change.
@@ -145,15 +173,20 @@ those dates.
 - **Read the result, not the exit code.** Open the written `.mcp.json`, account file and settings after each case.
   A case not run is reported as NOT RUN, never implied as passing. Windows-only behaviour is proved on the user's
   Windows VM or reported NOT RUN.
-- **CI runs the same checks** (`.github/workflows/ci.yml`: typecheck, lint, validate, test, kit:check on Linux, macOS
-  and Windows, against the Claude Code build pinned there). The matrix is not in CI: it stays a by-hand run on a
-  throwaway project.
+- **CI runs the same checks, and they run here first** (`.github/workflows/ci.yml`: typecheck, lint, validate, test,
+  kit:check on Linux, macOS and Windows, against the Claude Code build pinned there). Before a push, run those five
+  here in that order and push only when each passes; then watch the remote run to its end - it is what proves Linux and
+  Windows (the user's ruling, 2026-11-15). The matrix is not in CI: it stays a by-hand run on a throwaway project.
+- **What only the runner showed** (first CI runs, 2026-11-14): a test that read the real home folder (each test makes
+  its own temp home), a CRLF checkout failing the lint on Windows (`.gitattributes` holds every file to LF), and the
+  Windows runner's 8.3 short temp path (`TEMP` and `TMP` are set to `runner.temp` for the test step).
 - **Check order before a publish:** `npm run validate` (`claude plugin validate --profile directory --strict` on a
   scratch copy of the files git would ship, so a Finder `.DS_Store` never fails it), a `claude --plugin-dir .` session
   in a scratch project, then `claude plugin details`. The skill has the full list.
 - **Outside facts are verified, not recalled.** A package, version, endpoint, CLI flag or marketplace shape is checked
   against the vendor's own docs and recorded with its URL and date in `docs/sources.md`.
-- **Branches.** `main` is the default branch. Work lands on a branch; commit or push only on the user's word.
+- **Branches.** `main` is the default branch and release-only; work lands on `develop`. Commit or push only on the
+  user's word.
 - **Commits are the developer's, with no trace of the agent.** A commit message (and a PR description) never names or
   hints at the agent: no `Co-Authored-By` trailer for it, no session link, no 'Generated with' line, no mention of an AI
   in the subject or body. The author is the configured git user, as for any commit by hand. This overrides any default
@@ -167,6 +200,8 @@ those dates.
 - alfred-code (`../alfred-code` when checked out beside this one) is the sibling plugin of the catalog. It holds the record of the
   servers it shipped until 2.10.1: `stack/mcp/original-mcps.json`, `stack/mcp/shipped-mcps.json` and
   `stack/mcp/README.md`. Its claude-hud settings step is `scripts/plugin-settings.js`, `scripts/hud-statusline.js` and
-  `meta/plugin-settings.json`. A change there follows its own CLAUDE.md, never an edit from this repo.
+  `meta/plugin-settings.json`. A change there follows its own `AGENTS.md`, never an edit from this repo.
+- claude-kit (`../claude-kit`) holds the shared `.claude` rules, skills and settings synced into this repo
+  (`.claude/kit/lock.json` lists them): change one there and sync, never here.
 - claude-hud, typescript-lsp and csharp-lsp are installed by both plugins, each on its own; there is no hand-over
   (`docs/build-prompt.md`, Risks and Hand-off).

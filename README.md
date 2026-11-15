@@ -348,7 +348,7 @@ npm run refresh-pins              # which catalog pins have a newer release at l
 npm run refresh-pins -- --write   # move catalog/tools.json; a moved pin is a release
 ```
 
-This repo's own rules are in `.claude/CLAUDE.md` (not loaded by installs).
+This repo's own rules are in `AGENTS.md` (not loaded by installs).
 
 ## Credits
 

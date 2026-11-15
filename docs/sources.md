@@ -361,7 +361,10 @@ Docs: https://code.claude.com/docs/en/plugins/cli-reference.md and https://code.
   error. It warns on a `CLAUDE.md` at the plugin root (manifest reference). MEASURED on 2.1.311 (2026-10-27): with the
   file at `.claude/CLAUDE.md` instead, `--strict` passes with nothing to report, and the memory docs list
   `./.claude/CLAUDE.md` as a project-instructions location equal to `./CLAUDE.md`
-  (https://code.claude.com/docs/en/memory.md), so the repo keeps its rules there. The same run's plugin-directory
+  (https://code.claude.com/docs/en/memory.md), so the repo kept its rules there until 2026-11-15.
+  MEASURED on 2.1.325 (2026-11-15): `--strict` passes with an `AGENTS.md` at the plugin root and still fails with a
+  root `CLAUDE.md`; Claude Code reads `AGENTS.md` only while the repo has no `CLAUDE.md`, `.claude/CLAUDE.md` or
+  `CLAUDE.local.md` (same page, 'AGENTS.md'), so the rules are `AGENTS.md` at the root and none of the three exists. The same run's plugin-directory
   checks want a square PNG icon (512-2048 px, under 2 MB, at `.claude-plugin/icon.png` or named by `icon` in
   plugin.json) and no `.DS_Store`; Claude Code ignores the icon, Anthropic's directory reads it
   (https://code.claude.com/docs/en/plugins-reference.md, 'Directory listing fields').
