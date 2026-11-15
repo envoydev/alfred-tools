@@ -1,6 +1,6 @@
 {
   "name": "alfred-tools",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "The MCP servers its owner has tested and likes, set up for Claude Code and Cursor from one list, with their install, update, rename and fix procedures: /alfred-tools:install, /alfred-tools:configure, /alfred-tools:update and /alfred-tools:fix.",
   "author": { "name": "envoydev" },
   "homepage": "https://github.com/envoydev/alfred-tools",
