@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>alfred-tools User Guide</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+  /* Layout: a contents rail that stays on the left, one reading column beside it.
+     Tools and commands are ruled ledger rows with a mono name, not cards. */
+  :root {
+    --bg: #f4f7f6;
+    --surface: #ffffff;
+    --ink: #13201e;
+    --muted: #556965;
+    --line: #d3dedb;
+    --accent: #0d6f66;
+    --accent-soft: #dceeea;
+    --warn: #8a5200;
+    --warn-soft: #fbefd6;
+    --code: #eaf0ee;
+    --font-display: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
+    --font-body: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1615;
+      --surface: #152120;
+      --ink: #e4eeec;
+      --muted: #9ab0ac;
+      --line: #2a3b38;
+      --accent: #56cfc0;
+      --accent-soft: #15332f;
+      --warn: #f0b962;
+      --warn-soft: #33280f;
+      --code: #1a2827;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1615;
+    --surface: #152120;
+    --ink: #e4eeec;
+    --muted: #9ab0ac;
+    --line: #2a3b38;
+    --accent: #56cfc0;
+    --accent-soft: #15332f;
+    --warn: #f0b962;
+    --warn-soft: #33280f;
+    --code: #1a2827;
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+
+  .page {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 40px 72px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+  @media (min-width: 980px) {
+    .page { grid-template-columns: 212px minmax(0, 1fr); gap: 56px; }
+    .rail { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; max-height: calc(100vh - 48px); overflow-y: auto; }
+  }
+
+  /* contents rail */
+  .rail-name { font-family: var(--font-mono); font-weight: 600; font-size: 0.95rem; color: var(--accent); margin: 0 0 4px; }
+  .rail-ver { font-size: 0.8rem; color: var(--muted); margin: 0 0 16px; }
+  .rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: row; flex-wrap: wrap; gap: 4px 16px; }
+  @media (min-width: 980px) { .rail ol { flex-direction: column; flex-wrap: nowrap; gap: 2px; } }
+  .rail a { display: block; padding: 4px 0; color: var(--ink); text-decoration: none; font-size: 0.92rem; }
+  .rail a:hover { color: var(--accent); text-decoration: underline; }
+  .rail .sub a { color: var(--muted); font-family: var(--font-mono); font-size: 0.82rem; }
+  @media (min-width: 980px) { .rail .sub a { padding-left: 12px; } }
+
+  main { min-width: 0; display: flex; flex-direction: column; gap: 56px; }
+  section { display: flex; flex-direction: column; gap: 16px; min-width: 0; scroll-margin-top: 24px; }
+  section > *, .cmd > *, .tool-body > * { margin: 0; }
+
+  h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.2; text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(2rem, 5vw, 2.75rem); font-weight: 700; letter-spacing: -0.02em; }
+  h2 { font-size: 1.6rem; font-weight: 600; padding-top: 24px; border-top: 2px solid var(--ink); }
+  h3 { font-size: 1.15rem; font-weight: 600; }
+  h4 { font-size: 1rem; font-weight: 600; }
+  p, li, dd { max-width: 68ch; }
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ul, ol { padding-left: 1.25rem; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+  strong { font-weight: 600; }
+
+  code { font-family: var(--font-mono); font-size: 0.88em; background: var(--code); padding: 0.1em 0.35em; border-radius: 3px; overflow-wrap: anywhere; }
+  .codeblock { position: relative; }
+  pre { margin: 0; background: var(--code); border: 1px solid var(--line); padding: 14px 16px; padding-right: 84px; overflow-x: auto; font-family: var(--font-mono); font-size: 0.85rem; line-height: 1.55; }
+  pre code { background: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
+  .codeblock button { position: absolute; top: 8px; right: 8px; font: 500 0.75rem var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); padding: 4px 10px; cursor: pointer; }
+  .codeblock button:hover { border-color: var(--accent); color: var(--accent); }
+  pre.tree { padding-right: 16px; }
+
+  /* masthead */
+  .eyebrow { font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  .lede { font-size: 1.15rem; line-height: 1.55; max-width: 60ch; }
+  .facts-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; margin: 8px 0 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .facts-row div { padding: 12px 16px 12px 0; }
+  .facts-row dt { font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .facts-row dd { margin: 2px 0 0; font-weight: 500; }
+
+  .aside { background: var(--surface); border: 1px solid var(--line); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+  .aside > * { margin: 0; }
+  .aside-label { font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  .caution { background: var(--warn-soft); border: 1px solid transparent; padding: 12px 16px; }
+  .caution b { color: var(--warn); font-weight: 600; }
+
+  /* numbered walk-throughs */
+  ol.steps { list-style: none; padding: 0; counter-reset: step; gap: 0; }
+  ol.steps > li { counter-increment: step; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); max-width: none; }
+  ol.steps > li::before { content: counter(step); font-family: var(--font-mono); font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+  ol.steps > li > div { min-width: 0; max-width: 68ch; }
+
+  /* the shared shape of a run */
+  ol.flow { list-style: none; padding: 0; counter-reset: flow; display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 16px 12px; }
+  ol.flow li { counter-increment: flow; border-top: 2px solid var(--accent); padding-top: 10px; font-size: 0.9rem; color: var(--muted); max-width: none; }
+  ol.flow li::before { content: counter(flow); display: block; font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); font-weight: 600; }
+  ol.flow b { display: block; color: var(--ink); font-family: var(--font-display); font-size: 1rem; font-weight: 600; }
+  ol.flow li.you { border-top-color: var(--warn); }
+  ol.flow li.you::before { color: var(--warn); }
+
+  /* tables */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 0.92rem; }
+  th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: 0; }
+  th { font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; background: var(--bg); }
+  td:first-child { font-weight: 500; white-space: nowrap; }
+  td.wrap { white-space: normal; }
+
+  /* commands */
+  .cmd { display: flex; flex-direction: column; gap: 14px; padding-top: 20px; border-top: 1px solid var(--line); scroll-margin-top: 24px; }
+  .cmd-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+  .cmd-head h3 { font-family: var(--font-mono); font-size: 1.15rem; color: var(--accent); }
+  .cmd-arg { font-family: var(--font-mono); font-size: 0.85rem; color: var(--muted); }
+  .when { font-size: 1.02rem; }
+  .label { font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin-top: 6px; }
+
+  /* tools */
+  .filter { display: flex; flex-wrap: wrap; gap: 8px; }
+  .filter button { font: 500 0.88rem var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+  .filter button:hover { border-color: var(--accent); }
+  .filter button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .tool-group { display: flex; flex-direction: column; gap: 0; }
+  .tool-group > h3 { padding: 20px 0 10px; color: var(--muted); font-size: 0.85rem; letter-spacing: 0.08em; text-transform: uppercase; font-family: var(--font-body); font-weight: 500; }
+  .tool { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px 32px; padding: 20px 0; border-top: 1px solid var(--line); scroll-margin-top: 24px; }
+  @media (min-width: 720px) { .tool { grid-template-columns: 190px minmax(0, 1fr); } }
+  .tool-name h4 { font-family: var(--font-mono); font-size: 1.02rem; overflow-wrap: anywhere; }
+  .tool-name p { margin: 4px 0 0; font-size: 0.85rem; color: var(--muted); }
+  .tool-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .tool-sum { font-weight: 500; font-size: 1.02rem; }
+  dl.facts { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; border-top: 1px solid var(--line); }
+  dl.facts > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+  dl.facts dt { color: var(--muted); }
+  dl.facts dd { margin: 0; max-width: none; }
+
+  /* diagrams built from boxes */
+  .wire { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-items: center; }
+  @media (min-width: 720px) { .wire { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.25fr); gap: 16px; } }
+  .box { background: var(--surface); border: 1px solid var(--line); padding: 12px 14px; font-size: 0.9rem; min-width: 0; }
+  .box b { display: block; font-family: var(--font-display); font-size: 1rem; }
+  .box.key { border-color: var(--accent); background: var(--accent-soft); }
+  .stack { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .arrow { color: var(--accent); font-family: var(--font-mono); font-weight: 600; text-align: center; }
+  .arrow::before { content: '\2193'; }
+  @media (min-width: 720px) { .arrow::before { content: '\2192'; } }
+  .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 0.88rem; }
+  .chain span { background: var(--surface); border: 1px solid var(--line); padding: 4px 10px; font-family: var(--font-mono); font-size: 0.82rem; }
+  .chain i { font-style: normal; color: var(--accent); font-family: var(--font-mono); font-weight: 600; }
+  .routes { display: flex; flex-direction: column; gap: 0; }
+  .routes > div { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; border-top: 1px solid var(--line); }
+  .routes p { margin: 0; }
+
+  footer { color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--line); padding-top: 16px; }
+  footer p { margin: 0; max-width: none; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <nav class="rail" aria-label="Contents">
+    <p class="rail-name">alfred-tools</p>
+    <p class="rail-ver">User guide - version 0.5.2</p>
+    <ol>
+      <li><a href="#start">Get started</a></li>
+      <li><a href="#commands">The four commands</a></li>
+      <li class="sub"><a href="#cmd-install">install</a></li>
+      <li class="sub"><a href="#cmd-configure">configure</a></li>
+      <li class="sub"><a href="#cmd-fix">fix</a></li>
+      <li class="sub"><a href="#cmd-update">update</a></li>
+      <li><a href="#tools">The tools</a></li>
+      <li><a href="#choices">Which settings to pick</a></li>
+      <li><a href="#keys">Keys</a></li>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#files">Where the files go</a></li>
+      <li><a href="#trouble">When something is wrong</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section id="top">
+      <p class="eyebrow">Claude Code plugin - user guide</p>
+      <h1>alfred-tools</h1>
+      <p class="lede">One plugin that sets up 14 tested MCP servers for Claude Code and Cursor. You pick the tools and answer a few questions. It shows you a plan of every change and applies nothing until you confirm.</p>
+      <dl class="facts-row">
+        <div><dt>Commands</dt><dd>4, all typed by you</dd></div>
+        <div><dt>Tools</dt><dd>14 MCP servers</dd></div>
+        <div><dt>Apps</dt><dd>Claude Code and Cursor</dd></div>
+        <div><dt>Needs</dt><dd>Node 22.18+, the <code>claude</code> CLI</dd></div>
+      </dl>
+      <div class="aside">
+        <p class="aside-label">New to MCP?</p>
+        <p>An MCP server is a small program or hosted service that gives an AI assistant extra tools: reading GitHub issues, driving a browser, looking up current library docs. Claude Code and Cursor each keep their own list of the servers they connect to. alfred-tools writes those lists for you, keeps them in step, and repairs them when a machine or a project changes.</p>
+      </div>
+    </section>
+
+    <section id="start">
+      <h2>Get started</h2>
+      <p>Add the marketplace and install the plugin once per machine:</p>
+      <div class="codeblock">
+        <pre><code>claude plugin marketplace add envoydev/plugins-marketplaces
+claude plugin install alfred-tools@envoydev</code></pre>
+        <button type="button">Copy</button>
+      </div>
+      <p>The plugin installs nothing on its own. Open Claude Code in the project you want the tools in, then:</p>
+      <ol class="steps">
+        <li><div>Run <code>/alfred-tools:install</code>. It prints the catalog for your operating system and marks what is already installed.</div></li>
+        <li><div>Pick the tools you want.</div></li>
+        <li><div>Say which apps the servers are for. 'Claude Code and Cursor' is recommended when Cursor is on this machine.</div></li>
+        <li><div>Answer 'Use the recommended settings', or set each tool up one at a time. <a href="#choices">Which settings to pick</a> explains every question.</div></li>
+        <li><div>Read the plan: every <code>claude</code> call and every file it writes. Answer 'Apply'.</div></li>
+        <li><div>For a tool that uses a key, open the <code>.mcps-secrets</code> file the plan names and write the value after <code>NAME=</code>. The plugin never asks for a key, reads one out or prints one.</div></li>
+        <li><div>Restart Claude Code, or use <code>/mcp</code>, pick the server and choose Reconnect. Restart Cursor too if it got the servers. The plan's last lines say what each server needs.</div></li>
+      </ol>
+    </section>
+
+    <section id="commands">
+      <h2>The four commands</h2>
+      <p>Each command does one job. They are manual: a command runs only when you type it, and Claude never starts one by itself. Run them from your project folder.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Command</th><th>Use it when</th><th>What it touches</th></tr></thead>
+          <tbody>
+            <tr><td><a href="#cmd-install"><code>/alfred-tools:install</code></a></td><td class="wrap">You want a tool this project does not have yet.</td><td class="wrap">Adds only. It never changes, moves or removes what is there.</td></tr>
+            <tr><td><a href="#cmd-configure"><code>/alfred-tools:configure</code></a></td><td class="wrap">You want to change or remove something installed.</td><td class="wrap">One server or root folder at a time, starting from what it has now.</td></tr>
+            <tr><td><a href="#cmd-fix"><code>/alfred-tools:fix</code></a></td><td class="wrap">A server will not start, or you moved or cloned the project.</td><td class="wrap">Only the known problems it finds and you pick.</td></tr>
+            <tr><td><a href="#cmd-update"><code>/alfred-tools:update</code></a></td><td class="wrap">You updated the plugin, or want newer server versions.</td><td class="wrap">Versions that are behind, to releases at least 7 days old.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>The shape of every run</h3>
+      <p>All four follow the same order, so you always know where you are. The two steps in amber are yours.</p>
+      <ol class="flow">
+        <li><b>Read</b>Looks at what is installed. Starts no server.</li>
+        <li class="you"><b>Answer</b>Each question has one recommended option, listed first.</li>
+        <li><b>Plan</b>Lists every call and every file it will write.</li>
+        <li class="you"><b>Confirm</b>Nothing has changed before this point.</li>
+        <li><b>Apply</b>Makes each change, reads it back, stops at the first failure.</li>
+        <li><b>Download</b>Fetches new packages in the background and starts each server once.</li>
+        <li><b>Restart</b>New servers load when Claude Code starts again.</li>
+      </ol>
+      <ul>
+        <li><strong>Two guards on every change.</strong> Besides the plan's own question, Claude Code shows its permission prompt for the step that writes. The plugin pre-approves only the steps that read.</li>
+        <li><strong>Go straight to one tool</strong> by naming it: <code>/alfred-tools:configure sentry</code>.</li>
+        <li><strong>Your own servers are safe.</strong> A server you added yourself is listed, never offered and never touched.</li>
+        <li><strong>If a change fails</strong>, what was already applied stays and is named. A failed rewrite prints a <code>RESTORE BY HAND</code> line that puts the registration back. A key in that line shows as <code>${ALFRED_TOOLS_KEPT}</code>, never its value.</li>
+      </ul>
+
+      <div class="cmd" id="cmd-install">
+        <div class="cmd-head"><h3>/alfred-tools:install</h3><span class="cmd-arg">[tool id]</span></div>
+        <p class="when">Adds tools that are not installed in this project.</p>
+        <p class="label">What happens</p>
+        <ol class="steps">
+          <li><div><strong>The catalog.</strong> Prints every tool for your operating system, numbered, with what is installed at each scope.</div></li>
+          <li><div><strong>Pick.</strong> You choose from the tools not installed here, grouped as Code, Docs and forges, Browsers, and Machine.</div></li>
+          <li><div><strong>Apps.</strong> 'Claude Code and Cursor' or 'Claude Code only'. Asked once for the whole run.</div></li>
+          <li><div><strong>Settings.</strong> 'Use the recommended settings' ends the questions here. Otherwise each tool is asked in turn: its route, scope and name, the root folder, its data folder, then its key name and settings.</div></li>
+          <li><div><strong>Prerequisites.</strong> Checks only what your picks need: <code>uvx</code>, <code>npx</code>, Docker, a browser, the Android SDK, a JDK. For a missing one you choose 'Skip this tool' (recommended), 'Install it now' or 'Register anyway'.</div></li>
+          <li><div><strong>Plan and confirm.</strong> 'Apply', 'Change something' or 'Cancel'.</div></li>
+          <li><div><strong>Apply and download.</strong> Registers each server, then downloads its package in the background and starts it once, so your next session connects quickly. Restart only after the download reports.</div></li>
+        </ol>
+        <p class="label">Good to know</p>
+        <ul>
+          <li>A tool already installed for every project (Global) can get this project's own copy beside it. The global one is not changed.</li>
+          <li>A tool that already reaches you through a claude.ai connector or another plugin is labelled in the list. Picking it adds this project's own registration beside the other.</li>
+          <li>To change or remove something installed, use configure. Install will point you there.</li>
+        </ul>
+      </div>
+
+      <div class="cmd" id="cmd-configure">
+        <div class="cmd-head"><h3>/alfred-tools:configure</h3><span class="cmd-arg">[registration name | tool id]</span></div>
+        <p class="when">Changes or removes what is installed, one server at a time.</p>
+        <p class="label">What happens</p>
+        <ol class="steps">
+          <li><div><strong>Menu.</strong> 'Change tools', 'Remove tools' or 'Done'.</div></li>
+          <li><div><strong>Pick.</strong> One option per installed server (a tool at two scopes is two options), plus servers left on their own and the root folders in use.</div></li>
+          <li><div><strong>Who looks after it.</strong> The first question about a server. 'alfred-tools' goes on to the settings. 'Leave it on its own' ends there, and configure, update and fix skip that server from then on. Configure hands it back whenever you want.</div></li>
+          <li><div><strong>Settings.</strong> Route, scope, name, data folder, key or OAuth, key name, extra settings, and which apps it is set up for. Every question recommends what the server has now, so keeping the answers changes nothing.</div></li>
+          <li><div><strong>Plan, confirm, apply.</strong> A plan that says 'Nothing to do' means every answer kept what is installed.</div></li>
+        </ol>
+        <p class="label">Good to know</p>
+        <ul>
+          <li><strong>It starts from what is installed</strong>, not from the catalog. A version you updated, and any arguments or environment values you added, stay.</li>
+          <li><strong>A scope change is a move.</strong> A Global server moved to Local is gone from your other projects. To keep it there and add a copy here, use install.</li>
+          <li><strong>A rename or move is done safely.</strong> The new registration is added and read back before the old one is removed.</li>
+          <li><strong>Moving a data folder or a root folder moves no data.</strong> The plan names the old folder. You copy what you want to keep, including values in <code>.mcps-secrets</code>.</li>
+          <li><strong>Removing</strong> a server takes it out of both apps. Its data folder and key file stay where they are.</li>
+        </ul>
+      </div>
+
+      <div class="cmd" id="cmd-fix">
+        <div class="cmd-head"><h3>/alfred-tools:fix</h3><span class="cmd-arg">[tool, registration name or fix id]</span></div>
+        <p class="when">Finds known problems in what is installed and applies the recorded fix for each.</p>
+        <p class="label">What happens</p>
+        <ol class="steps">
+          <li><div><strong>Detect.</strong> Lists each problem found: its fix id, the server and what is wrong. A line ending 'NOT APPLICABLE' gives a reason, and that reason is the advice. Nothing found prints 'No known problem found.'</div></li>
+          <li><div><strong>Choose.</strong> 'Apply all found' (recommended), 'Pick which' or 'Skip'.</div></li>
+          <li><div><strong>Hand edits.</strong> When one app's copy of a server was changed by hand, you are asked per server: 'Keep the change' (the list and the other app take it) or 'Restore from the list'.</div></li>
+          <li><div><strong>Apply and check.</strong> Each fix is checked by running its detector again, and reported as 'fixed' or 'STILL FOUND'.</div></li>
+        </ol>
+        <p class="label">Run it after</p>
+        <ul>
+          <li>moving a project folder, or cloning a project onto another machine (the paths it wrote are absolute);</li>
+          <li>changing the key of a local server such as github in Docker (fix writes the new key into its registration);</li>
+          <li>a server that will not start or connects without its key. <a href="#trouble">When something is wrong</a> lists what it knows.</li>
+        </ul>
+      </div>
+
+      <div class="cmd" id="cmd-update">
+        <div class="cmd-head"><h3>/alfred-tools:update</h3><span class="cmd-arg">no argument</span></div>
+        <p class="when">Brings what is behind up to date, and moves older setups to the way the plugin works now.</p>
+        <p class="label">What happens</p>
+        <ol class="steps">
+          <li><div><strong>Check.</strong> Refreshes your marketplaces and lists what is behind: installed plugins, pinned servers as <code>current -&gt; offered</code> with the release's age, and the helper files in each root folder. It also lists releases held back, and what it could not check. 'everything current' ends the run.</div></li>
+          <li><div><strong>Choose.</strong> 'All of them' (recommended), 'Pick which' or 'Skip'.</div></li>
+          <li><div><strong>Cursor.</strong> If Cursor is on this machine and a root's servers are set up for Claude Code only, it offers once to add Cursor. 'Not now' is remembered.</div></li>
+          <li><div><strong>Apply and download.</strong> Each updated server is removed and added again under the same name, scope and settings. Only the version moves. The new packages download in the background.</div></li>
+        </ol>
+        <p class="label">Good to know</p>
+        <ul>
+          <li><strong>The 7-day rule.</strong> A version moves only to a release at least 7 days old. A newer, younger release is shown as held back and never offered.</li>
+          <li><strong>What has no version to move:</strong> a hosted server (it is a URL), a Docker image tag, and a server left on its own.</li>
+          <li><strong>After a plugin upgrade</strong> it also moves what an older version wrote: a key kept in a registration moves to <code>.mcps-secrets</code> once you have put it there, relative paths become absolute, and the root's <code>.gitignore</code> gains missing lines.</li>
+          <li><strong>Cursor asks you to approve a server again</strong> whenever its entry changes. The report names each one.</li>
+        </ul>
+        <p>The plugin itself is updated from your terminal. Updates are pulled, never pushed:</p>
+        <div class="codeblock">
+          <pre><code>claude plugin marketplace update envoydev
+claude plugin update alfred-tools@envoydev</code></pre>
+          <button type="button">Copy</button>
+        </div>
+        <p>Then run <code>/alfred-tools:update</code> in each project.</p>
+      </div>
+    </section>
+
+    <section id="tools">
+      <h2>The tools</h2>
+      <p>Fourteen MCP servers, each tested in Claude Code and in Cursor. A tool that works in one app only is not in the catalog. Every package is pinned to an exact version; the ones shown here are the catalog's in 0.5.2.</p>
+      <div class="filter" role="group" aria-label="Show a group of tools">
+        <button type="button" id="f-all" data-filter="all" aria-pressed="true">All 14</button>
+        <button type="button" id="f-code" data-filter="code" aria-pressed="false">Code</button>
+        <button type="button" id="f-docs" data-filter="docs" aria-pressed="false">Docs and forges</button>
+        <button type="button" id="f-browsers" data-filter="browsers" aria-pressed="false">Browsers</button>
+        <button type="button" id="f-machine" data-filter="machine" aria-pressed="false">Machine and monitoring</button>
+      </div>
+
+      <div class="tool-group" data-group="code">
+        <h3>Code</h3>
+
+        <article class="tool" id="tool-serena">
+          <div class="tool-name"><h4>serena</h4><p>local</p></div>
+          <div class="tool-body">
+            <p class="tool-sum">Code navigation that understands symbols, not just text.</p>
+            <p>serena starts a language server for your project and answers structural questions: what a file defines, where a symbol is declared, what implements an interface, and everything that references a symbol. That is more reliable than a text search when a name is common or reused.</p>
+            <p>The plugin runs it with its own context file, <code>serena-context.yml</code>, which gives it navigation tools only: <code>get_symbols_overview</code>, <code>find_symbol</code>, <code>find_declaration</code>, <code>find_implementations</code> and <code>find_referencing_symbols</code>. Reading, editing and searching files stay with the app's own tools. Its web dashboard and usage reporting are off.</p>
+            <dl class="facts">
+              <div><dt>Runs</dt><dd><code>uvx</code>, Python 3.13 - <code>serena-agent</code> 2.1.0</dd></div>
+              <div><dt>Needs</dt><dd><code>uvx</code></dd></div>
+              <div><dt>Key</dt><dd>None</dd></div>
+              <div><dt>Data</dt><dd>serena's home, <code>&lt;root&gt;/serena</code></dd></div>
+            </dl>
+          </div>
+        </article>
+
+        <article class="tool" id="tool-memory">
+          <div class="tool-name"><h4>memory</h4><p>local</p></div>
+          <div class="tool-body">
+            <p class="tool-sum">A memory that lasts across sessions.</p>
+            <p>Runs mcp-memory-service with a local SQLite database. Claude can store notes and decisions and search them later by meaning, so a new session can pick up what an earlier one learned. Nothing leaves your machine.</p>
+            <p>The database follows the scope you install at: Global is one memory shared by every project, Local or Project is this project's own. The first start downloads an embedding model, which takes about 2 minutes. Install does that in the background.</p>
+            <dl class="facts">
+              <div><dt>Runs</dt><dd><code>uvx</code>, Python 3.13 - <code>mcp-memory-service</code> 12.5.0</dd></div>
+              <div><dt>Needs</dt><dd><code>uvx</code></dd></div>
+              <div><dt>Key</dt><dd>None</dd></div>
+              <div><dt>Data</dt><dd><code>&lt;root&gt;/memory/memory.db</code></dd></div>
+            </dl>
+          </div>
+        </article>
+      </div>
+
+      <div class="tool-group" data-group="docs">
+        <h3>Docs and forges</h3>
+
+        <article class="tool" id="tool-context7">
+          <div class="tool-name"><h4>context7</h4><p>hosted or local</p></div>
+          <div class="tool-body">
+            <p class="tool-sum">Current documentation for libraries and frameworks.</p>
+            <p>Claude asks context7 for the docs of a library and gets the current version's pages and examples, instead of relying on what it remembers. Useful for anything that changes often.</p>
+            <dl class="facts">
+              <div><dt>Hosted</dt><dd><code>https://mcp.context7.com/mcp</code> - recommended, nothing to run</dd></div>
+              <div><dt>Local</dt><dd><code>npx</code> - <code>@upstash/context7-mcp</code> 4.5.0</dd></div>
+              <div><dt>Key</dt><dd>Optional, <code>CONTEXT7_API_KEY</code>. Without it the rate limits are lower.</dd></div>
+            </dl>
+          </div>
+        </article>
+
+        <article class="tool" id="tool-github">
+          <div class="tool-name"><h4>github</h4><p>hosted or local</p></div>
+          <div class="tool-body">
+            <p class="tool-sum">GitHub repositories, issues and pull requests.</p>
+            <p>GitHub's own MCP server. Claude can read and search code, and work with issues and pull requests, with the permissions of the token you give it.</p>
+            <dl class="facts">
+              <div><dt>Hosted</dt><dd><code>https://api.githubcopilot.com/mcp/</code> - recommended</dd></div>
+              <div><dt>Local</dt><dd>Docker - <code>ghcr.io/github/github-mcp-server</code> v2.1.0, or the <code>github-mcp-server</code> binary when Docker is not there</dd></div>
+              <div><dt>Key</dt><dd>Required, <code>GITHUB_PERSONAL_ACCESS_TOKEN</code> - a GitHub personal access token</dd></div>
+            </dl>
+          </div>
+        </article>
+
+        <article class="tool" id="tool-gitlab">
+          <div class="tool-name"><h4>gitlab</h4><p>hosted</p></div>
+          <div class="tool-body">
+            <p class="tool-sum">GitLab issues, merge requests and code.</p>
+            <p>GitLab's own hosted MCP server, on gitlab.com or on your self-managed host. Install asks for the host.</p>
+            <dl class="facts">
+              <div><dt>Hosted</dt><dd><code>https://&lt;host&gt;/api/v4/mcp</code></dd></div>
+              <div><dt>Key</dt><dd>Recommended, <code>GITLAB_TOKEN</code>. It must be a fine-grained personal access token with the MCP tool resource and the Execute permission. A legacy, project or group token is refused.</dd></div>
+              <div><dt>No key</dt><dd>Signs in with OAuth in the browser</dd></div>
+            </dl>
+          </div>
+        </article>
+
+        <article class="tool" id="tool-atlassian">
+          <div class="tool-name"><h4>atlassian</h4><p>hosted</p></div>
+          <div class="tool-body">
+            <p class="tool-sum">Jira and Confluence.</p>
+            <p>Atlassian's hosted Rovo MCP server. Claude can search and read Jira issues and Confluence pages, and work with them as your account allows.</p>
+            <dl class="facts">
+              <div><dt>Hosted</dt><dd><code>https://mcp.atlassian.com/v2/mcp</code></dd></div>
+              <div><dt>Key</dt><dd>Recommended, <code>ATLASSIAN_API_TOKEN</code>. The value is <code>email:api_token</code> - your account email, a colon, the token. An org admin must turn API-token sign-in on.</dd></div>
+              <div><dt>No key</dt><dd>Signs in with OAuth. Some tools are missing with a token; OAuth has them all.</dd></div>
+            </dl>
+          </div>
+        </article>
+      </div>
+
+      <div class="tool-group" data-group="browsers">
+        <h3>Browsers</h3>
+
+        <article class="tool" id="tool-playwright">
+          <div class="tool-name"><h4>playwright-chrome<br>playwright-msedge<br>playwright-firefox<br>playwright-webkit</h4><p>local, one per engine</p></div>
+          <div class="tool-body">
+            <p class="tool-sum">A browser Claude can drive.</p>
+            <p>Four separate tools built on Playwright MCP, one per browser engine. Claude can open pages, click, type, read what is on screen and take screenshots. That covers checking a change in a real browser or walking through a flow on a site.</p>
+            <p>Each one keeps its own profile folder, so a login you make stays for the next session and the browsers do not share cookies. Install as many engines as you want to test in.</p>
+            <dl class="facts">
+              <div><dt>Runs</dt><dd><code>npx</code> - <code>@playwright/mcp</code> 0.0.84</dd></div>
+              <div><dt>Needs</dt><dd><code>npx</code>. playwright-chrome needs Chrome installed, playwright-msedge needs Edge. You can also name a browser binary.</dd></div>
+              <div><dt>Key</dt><dd>None</dd></div>
+              <div><dt>Data</dt><dd>The profile in <code>&lt;root&gt;/&lt;name&gt;</code>, saved files in <code>&lt;root&gt;/&lt;name&gt;/output</code></dd></div>
+            </dl>
+            <p class="caution"><b>Can run code.</b> The <code>browser_run_code_unsafe</code> tool runs arbitrary JavaScript in the page and the browser. The install plan names it.</p>
+          </div>
+        </article>
+      </div>
+
+      <div class="tool-group" data-group="machine">
+        <h3>Machine and monitoring</h3>
+
+        <article class="tool" id="tool-appium">
+          <div class="tool-name"><h4>appium</h4><p>local</p></div>
+          <div class="tool-body">
+            <p class="tool-sum">Android and iOS app automation.</p>
+            <p>Lets Claude drive a mobile app through Appium on an emulator, a simulator or a real device: tap, type, read the screen and take screenshots. Screenshots and page sources are saved in its data folder.</p>
+            <p>It is set up conservatively: remote app downloads are off, and a remote Appium server is accepted only on this machine (localhost). Install runs <code>npm audit</code> on the package and shows the result before you confirm.</p>
+            <dl class="facts">
+              <div><dt>Runs</dt><dd><code>npx</code> - <code>appium-mcp</code> 1.99.3, registered as <code>appium-mcp</code></dd></div>
+              <div><dt>Needs</dt><dd><code>npx</code>, the Android SDK, a JDK</dd></div>
+              <div><dt>Key</dt><dd>None</dd></div>
+              <div><dt>Data</dt><dd><code>&lt;root&gt;/appium-mcp</code></dd></div>
+            </dl>
+          </div>
+        </article>
+
+        <article class="tool" id="tool-macos">
+          <div class="tool-name"><h4>macos-control</h4><p>local, macOS only</p></div>
+          <div class="tool-body">
+            <p class="tool-sum">Control of the macOS desktop.</p>
+            <p>Lets Claude see and operate desktop apps on your Mac: windows, clicks, keystrokes. Its telemetry is off.</p>
+            <dl class="facts">
+              <div><dt>Runs</dt><dd><code>uvx</code>, Python 3.13 - <code>macos-mcp</code> 0.4.7, registered as <code>macos-desktop</code></dd></div>
+              <div><dt>Needs</dt><dd><code>uvx</code></dd></div>
+              <div><dt>Key</dt><dd>None</dd></div>
+            </dl>
+            <p class="caution"><b>Can run code.</b> Its <code>Shell</code> tool runs shell commands and AppleScript.</p>
+          </div>
+        </article>
+
+        <article class="tool" id="tool-windows">
+          <div class="tool-name"><h4>windows-control</h4><p>local, Windows only</p></div>
+          <div class="tool-body">
+            <p class="tool-sum">Control of the Windows desktop.</p>
+            <p>Lets Claude see and operate desktop apps on Windows. The plugin switches off its PowerShell, Registry, Process and FileSystem tools, and its telemetry.</p>
+            <dl class="facts">
+              <div><dt>Runs</dt><dd><code>uvx</code>, Python 3.14 - <code>windows-mcp</code> 0.8.8, registered as <code>windows-desktop</code></dd></div>
+              <div><dt>Needs</dt><dd><code>uvx</code></dd></div>
+              <div><dt>Key</dt><dd>None</dd></div>
+            </dl>
+            <p class="caution"><b>Can run code.</b> Its <code>App</code> tool can start any program with the arguments it is given.</p>
+          </div>
+        </article>
+
+        <article class="tool" id="tool-sentry">
+          <div class="tool-name"><h4>sentry</h4><p>hosted, local or bridge</p></div>
+          <div class="tool-body">
+            <p class="tool-sum">Sentry issues and events.</p>
+            <p>Claude can look up an error, read its stack trace and events, and connect it to your code. There are three ways to run it.</p>
+            <dl class="facts">
+              <div><dt>Hosted</dt><dd><code>https://mcp.sentry.dev/mcp</code> - recommended. A key, or OAuth without one.</dd></div>
+              <div><dt>Local</dt><dd><code>npx</code> - <code>@sentry/mcp-server</code> 0.42.0. A key is required.</dd></div>
+              <div><dt>Bridge</dt><dd>The hosted server, limited to one organization and project. See <a href="#bridge">the Sentry bridge</a>.</dd></div>
+              <div><dt>Key</dt><dd>Recommended, <code>SENTRY_ACCESS_TOKEN</code> - a Sentry user auth token</dd></div>
+            </dl>
+          </div>
+        </article>
+      </div>
+
+      <p>Tools in the Code, Browsers and Machine groups keep data on your machine, so they are recommended at Local scope. The hosted, keyed ones (github, gitlab, atlassian, sentry, context7 with a key) are recommended at Global scope.</p>
+      <p>claude-hud, typescript-lsp and csharp-lsp left the catalog in 0.5.0 because they work in Claude Code only. If you have them, they keep working; <code>/alfred-tools:update</code> offers once to uninstall each and remembers a 'No'.</p>
+    </section>
+
+    <section id="choices">
+      <h2>Which settings to pick</h2>
+      <p>'Use the recommended settings' is a good answer for most tools. When you set one up yourself, these are the questions.</p>
+
+      <h3>Scope: where the server is registered</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Scope</th><th>Who gets it</th><th>Claude Code</th><th>Cursor</th><th>Recommended for</th></tr></thead>
+          <tbody>
+            <tr><td>Global</td><td class="wrap">Every project on this machine</td><td class="wrap">Your account file, <code>~/.claude.json</code></td><td class="wrap"><code>~/.cursor/mcp.json</code></td><td class="wrap">Hosted servers with a key</td></tr>
+            <tr><td>Project</td><td class="wrap">Everyone who clones the project</td><td class="wrap"><code>.mcp.json</code>, which you commit</td><td class="wrap"><code>.cursor/mcp.json</code></td><td class="wrap">A server the team shares</td></tr>
+            <tr><td>Local</td><td class="wrap">This project, only you</td><td class="wrap">Your account file, under this project</td><td class="wrap"><code>.cursor/mcp.json</code></td><td class="wrap">Local tools: serena, memory, browsers, appium, desktop control</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li><strong>Project scope writes this machine's paths.</strong> A teammate who clones the project runs <code>/alfred-tools:fix</code> once to point them at their own machine.</li>
+        <li><strong>A hosted server with a key works best at Global scope.</strong> At Project scope, a session started in a subfolder connects without its key, because Claude Code does not run a parent folder's key helper there.</li>
+        <li><strong>Cursor has no private file per project.</strong> A Local server set up for Cursor goes in <code>.cursor/mcp.json</code>, which projects usually commit. The plan says so when git would commit it; add that file to <code>.gitignore</code> to keep it yours.</li>
+      </ul>
+
+      <h3>The other questions</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Question</th><th>What it decides</th><th>What to choose</th></tr></thead>
+          <tbody>
+            <tr><td>Route</td><td class="wrap">How the server runs. 'Hosted' is the vendor's server with nothing to run. 'Local' runs it on your machine.</td><td class="wrap">'Hosted' for context7, github and sentry. sentry also has 'Bridge'.</td></tr>
+            <tr><td>Apps</td><td class="wrap">Which apps get the server.</td><td class="wrap">'Claude Code and Cursor' when you use Cursor, else 'Claude Code only'.</td></tr>
+            <tr><td>API key</td><td class="wrap">Whether the server uses a key from <code>.mcps-secrets</code>.</td><td class="wrap">'Use a key' for every hosted server. Without one, context7 has lower limits, and gitlab, atlassian and sentry sign in with OAuth.</td></tr>
+            <tr><td>Key name</td><td class="wrap">The name the key has in <code>.mcps-secrets</code>.</td><td class="wrap">The default, unless you already keep the key under another name.</td></tr>
+            <tr><td>Name</td><td class="wrap">What the server is called in <code>/mcp</code>.</td><td class="wrap">The default. A second copy of a tool (two GitLab hosts) needs its own name.</td></tr>
+            <tr><td>Location</td><td class="wrap">The tool's data folder: a browser profile, serena's home, memory's database.</td><td class="wrap">The default, <code>&lt;root&gt;/&lt;name&gt;</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="keys">
+      <h2>Keys</h2>
+      <p>Every key lives in one plain text file per root folder, <code>.mcps-secrets</code>. The plugin writes the names. You write the values.</p>
+      <div class="codeblock">
+        <pre><code># keys for the hosted servers - never commit this file
+GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_...
+ATLASSIAN_API_TOKEN=me@example.com:ATATT3x...
+CONTEXT7_API_KEY=ctx7sk-...   # a note after whitespace and # is not part of the value</code></pre>
+        <button type="button">Copy</button>
+      </div>
+      <ul>
+        <li><strong>The plugin never handles a value.</strong> It does not ask for a key, read one out or print one. It names the file and the name, and tells you whether the value is filled.</li>
+        <li><strong>One key can serve every project.</strong> The key is looked up in the <code>.mcps-secrets</code> beside the helper first, then in the global root's. The first value found wins.</li>
+        <li><strong>Changing a key</strong> is: edit the file, then <code>/mcp</code>, pick the server, Reconnect.</li>
+        <li><strong>Kept out of AI sessions.</strong> The plugin adds a deny rule to your Claude Code settings so a session cannot open <code>.mcps-secrets</code>. The file is still plain text, so keep it out of anything you share. The root's <code>.gitignore</code> keeps it out of git.</li>
+      </ul>
+
+      <h3>How a server gets its key</h3>
+      <div class="routes">
+        <div>
+          <p><strong>A hosted server in Claude Code.</strong> A small helper script runs each time Claude Code connects and hands over the key. The registration itself holds no key.</p>
+          <div class="chain"><span>.mcps-secrets</span><i>&rarr;</i><span>mcp-headers.js</span><i>&rarr;</i><span>the vendor's server</span></div>
+        </div>
+        <div>
+          <p><strong>A hosted server in Cursor, or a bridge route.</strong> Cursor does not run Claude Code's helper, so its copy starts a small bridge that reads the same file and passes the key on in memory, never on a command line.</p>
+          <div class="chain"><span>.mcps-secrets</span><i>&rarr;</i><span>mcp-bridge.js</span><i>&rarr;</i><span>mcp-remote</span><i>&rarr;</i><span>the vendor's server</span></div>
+        </div>
+        <div>
+          <p><strong>A local server with a key</strong> (github in Docker, sentry with <code>npx</code>). The key is written into the registration when you apply, at Local or Global scope only, so it never lands in a file you commit. After you change the key, run <code>/alfred-tools:fix</code> to write it again.</p>
+          <div class="chain"><span>.mcps-secrets</span><i>&rarr;</i><span>the registration</span><i>&rarr;</i><span>the local server</span></div>
+        </div>
+      </div>
+
+      <h3>What each key is</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tool</th><th>Name</th><th>The value to write</th></tr></thead>
+          <tbody>
+            <tr><td>github</td><td><code>GITHUB_PERSONAL_ACCESS_TOKEN</code></td><td class="wrap">A GitHub personal access token</td></tr>
+            <tr><td>gitlab</td><td><code>GITLAB_TOKEN</code></td><td class="wrap">A fine-grained personal access token with the MCP tool resource and the Execute permission</td></tr>
+            <tr><td>atlassian</td><td><code>ATLASSIAN_API_TOKEN</code></td><td class="wrap"><code>email:api_token</code></td></tr>
+            <tr><td>sentry</td><td><code>SENTRY_ACCESS_TOKEN</code></td><td class="wrap">A Sentry user auth token</td></tr>
+            <tr><td>context7</td><td><code>CONTEXT7_API_KEY</code></td><td class="wrap">A Context7 API key (optional)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="how">
+      <h2>How it works</h2>
+
+      <h3>One list, two apps</h3>
+      <p>Claude Code and Cursor read different files, so a server set up in one is invisible to the other. Each root folder keeps one list, <code>mcps.json</code>: every server the plugin manages there, which apps it is for, and the entry each app gets. It never holds a key. Every command writes both apps from that list in the same run.</p>
+      <div class="wire">
+        <div class="box key"><b>The list</b><code>&lt;root&gt;/mcps.json</code><br>What is managed, and for which apps</div>
+        <div class="arrow" aria-hidden="true"></div>
+        <div class="stack">
+          <div class="box"><b>Claude Code</b>Written through the <code>claude</code> CLI: <code>.mcp.json</code> and your account file</div>
+          <div class="box"><b>Cursor</b>Written by the plugin: <code>.cursor/mcp.json</code> and <code>~/.cursor/mcp.json</code></div>
+        </div>
+      </div>
+
+      <h3>The rules it keeps</h3>
+      <ul>
+        <li><strong>Plain registrations.</strong> Each server is registered the standard way, as if you had typed <code>claude mcp add-json</code> yourself. Nothing of the plugin sits between the app and the server, so servers keep working if you uninstall it. The one exception is the small bridge described below, which lives in your root folder.</li>
+        <li><strong>A server is recognised by what it launches</strong> (its package, or its URL), not by its name. A tool you renamed is still found, and a server of your own is never mistaken for one of the plugin's.</li>
+        <li><strong>Your entries in Cursor stay.</strong> A server you added to Cursor's file yourself is kept in place. A name you already use there is replaced only after a question.</li>
+        <li><strong>Pinned versions.</strong> Each package is fixed to an exact version that was at least 7 days old when it was chosen, so a release published an hour ago never runs on your machine unreviewed.</li>
+        <li><strong>Absolute paths.</strong> Every path the plugin writes is absolute, so a session started in a subfolder uses the same profile, index and database.</li>
+        <li><strong>Prepared before first use.</strong> Claude Code gives a server 30 seconds to answer, and a first download can take minutes. Install downloads each package and starts the server once in the background, so your next session connects in time.</li>
+      </ul>
+
+      <h3>One sign-in for both apps</h3>
+      <p>gitlab, atlassian and sentry's hosted route sign in with OAuth when you give them no key. Set up for both apps, each runs through <a href="https://www.npmjs.com/package/mcp-remote">mcp-remote</a> with its sign-in folder set to the root, so you sign in once in the browser and both apps use it.</p>
+      <ul>
+        <li>The sign-in files are in <code>&lt;root&gt;/mcp-remote-v1/</code>. They are tokens: the plugin never reads, prints or copies them, the root's <code>.gitignore</code> keeps them out of git, and a deny rule keeps AI sessions out of the folder.</li>
+        <li>To sign out, delete that folder. The next start opens the browser again.</li>
+        <li>If the sign-in fails in both apps, the vendor may have turned this kind of sign-in off. Use a key instead: <code>/alfred-tools:configure &lt;tool&gt;</code>, then 'Use a key from .mcps-secrets'.</li>
+      </ul>
+
+      <h3 id="bridge">The Sentry bridge: one organization and project</h3>
+      <p>Sentry's hosted server is limited to an organization and a project only through its URL. The 'Bridge' route builds that URL from <code>.mcps-secrets</code> each time the server starts, so switching projects is: change a line, then restart.</p>
+      <ol class="steps">
+        <li><div>Run <code>/alfred-tools:install sentry</code>, choose 'Set sentry up' and the route 'Bridge'. Project scope is recommended here: the registration holds names only.</div></li>
+        <li><div>Keep the names it offers: <code>SENTRY_ACCESS_TOKEN</code>, <code>SENTRY_ORG</code> and <code>SENTRY_PROJECT</code>.</div></li>
+        <li><div>Fill them in the <code>.mcps-secrets</code> the plan names. Leave <code>SENTRY_PROJECT</code> empty for the whole organization.</div></li>
+        <li><div>Restart Claude Code, or Reconnect the server in <code>/mcp</code>. Do the same after each change to these lines.</div></li>
+      </ol>
+      <div class="codeblock">
+        <pre><code>SENTRY_ACCESS_TOKEN=sntryu_...
+SENTRY_ORG=my-org
+SENTRY_PROJECT=my-project</code></pre>
+        <button type="button">Copy</button>
+      </div>
+      <p>The server does not start until the key and the organization are filled. A wrong token shows at the first tool call, as Sentry's own error.</p>
+    </section>
+
+    <section id="files">
+      <h2>Where the files go</h2>
+      <p>Everything the plugin writes sits in one of two root folders. Install asks for each one once.</p>
+      <ul>
+        <li><strong>The project root</strong>, for Project and Local scope: <code>.alfred-tools</code> in your project (<code>.alfred</code> when alfred-code is set up there), or a folder you name.</li>
+        <li><strong>The global root</strong>, for Global scope: <code>~/.alfred-tools</code> (<code>~/.alfred</code> when it exists), or a folder you name.</li>
+      </ul>
+      <div class="codeblock">
+        <pre class="tree"><code>.alfred-tools/
+  .mcps-secrets          your keys - you write the values
+  mcps.json              the list of servers the plugin manages here
+  mcp-headers.js         the key helper for hosted servers
+  mcp-bridge.js          the bridge - only when a server needs it
+  package.json           lets the two scripts load in any project
+  serena-context.yml     serena's navigation-only setup
+  .gitignore             keeps keys, sign-ins and data out of git
+  mcp-remote-v1/         OAuth sign-ins, after the first one
+  serena/                one data folder per tool
+  memory/
+  playwright-chrome/</code></pre>
+      </div>
+      <p>The only files outside a root are the apps' own: <code>.mcp.json</code> and your account file for Claude Code, <code>.cursor/mcp.json</code> and <code>~/.cursor/mcp.json</code> for Cursor.</p>
+    </section>
+
+    <section id="trouble">
+      <h2>When something is wrong</h2>
+      <p>Run <code>/alfred-tools:fix</code> first. It knows most of these and applies the recorded fix after you confirm.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>What you see</th><th>Likely cause</th><th>What to do</th></tr></thead>
+          <tbody>
+            <tr><td class="wrap">A hosted server connects but has no access</td><td class="wrap">The key is not filled, the folder's trust prompt was not accepted, or the session started in a subfolder</td><td class="wrap">Fill the key and Reconnect. Accept the trust prompt. Start Claude in the project folder, or use Global scope.</td></tr>
+            <tr><td class="wrap">'The server refused the key'</td><td class="wrap">The value is the wrong kind for that server</td><td class="wrap">gitlab takes a fine-grained token, atlassian takes <code>email:api_token</code>. Fix the value, then Reconnect.</td></tr>
+            <tr><td class="wrap">A server times out on its first start</td><td class="wrap">Its package or model is still downloading</td><td class="wrap">Wait for the background download to report, then restart. memory's first start takes about 2 minutes.</td></tr>
+            <tr><td class="wrap">An <code>npx</code> server fails at every start with <code>ENOENT</code></td><td class="wrap">A session was started during the first download</td><td class="wrap">Run fix. It repairs the broken cache folder.</td></tr>
+            <tr><td class="wrap">The Sentry bridge does not start</td><td class="wrap">The key or the organization is not filled, or the bridge file is missing or old</td><td class="wrap">Fill both lines. Run fix.</td></tr>
+            <tr><td class="wrap">Servers break after moving or cloning the project</td><td class="wrap">The paths written are the old machine's or folder's</td><td class="wrap">Run fix in the project.</td></tr>
+            <tr><td class="wrap">Cursor asks to approve a server again</td><td class="wrap">Cursor re-asks whenever an entry changes</td><td class="wrap">Approve it. This is expected after an update.</td></tr>
+            <tr><td class="wrap">Cursor does not see a project's servers</td><td class="wrap">Cursor reads only the folder it opens, not a parent folder</td><td class="wrap">Open Cursor at the project, or install at Global scope.</td></tr>
+            <tr><td class="wrap">Claude Code and Cursor disagree about a server</td><td class="wrap">One app's copy was edited by hand</td><td class="wrap">Run fix. It asks which copy stays.</td></tr>
+            <tr><td class="wrap">OAuth sign-in fails in both apps</td><td class="wrap">The vendor turned that sign-in off</td><td class="wrap">Use a key: configure, then 'Use a key from .mcps-secrets'.</td></tr>
+            <tr><td class="wrap">git wants to commit a data folder, key file or sign-in folder</td><td class="wrap">A <code>.gitignore</code> line is missing</td><td class="wrap">Run fix. It adds the line.</td></tr>
+            <tr><td class="wrap">A <code>uvx</code> or <code>npx</code> server fails on Windows, or appium cannot find the Android SDK or a JDK</td><td class="wrap">A known platform problem</td><td class="wrap">Run fix.</td></tr>
+            <tr><td class="wrap">A script stops with <code>Unknown file extension ".ts"</code></td><td class="wrap">Node is older than 22.18</td><td class="wrap">Update Node. <code>node --version</code> shows yours.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      <p>Describes alfred-tools 0.5.2. Source and full reference: <a href="https://github.com/envoydev/alfred-tools">github.com/envoydev/alfred-tools</a></p>
+    </footer>
+
+  </main>
+</div>
+
+<script>
+(function () {
+  var buttons = document.querySelectorAll('[data-filter]');
+  var groups = document.querySelectorAll('.tool-group');
+  buttons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      var wanted = button.getAttribute('data-filter');
+      buttons.forEach(function (other) {
+        other.setAttribute('aria-pressed', other === button ? 'true' : 'false');
+      });
+      groups.forEach(function (group) {
+        group.hidden = wanted !== 'all' && group.getAttribute('data-group') !== wanted;
+      });
+    });
+  });
+
+  document.querySelectorAll('.codeblock').forEach(function (block) {
+    var button = block.querySelector('button');
+    var pre = block.querySelector('pre');
+    if (!button || !pre) return;
+    function label(text) {
+      button.textContent = text;
+      setTimeout(function () { button.textContent = 'Copy'; }, 1800);
+    }
+    function selectText() {
+      var range = document.createRange();
+      range.selectNodeContents(pre);
+      var selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      label('Selected');
+    }
+    button.addEventListener('click', function () {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(pre.textContent).then(function () { label('Copied'); }, selectText);
+      } else {
+        selectText();
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>
