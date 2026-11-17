@@ -891,6 +891,27 @@ test('update offers a lower serena-context.yml as context:<file> and rewrites it
     finally { w.clean(); }
 });
 
+test('the context file offer finds a copy per home', async () => {
+    const w = world();
+    try
+    {
+        const home = path.join(w.project, '.alfred-tools', 'serena');
+        fs.mkdirSync(home, { recursive: true });
+        const file = path.join(home, 'serena-context.yml');
+        fs.writeFileSync(file, roots.shippedSource('serenaContext').replace(/^# alfred-tools serena-context \d+/, '# alfred-tools serena-context 0'));
+        const S = { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-10-20T23:59:59Z', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server', '--context', file, '--project-from-cwd'], env: { SERENA_USAGE_REPORTING: 'false', SERENA_HOME: home } };
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'serena', JSON.stringify(S), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        const registry = fakeRegistry({ 'pypi:serena-agent': [{ version: '2.1.0', time: ago(30) }] });
+        const c = await run(w, ['--check', '--no-refresh'], { registry });
+        assert.strictEqual(c.code, 0, c.text);
+        assert.match(c.text, /serena-context\.yml in .*serena +0 -> 2/);
+        const a = await run(w, ['--apply', `context:${file}`], { registry });
+        assert.strictEqual(a.code, 0, a.text);
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), roots.shippedSource('serenaContext'));
+    }
+    finally { w.clean(); }
+});
+
 // ---- 0.5.0: every pin move reaches the list and Cursor; update offers Cursor once per root (spec D1, D9) ------------
 const projectList = (w: World) => path.join(w.project, '.alfred-tools', 'mcps.json');
 const projectCursor = (w: World) => path.join(w.project, '.cursor', 'mcp.json');

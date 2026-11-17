@@ -31,7 +31,7 @@ import * as mcpOrder from '../mcps-list/mcp-order.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { addAndVerify, rowOf, removeAndVerify, restoreBy, makeRunner, restoreStep, fillStep } from './cli-steps.ts';
-import { rootIgnore, writeHelper, writeShipped, moveRootFile, ensureKeyName, listWrite, retireRecord, denyRead, recordRoot, failureLists } from './file-steps.ts';
+import { rootIgnore, writeHelper, writeShipped, moveRootFile, ensureKeyName, listWrite, retireRecord, retireShipped, denyRead, recordRoot, failureLists } from './file-steps.ts';
 import { emptyBaseModes } from './serena-config.ts';
 import type { Endpoint, McpAddStep, McpMoveStep, McpReplaceStep, PlanStep, Reconnect } from '../plan/types.ts';
 import type { ApplyCtx, ApplyOptions, ApplyPlan, ApplyReport, StepResult, Status } from './types.ts';
@@ -57,6 +57,7 @@ export function runStep(step: PlanStep, context: ApplyCtx): StepResult
         case 'ensure-key-name': return ensureKeyName(step.file, step.names);
         case 'list-write': return listWrite(step, context);
         case 'retire-record': return retireRecord(step.file);
+        case 'retire-shipped': return retireShipped(step);
         case 'cursor-write': return cursorMcp.cursorWrite(step, context);
         case 'deny-read': return denyRead(step.file, step.rules || []);
         // never fails the apply: a warning, and the file as it was (spec F8)

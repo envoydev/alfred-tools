@@ -419,7 +419,8 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
     // a launch the cache may not hold yet is fetched once it is written (entries/names.ts fetchStep says why); a change that
     // keeps the package, such as a location or a name, fetches nothing
     const fetch = fetchStep(name, entry, row.id, current && current.entry);
-    const uses: RootUses = { helper: Boolean(entry.headersHelper) || Boolean(bridge), bridge: Boolean(bridge) || form === 'two', serenaContext: contextArgAt(entry) >= 0, keyFile, keyName, keyNames, data: dataAbs };
+    const contextAt = contextArgAt(entry);
+    const uses: RootUses = { helper: Boolean(entry.headersHelper) || Boolean(bridge), bridge: Boolean(bridge) || form === 'two', serenaContext: contextAt >= 0 ? pathFor(context.platform).dirname(entry.args![contextAt]!) : undefined, keyFile, keyName, keyNames, data: dataAbs };
     // the shared sign-in's folder sits in the family's root: the root is written (its .gitignore) like any other
     const signInRoot = () => { if (form === 'signin') context.uses.push({ family: roots.familyOf(scope), root: context.roots![roots.familyOf(scope)]! }); };
     // the apps and the form this registration is listed with (plan/lists.ts)

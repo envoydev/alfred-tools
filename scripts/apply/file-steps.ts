@@ -12,7 +12,7 @@ import { HELPER_VERSION } from '../copied/mcp-headers.js';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import type { ListServer, McpsList } from '../mcps-list/types.ts';
 import type { ShippedKind } from '../roots/types.ts';
-import type { ListWriteStep, RecordRootStep } from '../plan/types.ts';
+import type { ListWriteStep, RecordRootStep, RetireShippedStep } from '../plan/types.ts';
 import type { ApplyCtx, ApplyPlan, ApplyReport, StepResult } from './types.ts';
 
 // ---- the file steps (spec D2-D4, D6, D8): each skips what is in place, so a re-run after a failed add writes nothing again
@@ -95,7 +95,13 @@ export function writeShipped(kind: ShippedKind, root: string): StepResult
     const file = path.join(root, roots.FILES[kind]);
     const { state, number } = roots.shippedState(kind, file);
     const { word, version, plain } = SHIPPED[kind];
-    if (plain) fs.mkdirSync(root, { recursive: true });
+    // serena's home is made here before its data-folder step runs (which leaves a folder that exists as it is): a folder this
+    // write creates gets the same .gitignore holding * so serena_config.yml, with its auth_secret, is never committed
+    if (plain && !fs.existsSync(root))
+    {
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(path.join(root, '.gitignore'), '*\n');
+    }
     const packageJsonResult = plain ? { wrote: false, note: null } : ensureCommonjs(root);
     const withPkg = (detail: string): StepResult => ({ ok: true, detail: [detail, packageJsonResult.wrote ? `wrote ${path.join(root, 'package.json')} (type commonjs)` : null, packageJsonResult.note].filter(Boolean).join('; ') });
     if (state === 'same') return withPkg(`${file} is up to date - left as it is`);
@@ -265,6 +271,18 @@ export function retireRecord(file: string): StepResult
     for (let suffix = 2; fs.existsSync(to); suffix++) to = `${file}.0.4.bak.${suffix}`;
     fs.renameSync(file, to);
     return { ok: true, detail: `moved ${file} to ${to} - its entries are in the list now` };
+}
+
+// The root's old copy of a shipped file: removed only when it is this plugin's own, unedited copy and no registration still
+// names it - else left, with the reason. The state is read now, when the step runs. Nothing but `file` is ever touched.
+export function retireShipped(step: RetireShippedStep): StepResult
+{
+    const { state } = roots.shippedState(step.kind, step.file);
+    if (state === 'absent') return { ok: true, detail: `${step.file} is already gone` };
+    if (state !== 'same') return { ok: true, detail: `left ${step.file} - edited by hand` };
+    if (step.namedBy.length) return { ok: true, detail: `left ${step.file} - still named by ${step.namedBy.join(', ')}` };
+    fs.rmSync(step.file);
+    return { ok: true, detail: `removed ${step.file}` };
 }
 
 // After a stop: every list-write of the plan again, so each list holds what was applied before the stop and nothing

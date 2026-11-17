@@ -22,7 +22,7 @@ export function useRoots(context: { platform: string; roots?: Roots | null | und
     const familyOf = (filePath: string | null | undefined): Family | null => (['project', 'global'] as Family[]).find((candidateFamily) => inside(rootFolders[candidateFamily], filePath)) || null;
     const family = roots.familyOf(scope);
     if (helper && rootFolders[family]) context.uses.push({ family, root: rootFolders[family]!, helper: true, bridge: Boolean(bridge), committed: scope === 'project' });
-    if (serenaContext && rootFolders[family]) context.uses.push({ family, root: rootFolders[family]!, serenaContext: true, committed: scope === 'project' });
+    if (serenaContext && rootFolders[family]) context.uses.push({ family, root: rootFolders[family]!, serenaContext, committed: scope === 'project' });
     const keyFamily = familyOf(keyFile);
     if (keyFamily) context.uses.push({ family: keyFamily, root: rootFolders[keyFamily]!, key: { file: keyFile!, name: keyName!, names: keyNames || [keyName!] } });
     const dataFamily = familyOf(data);
@@ -42,11 +42,11 @@ export function fileSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
     for (const family of ['project', 'global'])
         for (const rootUse of context.uses.filter((candidate) => candidate.family === family))
         {
-            const rootWrite: RootWrite = byRoot.get(rootUse.root) || { family, root: rootUse.root, helper: false, bridge: false, keys: new Map() };
+            const rootWrite: RootWrite = byRoot.get(rootUse.root) || { family, root: rootUse.root, helper: false, bridge: false, serenaContext: new Set(), keys: new Map() };
             byRoot.set(rootUse.root, rootWrite);
             if (rootUse.helper) rootWrite.helper = true;
             if (rootUse.bridge) rootWrite.bridge = true;
-            if (rootUse.serenaContext) rootWrite.serenaContext = true;
+            if (rootUse.serenaContext) rootWrite.serenaContext.add(rootUse.serenaContext);
             if (rootUse.committed) rootWrite.committed = true;
             if (rootUse.key) rootWrite.keys.set(rootUse.key.file, [...new Set([...(rootWrite.keys.get(rootUse.key.file) || []), ...(rootUse.key.names || [rootUse.key.name])])]);
         }
@@ -62,7 +62,7 @@ export function fileSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
             ignore.push({ op: 'root-ignore', path: rootWrite.root, why: `the new root ${rootWrite.root}: its .gitignore keeps the key file, the record and the data out of git` });
         // a key file git would commit gets no name; an ignored helper matters only to a project-scope server, whose
         // committed .mcp.json names it - the key file beside it is still ignored, so its names are written
-        const gap = existed ? roots.ignoreGap(rootWrite.root, rootWrite.family, { writes: [rootWrite.bridge && roots.FILES.bridge, rootWrite.serenaContext && roots.FILES.serenaContext].filter(Boolean) as string[] }) : null;
+        const gap = existed ? roots.ignoreGap(rootWrite.root, rootWrite.family, { writes: [rootWrite.bridge && roots.FILES.bridge, rootWrite.serenaContext.has(rootWrite.root) && roots.FILES.serenaContext].filter(Boolean) as string[] }) : null;
         // a root of this plugin's own files whose .gitignore predates a line GITIGNORE has now (0.5.0: the bridge and
         // serena's context): rootIgnore appends only the lines it lacks
         if (existed && pathApi.basename(rootWrite.root) !== '.alfred')
@@ -90,13 +90,13 @@ export function fileSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
             else if (state === 'higher') out.notes.push(`mcp-bridge.js in ${rootWrite.root} is newer than this plugin - update alfred-tools`);
             else if (state === 'edited') out.notes.push(`mcp-bridge.js in ${rootWrite.root} changed since alfred-tools wrote it - left as it is; /alfred-tools:fix (helper-stale) rewrites it`);
         }
-        if (rootWrite.serenaContext)
+        for (const folder of rootWrite.serenaContext)
         {
-            const { state } = roots.shippedState('serenaContext', pathApi.join(rootWrite.root, roots.FILES.serenaContext), exists);
+            const { state } = roots.shippedState('serenaContext', pathApi.join(folder, roots.FILES.serenaContext), exists);
             if (state === 'absent' || state === 'lower')
-                helpers.push({ op: 'write-serena-context', path: rootWrite.root, why: `${rootWrite.root}: serena-context.yml, the context serena runs with - code navigation only, in Claude Code and Cursor` });
-            else if (state === 'higher') out.notes.push(`serena-context.yml in ${rootWrite.root} is newer than this plugin - update alfred-tools`);
-            else if (state === 'edited') out.notes.push(`serena-context.yml in ${rootWrite.root} changed since alfred-tools wrote it - left as it is; /alfred-tools:fix (helper-stale) rewrites it`);
+                helpers.push({ op: 'write-serena-context', path: folder, why: `${folder}: serena-context.yml, the context serena runs with - code navigation only, in Claude Code and Cursor` });
+            else if (state === 'higher') out.notes.push(`serena-context.yml in ${folder} is newer than this plugin - update alfred-tools`);
+            else if (state === 'edited') out.notes.push(`serena-context.yml in ${folder} changed since alfred-tools wrote it - left as it is; /alfred-tools:fix (helper-stale) rewrites it`);
         }
         if (!gap || !gap.secrets)
             for (const [file, want] of rootWrite.keys)

@@ -78,14 +78,16 @@ function fresh(rowId: string, platform = 'darwin', arch = 'x64', scope = 'local'
     const win = platform === 'win32';
     const r = row(rowId);
     const ctx = { platform, arch, env: {}, home: win ? 'C:\\Users\\dev' : '/home/dev', project: win ? 'C:\\proj' : '/proj', ...where };
-    const rootStr = r.locations ? (win ? 'C:\\Users\\dev\\.pt\\x' : '/home/dev/.pt/x') : undefined;
+    // with a real home and project (a world's), serena's home is the install's: <root>/serena
+    const placed = where.home && where.project ? path.join(scope === 'user' ? where.home : where.project, '.alfred-tools', 'serena') : null;
+    const rootStr = r.locations ? (placed || (win ? 'C:\\Users\\dev\\.pt\\x' : '/home/dev/.pt/x')) : undefined;
     return buildEntry(r, 'local', { rootStr, scope, token: false }, ctx, catalog.rules);
 }
 
 const ids = (list: { id: string }[]) => list.map((f) => f.id);
-// a synthetic /proj never holds the serena-context.yml an install writes beside serena's entry (tests/plan.test.ts and
-// tests/apply.test.ts prove that write): its helper-missing finding is left out here, and only here
-const synthetic = (f: Finding) => f.id === 'helper-missing' && f.shipped === 'serenaContext' && /^(?:\/proj|C:\\proj)[\\/]/.test(f.path!);
+// a synthetic /proj and its home never hold the serena-context.yml an install writes in serena's home (tests/plan.test.ts and
+// tests/apply.test.ts prove that write): the findings about that missing file are left out here, and only here
+const synthetic = (f: Finding) => (f.id === 'helper-missing' && f.shipped === 'serenaContext' && /^(?:\/proj|\/home\/dev|C:\\proj|C:\\Users\\dev)[\\/]/.test(f.path!)) || (f.id === 'serena-context' && /, which is not there$/.test(f.found));
 const detect = (ctx: FixCtx, only?: string) => { const d = detectAll(ctx, { only }); return { ...d, found: d.found.filter((f) => !synthetic(f)) }; };
 
 // ---- the catalog is wired ------------------------------------------------------------------------------------------
@@ -631,7 +633,7 @@ test('fix detectors never return an inherited registration (data-folder-ignore, 
 test('--only narrows by fix id, tool or registration name; the table names the held row; nothing found says so', () =>
 {
     const entry = fresh('serena');
-    const stripped = { command: 'uvx', args: entry.args!.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python'), env: {} };
+    const stripped = { command: 'uvx', args: entry.args!.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python'), env: { SERENA_HOME: entry.env!.SERENA_HOME! } };
     const ctx = ctxFor({ registrations: [reg('serena', stripped), reg('memory', { command: 'uvx', args: ['--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'] })] });
     assert.deepStrictEqual(ids(detect(ctx).found).sort(), ['serena-telemetry', 'uvx-python', 'uvx-python']);
     assert.strictEqual(detect(ctx, 'serena').found.length, 2);
@@ -685,7 +687,7 @@ test('apply: two fixes on one registration are ONE replace, from the entry as re
         // the entry as the installer writes it on this machine, so the same two fixes apply on every OS - with its
         // context file in the global root, as the install leaves it
         const entry = fresh('serena', process.platform, process.arch, 'user', { project: w.project, home: w.home });
-        put(path.join(w.home, '.alfred-tools', 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
+        put(path.join(w.home, '.alfred-tools', 'serena', 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
         const theirs = {
             command: 'uvx',
             args: entry.args!.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python').map((a) => (a === 'serena-agent@2.1.0' ? 'serena-agent@2.0.0' : a)).concat(['--verbose']),
@@ -1685,7 +1687,7 @@ test('the file pass runs after the registration pass, detects on what it wrote, 
     {
         // uvx-python fires on it: no python request (its context file in place, as the install leaves it)
         const entry = fresh('serena', process.platform, process.arch, 'local', { project: w.project, home: w.home });
-        put(path.join(w.project, '.alfred-tools', 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
+        put(path.join(w.project, '.alfred-tools', 'serena', 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
         seed(w, 'serena', 'local', { ...entry, args: entry.args!.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python') });
         const l = logged();
         const res = applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
@@ -1791,13 +1793,95 @@ test('serena-context rewrites --context and writes the file first', () =>
         const l = logged();
         const res = applyFixes(ctxOf(w), ['serena-context'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
-        const want = path.join(ptRoot(w), 'serena-context.yml');
+        const want = path.join(ptRoot(w), 'serena', 'serena-context.yml');
         assert.strictEqual(ctxArg(localEntry(w, 'serena')!), want);
         assert.strictEqual(fsx.readFileSync(want, 'utf8'), rootsLib.shippedSource('serenaContext'));
         assert.ok(l.text().indexOf(`wrote ${want}`) < l.text().indexOf('rewrote \'serena\''), 'the file is written before the registration');
         assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-context'), []);
     }
     finally { w.clean(); }
+});
+
+test('serena-context fires on the root copy and on a missing file', () =>
+{
+    const w = world();
+    try
+    {
+        const home = path.join(ptRoot(w), 'serena');
+        const want = path.join(home, 'serena-context.yml');
+        const rootCopy = path.join(ptRoot(w), 'serena-context.yml');
+        const named = (file: string) => { const e = SERENA_OLD(home); e.args[e.args.indexOf('claude-code')] = file; return e; };
+        const foundFor = () => detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-context');
+        // a 0.5.2-shaped registration: the context is the root's copy
+        put(rootCopy, rootsLib.shippedSource('serenaContext'));
+        seed(w, 'serena', 'local', named(rootCopy));
+        assert.deepStrictEqual(foundFor().map((f) => [f.name, f.want]), [['serena', want]]);
+        // the home's path with no file there is found too
+        fsx.rmSync(rootCopy);
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w), ['serena-context'], { tmp: path.join(w.dir, 'tmp0'), log: l.log }).failed, null, l.text());
+        assert.deepStrictEqual(foundFor(), [], 'the repoint writes the home copy');
+        fsx.rmSync(want);
+        assert.deepStrictEqual(foundFor().map((f) => [f.name, f.want]), [['serena', want]], 'the registration names the home and the file is not there');
+        const l2 = logged();
+        assert.strictEqual(applyFixes(ctxOf(w), ['serena-context'], { tmp: path.join(w.dir, 'tmp1'), log: l2.log }).failed, null, l2.text());
+        assert.strictEqual(fsx.readFileSync(want, 'utf8'), rootsLib.shippedSource('serenaContext'));
+        assert.deepStrictEqual(foundFor(), []);
+        // alfred-code's home keeps the root's path: nothing to move
+        const alfredHome = path.join(w.project, '.alfred', 'serena', 'home');
+        put(rootCopy, rootsLib.shippedSource('serenaContext'));
+        const alfredEntry = named(rootCopy);
+        alfredEntry.env.SERENA_HOME = alfredHome;
+        seed(w, 'serena-alfred', 'project', alfredEntry);
+        assert.deepStrictEqual(foundFor().filter((f) => f.name === 'serena-alfred'), []);
+    }
+    finally { w.clean(); }
+});
+
+test('the root\'s old copy goes only when unedited and unnamed', () =>
+{
+    const home = (w: World) => path.join(ptRoot(w), 'serena');
+    const rootCopy = (w: World) => path.join(ptRoot(w), 'serena-context.yml');
+    const seedOld = (w: World, name = 'serena') => { const e = SERENA_OLD(home(w)); e.args[e.args.indexOf('claude-code')] = rootCopy(w); seed(w, name, 'local', e); };
+    // unedited and unnamed once the registration moves: removed
+    const a = world();
+    try
+    {
+        put(rootCopy(a), rootsLib.shippedSource('serenaContext'));
+        seedOld(a);
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(a), ['serena-context'], { tmp: path.join(a.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.ok(!fsx.existsSync(rootCopy(a)), l.text());
+        assert.ok(l.text().includes(`removed ${rootCopy(a)}`), l.text());
+        assert.strictEqual(fsx.readFileSync(path.join(home(a), 'serena-context.yml'), 'utf8'), rootsLib.shippedSource('serenaContext'));
+        assert.strictEqual(ctxArg(localEntry(a, 'serena')!), path.join(home(a), 'serena-context.yml'));
+    }
+    finally { a.clean(); }
+    // edited by hand: left and named
+    const b = world();
+    try
+    {
+        put(rootCopy(b), `${rootsLib.shippedSource('serenaContext')}# my own line\n`);
+        seedOld(b);
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(b), ['serena-context'], { tmp: path.join(b.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.ok(fsx.existsSync(rootCopy(b)));
+        assert.ok(l.text().includes(`left ${rootCopy(b)} - edited by hand`), l.text());
+    }
+    finally { b.clean(); }
+    // another registration still names it: left
+    const c = world();
+    try
+    {
+        put(rootCopy(c), rootsLib.shippedSource('serenaContext'));
+        seedOld(c);
+        seed(c, 'theirs', 'local', { command: 'node', args: ['their-launcher.js', '--context', rootCopy(c)] });
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(c), ['serena-context'], { tmp: path.join(c.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.ok(fsx.existsSync(rootCopy(c)));
+        assert.ok(l.text().includes(`left ${rootCopy(c)} - still named by theirs`), l.text());
+    }
+    finally { c.clean(); }
 });
 
 test('helper-missing covers serena\'s context file', () =>
@@ -1867,13 +1951,13 @@ test('a 0.4.x root .gitignore gains !mcp-bridge.js and !serena-context.yml from 
         const l = logged();
         assert.strictEqual(applyFixes(ctxOf(w), ['serena-context'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
         assert.strictEqual(fsx.readFileSync(path.join(ptRoot(w), '.gitignore'), 'utf8'), `${OLD}!mcp-bridge.js\n!serena-context.yml\n`);
-        assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), 'serena-context.yml')), false);
         assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), 'mcp-bridge.js')), false);
         assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), '.mcps-secrets')), true, 'the key file stays ignored');
         assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'root-ignore'), []);
         // fix root-ignore on its own: a root holding mcp-bridge.js under the old .gitignore
         fsx.writeFileSync(path.join(ptRoot(w), '.gitignore'), OLD);
         put(path.join(ptRoot(w), 'mcp-bridge.js'), rootsLib.shippedSource('bridge'));
+        put(path.join(ptRoot(w), 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
         const [f] = detectAll(ctxOf(w)).found.filter((x) => x.id === 'root-ignore') as [Finding];
         assert.ok(f && !f.blocked, JSON.stringify(f));
         assert.match(f.found, /mcp-bridge\.js/);

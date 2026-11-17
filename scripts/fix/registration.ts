@@ -3,6 +3,7 @@
 // apply.ts's mcp-replace, with a rollback; this file never writes.
 //
 // A finding the machine cannot act on carries `blocked` (the reason), is shown, and is never applied.
+import fs from 'node:fs';
 import path from 'node:path';
 import { pythonRequest, isWindowsArm, pathFor } from '../entries/platform.ts';
 import { validWindowsSerenaHome, serenaWindowsHome, serenaSpaceFree } from '../entries/locations.ts';
@@ -216,10 +217,11 @@ export function serenaTelemetryFix(entry: ServerEntry): ServerEntry
     return { ...entry, env: { ...(entry.env || {}), SERENA_USAGE_REPORTING: 'false' } };
 }
 
-// ---- serena-context (0.5.0, D7) --------------------------------------------------------------------------------------
-// A managed serena whose --context is not the context file in its family's root: 0.4.x ran Serena's own claude-code
-// context, whose instructions name Claude Code's tools. The fix points it at <root>/serena-context.yml; fix.ts plans the
-// file's write before the replace.
+// ---- serena-context (0.5.0, D7; the home's copy since 0.6.0) ---------------------------------------------------------
+// A managed serena whose --context is not this plugin's context file in its home (<SERENA_HOME>/serena-context.yml; the
+// family's root for a home the plugin keeps no files in) - 0.4.x ran Serena's own claude-code context, whose instructions
+// name Claude Code's tools, and 0.5.x kept the file in the root - or whose context file is not there. The fix points it at
+// the home's copy; fix.ts plans the file's write before the replace and retires the root's old copy afterwards.
 export function serenaContextDetect(context: FixCtx): Finding[]
 {
     const resolvedRoots = roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
@@ -227,12 +229,13 @@ export function serenaContextDetect(context: FixCtx): Finding[]
     {
         const root = resolvedRoots[roots.familyOf(registration.scope)];
         if (!root) return null;
-        const want = pathFor(context.platform).join(root, roots.FILES.serenaContext);
+        const want = C.homeContextOf(registration.entry, context.platform, roots.FILES.serenaContext) || pathFor(context.platform).join(root, roots.FILES.serenaContext);
         const args = registration.entry.args || [];
         const i = args.indexOf('--context');
         const now = i >= 0 ? args[i + 1] : null;
-        if (now === want) return null;
-        return C.finding('serena-context', registration, `serena runs with ${now ? `the context ${now}` : 'no --context'} - this plugin's ${want} gives it code navigation only, for Claude Code and Cursor`, { want, roots: resolvedRoots });
+        if (now === want && fs.existsSync(want)) return null;
+        const what = now === want ? `serena names the context ${want}, which is not there` : `serena runs with ${now ? `the context ${now}` : 'no --context'} - this plugin's ${want} gives it code navigation only, for Claude Code and Cursor`;
+        return C.finding('serena-context', registration, what, { want, roots: resolvedRoots });
     });
 }
 

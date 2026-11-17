@@ -18,6 +18,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathFor } from '../entries/platform.ts';
 import * as catalogLib from '../catalog/catalog.ts';
 import * as inventory from '../inventory/inventory.ts';
 import * as account from '../core/account.ts';
@@ -36,6 +37,7 @@ import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
 import * as declines from '../core/declines.ts';
 import { repairTail } from '../plan/repair-tail.ts';
+import { retireContextSteps, writeMissingContext } from './context-move.ts';
 import { driftQuestion } from '../plan/asks-other.ts';
 import type { Declined, Env, ServerEntry } from '../core/types.ts';
 import type { Catalog, CatalogRoute } from '../catalog/types.ts';
@@ -300,11 +302,16 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
                 entry = (F as unknown as Record<string, RegistrationFix>)[context.catalog.fixes.find((fixRow) => fixRow.id === finding.id)!.fix!]!(entry, finding, context, input);
         }
         catch (caught) { const error = caught as NodeJS.ErrnoException; result.failed = `${list[0]!.name}: ${error.message}`; log(`FAILED ${result.failed}`); return result; }
-        if (deepEqual(entry, registration.entry)) continue;
+        if (deepEqual(entry, registration.entry))
+        {
+            for (const finding of list.filter((candidate) => candidate.id === 'serena-context')) { const line = writeMissingContext(finding); if (line) log(line); }
+            continue;
+        }
         steps.push({ op: 'mcp-replace', name: registration.name, scope: registration.scope, entry, old: registration.entry, row: registration.rowId, route: registration.route, why: `${list.map((finding) => finding.id).join(' + ')}: rewrite '${registration.name}' from the registration as read` });
         if (entry.headersHelper && !registration.entry.headersHelper && fileCtx.roots) useRoots(fileCtx, registration.scope, { helper: true, keyFile: null, keyName: null, data: null });
-        // serena's context file (D7) is written into its root before the registration names it
-        if (contextArgAt(entry) >= 0 && fileCtx.roots) useRoots(fileCtx, registration.scope, { serenaContext: true });
+        // serena's context file (D7) is written into its folder - its home, else the root - before the registration names it
+        const contextAt = contextArgAt(entry);
+        if (contextAt >= 0 && fileCtx.roots) useRoots(fileCtx, registration.scope, { serenaContext: pathFor(context.platform).dirname(entry.args![contextAt]!) });
     }
     result.steps = steps.length;
     // each list the repaired servers sit in, and Cursor's files from them, in the same run (spec D1); a Cursor copy whose
@@ -329,7 +336,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         const files = fileCtx.uses.length ? fileSteps(context.inventory, fileCtx as ListCtx, { notes: fileNotes }) : { before: [] };
         for (const rootUse of [...new Map(fileCtx.uses.map((usage) => [usage.root, usage] as const)).values()]) log(`the key helper goes in the ${rootUse.family} root ${rootUse.root}`);
         for (const note of [...fileNotes, ...tailNotes]) log(`note: ${note}`);
-        const plan = { version: 1, project: context.inventory.project, os: context.platform, alfredCodeEnabled: Boolean(context.inventory.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch, ...tail], context.inventory.project, mcpOrder.ownProjectNames(context.inventory)), notes: [], errors: [], expect: steps.map((step) => ({ kind: 'mcp', name: step.name, scope: step.scope, route: context.inventory.registrations.find((candidate) => candidate.name === step.name && candidate.scope === step.scope)!.route })) };
+        const plan = { version: 1, project: context.inventory.project, os: context.platform, alfredCodeEnabled: Boolean(context.inventory.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch, ...tail, ...retireContextSteps(context, steps)], context.inventory.project, mcpOrder.ownProjectNames(context.inventory)), notes: [], errors: [], expect: steps.map((step) => ({ kind: 'mcp', name: step.name, scope: step.scope, route: context.inventory.registrations.find((candidate) => candidate.name === step.name && candidate.scope === step.scope)!.route })) };
         result.tmp = tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'alfred-tools-fix-'));
         const report = apply(plan, { env: context.env, tmp: result.tmp, runCli, log, fetchFile });
         result.fetchFile = report.fetchFile;

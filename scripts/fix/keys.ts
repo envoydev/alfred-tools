@@ -97,13 +97,13 @@ function shippedFiles(context: FixCtx, fixId: string): ShippedFile[]
         const named = roots.helperPathOf(registration.entry && registration.entry.headersHelper);
         if (named) add(roots.absOf(named, rootCtx(context)), 'helper', registration);
         // serena's context file (0.5.0, D7): the --context path a managed serena names
-        // only the root's own: a path elsewhere is serena-context's to repoint, and a folder there may not be writable
+        // only the root's own or the home's: a path elsewhere is serena-context's to repoint, and a folder there may not be writable
         const ctxAt = contextArgAt(registration.entry);
         if (ctxAt >= 0)
         {
             const file = roots.absOf(registration.entry.args![ctxAt], rootCtx(context));
             const root = (familyRoots || (familyRoots = rootsOf(context)))[roots.familyOf(registration.scope)];
-            if (root && file === pathApi.join(root, roots.FILES.serenaContext)) add(file, 'serenaContext', registration);
+            if ((root && file === pathApi.join(root, roots.FILES.serenaContext)) || file === C.homeContextOf(registration.entry, context.platform, roots.FILES.serenaContext)) add(file, 'serenaContext', registration);
         }
         const bridge = bridgeParts(registration.entry);
         if (!bridge) continue;

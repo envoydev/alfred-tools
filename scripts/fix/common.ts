@@ -9,6 +9,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { launchTokens, bareName } from '../inventory/inventory.ts';
 import * as E from '../entries/locations.ts';
+import * as serenaConfig from '../apply/serena-config.ts';
+import { pathFor } from '../entries/platform.ts';
 import type { Env, ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow, FixRow } from '../catalog/types.ts';
 import type { InvRegistration } from '../inventory/types.ts';
@@ -91,3 +93,12 @@ export function realMachine({ env = process.env, platform = process.platform }: 
     };
 }
 
+
+// serena's context file in its home: <SERENA_HOME>/<fileName>, for a home the plugin may keep files in. null for no
+// SERENA_HOME or one editableHome refuses (alfred-code's), whose context stays in the root.
+export function homeContextOf(entry: ServerEntry, platform: string, fileName: string): string | null
+{
+    const home = entry.env && entry.env.SERENA_HOME;
+    if (!home || !serenaConfig.editableHome(home, { platform }).ok) return null;
+    return pathFor(platform).join(home, fileName);
+}

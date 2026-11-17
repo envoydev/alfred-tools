@@ -66,6 +66,7 @@ export function renderPlan(plan: Plan): string
         else if (step.op === 'write-bridge') lines.push(`   writes ${pathApi.join(step.path, roots.FILES.bridge)}  (this plugin's URL bridge)`, `   (and package.json, type commonjs, when absent)`);
         else if (step.op === 'move-root-file') lines.push(`   moves ${step.from} to ${step.to}  (the root's own file goes with it)`);
         else if (step.op === 'write-serena-context') lines.push(`   writes ${pathApi.join(step.path, roots.FILES.serenaContext)}  (serena's context: code navigation only)`);
+        else if (step.op === 'retire-shipped') lines.push(`   removes ${step.file}  (only when it is this plugin's own, unedited copy and no registration names it)`);
         else if (step.op === 'ensure-key-name') lines.push(`   writes ${step.file}  (names only: ${step.names.join(', ')} - you fill in each value)`);
         else if (step.op === 'list-write' || step.op === 'retire-record' || step.op === 'cursor-write' || step.op === 'deny-read') lines.push(renderLine(step));
         else if (step.op === 'order-mcp-json') lines.push(`   reorders ${step.file}  (no value changes)`);

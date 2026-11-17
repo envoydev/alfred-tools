@@ -239,7 +239,7 @@
         "serena"
       ],
       "kind": "registration",
-      "symptom": "a managed serena runs with a --context other than <root>/serena-context.yml - 0.4.x ran Serena's claude-code context, whose instructions name Claude Code's own tools",
+      "symptom": "a managed serena runs with a --context other than <SERENA_HOME>/serena-context.yml, or that file is missing - 0.4.x ran Serena's claude-code context, whose instructions name Claude Code's own tools, and 0.5.x kept the file in the root",
       "detect": "serenaContextDetect",
       "fix": "serenaContextFix",
       "verifiedOn": "this build: tests/fix.test.js serena-context (2026-11-13)",

@@ -7,6 +7,7 @@ import { templateNames } from '../copied/mcp-bridge.js';
 import { pathFor, pythonRequest } from './platform.ts';
 import { rootOfEntry, rootOf, applyRoot } from './locations.ts';
 import { signInParts } from './sign-in.ts';
+import * as serenaConfig from '../apply/serena-config.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow, CatalogRules } from '../catalog/types.ts';
 import type { BridgeParts, BuildAnswers, Current, HelperParts, Machine, Registration } from './types.ts';
@@ -159,10 +160,16 @@ export function bridgePathFor(scope: string, context: Machine): string
     return pathFor(context.platform).join(rootOf(scope === 'user' ? 'global' : 'project', context), 'mcp-bridge.js');
 }
 
-// serena's context file (D7): in the scope's family root, absolute at every scope.
-export function contextPathFor(scope: string, context: Machine): string
+const CONTEXT_FILE = 'serena-context.yml';
+
+// serena's context file (D7): in the entry's SERENA_HOME when serena's own settings there are the plugin's to keep (an
+// editable home), else in the scope's family root; absolute at every scope. With no entry it is the root's.
+export function contextPathFor(scope: string, context: Machine, entry: ServerEntry | null | undefined = null): string
 {
-    return pathFor(context.platform).join(rootOf(scope === 'user' ? 'global' : 'project', context), 'serena-context.yml');
+    const pathApi = pathFor(context.platform);
+    const home = entry && entry.env && entry.env.SERENA_HOME;
+    if (home && serenaConfig.editableHome(home, { platform: context.platform }).ok) return pathApi.join(home, CONTEXT_FILE);
+    return pathApi.join(rootOf(scope === 'user' ? 'global' : 'project', context), CONTEXT_FILE);
 }
 
 // The --context an entry runs with points at this plugin's file (any root) - the path form D7 writes, not a name such as
@@ -181,7 +188,7 @@ export function applyContext(entry: ServerEntry, scope: string, context: Machine
     const at = contextArgAt(entry);
     if (at < 0) return entry;
     const args = [...entry.args!];
-    args[at] = contextPathFor(scope, context);
+    args[at] = contextPathFor(scope, context, entry);
     return { ...entry, args };
 }
 
@@ -238,7 +245,8 @@ export function buildEntry(row: CatalogRow, routeId: string, answers: BuildAnswe
         const packageSpec = route.package!;
         const args = ['--python', pythonRequest(route, context, rules), '--exclude-newer', packageSpec.cutoff];
         for (const withPackage of route.with || []) args.push('--with', withPackage);
-        const run = route.run!.some((runArgument) => runArgument.includes('{contextFile}')) ? route.run!.map((runArgument) => subst(runArgument, { contextFile: contextPathFor(answers.scope, context) })) : route.run!;
+        const hasContext = route.run!.some((runArgument) => runArgument.includes('{contextFile}'));
+        const run = hasContext ? route.run!.map((runArgument) => subst(runArgument, { contextFile: contextPathFor(answers.scope, context) })) : route.run!;
         args.push('--from', subst(packageSpec.fromSpec, { version: packageSpec.version }), ...run, ...extra);
         entry = { command: 'uvx', args };
         if (Object.keys(route.env || {}).length) entry.env = { ...route.env };
@@ -262,6 +270,7 @@ export function buildEntry(row: CatalogRow, routeId: string, answers: BuildAnswe
         if (Object.keys(route.env || {}).length) entry.env = { ...route.env };
     }
     if (row.locations && answers.rootStr !== undefined) entry = applyRoot(entry, row, answers.rootStr!, answers.scope, context);
-    return entry;
+    // serena's home is set by now: its context file goes in it
+    return applyContext(entry, answers.scope, context);
 }
 

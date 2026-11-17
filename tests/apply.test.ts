@@ -1447,6 +1447,52 @@ test('a Claude-side rewrite keeps Cursor\'s moved pin and its added env pair', (
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('write-serena-context makes a new home with a .gitignore holding *, and leaves a home that exists as it is', () => {
+    const w = world();
+    try
+    {
+        const home = path.join(w.project, '.alfred-tools', 'serena');
+        let r = runSteps(w, [{ op: 'write-serena-context', path: home }]);
+        assert.strictEqual(r.report.failed, null, r.text);
+        assert.strictEqual(fs.readFileSync(path.join(home, '.gitignore'), 'utf8'), '*\n');
+        assert.ok(fs.existsSync(path.join(home, 'serena-context.yml')));
+        const other = path.join(w.project, 'other-home');
+        fs.mkdirSync(other);
+        r = runSteps(w, [{ op: 'write-serena-context', path: other }]);
+        assert.strictEqual(r.report.failed, null, r.text);
+        assert.ok(!fs.existsSync(path.join(other, '.gitignore')), 'a folder that was there is not given a .gitignore');
+    }
+    finally { w.clean(); }
+});
+
+test('retire-shipped removes only an unedited, unnamed copy and says why it left the rest', () => {
+    const w = world();
+    try
+    {
+        const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'scripts', 'copied', 'serena-context.yml'), 'utf8');
+        const root = path.join(w.project, '.alfred-tools');
+        fs.mkdirSync(root, { recursive: true });
+        const file = path.join(root, 'serena-context.yml');
+        const neighbour = path.join(root, 'keep-me.txt');
+        fs.writeFileSync(neighbour, 'x');
+        const step = (namedBy: string[]) => ({ op: 'retire-shipped', kind: 'serenaContext', file, namedBy, why: 'test' });
+        fs.writeFileSync(file, src);
+        let r = runSteps(w, [step(['theirs'])]);
+        assert.ok(fs.existsSync(file) && r.text.includes(`left ${file} - still named by theirs`), r.text);
+        fs.writeFileSync(file, `${src}# mine\n`);
+        r = runSteps(w, [step([])]);
+        assert.ok(fs.existsSync(file) && r.text.includes(`left ${file} - edited by hand`), r.text);
+        fs.writeFileSync(file, src);
+        r = runSteps(w, [step([])]);
+        assert.strictEqual(r.report.failed, null, r.text);
+        assert.ok(!fs.existsSync(file) && r.text.includes(`removed ${file}`), r.text);
+        assert.ok(fs.existsSync(neighbour), 'nothing but the named file goes');
+        r = runSteps(w, [step([])]);
+        assert.strictEqual(r.report.failed, null, r.text);
+    }
+    finally { w.clean(); }
+});
+
 test('write-serena-context writes an absent and a lower file, keeps a higher or edited one', () => {
     const w = world();
     try

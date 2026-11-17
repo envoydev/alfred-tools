@@ -5,7 +5,7 @@ import type { Env, ServerEntry } from '../core/types.ts';
 import type { Catalog, CatalogRow, DangerousTool } from '../catalog/types.ts';
 import type { Current, FetchStep, Machine, Root, Roots } from '../entries/types.ts';
 import type { Installed } from '../inventory/types.ts';
-import type { Family, RootAnswer } from '../roots/types.ts';
+import type { Family, RootAnswer, ShippedKind } from '../roots/types.ts';
 import type { ListServer, OrderStep, OwnEntry, Live } from '../mcps-list/types.ts';
 import type { CursorWriteStep as CursorWriteFields } from '../cursor/types.ts';
 
@@ -206,6 +206,16 @@ export interface FileStep
     file: string; // stored - do not rename
     why: string; // stored - do not rename
 }
+// The copy of a shipped file left behind where it used to live: removed at apply time when it is this plugin's own,
+// unedited copy and no registration in `namedBy` still names it.
+export interface RetireShippedStep
+{
+    op: 'retire-shipped'; // stored - do not rename
+    kind: ShippedKind; // stored - do not rename
+    file: string; // stored - do not rename
+    namedBy: string[]; // stored - do not rename
+    why: string; // stored - do not rename
+}
 export interface EnsureKeyNameStep
 {
     op: 'ensure-key-name'; // stored - do not rename
@@ -235,7 +245,7 @@ export interface RecordRootStep
     root: string; // stored - do not rename
     why: string; // stored - do not rename
 }
-export type PlanStep = RegistrationStep | (FetchStep & { scope?: string }) | ListWriteStep | CursorWritePlanStep | PathStep | MoveRootFileStep | FileStep | EnsureKeyNameStep | SerenaBaseModesStep | DenyReadStep | RecordRootStep | OrderStep;
+export type PlanStep = RegistrationStep | (FetchStep & { scope?: string }) | ListWriteStep | CursorWritePlanStep | PathStep | MoveRootFileStep | FileStep | RetireShippedStep | EnsureKeyNameStep | SerenaBaseModesStep | DenyReadStep | RecordRootStep | OrderStep;
 
 // The lines a plan prints beside its steps.
 export interface KeyLine
@@ -321,7 +331,7 @@ export interface RootUse
     root: string;
     helper?: boolean;
     bridge?: boolean;
-    serenaContext?: boolean;
+    serenaContext?: string; // the folder the context file goes in: serena's home, or the root
     committed?: boolean;
     key?: { file: string; name: string; names?: string[] };
 }
@@ -399,7 +409,7 @@ export interface RootWrite
     root: string;
     helper: boolean;
     bridge: boolean;
-    serenaContext?: boolean;
+    serenaContext: Set<string>; // the folders the context file goes in
     committed?: boolean;
     keys: Map<string, string[]>;
 }
@@ -408,7 +418,7 @@ export interface RootUses
 {
     helper?: boolean;
     bridge?: boolean;
-    serenaContext?: boolean;
+    serenaContext?: string | undefined;
     keyFile?: string | null;
     keyName?: string | null;
     keyNames?: string[];

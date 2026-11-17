@@ -2635,13 +2635,30 @@ test('serena args at project, local and global scope: --context absolute, --proj
         const p = plan(inv(MAC), pickOne('serena', { scope }), opts('/h'));
         assert.deepStrictEqual(p.errors, [], scope);
         const args = addStep(p).entry.args;
-        assert.strictEqual(args![args!.indexOf('--context') + 1], `${root}/serena-context.yml`, scope);
+        assert.strictEqual(args![args!.indexOf('--context') + 1], `${root}/serena/serena-context.yml`, scope);
         assert.ok(args!.includes('--project-from-cwd'), scope);
         assert.ok(!args!.includes('claude-code'), scope);
-        assert.deepStrictEqual((p.steps.filter((s) => s.op === 'write-serena-context') as PathStep[]).map((s) => s.path), [root], scope);
+        assert.deepStrictEqual((p.steps.filter((s) => s.op === 'write-serena-context') as PathStep[]).map((s) => s.path), [`${root}/serena`], scope);
     }
     // a server that is not serena plans no context file
     assert.deepStrictEqual(plan(inv(MAC), pickOne('memory', { scope: 'project' }), opts('/h')).steps.filter((s) => s.op === 'write-serena-context'), []);
+});
+
+test('a serena install writes its context in its home', () => {
+    const root = '/work/shop/.alfred-tools';
+    const p = plan(inv(MAC), pickOne('serena', { scope: 'project' }), opts('/Users/me'));
+    assert.deepStrictEqual(p.errors, []);
+    assert.deepStrictEqual((p.steps.filter((s) => s.op === 'write-serena-context') as PathStep[]).map((s) => s.path), [`${root}/serena`]);
+    const args = addStep(p).entry.args!;
+    assert.strictEqual(args[args.indexOf('--context') + 1], `${root}/serena/serena-context.yml`);
+    assert.ok(renderPlan(p).includes(`writes ${root}/serena/serena-context.yml`), renderPlan(p));
+    // alfred-code's home is not the plugin's to put files in: the root keeps the context
+    const alfred = plan(inv(MAC), pickOne('serena', { scope: 'project', location: { side: 'alfred' } }), opts('/Users/me', { exists: (path) => path === '/work/shop/.alfred/serena/home' }));
+    assert.deepStrictEqual(alfred.errors, []);
+    const alfredEntry = addStep(alfred).entry;
+    assert.strictEqual(alfredEntry.env!.SERENA_HOME, '/work/shop/.alfred/serena/home');
+    assert.strictEqual(alfredEntry.args![alfredEntry.args!.indexOf('--context') + 1], `${root}/serena-context.yml`);
+    assert.deepStrictEqual((alfred.steps.filter((s) => s.op === 'write-serena-context') as PathStep[]).map((s) => s.path), [root]);
 });
 
 // ---- configure's root change moves the root's files (spec D1, D5, D7) --------------------------------------------------
@@ -2663,26 +2680,26 @@ function rootMoveWorld(t: TestContext, pick: Answers['picks'])
     return { w, fs, old, fresh, change, run, local, cursor };
 }
 
-test('a root change moves mcps.json and serena-context.yml, rewrites --context and writes Cursor', (t) => {
+test('a root change moves mcps.json, writes serena-context.yml in the new home, rewrites --context and writes Cursor', (t) => {
     const m = rootMoveWorld(t, { serena: { scope: 'local' } });
     const ctxOf = (e: ServerEntry) => e.args![e.args!.indexOf('--context') + 1];
-    assert.strictEqual(ctxOf(m.local('serena')!), path.join(m.old, 'serena-context.yml'));
+    assert.strictEqual(ctxOf(m.local('serena')!), path.join(m.old, 'serena', 'serena-context.yml'));
     const listBefore = m.fs.readFileSync(path.join(m.old, 'mcps.json'), 'utf8');
     const p = m.change();
     assert.deepStrictEqual(p.errors, []);
     const ops = p.steps.map((s) => s.op);
     assert.deepStrictEqual((p.steps.filter((s) => s.op === 'move-root-file') as MoveRootFileStep[]).map((s) => [s.from, s.to]), [
         [path.join(m.old, 'mcps.json'), path.join(m.fresh, 'mcps.json')],
-        [path.join(m.old, 'serena-context.yml'), path.join(m.fresh, 'serena-context.yml')],
-    ]);
+    ], 'serena\'s context file is in its home now, not the root\'s own file: the move leaves it and writes a copy in the new home');
+    assert.deepStrictEqual((p.steps.filter((s) => s.op === 'write-serena-context') as PathStep[]).map((s) => s.path), [path.join(m.fresh, 'serena')]);
     assert.ok(ops.lastIndexOf('root-ignore') < ops.indexOf('move-root-file') && ops.lastIndexOf('move-root-file') < ops.indexOf('mcp-replace'), ops.join());
     const { r, text } = m.run(p, 'tmp2');
     assert.strictEqual(r.failed, null, text);
-    assert.ok(!m.fs.existsSync(path.join(m.old, 'mcps.json')) && !m.fs.existsSync(path.join(m.old, 'serena-context.yml')));
-    assert.ok(m.fs.existsSync(path.join(m.fresh, 'serena-context.yml')));
+    assert.ok(!m.fs.existsSync(path.join(m.old, 'mcps.json')));
+    assert.ok(m.fs.existsSync(path.join(m.fresh, 'serena', 'serena-context.yml')));
     assert.deepStrictEqual(JSON.parse(m.fs.readFileSync(path.join(m.fresh, 'mcps.json'), 'utf8')).servers.map((s: { name: string }) => s.name), JSON.parse(listBefore).servers.map((s: { name: string }) => s.name));
-    assert.strictEqual(ctxOf(m.local('serena')!), path.join(m.fresh, 'serena-context.yml'));
-    assert.strictEqual(ctxOf(m.cursor().serena), path.join(m.fresh, 'serena-context.yml'), 'Cursor follows');
+    assert.strictEqual(ctxOf(m.local('serena')!), path.join(m.fresh, 'serena', 'serena-context.yml'));
+    assert.strictEqual(ctxOf(m.cursor().serena), path.join(m.fresh, 'serena', 'serena-context.yml'), 'Cursor follows');
 });
 
 test('a root change stops before any registration when the new root holds another mcps.json', (t) => {
