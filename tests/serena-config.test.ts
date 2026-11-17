@@ -87,3 +87,66 @@ test('install\'s plan carries the base_modes line for each serena home kind', ()
     assert.strictEqual(sc.planNote(alfred, { platform: 'darwin' }), 'serena\'s settings at /work/shop/.alfred/serena/home/serena_config.yml are alfred-code\'s - base_modes is left; its manual still names edit tools serena does not have');
     assert.strictEqual(sc.planNote({ command: 'uvx', args: [] }, { platform: 'darwin' }), null);
 });
+
+test('folderValue uses / and single quotes', () => {
+    assert.deepStrictEqual(sc.folderValue('C:\\a\\.alfred\\serena'), { value: "'C:/a/.alfred/serena/projects/$projectFolderName'" });
+    assert.deepStrictEqual(sc.folderValue("/home/o'neil/serena"), { value: "'/home/o''neil/serena/projects/$projectFolderName'" });
+    const refused = sc.folderValue('/home/$me/serena');
+    assert.ok('error' in refused && refused.error.includes('$'), JSON.stringify(refused));
+});
+
+test('writeMinimalConfig writes the three keys once', () => {
+    const file = path.join(tmp, 'minimal', 'new-home', 'serena_config.yml');
+    const first = sc.writeMinimalConfig(file, '/h/serena');
+    assert.strictEqual(first.wrote, true);
+    const text = `projects: []\nbase_modes: []\n${sc.FOLDER_KEY}: '/h/serena/projects/$projectFolderName'\n`;
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), text);
+    const second = sc.writeMinimalConfig(file, '/h/other');
+    assert.strictEqual(second.wrote, false);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), text, 'a present file is left byte for byte');
+    const refused = sc.writeMinimalConfig(path.join(tmp, 'minimal', 'dollar', 'serena_config.yml'), '/h/$x');
+    assert.strictEqual(refused.wrote, false);
+    assert.ok(!fs.existsSync(path.join(tmp, 'minimal', 'dollar', 'serena_config.yml')));
+});
+
+test('setProjectFolder changes only its line', () => {
+    const value = "'/h/serena/projects/$projectFolderName'";
+    const before = `# serena settings\r\nweb_dashboard: false\r\n${sc.FOLDER_KEY}: "$projectDir/.serena"\r\n# keep me\r\n${SECRET}\r\n`;
+    const f = fileWith(before);
+    if (process.platform !== 'win32') fs.chmodSync(f, 0o600);
+    const r = sc.setProjectFolder(f, '/h/serena');
+    assert.strictEqual(r.changed, true);
+    assert.strictEqual(fs.readFileSync(f, 'utf8'), before.replace('"$projectDir/.serena"', value));
+    if (process.platform !== 'win32') assert.strictEqual(fs.statSync(f).mode & 0o777, 0o600);
+    assert.ok(!r.detail.includes('s3cr3t'), 'the detail never quotes the file');
+    assert.strictEqual(sc.setProjectFolder(f, '/h/serena').changed, false, 'a second run changes nothing');
+    // no key: appended, with the file's line ending
+    const g = fileWith(`a: 1\r\n${SECRET}`);
+    assert.strictEqual(sc.setProjectFolder(g, '/h/serena').changed, true);
+    assert.strictEqual(fs.readFileSync(g, 'utf8'), `a: 1\r\n${SECRET}\r\n${sc.FOLDER_KEY}: ${value}\r\n`);
+    // a repeated key: the first is replaced, the second stays
+    const h = fileWith(`${sc.FOLDER_KEY}: one\n${sc.FOLDER_KEY}: two\n`);
+    sc.setProjectFolder(h, '/h/serena');
+    assert.strictEqual(fs.readFileSync(h, 'utf8'), `${sc.FOLDER_KEY}: ${value}\n${sc.FOLDER_KEY}: two\n`);
+    // no file: nothing is created; a home with $: nothing changes
+    const none = path.join(tmp, 'none2', 'serena_config.yml');
+    const missing = sc.setProjectFolder(none, '/h/serena');
+    assert.strictEqual(missing.changed, false);
+    assert.ok(missing.detail.includes('not found'));
+    assert.ok(!fs.existsSync(none));
+    const k = fileWith(`${SECRET}\n`);
+    assert.strictEqual(sc.setProjectFolder(k, '/h/$x').changed, false);
+    assert.strictEqual(fs.readFileSync(k, 'utf8'), `${SECRET}\n`);
+});
+
+test('folderState reads same, other and absent', () => {
+    const home = "/h/o'neil/serena";
+    const written = fileWith(`a: 1\n${SECRET}\n`);
+    assert.strictEqual(sc.folderState(written, home), 'absent');
+    sc.setProjectFolder(written, home);
+    assert.strictEqual(sc.folderState(written, home), 'same');
+    assert.strictEqual(sc.folderState(written, '/h/else'), 'other');
+    assert.strictEqual(sc.folderState(fileWith(`${sc.FOLDER_KEY}: "$projectDir/.serena"\n`), home), 'other');
+    assert.strictEqual(sc.folderState(fileWith(`${sc.FOLDER_KEY}: '/h/serena/projects/$projectFolderName' # mine\n`), '/h/serena'), 'same');
+    assert.strictEqual(sc.folderState(path.join(tmp, 'none3', 'serena_config.yml'), home), 'absent');
+});

@@ -78,12 +78,85 @@ export function emptyBaseModes(file: string): { changed: boolean; detail: string
         next = `${head}base_modes: []${keyEol}${tail}`;
     }
     if (next === text) return { changed: false, detail: `${file}: base_modes is [] already` };
+    replaceInPlace(file, next);
+    return { changed: true, detail: `set base_modes: [] in ${file}` };
+}
+
+// The file's new text through a temporary file, with the file's own mode.
+function replaceInPlace(file: string, next: string): void
+{
     const tmp = `${file}.${process.pid}.tmp`;
     const mode = fs.statSync(file).mode & 0o777;
     fs.writeFileSync(tmp, next, { mode });
     fs.chmodSync(tmp, mode);
     fs.renameSync(tmp, file);
-    return { changed: true, detail: `set base_modes: [] in ${file}` };
+}
+
+export const FOLDER_KEY = 'project_serena_folder_location';
+const FOLDER_LINE = new RegExp(`^${FOLDER_KEY}[ \\t]*:(.*?)(\\r?)$`);
+
+// serena 2.1.0 puts each project's .serena folder under <home>/projects/<project folder name>. The value is single-quoted
+// YAML with / separators; a $ in the home would read as a placeholder, so it is refused.
+export function folderValue(home: string): { value: string } | { error: string }
+{
+    if (home.includes('$')) return { error: `${home} holds a $ - serena would read it as a placeholder, so ${FOLDER_KEY} is not set` };
+    const base = home.replace(/\\/g, '/').replace(/\/+$/, '');
+    return { value: `'${base.replace(/'/g, "''")}/projects/$projectFolderName'` };
+}
+
+// The text of a YAML scalar on a key line, quotes and a trailing comment dropped.
+function scalarOf(raw: string): string
+{
+    const text = raw.trim();
+    const single = /^'((?:[^']|'')*)'(?:\s+#.*)?$/.exec(text);
+    if (single) return single[1]!.replace(/''/g, "'");
+    const double = /^"((?:[^"\\]|\\.)*)"(?:\s+#.*)?$/.exec(text);
+    if (double) return double[1]!.replace(/\\(.)/g, '$1');
+    return text.replace(/\s+#.*$/, '');
+}
+
+// -> 'absent' (no file, or no key) | 'same' (the value folderValue(home) writes) | 'other'
+export function folderState(file: string, home: string): 'absent' | 'same' | 'other'
+{
+    const text = readText(file);
+    if (text === null) return 'absent';
+    const line = linesOf(text).find(([body]) => FOLDER_LINE.test(body));
+    if (!line) return 'absent';
+    const wanted = folderValue(home);
+    if ('error' in wanted) return 'other';
+    return scalarOf(FOLDER_LINE.exec(line[0])![1]!) === scalarOf(wanted.value) ? 'same' : 'other';
+}
+
+// The key's value in place of the first one (or appended when the file has none); a missing file is not created. -> { changed, detail }
+export function setProjectFolder(file: string, home: string): { changed: boolean; detail: string }
+{
+    const wanted = folderValue(home);
+    if ('error' in wanted) return { changed: false, detail: wanted.error };
+    const text = readText(file);
+    if (text === null) return { changed: false, detail: `${file} not found` };
+    const lines = linesOf(text);
+    const at = lines.findIndex(([body]) => FOLDER_LINE.test(body));
+    const lineEnd = text.includes('\r\n') ? '\r\n' : '\n';
+    let next: string;
+    if (at < 0) next = `${text}${text === '' || /\n$/.test(text) ? '' : lineEnd}${FOLDER_KEY}: ${wanted.value}${lineEnd}`;
+    else
+    {
+        if (folderState(file, home) === 'same') return { changed: false, detail: `${file}: ${FOLDER_KEY} is set already` };
+        next = lines.map(([body, ending], index) => (index === at ? `${FOLDER_KEY}: ${wanted.value}${ending}` : body + ending)).join('');
+    }
+    replaceInPlace(file, next);
+    return { changed: true, detail: `set ${FOLDER_KEY} in ${file}` };
+}
+
+// A file for a home serena has not started in yet: the three keys, only when there is none. -> { wrote, detail }
+export function writeMinimalConfig(file: string, home: string): { wrote: boolean; detail: string }
+{
+    const wanted = folderValue(home);
+    if ('error' in wanted) return { wrote: false, detail: wanted.error };
+    if (fs.existsSync(file)) return { wrote: false, detail: `${file} is there already` };
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `projects: []\nbase_modes: []\n${FOLDER_KEY}: ${wanted.value}\n`, { flag: 'wx' });
+    return { wrote: true, detail: `wrote ${file} with ${FOLDER_KEY}` };
 }
 
 // Which homes the edit may touch (D7): never an alfred-code 2.x home (.alfred/serena/home), shared with its old setup;
