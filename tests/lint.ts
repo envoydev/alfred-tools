@@ -122,6 +122,7 @@ const HELPER_SHA256: Record<number, string> = {
     3: '388dc7ad5ad0093e2340ccadde11ca8b92929f6c3598a306dbebda5b60b798ac', // Basic: email:api_token sent base64-encoded
     4: '6376dc81ff5b192a8e75de1f350e75a766dc9ad01cd950d58fd6733700469017', // exports its reader for mcp-bridge.js
     5: '5631cbd6b2f168595a16ea40e2adee470994d33eebb9f4bf66a5e014443cda26', // the plugin is alfred-tools: ~/.alfred-tools in the chain
+    6: 'bab4e23ff4d221384ce27a529f649e929875132ebe00ef6f3206f28256c35281', // header pairs: --header NAME=VAR or NAME:value
 };
 {
     const rel = path.join('scripts', 'copied', 'mcp-headers.js');

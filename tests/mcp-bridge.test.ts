@@ -290,5 +290,5 @@ test('the bridge requires only node: modules and ./mcp-headers.js, and its CREDE
     assert.strictEqual(b.BRIDGE_VERSION, 2);
     assert.strictEqual(b.NEEDS_HELPER, 4);
     assert.ok(b.CREDENTIAL.test('MY_API_KEY') && !b.CREDENTIAL.test('SENTRY_ORG'));
-    assert.strictEqual(helper().HELPER_VERSION, 5);
+    assert.strictEqual(helper().HELPER_VERSION, 6);
 });

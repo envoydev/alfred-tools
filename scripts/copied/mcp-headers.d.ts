@@ -10,3 +10,5 @@ export declare function readDotenv(file: string): Record<string, string> | null;
 export declare function valueIn(name: string, files: readonly string[]): { value: string; file: string } | null;
 // The Authorization value: `<scheme> <value>`, a Basic email:api_token base64-encoded.
 export declare function authValue(scheme: string, value: string): string;
+// The arguments after <SCHEME>: at most one root and any number of --header pairs (NAME=VAR or NAME:value); { error } when malformed.
+export declare function parsePairs(argv: readonly string[]): { root: string | null; pairs: ({ header: string; var: string } | { header: string; value: string })[] } | { error: string };

@@ -229,12 +229,93 @@ test('authValue is the scheme and the value, with the Basic base64 rule', () => 
     assert.strictEqual(helper.authValue('Basic', 'YUBiOnQ='), 'Basic YUBiOnQ=');
 });
 
-test('helper 5 prints the same headers as helper 4, and exports its reader', () => {
+test('helper 6 prints the same headers as helper 5 with no pairs, and exports its reader', () => {
     const helper = requireCopied(SOURCE);
-    assert.strictEqual(helper.HELPER_VERSION, 5);
-    assert.match(fs.readFileSync(SOURCE, 'utf8').split('\n')[0]!, /^\/\/ alfred-tools mcp-headers 5$/);
-    for (const k of ['chainOf', 'digestOf', 'readDotenv', 'valueIn', 'authValue']) assert.strictEqual(typeof helper[k], 'function', k);
+    assert.strictEqual(helper.HELPER_VERSION, 6);
+    assert.match(fs.readFileSync(SOURCE, 'utf8').split('\n')[0]!, /^\/\/ alfred-tools mcp-headers 6$/);
+    for (const k of ['chainOf', 'digestOf', 'readDotenv', 'valueIn', 'authValue', 'parsePairs']) assert.strictEqual(typeof helper[k], 'function', k);
     assert.deepStrictEqual(schemeRun('fake-1', 'Bearer'), { Authorization: 'Bearer fake-1' });
     assert.deepStrictEqual(schemeRun('fake-1', 'Sentry-Bearer'), { Authorization: 'Sentry-Bearer fake-1' });
     assert.deepStrictEqual(schemeRun('a@b:t', 'Basic'), { Authorization: 'Basic YUBiOnQ=' });
+});
+
+const TOKEN = 'SONARQUBE_TOKEN';
+const ORG = 'SONARQUBE_ORG';
+
+test('a =pair sends its header from the chain when the key is found', () => {
+    const w = world();
+    try
+    {
+        put(sec(w.root), `${TOKEN}=tok-123\n${ORG}=acme\n`);
+        assert.deepStrictEqual(w.run(TOKEN, 'Bearer', '--header', `${ORG}=${ORG}`).json, { Authorization: 'Bearer tok-123', [ORG]: 'acme' });
+    }
+    finally { w.clean(); }
+});
+
+test('a :pair sends its fixed value', () => {
+    const w = world();
+    try
+    {
+        put(sec(w.root), `${TOKEN}=tok-123\n`);
+        assert.deepStrictEqual(w.run(TOKEN, 'Bearer', '--header', 'SONARQUBE_READ_ONLY:true').json, { Authorization: 'Bearer tok-123', SONARQUBE_READ_ONLY: 'true' });
+    }
+    finally { w.clean(); }
+});
+
+test('an empty or missing pair value sends no header', () => {
+    const w = world();
+    try
+    {
+        put(sec(w.root), `${TOKEN}=tok-123\n${ORG}=\n`);
+        assert.deepStrictEqual(w.run(TOKEN, 'Bearer', '--header', `${ORG}=${ORG}`).json, { Authorization: 'Bearer tok-123' }, 'an empty value');
+        put(sec(w.root), `${TOKEN}=tok-123\n`);
+        assert.deepStrictEqual(w.run(TOKEN, 'Bearer', '--header', `${ORG}=${ORG}`).json, { Authorization: 'Bearer tok-123' }, 'no line');
+    }
+    finally { w.clean(); }
+});
+
+test('no key: {} even with pairs', () => {
+    const w = world();
+    try
+    {
+        put(sec(w.root), `${ORG}=acme\n`);
+        const r = w.run(TOKEN, 'Bearer', '--header', `${ORG}=${ORG}`, '--header', 'SONARQUBE_READ_ONLY:true');
+        assert.deepStrictEqual(r.json, {});
+        assert.match(r.stderr, new RegExp(`no value for ${TOKEN}`));
+    }
+    finally { w.clean(); }
+});
+
+test('a root argument before the pairs is still read', () => {
+    const w = world();
+    try
+    {
+        const other = path.join(w.dir, 'other folder');
+        put(sec(other), `${TOKEN}=tok-123\n${ORG}=acme\n`);
+        assert.deepStrictEqual(w.run(TOKEN, 'Bearer', other, '--header', `${ORG}=${ORG}`).json, { Authorization: 'Bearer tok-123', [ORG]: 'acme' });
+    }
+    finally { w.clean(); }
+});
+
+test('Authorization as a pair is refused', () => {
+    const w = world();
+    try
+    {
+        put(sec(w.root), `${TOKEN}=tok-123\n`);
+        const r = w.run(TOKEN, 'Bearer', '--header', 'authorization=X');
+        assert.deepStrictEqual(r.json, {});
+        assert.match(r.stderr, /usage/);
+    }
+    finally { w.clean(); }
+});
+
+test('parsePairs reads a root and pairs, and rejects a bad header name, a bad VAR and a fixed value outside [A-Za-z0-9_.,-]', () => {
+    const helper = requireCopied(SOURCE);
+    assert.deepStrictEqual(helper.parsePairs([]), { root: null, pairs: [] });
+    assert.deepStrictEqual(helper.parsePairs(['C:\\My Root', '--header', 'X-Org=ORG_VAR', '--header', 'X-Mode:read-only']), {
+        root: 'C:\\My Root',
+        pairs: [{ header: 'X-Org', var: 'ORG_VAR' }, { header: 'X-Mode', value: 'read-only' }],
+    });
+    for (const bad of [['--header', 'bad name=ORG'], ['--header', 'X=1BAD'], ['--header', 'X:a b'], ['--header', 'X:a/b'], ['--header'], ['--header', 'noseparator'], ['one', 'two']])
+        assert.ok('error' in helper.parsePairs(bad), `rejected: ${bad.join(' ')}`);
 });
