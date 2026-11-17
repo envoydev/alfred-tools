@@ -20,5 +20,6 @@ export interface Launch
     args: string[];
     childEnv: Record<string, string | undefined>;
 }
-// What to start, read from argv and the .mcps-secrets chain; nothing is started.
+// What to start, read from argv (the root, then any `--header NAME=VAR` or `--header NAME:value`) and the .mcps-secrets
+// chain; nothing is started.
 export declare function launch(argv: readonly string[], env: Record<string, string | undefined>, options?: { dir?: string; platform?: string; helper?: typeof Helper }): Launch | { error: string };

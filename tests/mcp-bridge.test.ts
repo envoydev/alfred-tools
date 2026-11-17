@@ -204,7 +204,7 @@ test('a bad value, or a usage error, exits 1 with one line naming no value', () 
         assert.strictEqual(bad.stderr.trim(), `mcp-bridge: SENTRY_ORG in ${sec(w.root)} is not a plain name (letters, digits, _ . -)`);
         const usage = w.run([T, K]);
         assert.strictEqual(usage.status, 1);
-        assert.strictEqual(usage.stderr.trim(), 'mcp-bridge: usage: node mcp-bridge.js <url template> <KEY_NAME> <SCHEME> <package@version> [<root>]');
+        assert.strictEqual(usage.stderr.trim(), 'mcp-bridge: usage: node mcp-bridge.js <url template> <KEY_NAME> <SCHEME> <package@version> [<root>] [--header NAME=VAR | --header NAME:value]...');
         assert.deepStrictEqual(w.calls(), []);
     }
     finally { w.clean(); }
@@ -221,6 +221,123 @@ test('a URL value equal to the key exits 1 before npx, naming the variable and n
         assert.strictEqual(r.stderr.trim(), `mcp-bridge: SENTRY_PROJECT in ${sec(w.root)} holds the key's value - a key never goes in a URL`);
         assert.ok(!r.stderr.includes(KEY) && !r.stdout.includes(KEY));
         assert.deepStrictEqual(w.calls(), []);
+    }
+    finally { w.clean(); }
+});
+
+const SQ = 'https://mcp.example.dev/mcp/{SENTRY_ORG}';
+const ORG_PAIR = ['--header', 'SONARQUBE_ORG=SONARQUBE_ORG'];
+const launchWith = (w: ReturnType<typeof world>, pairs: string[], extra: Record<string, string> = {}, helperStub?: object) =>
+    bridge().launch([SQ, K, 'Sentry-Bearer', PKG, w.global, ...pairs], { HOME: w.home, ...extra }, { dir: w.root, platform: 'darwin', ...(helperStub ? { helper: helperStub } : {}) });
+
+test('a =pair reaches mcp-remote through the env only', () => {
+    const w = world();
+    try
+    {
+        put(sec(w.root), 'SENTRY_ORG=acme\nSONARQUBE_ORG=orgval\n');
+        put(sec(w.global), `${K}=${KEY}\n`);
+        const r = launchWith(w, ORG_PAIR);
+        assert.ok(!r.error, r.error);
+        assert.deepStrictEqual(r.args, ['-y', PKG, r.url, '--header', 'Authorization:${PT_BRIDGE_AUTH}', '--header', 'SONARQUBE_ORG:${PT_BRIDGE_H1}', '--transport', 'http-only']);
+        assert.strictEqual(r.childEnv.PT_BRIDGE_H1, 'orgval');
+        assert.ok(r.args.every((a: string) => !a.includes('orgval') && !a.includes(KEY)), 'no arg holds a value');
+        // numbered from 1 in the order the pairs appear
+        put(sec(w.root), 'SENTRY_ORG=acme\nSONARQUBE_ORG=orgval\nX_OTHER=second\n');
+        const two = launchWith(w, [...ORG_PAIR, '--header', 'X-Other=X_OTHER']);
+        assert.deepStrictEqual(two.args.slice(5, 9), ['--header', 'SONARQUBE_ORG:${PT_BRIDGE_H1}', '--header', 'X-Other:${PT_BRIDGE_H2}']);
+        assert.strictEqual(two.childEnv.PT_BRIDGE_H2, 'second');
+    }
+    finally { w.clean(); }
+});
+
+test('a :pair goes in argv', () => {
+    const w = world();
+    try
+    {
+        put(sec(w.root), 'SENTRY_ORG=acme\n');
+        put(sec(w.global), `${K}=${KEY}\n`);
+        const r = launchWith(w, ['--header', 'SONARQUBE_READ_ONLY:true', '--header', 'SONARQUBE_TOOLSETS:issues,projects']);
+        assert.ok(!r.error, r.error);
+        assert.deepStrictEqual(r.args.slice(5, 9), ['--header', 'SONARQUBE_READ_ONLY:true', '--header', 'SONARQUBE_TOOLSETS:issues,projects']);
+        assert.ok(!Object.keys(r.childEnv).some((n) => n.startsWith('PT_BRIDGE_H')), 'a fixed value needs no env');
+    }
+    finally { w.clean(); }
+});
+
+test('an empty =pair is left out and takes no number', () => {
+    const w = world();
+    try
+    {
+        put(sec(w.global), `${K}=${KEY}\nX_OTHER=second\n`);
+        // the line empty, then the line absent
+        for (const text of ['SENTRY_ORG=acme\nSONARQUBE_ORG=\n', 'SENTRY_ORG=acme\n'])
+        {
+            put(sec(w.root), text);
+            const r = launchWith(w, [...ORG_PAIR, '--header', 'X-Other=X_OTHER']);
+            assert.ok(!r.error, r.error);
+            assert.deepStrictEqual(r.args.slice(5, 7), ['--header', 'X-Other:${PT_BRIDGE_H1}']);
+            assert.ok(!r.args.some((a: string) => a.startsWith('SONARQUBE_ORG')), 'no SONARQUBE_ORG header');
+            assert.strictEqual(r.childEnv.PT_BRIDGE_H1, 'second');
+            assert.ok(!('PT_BRIDGE_H2' in r.childEnv));
+        }
+    }
+    finally { w.clean(); }
+});
+
+test('a VAR equal to the key name is refused', () => {
+    const w = world();
+    try
+    {
+        put(sec(w.root), 'SENTRY_ORG=acme\n');
+        put(sec(w.global), `${K}=${KEY}\n`);
+        const r = launchWith(w, ['--header', `X-Token=${K}`]);
+        assert.ok(r.error?.includes(K), JSON.stringify(r));
+        assert.ok(!r.error.includes(KEY), 'the value stays out of the error');
+    }
+    finally { w.clean(); }
+});
+
+test('a value equal to the key is refused, naming the VAR and never the value', () => {
+    const w = world();
+    try
+    {
+        put(sec(w.root), `SENTRY_ORG=acme\nSONARQUBE_ORG=${KEY}\n`);
+        put(sec(w.global), `${K}=${KEY}\n`);
+        const r = launchWith(w, ORG_PAIR);
+        assert.ok(r.error?.includes('SONARQUBE_ORG'), JSON.stringify(r));
+        assert.ok(!r.error.includes(KEY), 'the value stays out of the error');
+    }
+    finally { w.clean(); }
+});
+
+test('a bad pair, or a second root, is a usage error', () => {
+    const w = world();
+    try
+    {
+        put(sec(w.root), 'SENTRY_ORG=acme\n');
+        put(sec(w.global), `${K}=${KEY}\n`);
+        for (const bad of [['--header'], ['--header', 'Authorization=SONARQUBE_ORG'], ['--header', 'authorization:x'], ['--header', 'X=1BAD'], ['--header', 'X:a b'], ['--header', 'X'], [w.root]])
+            assert.ok(launchWith(w, bad).error?.startsWith('usage: node mcp-bridge.js'), JSON.stringify(bad));
+    }
+    finally { w.clean(); }
+});
+
+test('it runs beside helper 5', () => {
+    const w = world();
+    try
+    {
+        put(sec(w.root), 'SENTRY_ORG=acme\nSONARQUBE_ORG=orgval\n');
+        put(sec(w.global), `${K}=${KEY}\n`);
+        const { valueIn, readDotenv, authValue, chainOf } = helper();
+        const r = launchWith(w, [...ORG_PAIR, '--header', 'SONARQUBE_READ_ONLY:true'], {}, { HELPER_VERSION: 5, valueIn, readDotenv, authValue, chainOf });
+        assert.ok(!r.error, r.error);
+        assert.strictEqual(r.childEnv.PT_BRIDGE_H1, 'orgval');
+        // and as a process, with the helper file in the root carrying number 5
+        const copy = fs.readFileSync(HELPER, 'utf8').replace(/HELPER_VERSION = \d+;/, 'HELPER_VERSION = 5;');
+        fs.writeFileSync(path.join(w.root, 'mcp-headers.js'), copy);
+        const run = w.run([LOCAL, K, 'Sentry-Bearer', PKG, w.global, ...ORG_PAIR, '--header', 'SONARQUBE_READ_ONLY:true']);
+        assert.strictEqual(run.status, 0, run.stderr);
+        assert.deepStrictEqual(w.calls()[0].argv, ['-y', PKG, 'http://127.0.0.1:9/mcp/acme', '--header', 'Authorization:${PT_BRIDGE_AUTH}', '--header', 'SONARQUBE_ORG:${PT_BRIDGE_H1}', '--header', 'SONARQUBE_READ_ONLY:true', '--transport', 'http-only']);
     }
     finally { w.clean(); }
 });
@@ -283,11 +400,11 @@ test('a root under a type-module package.json runs with its own commonjs package
 
 test('the bridge requires only node: modules and ./mcp-headers.js, and its CREDENTIAL equals keys.js', () => {
     const src = fs.readFileSync(BRIDGE, 'utf8');
-    assert.match(src.split(/\r?\n/)[0]!, /^\/\/ alfred-tools mcp-bridge 2$/, 'the first line, CRLF or LF (roots.js SHIPPED_LINE reads both)');
+    assert.match(src.split(/\r?\n/)[0]!, /^\/\/ alfred-tools mcp-bridge 3$/, 'the first line, CRLF or LF (roots.js SHIPPED_LINE reads both)');
     const reqs = [...src.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]);
     assert.ok(reqs.length && reqs.every((r) => r!.startsWith('node:') || r === './mcp-headers.js'), reqs.join(', '));
     const b = bridge();
-    assert.strictEqual(b.BRIDGE_VERSION, 2);
+    assert.strictEqual(b.BRIDGE_VERSION, 3);
     assert.strictEqual(b.NEEDS_HELPER, 4);
     assert.ok(b.CREDENTIAL.test('MY_API_KEY') && !b.CREDENTIAL.test('SENTRY_ORG'));
     assert.strictEqual(helper().HELPER_VERSION, 6);

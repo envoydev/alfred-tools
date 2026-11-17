@@ -146,6 +146,7 @@ const HELPER_SHA256: Record<number, string> = {
 const BRIDGE_SHA256: Record<number, string> = {
     1: '8aff5de859ba6b69c3f40d20d35c2d36738d6c35c791a821614f53a48bc29635', // 0.4.0
     2: 'f4a2b606ee8ab71c0df750b09c47ea80d3474e887a85de81bc1f3dd1904a293c', // the plugin is alfred-tools
+    3: '965f7464ba807f096826df78545f55357a573a203f5fe733ae7ba3fb51b41750', // header pairs: --header NAME=VAR or NAME:value
 };
 {
     const rel = path.join('scripts', 'copied', 'mcp-bridge.js');
@@ -162,6 +163,14 @@ const BRIDGE_SHA256: Record<number, string> = {
     }
     for (const m of text.matchAll(/\brequire\(\s*(['"])([^'"]+)\1\s*\)/g))
         need(m[2]!.startsWith('node:') || m[2] === './mcp-headers.js', `${rel}: require('${m[2]}') - the bridge runs outside the plugin, so node: modules and ./mcp-headers.js only`);
+    // the pair grammar is the helper's, copied: the bridge parses its own so it runs beside an older helper
+    const helperText = fs.readFileSync(path.join(root, 'scripts', 'copied', 'mcp-headers.js'), 'utf8');
+    for (const rule of ['NAME_RULE', 'HEADER_RULE', 'FIXED_VALUE_RULE'])
+    {
+        const line = new RegExp(`^const ${rule} = (/.+/);$`, 'm');
+        const inBridge = line.exec(text)?.[1];
+        need(inBridge && inBridge === line.exec(helperText)?.[1], `${rel}: ${rule} is not the helper's ${rule} - the two pair grammars must match`);
+    }
     const keysSrc = fs.readFileSync(path.join(root, 'scripts', 'keys', 'keys.ts'), 'utf8');
     const pattern = /const credentialName = \(name(?::\s*\w+)?\)(?::\s*\w+)? => (\/[^/]+\/[a-z]*)\.test/.exec(keysSrc);
     need(pattern && String(bridge.CREDENTIAL) === pattern[1], `${rel}: CREDENTIAL is not keys.js credentialName's pattern`);
