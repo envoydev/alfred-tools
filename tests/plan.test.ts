@@ -222,7 +222,7 @@ test('a keyed route\'s plan line names the files its reader takes and whether th
     // the shell's variable plays no part (spec D5): the helper reads .mcps-secrets, so a value set here moves no scope
     const p = plan(inv(MAC), pickOne('github', { route: 'remote' }), opts('/h', { env: { GITHUB_PERSONAL_ACCESS_TOKEN: fake } }));
     assert.strictEqual(addStep(p).scope, 'project');
-    const files = [path.join('/work/shop', '.alfred-tools', '.mcps-secrets'), path.join('/h', '.alfred-tools', '.mcps-secrets'), path.join('/h', '.alfred', '.mcps-secrets')];
+    const files = [path.posix.join('/work/shop', '.alfred-tools', '.mcps-secrets'), path.posix.join('/h', '.alfred-tools', '.mcps-secrets'), path.posix.join('/h', '.alfred', '.mcps-secrets')];
     assert.deepStrictEqual(p.keys, [{ row: 'github', name: 'github', scope: 'project', variable: 'GITHUB_PERSONAL_ACCESS_TOKEN', kind: 'helper', files, filled: false, old: null }]);
     assert.ok(!JSON.stringify(p).includes(fake));
     assert.ok(!renderPlan(p).includes(fake));
@@ -279,7 +279,7 @@ test('the key line names the chain its reader takes; a workspace child finds an 
 });
 
 test('at local and global scope the key line names the files its reader takes, in order, and never a value', () => {
-    const P = (...a: string[]) => path.join(...a);
+    const P = (...a: string[]) => path.posix.join(...a);
     const local = plan(inv(MAC), pickOne('github', { route: 'remote', scope: 'local' }), opts('/h'));
     assert.deepStrictEqual(local.keys[0]!.files, [P('/work/shop', '.alfred-tools', '.mcps-secrets'), P('/h', '.alfred-tools', '.mcps-secrets'), P('/h', '.alfred', '.mcps-secrets')]);
     assert.ok(renderPlan(local).includes(`Key: github (local scope) - ${G}; mcp-headers.js reads it each time Claude Code connects, from ${local.keys[0]!.files.join(', then ')}. The key is never printed.`), renderPlan(local));
@@ -1680,7 +1680,7 @@ test('a key name outside ^[A-Za-z_][A-Za-z0-9_]*$ is a plan error that states th
     assert.strictEqual(ok.keys[0]!.variable, 'ACME_GITHUB_TOKEN');
     // a stdio route: the step carries the name and the stdio chain; the server's own variable keeps its name
     const d = plan(inv(MAC), { picks: { github: { route: 'local', scope: 'local' } }, keyNames: { github: 'ACME_GITHUB_TOKEN' } }, opts('/Users/me'));
-    assert.deepStrictEqual(addStep(d).key, { name: 'ACME_GITHUB_TOKEN', files: [path.join('/work/shop', '.alfred-tools', '.mcps-secrets'), path.join('/Users/me', '.alfred-tools', '.mcps-secrets')] });
+    assert.deepStrictEqual(addStep(d).key, { name: 'ACME_GITHUB_TOKEN', files: [path.posix.join('/work/shop', '.alfred-tools', '.mcps-secrets'), path.posix.join('/Users/me', '.alfred-tools', '.mcps-secrets')] });
     assert.ok(Object.hasOwn(addStep(d).entry.env!, G));
     assert.strictEqual(addStep(plan(inv(MAC), pickOne('github', { route: 'local', scope: 'local' }), opts('/Users/me'))).key!.name, G, 'no answer: the catalog\'s name');
     assert.strictEqual(addStep(plan(inv(MAC), pickOne('context7', { route: 'local', scope: 'local' }), opts('/Users/me'))).key, undefined, 'no key picked: no key step');
