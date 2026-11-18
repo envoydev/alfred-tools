@@ -42,6 +42,7 @@ export const REFUSAL = {
     notObject: 'is not a JSON object',
     stepShape: 'step.json must be { "id": <string>, "answers": <object> }',
     walkDone: 'the walk is done: there is no step to record',
+    outFolder: '--out must name a file in a folder tmpdir.ts made',
     nothingRecorded: 'no answer is recorded yet, so none can be changed',
 } as const;
 

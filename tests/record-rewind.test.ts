@@ -2,7 +2,7 @@
 // takes its entries out, and the question that asks which pick to change.
 import test from 'node:test';
 import assert from 'node:assert';
-import { rewindPick, skipPick } from '../scripts/plan/record.ts';
+import { resolveSkipTarget, rewindPick, skipPick } from '../scripts/plan/record.ts';
 import { rewindQuestion } from '../scripts/plan/asks-other.ts';
 import { sendsToOther } from './ask-texts.ts';
 import { inv, MAC, record, start, stepOf } from './record-helpers.ts';
@@ -183,4 +183,33 @@ test('rewindQuestion with one pick offers Change nothing, and with none returns 
 test('rewindQuestion lists a pick once even when it has several steps', () => {
     const picks: Picks = { recorded: { 'a:route': { tool: 'a', picks: [], answers: [] }, 'b:questions': { tool: 'b', picks: [], answers: [] }, 'a:questions': { tool: 'a', picks: [], answers: [] }, clients: { tool: null, picks: [], answers: [] }, settings: { tool: null, picks: [], answers: [] } } };
     assert.deepStrictEqual(rewindQuestion(picks, labelOf)!.question.options.map((option) => option.label), ['SETTINGS (Recommended)', 'CLIENTS', 'A', 'B']);
+});
+
+test('rewindQuestion keeps every label unique, so each pick maps to its own value', () => {
+    const asked = rewindQuestion(ids(['a', 'b', 'c']), () => 'same')!;
+    const labels = asked.question.options.map((option) => option.label.replace(' (Recommended)', ''));
+    assert.strictEqual(new Set(labels).size, 3);
+    assert.deepStrictEqual(Object.values(asked.answers).sort(), ['a', 'b', 'c']);
+    assert.ok(labels.slice(1).every((label) => label.startsWith('same')));
+});
+
+test('rewinding settings also clears the skipped tools, so a skipped tool can come back', () => {
+    const state = start(I, { rows: ['gitlab', 'sentry'], walk: 'each', done: ['clients', 'settings'] });
+    const skipped = files(skipPick(state.picks, state.answers, 'gitlab'));
+    const walkedOn = walked([], {}, start(I, skipped.picks, skipped.answers));
+    assert.deepStrictEqual(walkedOn.picks.skipped, ['gitlab']);
+    const rewound = files(rewindPick(walkedOn.picks, walkedOn.answers, 'settings'));
+    assert.deepStrictEqual(rewound.picks.skipped, []);
+    const again = walked([], {}, start(I, rewound.picks, rewound.answers));
+    assert.notStrictEqual(again.answers.picks?.['gitlab'], undefined);
+});
+
+test('a row id names the one configure target of that row, and is refused when several share it', () => {
+    const rowOf = (target: string) => ({ 'mcp:s~user': 'sentry', 'mcp:s~local': 'sentry', 'mcp:g~user': 'gitlab' })[target];
+    const picks: Picks = { targets: ['mcp:s~user', 'mcp:s~local', 'mcp:g~user'] };
+    assert.deepStrictEqual(resolveSkipTarget(picks, 'gitlab', rowOf), { pick: 'mcp:g~user' });
+    assert.deepStrictEqual(resolveSkipTarget(picks, 'mcp:s~local', rowOf), { pick: 'mcp:s~local' });
+    assert.deepStrictEqual(resolveSkipTarget({ rows: ['gitlab'] }, 'gitlab', rowOf), { pick: 'gitlab' });
+    assert.deepStrictEqual(resolveSkipTarget(picks, 'sentry', rowOf), { refused: "'sentry' names 2 targets (mcp:s~user, mcp:s~local): skip one by its key" });
+    assert.deepStrictEqual(resolveSkipTarget(picks, 'memory', rowOf), { refused: "'memory' is not a pick of this run" });
 });

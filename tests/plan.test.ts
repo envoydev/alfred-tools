@@ -18,6 +18,7 @@ import { toolAsk, STATIC, toolQuestions, removeQuestions } from '../scripts/plan
 import * as asks from '../scripts/plan/asks-all.ts';
 import * as inventoryLib from '../scripts/inventory/inventory.ts';
 import { MARKER } from '../scripts/core/kept.ts';
+import { makeTempDir } from '../scripts/core/tmpdir.ts';
 import { world, writeJson, helperCmd } from './helpers.ts';
 import { parseAskBlocks } from './ask-blocks.ts';
 import { spawnSync } from 'node:child_process';
@@ -813,7 +814,7 @@ test('plan.js plans every route at project scope but a stdio route that needs a 
 });
 
 test('the CLI form prints a plan and writes it for apply.js', () => {
-    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plan-'));
+    const d = makeTempDir();
     try
     {
         fs.writeFileSync(path.join(d, 'inv.json'), JSON.stringify(inv(MAC)));
@@ -891,7 +892,7 @@ test('plan.js from a kept inventory file leaves location keys as they are', () =
 
 test('configure plan.js from a kept inventory prints no live value', () => {
     const token = `sntryu_${randomBytes(16).toString('hex')}`;
-    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plan-'));
+    const d = makeTempDir();
     try
     {
         const r = reg('sentry-live', 'local', { command: 'npx', args: ['-y', '@sentry/mcp-server@0.42.0'], env: { SENTRY_ACCESS_TOKEN: token } }, 'sentry', 'local');

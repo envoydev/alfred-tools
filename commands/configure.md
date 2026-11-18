@@ -194,7 +194,7 @@ keep it, and say in the confirmation that it will not start yet.
 'Skip' runs:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --skip <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <key> --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --skip <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <key or row> --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 ## 7. Plan, then one confirmation
@@ -246,10 +246,10 @@ Apply this plan?
 node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --rewind <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <pick> --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
-Without `<pick>` - for 'Change something' first, and when `--rewind <pick>` exits 2 or the error names no pick - it
+Run it without `<pick>` for 'Change something', when `--rewind <pick>` exits 2, or when the error names no pick: it
 prints one question to ask as printed, and `answers.rewind` maps each label to its pick. `''` is 'Change nothing' - put
 the apply ask again with the plan as it was. `'another'` - ask for the pick in one plain line and take the target key
-from what is typed. With the pick chosen it drops that pick's recorded steps and prints the walk's next
+from what is typed through `change.keys`. With the pick chosen it drops that pick's recorded steps and prints the walk's next
 step. Run step 5's loop again to `done` from that `next`, then steps 6 and 7's plan again, then the apply ask.
 
 A plan that says 'Nothing to do': show that and stop without asking.

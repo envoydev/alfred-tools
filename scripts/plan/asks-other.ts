@@ -194,7 +194,14 @@ export function rewindQuestion(picks: Picks, labelOf: (pick: string) => string):
     if (recorded.length === 0) return null;
     const more = recorded.length > REWIND_MAX_OPTIONS;
     const shown = recorded.slice(0, more ? REWIND_MAX_OPTIONS - 1 : REWIND_MAX_OPTIONS);
-    const options = shown.map((pick, i) => ({ label: `${labelOf(pick)}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: 'answer its questions again', value: pick }));
+    const taken = new Set<string>();
+    const options = shown.map((pick, i) =>
+    {
+        const base = labelOf(pick);
+        const unique = taken.has(base) ? `${base} (${pick})` : base;
+        taken.add(unique);
+        return { label: `${unique}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: 'answer its questions again', value: pick };
+    });
     if (more) options.push({ label: 'Another one', description: 'named next', value: REWIND_ANOTHER });
     if (recorded.length === 1) options.push({ label: 'Change nothing', description: 'go back to the plan', value: '' });
     return {

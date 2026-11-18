@@ -133,7 +133,8 @@ The first five plus `kit:check` are what CI runs, in that order.
   family's root folder (project root: project and local scope; global root: global scope), memory's data included.
 - **`allowed-tools` pre-approves read-only calls only.** `apply.ts`, `fetch.ts`, `fix.ts --apply`, `update.ts --apply` and the
   `hud-statusline.ts` writes are never listed, so Claude Code's own prompt guards a change beside the command's written ask. `tests/lint.ts`
-  enforces it.
+  enforces it. The one exception is a write confined to the run's temp folder: `tmpdir.ts` and `plan.ts --out`, `--record`,
+  `--rewind` and `--skip`, each refusing (exit 2) a file outside a folder `tmpdir.ts` made.
 - **Script paths go through the plugin root.** A command's shell runs in the user's project, so every call is
   `node "${CLAUDE_PLUGIN_ROOT}/scripts/<file>"`.
 - **Asks stay within the AskUserQuestion limits** (1-4 questions per call, 2-4 options each). Exactly one option is

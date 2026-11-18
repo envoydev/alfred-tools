@@ -291,3 +291,60 @@ test('the which-pick ask labels the walk\'s own two picks', (t) => {
     const labels = asked.call[0].options.map((option: { label: string }) => option.label);
     assert.deepStrictEqual(labels, ['Settings (Recommended)', 'Apps']);
 });
+
+test('the which-pick ask tells two configure targets of one name apart by scope', (t) => {
+    const copies = [installed('sentry', { route: 'bridge', scope: 'user' }), installed('sentry', { route: 'bridge', scope: 'local' })];
+    const keys = copies.map((registration) => `mcp:${registration.name}~${registration.scope}`);
+    assert.strictEqual(copies[0]!.name, copies[1]!.name);
+    const w = work(t, inv(MAC, { registrations: copies }), { targets: keys });
+    drive(w);
+    const asked = JSON.parse(w.run('--rewind', w.inventory, w.picks, w.answers).stdout);
+    const labels = asked.call[0].options.map((option: { label: string }) => option.label.replace(' (Recommended)', ''));
+    assert.deepStrictEqual([...labels].sort(), ['sentry (Global)', 'sentry (Local)']);
+    assert.deepStrictEqual(Object.values(asked.answers.rewind).sort(), [...keys].sort());
+});
+
+test('--skip takes a row id when one configure target has that row, and refuses it when several do', (t) => {
+    const copies = [installed('sentry', { route: 'bridge', scope: 'user' }), installed('sentry', { route: 'bridge', scope: 'local' }), installed('gitlab', { scope: 'user', token: false })];
+    const [first, second, other] = copies.map((registration) => `mcp:${registration.name}~${registration.scope}`) as [string, string, string];
+    const w = work(t, inv(MAC, { registrations: copies }), { targets: [first, second, other] }, { change: { [other]: { row: 'gitlab', scope: 'project' } } });
+    const several = w.run('--skip', w.inventory, w.picks, w.answers, 'sentry');
+    assert.strictEqual(several.status, 2);
+    assert.match(several.stderr, /'sentry' names 2 targets/);
+    assert.strictEqual((w.read(w.picks) as Picks).skipped, undefined);
+    const one = w.run('--skip', w.inventory, w.picks, w.answers, 'gitlab');
+    assert.strictEqual(one.status, 0, one.stderr);
+    assert.strictEqual(one.stdout.trim(), other);
+    assert.deepStrictEqual((w.read(w.picks) as Picks).skipped, [other]);
+    assert.strictEqual((w.read(w.answers) as Answers).change?.[other], undefined);
+});
+
+test('--out outside a folder tmpdir.ts made is refused with exit 2 and writes nothing', (t) => {
+    const w = work(t, I, {}, { picks: { gitlab: {} } });
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'outside-'));
+    t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+    const target = path.join(outside, 'plan.json');
+    const refused = w.run(w.inventory, w.answers, '--out', target);
+    assert.strictEqual(refused.status, 2, refused.stderr);
+    assert.match(refused.stderr, /--out/);
+    assert.strictEqual(refused.stderr.trim().split('\n').filter((line) => line.startsWith('plan.ts:')).length, 1);
+    assert.ok(!fs.existsSync(target));
+    const relative = w.run(w.inventory, w.answers, '--out', 'plan-relative.json');
+    assert.strictEqual(relative.status, 2, relative.stderr);
+});
+
+test('--out replaces a link planted at the file or its .tmp name instead of writing through it', (t) => {
+    const w = work(t, I, {}, { picks: { gitlab: {} } });
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'outside-'));
+    t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+    const victim = path.join(outside, 'victim.txt');
+    fs.writeFileSync(victim, 'untouched');
+    const target = path.join(w.dir, 'plan.json');
+    fs.symlinkSync(victim, target);
+    fs.symlinkSync(victim, `${target}.tmp`);
+    const made = w.run(w.inventory, w.answers, '--out', target);
+    assert.strictEqual(made.status, 0, made.stderr);
+    assert.strictEqual(fs.readFileSync(victim, 'utf8'), 'untouched');
+    assert.ok(!fs.lstatSync(target).isSymbolicLink());
+    assert.ok(Array.isArray((w.read(target) as { steps: unknown[] }).steps));
+});

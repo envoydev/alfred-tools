@@ -5,9 +5,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as catalogLib from '../catalog/catalog.ts';
 import { isOurTempDir } from '../core/tmpdir.ts';
+import { writeJsonNoFollow } from '../core/temp-write.ts';
 import { parseJson } from '../core/json-file.ts';
 import { rewindQuestion } from './asks-other.ts';
-import { recordStep, rewindPick, skipPick } from './record.ts';
+import { SCOPE_LABEL } from './asks-keys.ts';
+import { recordStep, resolveSkipTarget, rewindPick, skipPick } from './record.ts';
 import { EXIT_CODE, REFUSAL, WALK_PICK_LABEL } from './record-constants.ts';
 import { isRecord } from './record-resolve.ts';
 import { walkOutput } from './walk-output.ts';
@@ -36,30 +38,25 @@ function readObject(file: string, optional = false): FileRead
 
 const isStepFile = (value: Record<string, unknown>): value is Record<string, unknown> & StepFile => typeof value['id'] === 'string' && isRecord(value['answers']);
 
-function writeJson(file: string, value: unknown): void
-{
-    const temporary = `${file}.tmp`;
-    // a link planted at the temporary name is removed, not followed: 'wx' fails rather than write through one
-    fs.rmSync(temporary, { force: true });
-    fs.writeFileSync(temporary, JSON.stringify(value, null, 2), { flag: 'wx' });
-    fs.renameSync(temporary, file);
-}
-
 // the label of a pick in the which-pick ask: the walk's own two (as their questions' headers), a tool's catalog label, a
-// configure target's name
+// configure target's name and scope (two copies of one name differ by scope)
 function labelOfPick(pick: string, output: WalkOutput): string
 {
     if (Object.hasOwn(WALK_PICK_LABEL, pick)) return WALK_PICK_LABEL[pick]!;
     const row = catalogLib.load().byId.get(pick);
-    return row?.label ?? output.targets[pick]?.current?.name ?? pick;
+    if (row) return row.label;
+    const current = output.targets[pick]?.current;
+    if (!current?.name) return pick;
+    const scope = current.scope ? SCOPE_LABEL[current.scope] : undefined;
+    return scope ? `${current.name} (${scope})` : current.name;
 }
 
 // Writes the result's two files, then prints what the mode prints: the skipped pick, else the questions for the new picks.
 function persist(result: RecordResult, args: PlanArgs, inventory: Inventory, files: { picks: string; answers: string }): number
 {
     if ('refused' in result) return refuse(result.refused);
-    writeJson(files.picks, result.picks);
-    writeJson(files.answers, result.answers);
+    writeJsonNoFollow(files.picks, result.picks);
+    writeJsonNoFollow(files.answers, result.answers);
     if (args.mode === 'skip') { console.log(args.pick); return EXIT_CODE.ok; }
     return printWalk(inventory, result.picks, args);
 }
@@ -70,6 +67,22 @@ function printWalk(inventory: Inventory, picks: Picks, args: PlanArgs): number
     if ('waits' in output) { console.error(output.waits); return EXIT_CODE.stopped; }
     console.log(JSON.stringify(output, null, 2));
     return EXIT_CODE.ok;
+}
+
+// --skip: the pick as named, or the one configure target of a row id (the walk output has each target's row)
+function skipTarget(inventory: Inventory, picks: Picks, answers: Answers, args: PlanArgs, files: { picks: string; answers: string }): number
+{
+    const named = args.pick!;
+    let rowOf: (target: string) => string | null | undefined = () => undefined;
+    if (!(picks.rows ?? []).includes(named) && !(picks.targets ?? []).includes(named))
+    {
+        const output = walkOutput(inventory, picks, args);
+        if ('waits' in output) { console.error(output.waits); return EXIT_CODE.stopped; }
+        rowOf = (target) => output.targets[target]?.row;
+    }
+    const resolved = resolveSkipTarget(picks, named, rowOf);
+    if ('refused' in resolved) return refuse(resolved.refused);
+    return persist(skipPick(picks, answers, resolved.pick), { ...args, pick: resolved.pick }, inventory, files);
 }
 
 export function runRecordMode(args: PlanArgs): number
@@ -87,7 +100,7 @@ export function runRecordMode(args: PlanArgs): number
     const answers = answersRead.value as Answers;
     const files = { picks: picksFile, answers: answersFile };
 
-    if (args.mode === 'skip') return persist(skipPick(picks, answers, args.pick!), args, inventory, files);
+    if (args.mode === 'skip') return skipTarget(inventory, picks, answers, args, files);
 
     // before anything is written: a folder under the former name waits to move, as for --questions
     const output = walkOutput(inventory, picks, args);

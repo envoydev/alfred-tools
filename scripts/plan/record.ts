@@ -288,7 +288,7 @@ function removePath(root: object, path: string[]): void
 }
 
 // Back to one pick (spec D1b): its recorded steps leave `done` and `recorded`, and each path they wrote is deleted from both
-// files. `settings` is every step. A tool left out with --skip is brought back by it.
+// files. `settings` is every step, and brings back every tool left out with --skip, as rewinding that tool does.
 export function rewindPick(picks: Picks, answers: Answers, pick: string): RecordResult
 {
     const recorded = Object.entries(picks.recorded ?? {});
@@ -303,8 +303,21 @@ export function rewindPick(picks: Picks, answers: Answers, pick: string): Record
     }
     const dropped = new Set(steps.map(([id]) => id));
     next.picks.done = (next.picks.done ?? []).filter((id) => !dropped.has(id));
-    if (next.picks.skipped?.includes(pick)) next.picks.skipped = next.picks.skipped.filter((skipped) => skipped !== pick);
+    // `settings` restarts the walk, so the tools skipped at the prerequisite step are asked and checked again
+    if (pick === WALK_QUESTION.settings) next.picks.skipped = [];
+    else if (next.picks.skipped?.includes(pick)) next.picks.skipped = next.picks.skipped.filter((skipped) => skipped !== pick);
     return next;
+}
+
+// The pick --skip names (spec D1c): a pick of the run as it is, else the row id of exactly one configure target (the
+// prerequisite step names the row, a target's pick is its key). Several targets of one row are refused, never guessed.
+export function resolveSkipTarget(picks: Picks, named: string, rowOf: (target: string) => string | null | undefined): { pick: string } | Refusal
+{
+    if ((picks.rows ?? []).includes(named) || (picks.targets ?? []).includes(named)) return { pick: named };
+    const sharing = (picks.targets ?? []).filter((target) => rowOf(target) === named);
+    if (sharing.length === 1) return { pick: sharing[0]! };
+    if (sharing.length > 1) return refuse(`'${named}' names ${sharing.length} targets (${sharing.join(', ')}): skip one by its key`);
+    return refuse(`'${named}' is not a pick of this run`);
 }
 
 // Leave one pick out (spec D1c): its entries come out of answers.json and it is listed once under `skipped`, which every
