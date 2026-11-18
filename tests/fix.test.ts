@@ -120,13 +120,25 @@ test('a fresh entry from the catalog is clean on every OS - no detector fires on
         for (const r of catalog.tools.filter((t) => t.kind === 'mcp' && t.routes.local && t.os.includes(platform)))
         {
             const entry = fresh(r.id, platform, arch);
+            // serena's home is a real folder holding the context and config files the install writes before serena starts
+            const realHome = r.id === 'serena' && platform !== 'win32';
+            if (realHome)
+            {
+                const serenaHome = fsx.mkdtempSync(path.join(os.tmpdir(), 'pt-fresh-serena-'));
+                entry.env!.SERENA_HOME = serenaHome;
+                entry.args![entry.args!.indexOf('--context') + 1] = path.join(serenaHome, 'serena-context.yml');
+                put(path.join(serenaHome, 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
+                leaveConfig(serenaHome);
+            }
             const m = inventory.matchEntry(entry, catalog);
             assert.deepStrictEqual(m, { rowId: r.id, route: 'local' }, `${r.id} on ${platform} is recognised`);
             const found = detect(ctxFor({ platform, arch, registrations: [reg(r.id, entry, { route: 'local' })] })).found;
+            if (realHome) fsx.rmSync(entry.env!.SERENA_HOME!, { recursive: true, force: true });
             // appium's SDK paths are looked up on the machine by this very fix: with none on it, the finding is blocked
-            // serena-project-folder: the fixture has no disk, and the install writes serena_config.yml before serena starts
-            assert.deepStrictEqual(found.filter((f) => f.id !== 'appium-sdk-env' && f.id !== 'serena-project-folder'), [], `${r.id} on ${platform}/${arch}`);
-            for (const f of found.filter((candidate) => candidate.id !== 'serena-project-folder')) assert.ok(f.blocked, `${r.id}: ${f.id} should be blocked with nothing on the machine`);
+            // a Windows-shaped home cannot be made on this host, so there the one config-on-disk finding is the fixture's, not the installer's
+            const fixtureOnly = (f: { id: string }) => f.id === 'serena-project-folder' && r.id === 'serena' && platform === 'win32';
+            assert.deepStrictEqual(found.filter((f) => f.id !== 'appium-sdk-env' && !fixtureOnly(f)), [], `${r.id} on ${platform}/${arch}`);
+            for (const f of found.filter((candidate) => !fixtureOnly(candidate))) assert.ok(f.blocked, `${r.id}: ${f.id} should be blocked with nothing on the machine`);
         }
     }
 });
@@ -1931,7 +1943,7 @@ test('serena-base-modes: Apply all found runs the op and the finding is gone', (
         const l = logged();
         const res = applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
-        assert.match(fsx.readFileSync(cfg, 'utf8'), /^base_modes: \[\]\nauth_secret: s3cr3t-fixture\n(project_serena_folder_location: .*\n)?$/, 'the base modes line is the only one changed');
+        assert.match(fsx.readFileSync(cfg, 'utf8'), /^base_modes: \[\]\nauth_secret: s3cr3t-fixture\nproject_serena_folder_location: .*\n$/, 'base_modes is emptied and the folder key appended: apply all runs both rows');
         assert.ok(!l.text().includes('s3cr3t'));
         assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-base-modes'), []);
         // an alfred-code 2.x home is never found

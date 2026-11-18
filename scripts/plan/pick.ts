@@ -463,6 +463,8 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
     record();
     if (row.locations && current.rootStr && rootStr !== current.rootStr && formatRoot(logicalRoot(current.rootStr, context), 'local', context).value !== ensure)
         out.notes.push(`${row.id}: the old data stays at ${current.rootStr}; moving a location moves no data`);
+    const configInit = row.id === 'serena' ? serenaConfigInitStep(entry, context) : null;
+    if (configInit) out.steps.push(configInit);
     if (ensure && (!current.rootStr || rootStr !== current.rootStr)) out.steps.push({ op: 'ensure-dir', path: ensure, why: `${row.id}: new data folder` });
     if (moved)
         out.steps.push({ op: 'mcp-move', from: { name: current.name, scope: current.scope }, to: { name, scope }, entry, old: current.entry, row: row.id, route: routeId, ...withKey, ...withFilled, why: `${row.id}: ${current.name !== name ? `rename '${current.name}' to '${name}'` : ''}${current.name !== name && current.scope !== scope ? ' and ' : ''}${current.scope !== scope ? `move from ${current.scope} to ${scope} scope` : ''} - add first, read back, then remove the old one` });

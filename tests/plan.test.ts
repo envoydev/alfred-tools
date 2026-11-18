@@ -76,7 +76,7 @@ const inv = (base: { os: string; arch: string; project: string }, extra: Record<
 const opts = (home: string, extra: PlanOptions = {}) => ({ home, env: {}, exists: () => false, machine: { docker: true }, ...extra });
 const pickOne = (id: string, pick: PickAnswer = {}): Answers => ({ picks: { [id]: pick } });
 // the steps that change a registration, without the root's file steps and the records (spec D8)
-const FILE_OPS = ['root-ignore', 'write-helper', 'write-bridge', 'ensure-key-name', 'deny-read', 'list-write', 'record-root'];
+const FILE_OPS = ['root-ignore', 'write-helper', 'write-bridge', 'serena-config-init', 'ensure-key-name', 'deny-read', 'list-write', 'record-root'];
 const regSteps = (p: Plan) => p.steps.filter((s) => !FILE_OPS.includes(s.op));
 const addStep = (p: Plan, i = 0) => (p.steps.filter((s) => s.op === 'mcp-add') as McpAddStep[])[i] as McpAddStep;
 const reg = (name: string, scope: string, entry: ServerEntry, rowId: string | null = null, route: string | null = null, flags: Partial<InvRegistration> = {}): InvRegistration => ({ name, scope, entry, rowId, route, own: !rowId, alfredRetired: false, ...flags });
@@ -468,7 +468,7 @@ test('a rename starts from the registration as read: an updated pin and a user-a
     (r.entry.env as EntryEnv).MY_VAR = 'kept';
     const p = plan(inv(MAC, { registrations: [r] }), changeOf(r, { name: 'shop-serena' }), opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
-    assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'write-serena-context', 'mcp-move', 'list-write', 'record-root'], 'its data folder and its context file sit in the project root');
+    assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'write-serena-context', 'serena-config-init', 'mcp-move', 'list-write', 'record-root'], 'its data folder and its context file sit in the project root');
     const s = (p.steps.find((x) => x.op === 'mcp-move') as McpMoveStep);
     assert.deepStrictEqual([s.from, s.to], [{ name: 'serena', scope: 'local' }, { name: 'shop-serena', scope: 'local' }]);
     assert.ok(s.entry.args!.includes('serena-agent@2.4.0'), 'the updated pin is not downgraded to the catalog pin');
@@ -2728,6 +2728,29 @@ test('a root change moves mcps.json, writes serena-context.yml in the new home, 
     assert.strictEqual(ctxOf(m.cursor().serena), path.join(m.fresh, 'serena', 'serena-context.yml'), 'Cursor follows');
 });
 
+test('a root change inits serena\'s config in the new home before the replace, unless the home has one', (t) => {
+    const m = rootMoveWorld(t, { serena: { scope: 'local' } });
+    const newConfig = path.join(m.fresh, 'serena', 'serena_config.yml');
+    const p = m.change();
+    assert.deepStrictEqual(p.errors, []);
+    const ops = p.steps.map((s) => s.op);
+    const init = p.steps.find((s) => s.op === 'serena-config-init');
+    assert.ok(init && init.op === 'serena-config-init');
+    assert.strictEqual(init.file, newConfig);
+    assert.ok(ops.indexOf('serena-config-init') < ops.indexOf('mcp-replace'), ops.join());
+    const { r, text } = m.run(p, 'tmp2');
+    assert.strictEqual(r.failed, null, text);
+    assert.match(m.fs.readFileSync(newConfig, 'utf8'), /^projects: \[\]\nbase_modes: \[\]\nproject_serena_folder_location: /);
+    // a config already in the new home is left alone: a second world, with the file in place before the plan
+    const n = rootMoveWorld(t, { serena: { scope: 'local' } });
+    n.fs.mkdirSync(path.join(n.fresh, 'serena'), { recursive: true });
+    n.fs.writeFileSync(path.join(n.fresh, 'serena', 'serena_config.yml'), 'base_modes: []\n');
+    const kept = n.change();
+    assert.deepStrictEqual(kept.errors, []);
+    assert.ok(!kept.steps.some((s) => s.op === 'serena-config-init'), kept.steps.map((s) => s.op).join());
+    assert.ok(kept.steps.some((s) => s.op === 'mcp-replace'));
+});
+
 test('a root change retires the root copy of a 0.5.x serena context instead of moving it', (t) => {
     const m = rootMoveWorld(t, { serena: { scope: 'local' } });
     const ctxOf = (e: ServerEntry) => e.args![e.args!.indexOf('--context') + 1];
@@ -2761,7 +2784,7 @@ test('a rename of a 0.5.x serena retires the root copy of its context', () => {
     const p = plan(inv(MAC, { registrations: [r] }), changeOf(r, { name: 'shop-serena' }), opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
     const ops = p.steps.map((s) => s.op);
-    assert.deepStrictEqual(ops, ['root-ignore', 'write-serena-context', 'mcp-move', 'retire-shipped', 'list-write', 'record-root']);
+    assert.deepStrictEqual(ops, ['root-ignore', 'write-serena-context', 'serena-config-init', 'mcp-move', 'retire-shipped', 'list-write', 'record-root']);
     assert.deepStrictEqual((p.steps.find((s) => s.op === 'retire-shipped') as RetireShippedStep).namedBy, []);
     assert.strictEqual((p.steps.find((s) => s.op === 'retire-shipped') as RetireShippedStep).file, '/work/shop/.alfred-tools/serena-context.yml');
     assert.deepStrictEqual(p.steps.filter((s) => s.op === 'move-root-file'), []);
