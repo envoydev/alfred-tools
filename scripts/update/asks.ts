@@ -27,14 +27,25 @@ export function questions(out: UpdateCheck)
         }));
     }
     const offer = { ...STATIC.updateOffer };
+    // 'All of them' runs the offers, never the unchecked plugins: say which are left for 'Pick which'
+    if (out.offers.length && out.unchecked.length) offer.options = offer.options.map((option, i) => (i === 0 ? { ...option, description: `${option.description}; ${leftOutNote(out.unchecked.map((item) => item.label))}` } : option));
     if (!out.offers.length) offer.options = offer.options.filter((option) => option.label !== `All of them${RECOMMENDED_SUFFIX}`).map((option, i) => (i === 0 ? { ...option, label: `${option.label}${RECOMMENDED_SUFFIX}` } : option));
     return { offer, pick: chunk(pickQuestions, 4), ...cursor };
+}
+
+// 'a lists no version - pick it under Pick which', 'a and b list ...', 'a, b and c list ...'
+function leftOutNote(names: string[]): string
+{
+    const one = names.length === 1;
+    const joined = one ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names.at(-1)!}`;
+    return `${joined} ${one ? 'lists' : 'list'} no version - pick ${one ? 'it' : 'them'} under Pick which`;
 }
 
 // The ask cursor-offer (spec D9), plan/asks-other.ts's text; `answers` maps each label to the value passed back.
 function cursorOfferAsk(cursorOffer: CursorOffer)
 {
     const offerQuestion = cursorOfferQuestion(cursorOffer.root, cursorOffer.servers.length, cursorOffer.signIns);
-    return { ...offerQuestion.question, answers: offerQuestion.answers };
+    // `needs` is the list-import this offer waits on (null: askable with the update offer, in one call)
+    return { ...offerQuestion.question, answers: offerQuestion.answers, needs: cursorOffer.needs };
 }
 

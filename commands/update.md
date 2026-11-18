@@ -66,7 +66,9 @@ A line under 'Could not check' is a registry that did not answer; it is never re
 node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --questions --no-refresh --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
-It prints `{ "offer": <ask>, "pick": [<calls>] }`. Ask the `offer` as printed:
+It prints `{ "offer": <ask>, "pick": [<calls>], "cursorOffers": [...], "cursorNameQuestions": [...] }`. Ask the `offer` as
+printed, in one call with each question in `cursorOffers` whose `needs` is null when that is four questions or fewer (the
+Cursor offer text is below).
 
 ```ask updateOffer
 Update what is behind?
@@ -85,7 +87,10 @@ so is one 'All of them' leaves out because alfred-code is set up (its label ends
 removes it for both'): pass each as `--input retired-declined=<id>~<scope>,...` in step 3, and it is not offered again.
 When nothing else was picked, step 3 runs with `none`. 'Skip' declines nothing.
 
-Then, unless the user picked 'Skip', ask each question in `cursorOffers` as printed, one per root, after the updates:
+Ask each question in `cursorOffers` as printed, one per root. One whose `needs` is null goes in the update offer's call
+(four questions or fewer in all; else in the next call); one whose `needs` names a list-import waits until 'Pick which'
+is answered. On 'Skip', drop the Cursor answers from the batched call and pass none of them. When the update offer is
+not asked (only the Cursor offer remains), ask the Cursor offers alone:
 
 ```ask cursor-offer
 Cursor is on this machine, and the <n> servers in <root> are set up for Claude Code only. Set them up for Cursor too?

@@ -428,6 +428,17 @@ test('the asks stay within the AskUserQuestion limits; every pick option carries
     assert.deepStrictEqual(only.offer!.options.map((o) => o.label), ['Pick which (Recommended)', 'Skip']);
 });
 
+test('All of them names the plugins it leaves out', () =>
+{
+    const plugin = (id: string, to: string | null) => ({ kind: 'plugin', id: `plugin:${id}~user`, group: 'other', label: id, from: '1.0.0', to });
+    const base = { skipped: [], held: [], errors: [], lsp: [], notes: [] };
+    const allOf = (out: object) => questions({ ...base, ...out } as unknown as UpdateCheck).offer!.options[0]!.description;
+    assert.strictEqual(allOf({ offers: [plugin('a', '1.1.0')], unchecked: [plugin('alfred-code', null), plugin('alfred-mods', null)] }), 'update everything offered; alfred-code and alfred-mods list no version - pick them under Pick which');
+    assert.strictEqual(allOf({ offers: [plugin('a', '1.1.0')], unchecked: [plugin('alfred-code', null)] }), 'update everything offered; alfred-code lists no version - pick it under Pick which');
+    assert.strictEqual(allOf({ offers: [plugin('a', '1.1.0')], unchecked: ['x', 'y', 'z'].map((n) => plugin(n, null)) }), 'update everything offered; x, y and z list no version - pick them under Pick which');
+    assert.strictEqual(allOf({ offers: [plugin('a', '1.1.0')], unchecked: [] }), 'update everything offered');
+});
+
 test('arguments: exactly one mode, and a stray flag is refused', async () =>
 {
     const w = world();
@@ -1065,6 +1076,7 @@ test('cursor-offer: two options, Set them up recommended and first; Not now is k
         assert.strictEqual(q.cursorOffers.length, 1);
         const ask = q.cursorOffers[0];
         assert.strictEqual(ask.id, `cursor-offer:${root}`);
+        assert.strictEqual(ask.needs, null, 'no list-import to wait on: askable with the update offer');
         assert.strictEqual(ask.question, `Cursor is on this machine, and the 1 servers in ${root} are set up for Claude Code only. Set them up for Cursor too?`);
         assert.deepStrictEqual(ask.options.map((o: { label: string }) => o.label), ['Set them up for Cursor too (Recommended)', 'Not now']);
         // Skip: nothing passed, nothing written
