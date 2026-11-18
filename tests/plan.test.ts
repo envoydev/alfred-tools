@@ -3016,3 +3016,25 @@ test('helperParts reads the root past the pairs; configure offers the registrati
     const changed = plan(inv(MAC, { registrations: [old] }), { ...changeOf(old, {}), keyNames: { 'mcp:sonar~user': 'ACME_SONAR' }, settings: { 'mcp:sonar~user': { SONARQUBE_READ_ONLY: 'true' } } }, opts('/Users/me'));
     assert.strictEqual((changed.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep).entry.headersHelper, 'node /old/mcp-headers.js ACME_SONAR Bearer --header SONARQUBE_ORG=SONARQUBE_ORG --header SONARQUBE_READ_ONLY:true');
 });
+
+test('configure keeps the helper pairs as installed: the names it reads, the fixed pairs it added, and no org it never had', () => {
+    const entry = (command: string) => ({ type: 'http', url: 'https://api.sonarcloud.io/mcp', headersHelper: command });
+    const helper = '/old/mcp-headers.js';
+    const edited = reg('sonar', 'user', entry(`node ${helper} K Bearer --header SONARQUBE_ORG=ACME_ORG --header X-Foo:bar --header SONARQUBE_READ_ONLY:true`), 'sonarqube', 'remote');
+    const toReadWrite = plan(inv(MAC, { registrations: [edited] }), { ...changeOf(edited, {}), settings: { 'mcp:sonar~user': {} } }, opts('/Users/me'));
+    assert.deepStrictEqual(toReadWrite.errors, []);
+    assert.strictEqual((toReadWrite.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep).entry.headersHelper, `node ${helper} K Bearer --header SONARQUBE_ORG=ACME_ORG --header X-Foo:bar`);
+    assert.deepStrictEqual((toReadWrite.steps.find((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep).names, ['K', 'ACME_ORG'], 'the name the pair reads, not the catalog\'s');
+    // the order: the names as read, the fixed pairs the route does not list as read, then the settings
+    const toolsets = plan(inv(MAC, { registrations: [edited] }), { ...changeOf(edited, {}), settings: { 'mcp:sonar~user': { SONARQUBE_TOOLSETS: 'issues', SONARQUBE_READ_ONLY: 'true' } } }, opts('/Users/me'));
+    assert.strictEqual((toolsets.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep).entry.headersHelper, `node ${helper} K Bearer --header SONARQUBE_ORG=ACME_ORG --header X-Foo:bar --header SONARQUBE_READ_ONLY:true --header SONARQUBE_TOOLSETS:issues`);
+    // a registration with no `=` pair gets none on an unrelated change, and no SONARQUBE_ORG name is written
+    const bare = reg('sonar', 'user', entry(`node ${helper} K Bearer --header SONARQUBE_READ_ONLY:true`), 'sonarqube', 'remote');
+    const region = plan(inv(MAC, { registrations: [bare] }), changeOf(bare, { params: { host: 'api.sonarqube.us' } }), opts('/Users/me'));
+    assert.deepStrictEqual(region.errors, []);
+    const moved = region.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep;
+    assert.strictEqual(moved.entry.url, 'https://api.sonarqube.us/mcp');
+    assert.strictEqual(moved.entry.headersHelper, `node ${helper} K Bearer --header SONARQUBE_READ_ONLY:true`);
+    assert.ok(!(region.steps.find((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep | undefined)?.names.includes('SONARQUBE_ORG'));
+    assert.ok(!region.notes.some((n) => n.includes('SONARQUBE_ORG')), region.notes.join('\n'));
+});

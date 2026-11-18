@@ -4,7 +4,7 @@ import path from 'node:path';
 import { pathFor } from '../entries/platform.ts';
 import { recommendedSide, alfredNameProblem, logicalRoot, otherPlace, parseRoot, alfredRoot, defaultRoot, serenaSpaceFree, formatRoot, validWindowsSerenaHome, applyRoot } from '../entries/locations.ts';
 import { checkHostedSettings, currentHostedSettings, defaultHostedSettings, pairNames, optionalNameNotes } from './hosted-settings.ts';
-import { currentOf, buildEntry, applyContext, bridgeParts, helperGlobalRoot, bridgePathFor, renameTemplate, helperFor, subst, mergeSettings, contextArgAt } from '../entries/entry.ts';
+import { currentOf, buildEntry, applyContext, bridgeParts, helperParts, helperGlobalRoot, bridgePathFor, renameTemplate, helperFor, subst, mergeSettings, contextArgAt } from '../entries/entry.ts';
 import { signInParts, signInFormOf } from '../entries/sign-in.ts';
 import { nameProblem, fetchStep } from '../entries/names.ts';
 import { recommendedScope, keyStateOf, heldKey, PARENT_HELPER_IN_CHILD } from './asks-keys.ts';
@@ -295,7 +295,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
                 if (header) { delete entry.headers!.Authorization; if (!Object.keys(entry.headers!).length) delete entry.headers; }
             }
             else if (header) out.notes.push(`${row.id}: '${current!.name}' sends its key from an Authorization header - /alfred-tools:fix moves it into .mcps-secrets, read by mcp-headers.js (key-to-helper)`);
-            else entry.headersHelper = helperFor(route, scope, context, keyName, toolSettings);
+            else entry.headersHelper = helperFor(route, scope, context, keyName, toolSettings, (helperParts(current!.entry.headersHelper) || { pairs: null }).pairs);
         }
         else if (route.authMode === 'optional-token' && sendNow !== current!.token)
         {

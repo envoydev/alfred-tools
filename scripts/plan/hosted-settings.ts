@@ -1,6 +1,6 @@
 // A hosted route's tool settings (Part C2): fixed `--header NAME:value` pairs on the helper command. The question that
 // offers them, the check of the answer, the defaults a fresh install takes and the pairs a registration has now.
-import { helperParts } from '../entries/entry.ts';
+import { helperParts, splitPair } from '../entries/entry.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
 import type { Asked, HostedSettingsAnswer } from './types.ts';
@@ -19,8 +19,8 @@ export function currentHostedSettings(route: CatalogRoute, entry: ServerEntry | 
 {
     const known = new Set((route.settings || []).map((setting) => setting.header));
     const pairs = (entry && helperParts(entry.headersHelper)?.pairs) || [];
-    const fixed = pairs.map((pair) => pair.split(':')).filter((parts) => parts.length >= 2 && known.has(parts[0]!)).map((parts) => [parts[0]!, parts.slice(1).join(':')] as const);
-    return Object.fromEntries(fixed);
+    const fixed = pairs.map(splitPair).filter((pair) => pair !== null && pair.kind === 'fixed' && known.has(pair.header));
+    return Object.fromEntries(fixed.map((pair) => [pair!.header, pair!.rest]));
 }
 
 // The answer checked against the route's settings: names the route has, values from its `values`, toolsets as a
@@ -80,7 +80,7 @@ export function hostedSettingsQuestion(row: CatalogRow, route: CatalogRoute, ent
 export function pairNames(entry: ServerEntry | null | undefined): string[]
 {
     const pairs = (entry && helperParts(entry.headersHelper)?.pairs) || [];
-    return pairs.filter((pair) => pair.includes('=')).map((pair) => pair.slice(pair.indexOf('=') + 1));
+    return pairs.map(splitPair).filter((pair) => pair !== null && pair.kind === 'name').map((pair) => pair!.rest);
 }
 
 // One line per pair name that holds no value yet: it is optional - the header is sent once the name is filled.

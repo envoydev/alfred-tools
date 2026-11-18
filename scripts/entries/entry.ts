@@ -160,19 +160,32 @@ export function helperNameOf(command: unknown): string | null
     return helper && helper.args.length >= 2 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(helper.args[0]!) && /^[A-Za-z][\w-]*$/.test(helper.args[1]!) ? helper.args[0]! : null;
 }
 
-// The pairs a hosted route's helper command carries: each of the route's `helper.headers` as `<header>=<var>`, then each
-// setting as `<header>:<value>`, in the order the catalog lists them.
-export function helperPairs(route: CatalogRoute, settings: Record<string, string> = {}): string[]
+// A `--header` pair's text split at its first separator, as the helper's parser does: `NAME=VAR` is a name read from
+// .mcps-secrets, `NAME:value` a fixed value.
+export function splitPair(text: string): { header: string; kind: 'name' | 'fixed'; rest: string } | null
+{
+    const at = text.search(/[=:]/);
+    return at < 1 ? null : { header: text.slice(0, at), kind: text[at] === '=' ? 'name' : 'fixed', rest: text.slice(at + 1) };
+}
+
+// The pairs a hosted route's helper command carries. A fresh command takes each of the route's `helper.headers` as
+// `<header>=<var>`, then each setting as `<header>:<value>`, in the order the catalog lists them. A command being
+// rewritten (`asRead`: its pairs as read) keeps its `=` pairs and every `:` pair the route does not list as a setting
+// exactly as they were, in that order, and only its settings are replaced.
+export function helperPairs(route: CatalogRoute, settings: Record<string, string> = {}, asRead: string[] | null = null): string[]
 {
     const order = (route.settings || []).map((setting) => setting.header);
     const rank = (header: string) => { const i = order.indexOf(header); return i < 0 ? order.length : i; };
-    const fixed = Object.entries(settings).sort(([first], [second]) => rank(first) - rank(second));
-    return [...((route.helper && route.helper.headers) || []).map((header) => `${header.header}=${header.var}`), ...fixed.map(([header, value]) => `${header}:${value}`)];
+    const fixed = Object.entries(settings).sort(([first], [second]) => rank(first) - rank(second)).map(([header, value]) => `${header}:${value}`);
+    if (asRead === null) return [...((route.helper && route.helper.headers) || []).map((header) => `${header.header}=${header.var}`), ...fixed];
+    const kept = asRead.filter((pair) => { const parts = splitPair(pair); return parts !== null && (parts.kind === 'name' || !order.includes(parts.header)); });
+    return [...kept.filter((pair) => splitPair(pair)!.kind === 'name'), ...kept.filter((pair) => splitPair(pair)!.kind === 'fixed'), ...fixed];
 }
 
 // The helper command a hosted keyed route gets at `scope`: the key's name (`keyName`, else the catalog's default), the
-// route's scheme, its header pairs and the `settings` the user chose.
-export const helperFor = (route: CatalogRoute, scope: string, context: Machine, keyName: string | null | undefined = null, settings: Record<string, string> = {}): string => helperCommand({ helperPath: helperPathFor(scope, context), name: keyName || route.helper!.var, scheme: route.helper!.scheme, globalRoot: helperGlobalRoot(scope, context), style: context.platform === 'win32' ? 'win32' : 'posix', pairs: helperPairs(route, settings) });
+// route's scheme, its header pairs and the `settings` the user chose. `asRead`: the pairs of the registration being
+// rewritten, which a change starts from.
+export const helperFor = (route: CatalogRoute, scope: string, context: Machine, keyName: string | null | undefined = null, settings: Record<string, string> = {}, asRead: string[] | null = null): string => helperCommand({ helperPath: helperPathFor(scope, context), name: keyName || route.helper!.var, scheme: route.helper!.scheme, globalRoot: helperGlobalRoot(scope, context), style: context.platform === 'win32' ? 'win32' : 'posix', pairs: helperPairs(route, settings, asRead) });
 
 // ---- the bridge (0.4.0) --------------------------------------------------------------------------------------------
 
