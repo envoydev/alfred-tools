@@ -27,7 +27,7 @@
     "- The folders written before 2026-11-15 keep effects in several files and constants beside their code; they follow the shape as they are changed."
   ],
   "audit": {
-    "skills": {
+    "commands": {
       "roots": [
         "commands"
       ],
@@ -36,13 +36,13 @@
         "npm run validate"
       ],
       "notes": [
-        "commands/*.md are single-file skills (slash commands): each file is one skill with SKILL.md-style frontmatter (description, argument-hint, disable-model-invocation, allowed-tools) and no bundled folder; all four are manual-only, so Dimension 1 judges the slash-menu description and argument-hint, not model triggering.",
+        "commands/*.md are the plugin's four slash commands (install, configure, update, fix), each with frontmatter description, argument-hint, disable-model-invocation: true and allowed-tools; the manifest has no commands key, so the default commands/ folder is what loads. SCRIPTS_ROOT is scripts/.",
         "A command runs its work through scripts invoked only via the plugin root (node \"${CLAUDE_PLUGIN_ROOT}/scripts/<x>.ts\"), each pre-approved in allowed-tools; npm run lint fails a script path that does not go through the plugin root.",
         "Commands that write registrations (install, configure, update, fix) have side effects the user owns; after an edit that touches what they write, run npm run matrix (real-CLI cases in a throwaway home) and read the written .mcp.json, account file and settings, never the exit code alone.",
         "The MCP-server catalog under catalog/ decides what the commands can install; a command cite of a server is checked against it."
       ]
     },
-    "plugins": {
+    "tools": {
       "roots": [
         "catalog/tools.json"
       ],
