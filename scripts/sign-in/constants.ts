@@ -16,3 +16,13 @@ export const LINE = {
     notSharedForm: 'not the shared sign-in form (mcp-remote with its sign-in folder) - nothing to sign in',
     noTokens: 'the client finished but no sign-in was stored',
 };
+// the lines mcp-remote 0.16.0 writes to stderr (docs/sources.md, mcp-remote-client): the authorize block, whose next line is
+// the URL, and the one that follows when no browser could be opened; each is `[<pid>] <text>`
+export const AUTHORIZE_MARKER = 'Please authorize this client by visiting:';
+export const NO_BROWSER_MARKER = 'Could not open a browser automatically';
+export const PID_PREFIX_PATTERN = /^\[\d+\]\s*/;
+export const LINK_PROTOCOL = 'https:';
+// a stderr line longer than this is no marker and no URL of the client's; it is skipped unread
+export const MAX_LINE_LENGTH = 4096;
+// how long a stopped client gets to exit on SIGTERM before it is killed
+export const KILL_GRACE_MS = 5000;

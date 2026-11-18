@@ -1423,6 +1423,12 @@ mcp-remote@0.16.0` into an empty folder, extracted and read, nothing in it run).
   the client's file is `<MCP_REMOTE_CONFIG_DIR>/mcp-remote-v1/<md5 of the URL>_tokens.json`, the one the proxy reads
   (S4). `sign-in.ts` checks that file by name only and never opens it.
 - `client.js` installs its stdin and SIGINT handlers only after it has connected, so a closed stdin cannot cut the
-  browser wait short; `sign-in.ts` closes stdin and drops the client's output.
+  browser wait short; `sign-in.ts` closes stdin and drops the client's stdout (the tool list).
+- Its logs go to stderr as `[<pid>] <text>` (`dist/chunk-K6DREQAS.js`, around lines 35181-35192 and 32291-32295, read
+  2026-11-18): a block whose first line is `Please authorize this client by visiting:` with the authorize URL on the next
+  line, then `Could not open a browser automatically. Please copy and paste the URL above into your browser.` when
+  opening the browser failed, else `Browser opened automatically.`. `sign-in.ts` reads stderr line by line in memory,
+  remembers the first `https:` URL after the first marker, and on the could-not-open line prints one line with that link;
+  no other stderr text is kept or shown. The unit tests feed these lines through a stub runner; a real run is NOT RUN.
 - Matrix case `sign-in` (by hand, a real Atlassian account, the first start of a keyless OAuth server inside the 30 s
   limit after the sign-in): NOT RUN. The unit tests use a stub runner, no browser and no network.

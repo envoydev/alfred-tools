@@ -3,4 +3,5 @@
 import { blockingStdio } from './core/json-file.ts';
 import { runSignInCommand } from './sign-in/command.ts';
 
-blockingStdio(); process.exit(runSignInCommand(process.argv.slice(2)));
+blockingStdio();
+runSignInCommand(process.argv.slice(2)).then((code) => process.exit(code));
