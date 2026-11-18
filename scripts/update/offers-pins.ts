@@ -1,7 +1,8 @@
 // The pin offers: each pinned MCP server behind a release at least 7 days old.
 import * as inventory from '../inventory/inventory.ts';
 import * as registryLib from '../catalog/registry.ts';
-import { signInParts } from '../entries/sign-in.ts';
+import { mcpRemotePackage, signInParts } from '../entries/sign-in.ts';
+import { FAMILIES } from '../roots/roots.ts';
 import { pinnedVersion } from '../fix/common.ts';
 import { bumpEntry } from './offers-plugins.ts';
 import * as kept from '../core/kept.ts';
@@ -32,7 +33,7 @@ export async function mcpOffers(context: UpdateCtx, out: UpdateCheck): Promise<v
         const signIn = registration.route === 'remote' && signInParts(registration.entry);
         if (registration.route === 'remote' && !signIn) { out.skipped.push(`${at}: a hosted URL has no pin`); continue; }
         if (routeDefinition.runtime === 'docker') { out.skipped.push(`${at}: the Docker image tag is not checked - change it with /alfred-tools:configure`); continue; }
-        const packageSpec = signIn ? context.catalog.byId.get('sentry')!.routes.bridge!.package : routeDefinition.package;
+        const packageSpec = signIn ? mcpRemotePackage(context.catalog) : routeDefinition.package;
         if (!packageSpec) continue;
         const from = pinnedVersion(registration.entry, packageSpec.name);
         if (!from) { out.skipped.push(`${at}: ${packageSpec.name} is launched with no version, so it follows the registry already`); continue; }
@@ -53,9 +54,9 @@ export async function mcpOffers(context: UpdateCtx, out: UpdateCheck): Promise<v
 // from the list is named and left to fix.
 export async function cursorPinOffers(context: UpdateCtx, out: UpdateCheck): Promise<void>
 {
-    const packageSpec = context.catalog.byId.get('sentry')!.routes.bridge!.package!;
+    const packageSpec = mcpRemotePackage(context.catalog);
     let versions: Release[] | null = null;
-    for (const family of ['project', 'global'] as const)
+    for (const family of FAMILIES)
     {
         const list = context.inventory.lists && context.inventory.lists[family];
         if (!list || list.note || list.old) continue;

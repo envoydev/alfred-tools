@@ -6,10 +6,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { ALFRED_DATA } from '../core/constants.ts';
 import type { Env } from '../core/types.ts';
 import type { LineEntry, RawRecord, RecordRead, Role, Workspace, WorkspaceJson, WorkspaceRecord } from './types.ts';
 
-const DATA = '.alfred';
 const JSON_NAME = 'workspace.json';
 const LEGACY_NAME = 'workspace';
 const PARENT_RE = /^\.\.(\/\.\.)*$/;
@@ -77,8 +77,8 @@ const shape = (record: RawRecord): WorkspaceRecord => { const out: WorkspaceReco
 // -> { parent?, role?, children, ignoredChildren } | { error, file } | null (no record)
 export function readRecord(folder: string): RecordRead | null
 {
-    const jsonFile = path.join(folder, DATA, JSON_NAME);
-    const legacyFile = path.join(folder, DATA, LEGACY_NAME);
+    const jsonFile = path.join(folder, ALFRED_DATA, JSON_NAME);
+    const legacyFile = path.join(folder, ALFRED_DATA, LEGACY_NAME);
     const json = readText(jsonFile);
     const legacy = readText(legacyFile);
     if (json.error) return { error: `cannot be read (${json.error})`, file: jsonFile };
@@ -107,8 +107,8 @@ export function readRecord(folder: string): RecordRead | null
 }
 
 const NONE = (notes: string[] = []): Workspace => ({ root: null, members: [], ancestors: [], notes });
-const inside = (child: string, root: string): boolean => { const rel = path.relative(root, child); return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel); };
-const at = (folder: string, rel: string): string => path.resolve(folder, rel.replace(/\\/g, '/'));
+const inside = (child: string, root: string): boolean => { const relativePath = path.relative(root, child); return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath); };
+const at = (folder: string, relativePath: string): string => path.resolve(folder, relativePath.replace(/\\/g, '/'));
 // alfred-code's own rule (stack/hooks/docs.js dataRoot): an absolute ALFRED_CODE_DATA_PATH moves its data folder away
 const movedData = (env: Env | null | undefined): boolean => /^(?:\/|[A-Za-z]:[\\/])/.test(String((env || {}).ALFRED_CODE_DATA_PATH || '').trim());
 
@@ -116,7 +116,7 @@ function anyRecordAbove(folder: string): boolean
 {
     for (let dir = folder; ; dir = path.dirname(dir))
     {
-        if ([JSON_NAME, LEGACY_NAME].some((fileName) => fs.existsSync(path.join(dir, DATA, fileName)))) return true;
+        if ([JSON_NAME, LEGACY_NAME].some((fileName) => fs.existsSync(path.join(dir, ALFRED_DATA, fileName)))) return true;
         if (path.dirname(dir) === dir) return false;
     }
 }

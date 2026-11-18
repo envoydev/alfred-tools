@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // THE FIX ENGINE - known problems and their recorded fixes (catalog/fixes.json, detectors in scripts/fix/).
 //
 //   node fix.ts --detect [--only <fix id | tool | registration name>] [--json] [--project <dir>] [--data <dir>]
@@ -26,8 +25,9 @@ import { apply } from '../apply/run.ts';
 import * as cli from '../core/claude-cli.ts';
 import { writeJob, fetchJob, nextLines } from '../apply/fetch.ts';
 import * as F from './fix-functions.ts';
-import { realMachine, clone } from './common.ts';
-import { deepEqual } from '../plan/plan.ts';
+import { realMachine, clone, isManaged } from './common.ts';
+import { deepEqual } from '../core/json-file.ts';
+import { PREFIX } from '../core/tmpdir.ts';
 import { useRoots, fileSteps } from '../plan/root-files.ts';
 import { reconnectLine } from '../plan/render.ts';
 import { helperNameOf, helperParts, contextArgAt } from '../entries/entry.ts';
@@ -56,6 +56,9 @@ export function makeCtx({ inventory: projectInventory, catalog = catalogLib.load
 
 const matches = (finding: Finding, only: string | undefined) => !only || [finding.id, finding.row, finding.name].includes(only);
 
+// A temp folder for this apply when the command gave none, named with core/tmpdir.ts's prefix so its release and sweep know it.
+const newTempDir = (): string => fs.mkdtempSync(path.join(os.tmpdir(), `${PREFIX}fix-`));
+
 // Each rewritten hosted registration that sends a key through the helper: its name, and whether the hosted chain at its
 // scope fills it (spec F3) - the same reconnect line the plan prints.
 function reconnectOf(context: FixCtx, steps: McpReplaceStep[]): Pick<Reconnect, 'name' | 'variable' | 'file' | 'filled' | 'anonymous'>[]
@@ -76,7 +79,7 @@ function trustNotes(context: FixCtx, only: string | undefined): string[]
 {
     if (context.inventory.trusted !== false) return [];
     return (context.inventory.registrations || [])
-        .filter((registration) => registration.rowId && !registration.own && !registration.alfredRetired && registration.choice !== 'own' && ['project', 'local'].includes(registration.scope) && registration.entry && registration.entry.headersHelper)
+        .filter((registration) => registration.rowId && isManaged(registration) && ['project', 'local'].includes(registration.scope) && registration.entry && registration.entry.headersHelper)
         .filter((registration) => !only || [registration.name, registration.rowId].includes(only))
         .map((registration) => `${registration.name} (${registration.scope}): accept the trust dialog the next time Claude Code starts in ${context.inventory.project} - until then the server connects without its key`);
 }
@@ -343,7 +346,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         for (const rootUse of [...new Map(fileCtx.uses.map((usage) => [usage.root, usage] as const)).values()]) log(`the key helper goes in the ${rootUse.family} root ${rootUse.root}`);
         for (const note of [...fileNotes, ...tailNotes]) log(`note: ${note}`);
         const plan = { version: 1, project: context.inventory.project, os: context.platform, alfredCodeEnabled: Boolean(context.inventory.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch, ...tail, ...retireContextSteps(context, rewritesOf(steps))], context.inventory.project, mcpOrder.ownProjectNames(context.inventory)), notes: [], errors: [], expect: steps.map((step) => ({ kind: 'mcp', name: step.name, scope: step.scope, route: context.inventory.registrations.find((candidate) => candidate.name === step.name && candidate.scope === step.scope)!.route })) };
-        result.tmp = tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'alfred-tools-fix-'));
+        result.tmp = tmp || newTempDir();
         const report = apply(plan, { env: context.env, tmp: result.tmp, runCli, log, fetchFile });
         result.fetchFile = report.fetchFile;
         result.fetch = report.fetch;
@@ -370,7 +373,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         if (planned.length)
         {
             const plan = { version: 1, project: context.inventory.project, os: context.platform, alfredCodeEnabled: Boolean(context.inventory.alfredCodeEnabled), steps: planned, notes: [], errors: [], expect: [] };
-            result.tmp = result.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'alfred-tools-fix-'));
+            result.tmp = result.tmp || tmp || newTempDir();
             const report = apply(plan, { env: context.env, tmp: result.tmp, runCli, log, fetchFile: false, data: context.data });
             if (report.failed) { result.failed = report.failed.detail; return result; }
         }
@@ -391,7 +394,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     if (refetch.length)
     {
         // beside a fetch file a registration fix already wrote, or in a new one
-        result.tmp = result.tmp || tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'alfred-tools-fix-'));
+        result.tmp = result.tmp || tmp || newTempDir();
         result.fetchFile = writeJob(result.fetchFile || path.join(result.tmp, 'fetch.json'), fetchJob(context.inventory.project, refetch, refetch.map((jobStep) => jobStep.name)), { append: true });
         log('', ...nextLines(result.fetchFile, JSON.parse(fs.readFileSync(result.fetchFile, 'utf8'))));
     }

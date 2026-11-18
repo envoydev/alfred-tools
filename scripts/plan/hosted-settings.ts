@@ -5,8 +5,7 @@ import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
 import type { Asked, HostedSettingsAnswer } from './types.ts';
 import { READ_ONLY_HEADER, SETTINGS_HEADER, TOOLSETS_ASKED, TOOLSETS_HEADER, TOOL_OPTIONS } from './hosted-settings-constants.ts';
-
-const RECOMMENDED = ' (Recommended)';
+import { PREFIX, RECOMMENDED_SUFFIX, TOOLSET_SEPARATOR } from './record-constants.ts';
 
 // The settings a fresh install sends: each setting that has a default.
 export function defaultHostedSettings(route: CatalogRoute): Record<string, string>
@@ -36,11 +35,11 @@ export function checkHostedSettings(route: CatalogRoute, given: Record<string, s
         const allowed = setting.values || [];
         if (header === TOOLSETS_HEADER)
         {
-            const keys = [...new Set(String(value).split(',').map((key) => key.trim()).filter(Boolean))];
+            const keys = [...new Set(String(value).split(TOOLSET_SEPARATOR).map((key) => key.trim()).filter(Boolean))];
             if (!keys.length) return { error: `${header} needs at least one toolset - ${allowed.join(', ')}` };
             const unknown = keys.find((key) => !allowed.includes(key));
             if (unknown !== undefined) return { error: `'${unknown}' is not a toolset - one of ${allowed.join(', ')}` };
-            settings[header] = keys.join(',');
+            settings[header] = keys.join(TOOLSET_SEPARATOR);
         }
         else
         {
@@ -61,7 +60,7 @@ export function hostedSettingsQuestion(row: CatalogRow, route: CatalogRoute, ent
     const matching = TOOL_OPTIONS.find(same) || TOOL_OPTIONS[0];
     const ordered = [matching, ...TOOL_OPTIONS.filter((option) => option !== matching)];
     const options = ordered.map((option, i) => ({
-        label: `${option.label}${i === 0 ? RECOMMENDED : ''}`,
+        label: `${option.label}${i === 0 ? RECOMMENDED_SUFFIX : ''}`,
         description: option === matching && now && now[TOOLSETS_HEADER] !== undefined ? `toolsets: ${now[TOOLSETS_HEADER]}` : option.description,
         answer: ((): HostedSettingsAnswer =>
         {
@@ -71,7 +70,7 @@ export function hostedSettingsQuestion(row: CatalogRow, route: CatalogRoute, ent
         })(),
     }));
     return {
-        question: { id: `settings-${row.id}`, header: SETTINGS_HEADER, multiSelect: false, question: `${row.label}'s tools`, options: options.map(({ label, description }) => ({ label, description })) },
+        question: { id: `${PREFIX.settings}${row.id}`, header: SETTINGS_HEADER, multiSelect: false, question: `${row.label}'s tools`, options: options.map(({ label, description }) => ({ label, description })) },
         answers: Object.fromEntries(options.map((option) => [option.label, option.answer])),
     };
 }

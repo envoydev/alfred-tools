@@ -8,7 +8,7 @@ import type { FixArgs, MachineProbe } from './types.ts';
 
 // ---- CLI ------------------------------------------------------------------------------------------------------------
 
-export function parseArgs(argv: string[]): FixArgs
+function parseArgs(argv: string[]): FixArgs
 {
     const args: FixArgs = { input: {} };
     const value = (i: number, flag: string) =>

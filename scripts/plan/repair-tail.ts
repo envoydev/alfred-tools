@@ -8,7 +8,7 @@ import * as roots from '../roots/roots.ts';
 import * as keys from '../keys/keys.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
-import { deepEqual } from '../core/json-file.ts';
+import { deepEqual, stripBom } from '../core/json-file.ts';
 import { CONFIG_DIR_NAME, INSTALLED_PLUGINS_FILE, PLUGIN_KEY_PREFIXES, SETTINGS_FILE } from './read-guard-constants.ts';
 import { REG_OPS, listSteps } from './lists.ts';
 import { cursorSteps, SCOPES, heldCopies, keepOf } from './cursor-steps.ts';
@@ -24,7 +24,7 @@ import type { CursorWritePlanStep, DenyReadStep, FileStep, ListCtx, ListWriteSte
 // and named. Only lists that exist are written: a family with none waits for list-import. `refresh`: [{ name, scope }]
 // whose Cursor copy is refilled from .mcps-secrets at apply with no list change (token-sync). `repoint`: [{ name, scope }]
 // whose list entry and Cursor copy follow a moved root (root-repoint, spec D3), `normalize` re-pointing an entry - a
-// Cursor copy that differs from its list only by the moved root is written, not held. Notes go to ctx.notes.
+// Cursor copy that differs from its list only by the moved root is written, not held. Notes go to context.notes.
 // -> [step]
 export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: PlanStep[], { refresh = [], repoint = [], normalize, clientsFor, bridgeFor }: { refresh?: { name: string; scope: string }[]; repoint?: { name: string; scope: string }[]; clientsFor?: Map<string, string[]> | undefined; bridgeFor?: Set<string> | undefined; normalize?: ((entry: ServerEntry) => ServerEntry) | undefined } = {}): PlanStep[]
 {
@@ -42,12 +42,12 @@ export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: P
         // plugin's, so its Cursor copy is built as the bridge (helper-foreign). No other repair changes a copy's form.
         if ((prior && prior.cursorEntry) || (bridgeFor && bridgeFor.has(key!))) formFor.set(key!, 'two');
     }
-    const tctx: ListCtx = { platform: context.platform, project: context.project || inventory.project, home: context.home, env: context.env || {}, catalog, roots: null, uses: [], formFor, clientsFor, exists: context.exists, normalizeCopy: normalize };
+    const listContext: ListCtx = { platform: context.platform, project: context.project || inventory.project, home: context.home, env: context.env || {}, catalog, roots: null, uses: [], formFor, clientsFor, exists: context.exists, normalizeCopy: normalize };
     const out: PlanOut = { steps: [], notes, errors: [] };
-    const listW = listSteps(inventory, tctx, out, regSteps);
+    const listWrites = listSteps(inventory, listContext, out, regSteps);
     // the key's name, from the key files of the roots in use
     const rootPaths = { project: inventory.roots && inventory.roots.project ? inventory.roots.project.path : null, global: inventory.roots && inventory.roots.global ? inventory.roots.global.path : null };
-    for (const listStep of listW)
+    for (const listStep of listWrites)
         for (const upsert of (listStep as ListWriteStep).upserts || [])
             if (!upsert.keyFiles)
             {
@@ -61,18 +61,18 @@ export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: P
         const familyList = usable(family);
         const prior = familyList ? (familyList.servers || []).find((server) => server.name === item.name && server.scope === item.scope) : null;
         if (!familyList || !prior) continue;
-        let write = listW.find((step): step is ListWriteStep => step.op === 'list-write' && step.file === familyList.file);
+        let write = listWrites.find((step): step is ListWriteStep => step.op === 'list-write' && step.file === familyList.file);
         if (!write)
         {
             write = { op: 'list-write', file: familyList.file, family, upserts: [], drops: [], own: null, why: `${familyList.file}: the paths into the moved root re-pointed` };
-            listW.push(write);
+            listWrites.push(write);
         }
         if (write.upserts.some((upsert) => upsert.server.name === item.name && upsert.server.scope === item.scope)) continue;
         const again = (entry: ServerEntry) => (normalize ? normalize(entry) : entry);
         write.upserts.push({ server: { ...prior, entry: again(prior.entry), ...(prior.cursorEntry ? { cursorEntry: again(prior.cursorEntry) } : {}) }, after: null, cursorFile: null });
     }
-    out.steps = [...regSteps, ...listW];
-    const cursor = cursorSteps(inventory, tctx, out, {});
+    out.steps = [...regSteps, ...listWrites];
+    const cursor = cursorSteps(inventory, listContext, out, {});
     for (const error of out.errors) notes.push(`${error} - Cursor's file is left; run /alfred-tools:configure`);
     const blocked = new Set(out.errors.length ? cursor.map((cursorStep) => cursorStep.file) : []);
     const written = cursor.filter((cursorStep) => !blocked.has(cursorStep.file));
@@ -80,16 +80,16 @@ export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: P
     for (const family of [...new Set(refresh.map((item) => roots.familyOf(item.scope)))])
     {
         const familyList = usable(family);
-        const file = cursorMcp.fileFor(family, tctx);
+        const file = cursorMcp.fileFor(family, listContext);
         if (!familyList || written.some((cursorStep) => cursorStep.file === file)) continue;
         const why = cursorMcp.refusal(cursorMcp.readCursor(file));
         if (why) { notes.push(`Cursor: ${file} ${why} - not written`); continue; }
         const scopes = SCOPES[family];
         const before = cursorMcp.managedSet([{ file: familyList.file, scopes, servers: familyList.servers || [] }]);
-        const hold = heldCopies(file, before, before, tctx, out);
+        const hold = heldCopies(file, before, before, listContext, out);
         written.push({ op: 'cursor-write', file, family: family, lists: [{ file: familyList.file, scopes }], before: [...before.keys()], skip: hold, replace: [], reapprove: refresh.filter((item) => roots.familyOf(item.scope) === family && !hold.includes(item.name)).map((item) => item.name), why: `${file}: the key refilled from .mcps-secrets` });
     }
-    return [...listW, ...written];
+    return [...listWrites, ...written];
 }
 
 // What changed outside alfred-tools (spec D1): each list entry whose Claude registration differs after kept.maskCredentials,
@@ -99,7 +99,7 @@ export function changedOutside(inventory: Inventory, catalog: Catalog = catalogL
 {
     const changed: string[] = [];
     const missing: string[] = [];
-    for (const family of ['project', 'global'])
+    for (const family of roots.FAMILIES)
     {
         const familyList = inventory.lists && inventory.lists[family];
         if (!familyList || familyList.note || familyList.old) continue;
@@ -114,12 +114,9 @@ export function changedOutside(inventory: Inventory, catalog: Catalog = catalogL
     return [...changed, ...missing];
 }
 
-// The read guard (ruling 13): one deny-read for the plan, with the sign-in rule when it writes the shared sign-in form
-// and the key-file rule when it writes a key name - each only when Claude Code's settings file lacks it. A settings file
-// that is not a JSON object is a note: the rest of the plan is still written. -> [deny-read step]
 // The settings file the deny rules go in, and which of `want` it lacks: { file, rules } | { file, bad: true }. Shared by
 // install and configure (denyReadSteps) and fix's read-guard row. Claude Code's own settings: CLAUDE_CONFIG_DIR, else
-// ~/.claude - from ctx.home, so a test never reads the real one. `dir` is another config dir (configDirsWithPlugin): its
+// ~/.claude - from context.home, so a test never reads the real one. `dir` is another config dir (configDirsWithPlugin): its
 // settings.json is read the same way, and one it has not got yet is created with the rules, as the current dir's is.
 export function readGuardOf(context: { platform: string; home: string; env?: Env | undefined }, want: string[], dir?: string): { file: string; bad: true; rules?: undefined } | { file: string; rules: string[]; bad?: undefined }
 {
@@ -132,7 +129,7 @@ export function readGuardOf(context: { platform: string; home: string; env?: Env
     if (text !== null)
     {
         let doc: { permissions?: { deny?: string[] } } | null = null;
-        try { doc = JSON.parse(text.replace(/^\uFEFF/, '')); } catch { /* below */ }
+        try { doc = JSON.parse(stripBom(text)); } catch { /* below */ }
         const isObject = (value: unknown): value is object => (value && typeof value === 'object' && !Array.isArray(value)) as boolean;
         if (!isObject(doc) || (doc.permissions !== undefined && !isObject(doc.permissions)) || (doc.permissions && doc.permissions.deny !== undefined && !Array.isArray(doc.permissions.deny))) return { file, bad: true };
         deny = (doc.permissions && doc.permissions.deny) || [];
@@ -166,7 +163,7 @@ export function configDirsWithPlugin(home: string, current: string, platform: st
         if (key === currentKey || listed.has(key)) continue;
         try
         {
-            const doc = JSON.parse(fs.readFileSync(path.join(dir, 'plugins', INSTALLED_PLUGINS_FILE), 'utf8').replace(/^\uFEFF/, '')) as { plugins?: unknown } | null;
+            const doc = JSON.parse(stripBom(fs.readFileSync(path.join(dir, 'plugins', INSTALLED_PLUGINS_FILE), 'utf8'))) as { plugins?: unknown } | null;
             const plugins = doc && typeof doc === 'object' ? doc.plugins : null;
             if (plugins && typeof plugins === 'object' && !Array.isArray(plugins) && Object.keys(plugins).some((pluginKey) => PLUGIN_KEY_PREFIXES.some((prefix) => pluginKey.startsWith(prefix)))) { found.push(dir); listed.add(key); }
         }
@@ -181,6 +178,9 @@ export function denyReadStep(file: string, rules: string[]): DenyReadStep
     return { op: 'deny-read', file, rules, why: `${file}: keeps an AI session's Read tool out of ${rules.map((rule) => (rule === roots.READ_GUARD.signIns ? 'the sign-in tokens' : 'the key file')).join(' and ')}` };
 }
 
+// The read guard (ruling 13): one deny-read for the plan, with the sign-in rule when it writes the shared sign-in form
+// and the key-file rule when it writes a key name - each only when Claude Code's settings file lacks it. A settings file
+// that is not a JSON object is a note: the rest of the plan is still written. -> [deny-read step]
 export function denyReadSteps(steps: PlanStep[], context: { platform: string; home: string; env?: Env | undefined }, out: Pick<PlanOut, 'notes'>): DenyReadStep[]
 {
     const want = [

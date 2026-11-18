@@ -89,7 +89,7 @@ export function renderPlan(plan: Plan): string
 
 // The prose says Global for user scope (spec D1): 'global (user scope)' the first time, 'global scope' after. The commands
 // keep the value (`-s user`, `--scope user`).
-export function globalWords(text: string): string
+function globalWords(text: string): string
 {
     let first = true;
     return text.replace(/\buser scope\b/g, () => { if (!first) return 'global scope'; first = false; return 'global (user scope)'; });

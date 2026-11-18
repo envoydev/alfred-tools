@@ -1,9 +1,6 @@
-#!/usr/bin/env node
-// PREREQUISITES - what each picked tool needs on this machine, checked read-only.
-//
-//   node prereq.ts <answers.json> [--json] [--audit]   the tools in answers.picks, each on its picked route, and each
-//                                                      answers.change entry that names a new route
-//   node prereq.ts --rows serena,github [--json]  rows on their recommended route
+// PREREQUISITES - what each picked tool needs on this machine, checked read-only. Its command line is scripts/prereq.ts:
+// an answers file (the tools in answers.picks, each on its picked route, and each answers.change entry that names a new
+// route) or `--rows serena,github` (rows on their recommended route), with `--json` and `--audit`.
 //
 // A check looks at the machine and installs nothing. A missing one prints how to get it: a command only where the
 // vendor's docs gave one (docs/sources.md), else the vendor's install page. `--json` prints the findings and, under
@@ -15,13 +12,15 @@ import os from 'node:os';
 import path from 'node:path';
 import * as catalogLib from '../catalog/catalog.ts';
 import { androidSdk, javaHome } from '../fix/registration.ts';
+import { pathFor } from '../entries/platform.ts';
+import { AUDIT_DIR_PREFIX } from './constants.ts';
 import type { Catalog, CatalogPackage } from '../catalog/types.ts';
 import type { Answers } from '../plan/types.ts';
 import type { AuditResult, CheckResult, PrereqCheck, PrereqCtx, PrereqPick, PrereqReport, ToolCheck } from './types.ts';
 
 const versionOf = (text: unknown): string | null => (/(\d+\.\d+(?:\.\d+)?)/.exec(String(text || '')) || [])[1] || null;
 
-// Each check -> { ok, found, install?: { command?, url, note? } }. `ctx` = { platform, env, home, machine }.
+// Each check -> { ok, found, install?: { command?, url, note? } }. `context` = { platform, env, home, machine }.
 export const CHECKS: Record<string, PrereqCheck | undefined> = {
     uvx: (context: PrereqCtx): CheckResult =>
     {
@@ -58,7 +57,7 @@ export const CHECKS: Record<string, PrereqCheck | undefined> = {
 function browser(context: PrereqCtx, which: string): CheckResult
 {
     const { env, machine: machine, platform } = context;
-    const pathApi = platform === 'win32' ? path.win32 : path.posix;
+    const pathApi = pathFor(platform);
     const names = which === 'chrome' ? { mac: 'Google Chrome', bins: ['google-chrome', 'google-chrome-stable'], win: ['Google', 'Chrome', 'chrome.exe'] } : { mac: 'Microsoft Edge', bins: ['microsoft-edge', 'microsoft-edge-stable'], win: ['Microsoft', 'Edge', 'msedge.exe'] };
     let found: string | null | undefined = null;
     if (platform === 'darwin') found = [`/Applications/${names.mac}.app`, pathApi.join(context.home, 'Applications', `${names.mac}.app`)].find((appFolder) => machine.exists(appFolder));
@@ -73,10 +72,10 @@ function browser(context: PrereqCtx, which: string): CheckResult
 }
 
 // -> { ok, counts: { critical, high, moderate, low, total }, note } for one npm package at its pinned version
-export function auditPrereqs(packageSpec: CatalogPackage, context: PrereqCtx): AuditResult
+function auditPrereqs(packageSpec: CatalogPackage, context: PrereqCtx): AuditResult
 {
     const machine = context.machine;
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-audit-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), AUDIT_DIR_PREFIX));
     const tail = (result: { stderr?: string; stdout?: string } | null | undefined): string => String((result && (result.stderr || result.stdout)) || 'no output').trim().split('\n').slice(-2).join(' | ');
     try
     {

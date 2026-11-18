@@ -163,8 +163,6 @@ export interface MachineFixResult
 }
 export type MachineFix = (finding: Finding, context: FixCtx) => MachineFixResult;
 export type FileSteps = (finding: Finding, context: FixCtx, input: Record<string, string>) => PlanStep[];
-// fix-functions.ts read by the name a fixes.json row gives.
-export type FixFunction = Detector | RegistrationFix | MachineFix | FileSteps;
 
 // detectAll's result (stored - do not rename: --json prints it).
 export interface Detected

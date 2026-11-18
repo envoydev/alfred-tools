@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as account from '../core/account.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
-import { stripBom, deepEqual } from '../core/json-file.ts';
+import { parseJson, deepEqual } from '../core/json-file.ts';
 import { replaceFile } from '../core/replace-file.ts';
 import { bridgeParts, helperParts, withoutPairs } from '../entries/entry.ts';
 import { pathApiOf, pathFor } from '../entries/platform.ts';
@@ -15,7 +15,9 @@ import { mcpRemotePackage } from '../entries/sign-in.ts';
 import * as kept from '../core/kept.ts';
 import * as keys from '../keys/keys.ts';
 import { load } from '../catalog/catalog.ts';
-import { matchesFingerprint } from '../inventory/inventory.ts';
+import { matchesFingerprint } from '../inventory/fingerprint.ts';
+import { FAMILIES, FILES } from '../roots/roots.ts';
+import { CURSOR_COMMANDS, CURSOR_FILE, CURSOR_FOLDER, WINDOWS_COMMAND_EXTENSIONS } from './constants.ts';
 import type { Env, Outcome, ServerEntry, ServerMap } from '../core/types.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { ListServer } from '../mcps-list/types.ts';
@@ -25,7 +27,7 @@ import type { CursorCtx, CursorDoc, CursorOf, CursorPlace, CursorRead, CursorWri
 export function fileFor(family: string, context: CursorPlace): string
 {
     const pathApi = pathFor(context.platform);
-    return family === 'global' ? pathApi.join(context.home || account.homeDir(context.env || process.env), '.cursor', 'mcp.json') : pathApi.join(context.project!, '.cursor', 'mcp.json');
+    return family === 'global' ? pathApi.join(context.home || account.homeDir(context.env || process.env), CURSOR_FOLDER, CURSOR_FILE) : pathApi.join(context.project!, CURSOR_FOLDER, CURSOR_FILE);
 }
 
 // -> { state: 'absent' | 'ok' | 'symlink' | 'bad' | 'shape', doc, lineEnd }
@@ -40,7 +42,7 @@ export function readCursor(file: string): CursorRead
     catch (caught) { const err = caught as NodeJS.ErrnoException;  return { state: 'bad', doc: null, lineEnd: '\n', error: err.code }; }
     const lineEnd = text.includes('\r\n') ? '\r\n' : '\n';
     let doc: CursorDoc | null;
-    try { doc = JSON.parse(stripBom(text)) as CursorDoc | null; }
+    try { doc = parseJson(text) as CursorDoc | null; }
     catch { return { state: 'bad', doc: null, lineEnd: lineEnd }; }
     if (!doc || typeof doc !== 'object' || Array.isArray(doc) || !doc.mcpServers || typeof doc.mcpServers !== 'object' || Array.isArray(doc.mcpServers)) return { state: 'shape', doc, lineEnd: lineEnd };
     return { state: 'ok', doc, lineEnd: lineEnd, text };
@@ -55,7 +57,7 @@ export function refusal(read: CursorRead): string | null
     return null;
 }
 
-// The servers this file holds from the lists: those set up for Cursor, the nearest list first. `lists`: [{ file,
+// The servers this file holds from the lists: those set up for Cursor, the nearest list first. `sources`: [{ file,
 // scopes, servers }] - the family's own list (local and project scope; local wins one name) and, for a project, the
 // lists above it (project scope only). -> Map<name, { entry, scope, list, row }>
 export function managedSet(sources: ListSource[]): Map<string, Managed>
@@ -77,14 +79,15 @@ export function managedSet(sources: ListSource[]): Map<string, Managed>
 export function compose(doc: CursorDoc | null, managed: Map<string, Managed>, { before = [], skip = [], order = [] }: { before?: string[]; skip?: string[]; order?: string[] } = {}): Record<string, unknown>
 {
     const servers = (doc && doc.mcpServers) || {};
-    const at = (name: string) => { const i = order.indexOf((managed.get(name) || ({} as Partial<Managed>)).row as string); return i < 0 ? order.length : i; };
-    const names = [...managed.keys()].sort((first, second) => at(first) - at(second));
+    const at = ({ row }: Managed) => { const i = row === null ? -1 : order.indexOf(row); return i < 0 ? order.length : i; };
+    const sorted = [...managed].sort(([, first], [, second]) => at(first) - at(second));
     const next: ServerMap = {};
-    for (const name of names)
+    for (const [name, server] of sorted)
     {
         // a skipped name keeps the file's own value, and one the file lacks stays out (spec D1: never re-added)
-        if (!skip.includes(name)) next[name] = managed.get(name)!.entry;
-        else if (Object.hasOwn(servers, name)) next[name] = servers[name]!;
+        const own = servers[name];
+        if (!skip.includes(name)) next[name] = server.entry;
+        else if (Object.hasOwn(servers, name) && own !== undefined) next[name] = own;
     }
     for (const [name, value] of Object.entries(servers))
     {
@@ -111,11 +114,12 @@ export function cursorWrite(step: CursorWriteStep, context: CursorCtx | null | u
     const sources = (step.lists || []).map((list) => ({ file: list.file, scopes: list.scopes, servers: ((list.file && lists.readList(list.file)) || { servers: [] }).servers }));
     const managed = managedSet(sources);
     const notes = fillStdioKeys(managed, context);
-    const servers = read.doc!.mcpServers;
+    const servers: ServerMap = read.doc ? read.doc.mcpServers : {};
     const before = step.before || [];
     const theirs = [...managed.keys()].filter((name) => Object.hasOwn(servers, name) && !before.includes(name) && !(step.replace || []).includes(name));
     // `only`: the names this write may change (fix's client-drift); every other managed name keeps the file's value
-    const others = step.only ? [...managed.keys()].filter((name) => !step.only!.includes(name)) : [];
+    const only = step.only;
+    const others = only ? [...managed.keys()].filter((name) => !only.includes(name)) : [];
     const skip = [...new Set([...(step.skip || []), ...theirs, ...others])];
     const order = (context && context.catalog && context.catalog.order) || [];
     const doc = compose(read.doc, managed, { before, skip, order });
@@ -128,7 +132,8 @@ export function cursorWrite(step: CursorWriteStep, context: CursorCtx | null | u
     try { mode = fs.statSync(step.file).mode & 0o777; } catch { /* a new file takes the default */ }
     replaceFile(step.file, text, mode);
     const back = readCursor(step.file);
-    const wrong = back.state !== 'ok' ? [...managed.keys()] : [...managed.keys()].filter((name) => !skip.includes(name) && !deepEqual(back.doc!.mcpServers[name], managed.get(name)!.entry));
+    const written = back.state === 'ok' && back.doc ? back.doc.mcpServers : null;
+    const wrong = written === null ? [...managed.keys()] : [...managed].filter(([name, server]) => !skip.includes(name) && !deepEqual(written[name], server.entry)).map(([name]) => name);
     if (wrong.length) return { ok: false, detail: `${step.file}: ${wrong.join(', ')} did not read back as written` };
     const kept = theirs.length ? ` - ${theirs.join(', ')} left as your own` : '';
     return { ok: true, detail: `wrote ${step.file} (${managed.size - theirs.length} server${managed.size - theirs.length === 1 ? '' : 's'} from the list)${kept}${said}` };
@@ -155,27 +160,29 @@ function fillStdioKeys(managed: Map<string, Managed>, context: CursorCtx | null 
     const notes: string[] = [];
     for (const [name, managedServer] of managed)
     {
-        if (managedServer.scope !== 'user' || !managedServer.key || !managedServer.list) continue;
-        const row = catalog.byId.get(managedServer.row!);
-        if (!stdioKeyed(managedServer.entry, row, managedServer.route)) continue;
+        const { row: rowId, route: routeId } = managedServer;
+        if (managedServer.scope !== 'user' || !managedServer.key || !managedServer.list || rowId === null || !routeId) continue;
+        const row = catalog.byId.get(rowId);
+        const route = row ? row.routes[routeId] : undefined;
+        if (!row || !route || !route.tokenVar || !stdioKeyed(managedServer.entry, row, routeId)) continue;
         const files = keys.stdioChain({ scope: 'user', globalRoot: path.dirname(managedServer.list) });
         const found = keys.valueIn(files, managedServer.key);
-        const route = row!.routes[managedServer.route!];
         if (!found)
         {
             const registration = context && context.env ? account.readRegistration(name, 'user', context.project || process.cwd(), context.env) : undefined;
             const back = registration ? kept.restore(managedServer.entry, registration, row) : null;
-            const filled = back && !back.error ? keys.tokenFields(back.entry!, route).map((field) => keys.valueAt(back.entry!, field.at)) : [];
-            if (filled.length && filled.every((value) => typeof value === 'string' && value.trim() && !value.includes(kept.MARKER))) { managed.set(name, { ...managedServer, entry: back!.entry! }); continue; }
+            const restored = back && back.entry !== undefined ? back.entry : null;
+            const filled = restored ? keys.tokenFields(restored, route).map((field) => keys.valueAt(restored, field.at)) : [];
+            if (restored && filled.length && filled.every((value) => typeof value === 'string' && value.trim() && !value.includes(kept.MARKER))) { managed.set(name, { ...managedServer, entry: restored }); continue; }
         }
-        managed.set(name, { ...managedServer, entry: keys.fillKeys(managedServer.entry, row, managedServer.route!, 'user', { [route!.tokenVar!]: found ? found.value : '' }) });
+        managed.set(name, { ...managedServer, entry: keys.fillKeys(managedServer.entry, row, routeId, 'user', { [route.tokenVar]: found ? found.value : '' }) });
         if (!found) notes.push(`${managedServer.key} for '${name}' (user) is in none of ${files.join(', ')} - written empty: fill ${managedServer.key} in ${files[0]}, then run /alfred-tools:configure and keep ${managedServer.key} as the key's name - it writes the key in`);
     }
     return notes;
 }
 
 // Is this Cursor entry the row's server? A bridge copy (D5) is matched by its URL, as a plain http entry, against the
-// row's fingerprints, and by itself against a `bridge` fingerprint: inventory.matchesFingerprint alone returns false for
+// row's fingerprints, and by itself against a `bridge` fingerprint: matchesFingerprint alone returns false for
 // every bridge entry against a host or path fingerprint.
 export function matchesRow(entry: ServerEntry, row: CatalogRow | null | undefined): boolean
 {
@@ -192,10 +199,13 @@ export function matchesRow(entry: ServerEntry, row: CatalogRow | null | undefine
 export function cursorOf(file: string, marked: { name: string; row: string | null }[], catalog: Catalog): CursorOf
 {
     const read = readCursor(file);
-    const servers: ServerMap = read.state === 'ok' ? read.doc!.mcpServers : {};
+    const servers: ServerMap = read.state === 'ok' && read.doc ? read.doc.mcpServers : {};
     const entries: Record<string, ServerEntry> = {};
     for (const markedServer of marked)
-        if (Object.hasOwn(servers, markedServer.name) && !Object.hasOwn(entries, markedServer.name)) entries[markedServer.name] = kept.maskCredentials(servers[markedServer.name]!, catalog.byId.get(markedServer.row!));
+    {
+        const server = servers[markedServer.name];
+        if (Object.hasOwn(servers, markedServer.name) && server !== undefined && !Object.hasOwn(entries, markedServer.name)) entries[markedServer.name] = kept.maskCredentials(server, markedServer.row === null ? undefined : catalog.byId.get(markedServer.row));
+    }
     return { file, state: read.state, names: Object.keys(servers), entries };
 }
 
@@ -214,17 +224,19 @@ export function bridgeFormOf(entry: ServerEntry | null | undefined, catalog: Cat
 {
     if (!entry || typeof entry.headersHelper !== 'string' || otherHeaders(entry).length) return null;
     const helper = helperParts(entry.headersHelper);
-    if (!helper || helper.args.length < 2) return null;
+    const [keyName, scheme] = helper ? helper.args : [];
+    if (!helper || keyName === undefined || scheme === undefined) return null;
     const pathApi = pathApiOf(helper.path);
-    const own = [pathApi.join(pathApi.dirname(helper.path), 'mcp-bridge.js'), entry.url!, helper.args[0]!, helper.args[1]!];
+    const own = [pathApi.join(pathApi.dirname(helper.path), FILES.bridge), entry.url!, keyName, scheme];
     const globalRoot = helper.root ? [helper.root] : [];
     const pairs = helper.pairs.flatMap((pair) => ['--header', pair]);
     const priorParts = prior ? bridgeParts(prior) : null;
-    if (priorParts && priorParts.packageSpec)
+    const priorArgs = prior && Array.isArray(prior.args) ? prior.args : [];
+    if (prior && priorParts && priorParts.packageSpec)
     {
-        const at = prior!.args!.findIndex((argument) => String(argument) === priorParts.path);
-        const rest = priorParts.globalRoot !== null ? withoutPairs(prior!.args!.slice(at + 6)) : [];
-        return { ...prior, command: 'node', args: [...prior!.args!.slice(0, at), ...own, priorParts.packageSpec, ...globalRoot, ...rest, ...pairs], env: { ...(prior!.env || {}) } };
+        const at = priorArgs.findIndex((argument) => String(argument) === priorParts.path);
+        const rest = priorParts.globalRoot !== null ? withoutPairs(priorArgs.slice(at + 6)) : [];
+        return { ...prior, command: 'node', args: [...priorArgs.slice(0, at), ...own, priorParts.packageSpec, ...globalRoot, ...rest, ...pairs], env: { ...(prior.env || {}) } };
     }
     const packageSpec = mcpRemotePackage(catalog);
     return { command: 'node', args: [...own, `${packageSpec.name}@${packageSpec.version}`, ...globalRoot, ...pairs], env: { npm_config_before: packageSpec.cutoff } };
@@ -237,10 +249,10 @@ export function cursorFound(context: CursorPlace, inventory: { lists?: Record<st
     const pathApi = pathFor(context.platform);
     const env: Env = context.env || {};
     const home = context.home || account.homeDir(env);
-    if (home && fs.existsSync(pathApi.join(home, '.cursor'))) return true;
-    const exts = context.platform === 'win32' ? ['.exe', '.cmd', ''] : [''];
-    const dirs = String(env.PATH || env.Path || '').split(context.platform === 'win32' ? ';' : ':').filter(Boolean);
-    for (const dir of dirs) for (const name of ['cursor-agent', 'cursor']) for (const extension of exts) if (fs.existsSync(pathApi.join(dir, `${name}${extension}`))) return true;
-    return ['project', 'global'].some((family) => { const list = inventory && inventory.lists && inventory.lists[family]; return Boolean(list) && (list!.servers || []).some((server) => (server.clients || []).includes('cursor')); });
+    if (home && fs.existsSync(pathApi.join(home, CURSOR_FOLDER))) return true;
+    const exts = context.platform === 'win32' ? WINDOWS_COMMAND_EXTENSIONS : [''];
+    const dirs = String(env.PATH || env.Path || '').split(pathApi.delimiter).filter(Boolean);
+    for (const dir of dirs) for (const name of CURSOR_COMMANDS) for (const extension of exts) if (fs.existsSync(pathApi.join(dir, `${name}${extension}`))) return true;
+    return FAMILIES.some((family) => { const list = inventory && inventory.lists && inventory.lists[family]; return Boolean(list) && ((list && list.servers) || []).some((server) => (server.clients || []).includes('cursor')); });
 }
 

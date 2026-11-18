@@ -1,6 +1,9 @@
 // The words record.ts reads from the questions the builders in asks-*.ts make: question id prefixes, the labels that
 // take a typed value, and the values the answer maps use.
 
+// The mark on a recommended option's label: its home is core/constants.ts, since inventory/existing.ts marks its options too.
+export { RECOMMENDED_SUFFIX } from '../core/constants.ts';
+
 // A question id is `<prefix><row id>` (the walk's `settings` and `clients` have none).
 export const PREFIX = {
     route: 'route-',

@@ -49,7 +49,7 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
         // install only adds, so its questions never start from an installed registration
         out.tools[id] = { route: row.kind === 'mcp' ? routeQuestion(row) : null, ...toolAsk(row, inventory, { route: routes[id], scope: scopes[id], name: names[id], context: context, catalog, copyOf: installedOf(inventory, id) }) };
     }
-    const own = new Map(ownItems(inventory, catalog).map((it) => [it.key, it]));
+    const own = new Map(ownItems(inventory, catalog).map((ownItem) => [ownItem.key, ownItem]));
     for (const key of (picks && picks.targets) || [])
     {
         // a root folder: D2's question, the root in use recommended (spec D7)
@@ -63,14 +63,13 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
         // a server left on its own: one question, keep it so or hand it over (spec D6)
         if (own.has(key))
         {
-            const it = own.get(key)!;
-            out.targets[key] = { row: it.rowId, kind: 'own', current: { name: it.name || it.server || it.connector, scope: it.scope || null, route: null }, own: ownQuestion(it) };
+            const ownItem = own.get(key)!;
+            out.targets[key] = { row: ownItem.rowId, kind: 'own', current: { name: ownItem.name || ownItem.server || ownItem.connector, scope: ownItem.scope || null, route: null }, own: ownQuestion(ownItem) };
             continue;
         }
         const target = targetOf(inventory, key);
         const row = target && target.item.rowId && !target.item.alfredRetired ? catalog.byId.get(target.item.rowId) : null;
         if (!row) { out.targets[key] = { error: `'${key}' is not a catalog tool installed here` }; continue; }
-        // required here, not at the top: plan.ts requires this file
         const current = target!.kind === 'mcp' ? currentOf(row, target!.item as Registration) : { scope: target!.item.scope } as Partial<Current>;
         const listed = target!.kind === 'mcp' ? listedOf(inventory, target!.item as InvRegistration) : null;
         out.targets[key] = {

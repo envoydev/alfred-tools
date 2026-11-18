@@ -1,7 +1,7 @@
 // The inventory: what is installed, as buildInventory reads it and the commands pass it between their steps in a temp
 // file (stored - do not rename: every field crosses that JSON boundary).
 import type { AccountProject, CliOptions, CliResult, Env, FileState, ServerEntry, ServerMap } from '../core/types.ts';
-import type { Catalog } from '../catalog/types.ts';
+import type { Catalog, Fingerprint } from '../catalog/types.ts';
 import type { InUse, MapRead, Workspace } from '../roots/types.ts';
 import type { ListServer, OwnEntry } from '../mcps-list/types.ts';
 import type { CursorOf } from '../cursor/types.ts';
@@ -178,6 +178,14 @@ export interface DeclaredServer
 {
     server: string;
     entry: ServerEntry;
+}
+
+// The catalog fingerprint a launch matches, with its row and route.
+export interface CatalogMatch
+{
+    rowId: string;
+    route: string;
+    fingerprint: Fingerprint;
 }
 
 // ---- what buildInventory reads ---------------------------------------------------------------------------------------

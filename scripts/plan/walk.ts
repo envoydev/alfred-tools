@@ -1,7 +1,8 @@
-import path from 'node:path';
+import { pathApiOf } from '../entries/platform.ts';
 import { installedOf } from '../inventory/inventory.ts';
 import * as roots from '../roots/roots.ts';
 import { RECOMMENDED_SUFFIX } from './asks-keys.ts';
+import { PREFIX, WALK_QUESTION } from './record-constants.ts';
 import { rootInUse } from './asks-picks.ts';
 import { scopeOrder } from './asks-tool.ts';
 import { STATIC } from './asks-other.ts';
@@ -18,7 +19,7 @@ import type { AskOptions, Asked, Picks, Question, Questions, ToolBlock, WalkStep
 // would sit in. -> { question, answers: { <label as shown>: { key, choice } } }
 export function ownStep(item: { key: string; name?: string | undefined; scope?: string | null | undefined }, root: string): Asked<{ key: string; choice: string }>
 {
-    const pathApi = /^(?:[A-Za-z]:[\\/]|\\\\)/.test(String(root)) ? path.win32 : path.posix;
+    const pathApi = pathApiOf(String(root));
     const file = pathApi.join(root, roots.FILES.list);
     const where = item.scope === 'project' ? '; in .mcp.json it sits with your own servers, after the managed ones' : '';
     const options = [
@@ -26,7 +27,7 @@ export function ownStep(item: { key: string; name?: string | undefined; scope?: 
         { label: 'Leave it on its own', description: `nothing in this plugin changes its entry again${where}; saved in ${file}`, choice: 'own' },
     ];
     return {
-        question: { id: `own-${item.key}`, header: 'Looked after', multiSelect: false, question: `Who looks after ${item.name}?`, options: options.map(({ label, description }) => ({ label, description })) },
+        question: { id: `${PREFIX.own}${item.key}`, header: 'Looked after', multiSelect: false, question: `Who looks after ${item.name}?`, options: options.map(({ label, description }) => ({ label, description })) },
         answers: Object.fromEntries(options.map((option) => [option.label, { key: item.key, choice: option.choice }])),
     };
 }
@@ -45,7 +46,7 @@ function pickOrder(catalog: Catalog, ids: string[]): string[]
 // per target, who looks after it, then the same - a root target is its root question, a server left on its own its own
 // question. A step with nothing to ask is passed over, but for one with a location to `set`. `picks`:
 // install.md's and configure.md's picks.json - `done` the step ids answered, `walk` the settings answer, `tokens` the
-// API key answers. `built`: the all() output, when the caller has it.
+// API key answers. `built`: allQuestions' output, when the caller has it.
 // -> { id, tool, call, answers, set? } | { id: 'done' }
 export function nextQuestion(inventory: Inventory, picks: Picks | null | undefined, catalog: Catalog, options: AskOptions = {}, built: Questions | null = null): WalkStep
 {
@@ -76,7 +77,7 @@ export function nextQuestion(inventory: Inventory, picks: Picks | null | undefin
         if (rootStep) rootStep();
         if (located(toolBlock))
         {
-            const locationAsk = (toolBlock.questions || []).find((question) => question.id.startsWith('location-'));
+            const locationAsk = (toolBlock.questions || []).find((question) => question.id.startsWith(PREFIX.location));
             add(`${id}:questions`, id, toolBlock.questions || [], locationAsk ? { [locationAsk.id]: toolBlock.answers } : {}, toolBlock.only ? { location: toolBlock.only } : null);
         }
         keyStep(id);
@@ -88,9 +89,9 @@ export function nextQuestion(inventory: Inventory, picks: Picks | null | undefin
         if (rows.length)
         {
             // which apps, first after the picks (spec D3)
-            if (builtQuestions.clients) add('clients', null, [builtQuestions.clients.question], { clients: builtQuestions.clients.answers });
+            if (builtQuestions.clients) add(WALK_QUESTION.clients, null, [builtQuestions.clients.question], { [WALK_QUESTION.clients]: builtQuestions.clients.answers });
             const one = rows.length === 1 ? STATIC.settingsOne(catalog.byId.get(rows[0]!)!.label) : STATIC.settings;
-            add('settings', null, [one], { settings: { [one.options[0]!.label]: 'recommended', [one.options[1]!.label]: 'each' } });
+            add(WALK_QUESTION.settings, null, [one], { [WALK_QUESTION.settings]: { [one.options[0]!.label]: 'recommended', [one.options[1]!.label]: 'each' } });
             if (picks.walk === 'recommended') return steps.find((step) => !done.has(step.id)) || { id: 'done' };
         }
         const asked = new Set(Object.keys(picks.roots || {}));
@@ -107,7 +108,7 @@ export function nextQuestion(inventory: Inventory, picks: Picks | null | undefin
                 const family = roots.familyOf(scope);
                 if (asked.has(family)) return;
                 asked.add(family);
-                const rootAsk = builtQuestions.roots!.questions.find((candidate) => candidate.id === `root-${family}`);
+                const rootAsk = builtQuestions.roots!.questions.find((candidate) => candidate.id === `${PREFIX.root}${family}`);
                 if (rootAsk) add(`root:${family}`, id, [rootAsk], { [rootAsk.id]: builtQuestions.roots!.answers[rootAsk.id] });
             };
             toolSteps(toolBlock, id, rootStep);

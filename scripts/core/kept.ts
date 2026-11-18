@@ -20,20 +20,21 @@ export const OLD_MARKER = '${PREFERRED_TOOLS_KEPT}';
 const SECRET_KEY_RE = /(TOKEN|SECRET|KEY|PASSWORD|PASSWD|DSN|CREDENTIAL|AUTH)$/i;
 const FILE_KEY_EXTRA = /(?:^|[._-])pass(?:phrase)?$|(?:^|[._-])(?:client|private)[-_]?key[-_]?data$|^requirepass$/i;
 const CAMEL_PASS = /[a-z0-9](?:Pass(?:phrase)?|PWD|Pwd)$/;
-export const credKey = (key: string): boolean => SECRET_KEY_RE.test(key) || FILE_KEY_EXTRA.test(key) || CAMEL_PASS.test(key);
+const credKey = (key: string): boolean => SECRET_KEY_RE.test(key) || FILE_KEY_EXTRA.test(key) || CAMEL_PASS.test(key);
 const SHAPE = /\b(?:sntryu_[0-9a-f]{16,}|ctx7sk-[0-9a-f-]{16,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|sq[upa]_[0-9a-f]{40}|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/g;
 const PRIVATE_KEY_BLOCK = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY-----|$)/g;
 const PAIR = /((?:^|[;,])\s*(?:password|pwd)\s*=\s*)([^;,]*)/gi;
 const USERINFO = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]*:)([^@\s/]+)(?=@)/gi;
-const PLACEHOLDERS = /^\s*(?:[A-Za-z][\w-]*\s+)?(?:\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\})+\s*$/;
+// a value of nothing but ${NAME} / ${NAME:-default} placeholders after at most one scheme word: never a live credential
+export const PLACEHOLDER = /^\s*(?:[A-Za-z][\w-]*\s+)?(?:\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\})+\s*$/;
 
-const live = (value: unknown): boolean => typeof value === 'string' && value.trim() !== '' && !PLACEHOLDERS.test(value);
+const live = (value: unknown): boolean => typeof value === 'string' && value.trim() !== '' && !PLACEHOLDER.test(value);
 const maskParts = (text: string): string => text.replace(PRIVATE_KEY_BLOCK, MARKER).replace(SHAPE, MARKER)
     .replace(PAIR, (all: string, head: string, value: string) => (live(value) ? head + MARKER : all))
     .replace(USERINFO, (all: string, head: string, value: string) => (live(value) ? head + MARKER : all));
 const keepString = (text: string, whole: boolean): string => (!live(text) ? text : whole ? MARKER : maskParts(text));
 // `--api-key` -> 'api-key'; a bare value or a lone dash -> null
-const flagName = (argument: unknown): string | null => (typeof argument === 'string' && /^--?[A-Za-z]/.test(argument) ? argument.replace(/^--?/, '').split('=')[0]! : null);
+const flagName = (argument: unknown): string | null => (typeof argument === 'string' && /^--?[A-Za-z]/.test(argument) ? argument.replace(/^--?/, '').split('=')[0] ?? '' : null);
 
 function locationKeys(row: RowOf): { env: Set<string>; arg: Set<string> }
 {
@@ -48,17 +49,20 @@ function keepArgs(args: unknown[], whole: boolean, locArgs: Set<string> = new Se
     {
         if (typeof argument !== 'string') return keepNode(argument, '', whole);
         const prev = i > 0 ? args[i - 1] : null;
-        if (locArgs.has(prev as string)) return argument;
+        if (typeof prev === 'string' && locArgs.has(prev)) return argument;
         const equalsIndex = argument.indexOf('=');
-        if (flagName(argument) && equalsIndex > 0)
+        // flagName stops at the first `=`, so the name of `--api-key=<v>` is its flag's
+        const name = flagName(argument);
+        if (name !== null && equalsIndex > 0)
         {
             const flag = argument.slice(0, equalsIndex);
             if (locArgs.has(flag)) return argument;
             const value = argument.slice(equalsIndex + 1);
-            return `${flag}=${keepString(value, whole || credKey(flagName(flag)!))}`;
+            return `${flag}=${keepString(value, whole || credKey(name))}`;
         }
-        if (flagName(argument)) return argument;
-        return keepString(argument, whole || Boolean(flagName(prev) && !(prev as string).includes('=') && credKey(flagName(prev)!)));
+        if (name !== null) return argument;
+        const prevName = flagName(prev);
+        return keepString(argument, whole || Boolean(prevName !== null && typeof prev === 'string' && !prev.includes('=') && credKey(prevName)));
     });
 }
 
@@ -88,7 +92,8 @@ export function maskCredentials<Entry>(entry: Entry, row?: RowOf): Entry
     return out as Entry;
 }
 
-const at = (node: unknown, path: Path): unknown => path.reduce<unknown>((current, segment) => (current == null ? undefined : (current as Record<string | number, unknown>)[segment]), node);
+// The value at a path of keys and indexes in a JSON value, or undefined where the path leaves it.
+export const valueAt = (node: unknown, path: Path): unknown => path.reduce<unknown>((current, segment) => (current == null ? undefined : (current as Record<string | number, unknown>)[segment]), node);
 
 // restore(entry, source, row) -> { entry } | { error }. Each string holding MARKER takes the string at the same place in
 // `source` (the registration as it is now) whose kept text equals it; an arg takes the first unused source arg whose
@@ -96,7 +101,7 @@ const at = (node: unknown, path: Path): unknown => path.reduce<unknown>((current
 export function restore<Entry>(entry: Entry, source: ServerEntry | null | undefined, row?: RowOf): { entry: Entry; error?: undefined } | { error: string; entry?: undefined }
 {
     const kept: { args?: unknown[] | undefined } = maskCredentials(source || {}, row);
-    const sourceArgs = Array.isArray(source && source.args) ? source!.args! : [];
+    const sourceArgs = source && Array.isArray(source.args) ? source.args : [];
     const used = new Set<number>();
     let error: string | null = null;
     const walk = (node: unknown, path: Path): unknown =>
@@ -111,8 +116,8 @@ export function restore<Entry>(entry: Entry, source: ServerEntry | null | undefi
                 used.add(j);
                 return sourceArgs[j];
             }
-            if (at(kept, path) !== node) { error = error || `${path.join('.')} holds a kept value the registration no longer has`; return node; }
-            return at(source, path);
+            if (valueAt(kept, path) !== node) { error = error || `${path.join('.')} holds a kept value the registration no longer has`; return node; }
+            return valueAt(source, path);
         }
         if (Array.isArray(node)) return node.map((item, i) => walk(item, [...path, i]));
         if (!node || typeof node !== 'object') return node;

@@ -8,21 +8,23 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as C from './common.ts';
 import { validWindowsSerenaHome } from '../entries/locations.ts';
+import { pathFor, pathApiOf } from '../entries/platform.ts';
 import { helperParts, helperArgv, shellArg } from '../entries/entry.ts';
 import * as roots from '../roots/roots.ts';
 import * as mcpOrder from '../mcps-list/mcp-order.ts';
 import { fromHere, matchEntry } from '../inventory/inventory.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
+import { MCP_JSON } from '../core/constants.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { InvRegistration } from '../inventory/types.ts';
 import type { OldRecord } from '../mcps-list/types.ts';
 import type { Finding, FixCtx, MachineFixResult, PathChange } from './types.ts';
 
-const pathOf = (context: { platform: string }) => (context.platform === 'win32' ? path.win32 : path.posix);
+const pathOf = (context: { platform: string }) => pathFor(context.platform);
 const styleOf = (context: { platform: string }) => (context.platform === 'win32' ? 'win32' : 'posix');
 const runThere = (context: FixCtx, dir: string) => `run /alfred-tools:fix in ${fromHere(context.inventory, dir)}`;
 const HOME_FORM = /^\$\{(HOME|USERPROFILE)\}(?=[\\/]|$)/;
-const isAbsolute = (filePath: string) => path.posix.isAbsolute(filePath) || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(filePath);
+const isAbsolute = (filePath: string) => path.posix.isAbsolute(filePath) || pathApiOf(filePath) === path.win32;
 
 // ---- project-relative-path ------------------------------------------------------------------------------------------
 
@@ -125,7 +127,7 @@ export function projectRelativePathFix(entry: ServerEntry, finding: Finding, con
         else
         {
             const argv = helperArgv(entry.headersHelper);
-            const at = argv.findIndex((argument) => /mcp-headers\.js$/.test(argument));
+            const at = argv.findIndex((argument) => argument.endsWith(roots.FILES.helper));
             const style = styleOf(context);
             out.headersHelper = [...argv.slice(0, at), shellArg(change.to, style), ...argv.slice(at + 1).map((argument) => shellArg(argument, style))].join(' ');
         }
@@ -183,9 +185,9 @@ export function mcpOrderDetect(context: FixCtx): Finding[]
     const pathApi = pathOf(context);
     const out: Finding[] = [];
     const own = mcpOrder.ownProjectNames(context.inventory);
-    const file = pathApi.join(context.inventory.project, '.mcp.json');
+    const file = pathApi.join(context.inventory.project, MCP_JSON);
     const here = outOfOrder(file, context, new Set(own));
-    if (here) out.push({ id: 'mcp-order', row: here.row, name: '.mcp.json', scope: 'project', found: orderText(here), proposal: { file, own } });
+    if (here) out.push({ id: 'mcp-order', row: here.row, name: MCP_JSON, scope: 'project', found: orderText(here), proposal: { file, own } });
     const parents = new Map(context.inventory.registrations.filter((registration) => registration.scope === 'inherited' && registration.file).map((registration) => [registration.from, registration.file] as [string, string]));
     for (const [dir, parentFile] of parents)
     {

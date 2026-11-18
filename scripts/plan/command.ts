@@ -18,7 +18,7 @@ import type { Answers, Picks, PlanArgs, PlanMode } from './types.ts';
 const MODE_FLAGS: Record<string, PlanMode> = { '--questions': 'questions', '--record': 'record', '--rewind': 'rewind', '--skip': 'skip' };
 const VALUE_FLAGS: Record<string, 'data' | 'connectors' | 'out'> = { '--data': 'data', '--connectors': 'connectors', '--out': 'out' };
 const WALK_FILES = 3;
-export function parseArgs(argv: string[]): PlanArgs
+function parseArgs(argv: string[]): PlanArgs
 {
     const mode = Object.hasOwn(MODE_FLAGS, argv[0]!) ? MODE_FLAGS[argv[0]!]! : 'plan';
     const out: PlanArgs = { mode, files: [], pick: null, data: null, connectors: null, out: null, error: null };
@@ -59,24 +59,24 @@ export function runPlanCommand(argv: string[]): number
     blockingStdio();
     const read = (filePath: string): unknown => JSON.parse(fs.readFileSync(filePath, 'utf8'));
     const args = parseArgs(argv);
-    if (args.error) { console.error(`plan.ts: ${args.error}\n${USAGE}`); return 2; }
+    if (args.error) { console.error(`plan.ts: ${args.error}\n${USAGE}`); return EXIT_CODE.refused; }
     if (args.mode === 'record' || args.mode === 'rewind' || args.mode === 'skip') return runRecordMode(args);
     // the pre-approved call writes only in the run's temp folder, as the record modes do
     const outFile = args.out ? checkedTarget(args.out) : undefined;
     if (outFile === null) { console.error(`plan.ts: ${REFUSAL.outFolder}`); return EXIT_CODE.refused; }
     const [invFile, second] = args.files;
-    if (!invFile || (args.mode === 'plan' && !second)) { console.error(USAGE); return 2; }
+    if (!invFile || (args.mode === 'plan' && !second)) { console.error(USAGE); return EXIT_CODE.refused; }
     const inventory = read(invFile) as Inventory;
     withRootsMap(inventory, args.data);
     if (args.mode === 'questions')
     {
         const output = walkOutput(inventory, second ? read(second) as Picks : null, args);
-        if ('waits' in output) { console.error(output.waits); return 1; }
+        if ('waits' in output) { console.error(output.waits); return EXIT_CODE.stopped; }
         console.log(JSON.stringify(output, null, 2));
-        return 0;
+        return EXIT_CODE.ok;
     }
     const madePlan = plan(inventory, read(second!) as Answers, { env: process.env, connectors: args.connectors !== null ? existing.parseConnectors(args.connectors) : null });
     if (outFile) writeJsonNoFollow(outFile, madePlan);
     console.log(renderPlan(madePlan));
-    return madePlan.errors.length ? 1 : 0;
+    return madePlan.errors.length ? EXIT_CODE.stopped : EXIT_CODE.ok;
 }

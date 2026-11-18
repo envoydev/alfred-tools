@@ -1,6 +1,8 @@
 import { formatRoot, validWindowsSerenaHome, recommendedSide, otherPlace, serenaWindowsHome, serenaSpaceFree, alfredRoot, logicalRoot } from '../entries/locations.ts';
 import * as roots from '../roots/roots.ts';
 import { RECOMMENDED_SUFFIX } from './asks-keys.ts';
+import { PREFIX } from './record-constants.ts';
+import { MAX_OPTIONS } from './constants.ts';
 import type { CatalogRow } from '../catalog/types.ts';
 import type { Root } from '../entries/types.ts';
 import type { Inventory } from '../inventory/types.ts';
@@ -86,7 +88,7 @@ export function locationQuestion(row: CatalogRow, inventory: Inventory, { scope,
 
     const recommendedPlace = keep ? 'keep' : natural;
     const first = listed.find((place) => place.side === recommendedPlace) || listed[0];
-    const order = ([first, ...listed.filter((place) => place !== first)].filter(Boolean) as Place[]).slice(0, 4);
+    const order = ([first, ...listed.filter((place) => place !== first)].filter(Boolean) as Place[]).slice(0, MAX_OPTIONS);
     const describe = (place: Place) =>
     {
         if (place.description) return place.description;
@@ -101,6 +103,6 @@ export function locationQuestion(row: CatalogRow, inventory: Inventory, { scope,
     // one place left: nothing to ask
     if (order.length < 2 && first && first.side !== 'path') return { question: null, answers: {}, only: first.answer || { side: first.side } };
     if (!order.length) return { question: null, answers: {}, only: null };
-    return { question: { id: `location-${row.id}`, header: 'Location', multiSelect: false, question: `${row.label}: where does its data live?`, options }, answers, only: null };
+    return { question: { id: `${PREFIX.location}${row.id}`, header: 'Location', multiSelect: false, question: `${row.label}: where does its data live?`, options }, answers, only: null };
 }
 

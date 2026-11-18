@@ -1,9 +1,8 @@
 // The one way a pre-approved script writes a file: into a folder tmpdir.ts made, through a temporary file and a rename.
 import fs from 'node:fs';
 import path from 'node:path';
+import { NO_FILE_NAMES } from './constants.ts';
 import { isOurTempDir, realPathOf } from './tmpdir.ts';
-
-const NO_FILE_NAMES = new Set(['', '.', '..']);
 
 // The file to write, as a path inside the folder that was checked: that folder's real path joined to the file's own name,
 // so a `<link>/..` in the text cannot send the write somewhere the check did not look. null when the folder is not one

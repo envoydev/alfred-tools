@@ -1,6 +1,6 @@
 // --record's mapping (spec D1): one walk step's answers -> the new picks.json and answers.json, as install.md's step 4
 // and configure.md's step 5 mapped them by hand at commit 5320179. Pure: the inputs are cloned, never changed.
-import { ROUTE_WORD, scopeOfLabel } from './asks-keys.ts';
+import { ROUTE_WORD, capitalized, scopeOfLabel } from './asks-keys.ts';
 import { TOOLSETS_ASKED, TOOLSETS_HEADER } from './hosted-settings-constants.ts';
 import { DEFAULT_HOST_DESCRIPTION } from './asks-other-constants.ts';
 import { BACKTICKED_NAME, LABEL, PREFIX, SIDE, VALUE, WALK_QUESTION } from './record-constants.ts';
@@ -11,7 +11,6 @@ import type { Answers, LocationAnswer, Picks, RecordedStep, RecordInput, RecordR
 const KEYED = [PREFIX.route, PREFIX.scope, PREFIX.name, PREFIX.location, PREFIX.browser, PREFIX.host, PREFIX.token, PREFIX.keyName, PREFIX.urlName, PREFIX.settings, PREFIX.clients];
 
 const refuse = (refused: string): Refusal => ({ refused });
-const capitalized = (word: string) => `${word[0]!.toUpperCase()}${word.slice(1)}`;
 const sameSet = (left: string[], right: string[]) => left.length === right.length && left.every((item) => right.includes(item));
 
 function put(root: object, path: string[], value: unknown): void

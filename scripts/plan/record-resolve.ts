@@ -1,6 +1,5 @@
 // Which option an answer in step.json stands for, and the typed value it carries. Pure: values in, values out.
-import { RECOMMENDED_SUFFIX } from './asks-keys.ts';
-import { LABEL, PREFIX, SIDE, TOOLSET_SEPARATOR, VALUE } from './record-constants.ts';
+import { LABEL, PREFIX, RECOMMENDED_SUFFIX, SIDE, TOOLSET_SEPARATOR, VALUE } from './record-constants.ts';
 import { TOOLSETS_ASKED } from './hosted-settings-constants.ts';
 import type { Question, Refusal, Resolved, Typed, TypedKind } from './types.ts';
 

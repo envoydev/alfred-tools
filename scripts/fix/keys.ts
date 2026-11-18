@@ -9,9 +9,11 @@ import { pathFor } from '../entries/platform.ts';
 import { helperFor, contextArgAt, bridgeParts } from '../entries/entry.ts';
 import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
+import { ALFRED_DATA } from '../core/constants.ts';
 import { HELPER_VERSION } from '../copied/mcp-headers.js';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import * as C from './common.ts';
+import { ONE_VAR } from './constants.ts';
 import { ensureCommonjs, rootIgnoreLines, rootIgnore } from '../apply/file-steps.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Roots } from '../entries/types.ts';
@@ -28,7 +30,6 @@ const rootsOf = (context: FixCtx) => roots.resolveRoots(context.inventory, null,
 // A managed hosted registration whose Authorization header holds a ${VAR} or a key (0.1.x wrote both). The helper reads
 // the key by name from the hosted chain, so the name must be filled there first: a registration is never moved to a
 // helper that would send no key.
-const ONE_VAR = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
 
 function authOf(entry: ServerEntry | null | undefined): { header: string; value: string } | null
 {
@@ -118,7 +119,7 @@ function shippedFiles(context: FixCtx, fixId: string): ShippedFile[]
 // where a hosted server's helper runs at each connect (review)
 const helperFinding = (fixId: string, shippedFile: ShippedFile, what: string, extra: Partial<Finding> = {}): Finding => ({ ...C.finding(fixId, shippedFile.registration, what, extra), name: shippedFile.file, path: shippedFile.file, shipped: shippedFile.kind, bridged: Boolean(bridgeParts(shippedFile.registration.entry)) || shippedFile.kind === 'serenaContext' });
 const nameOf = (shippedFile: ShippedFile) => roots.FILES[shippedFile.kind];
-// the file this finding writes: 'helper' or 'bridge' (a finding from before 0.4.0 carries none: a helper)
+// the file this finding writes: 'helper', 'bridge' or 'serenaContext' (a finding from before 0.4.0 carries none: a helper)
 const kindOf = (finding: Finding): ShippedKind => (finding.shipped === 'bridge' || finding.shipped === 'serenaContext' ? finding.shipped : 'helper');
 // a fix that writes a file says CommonJS beside it (apply.ts ensureCommonjs, 0.4.0 Ruling 12)
 const withCommonjs = (root: string, result: MachineFixResult, kind: ShippedKind): MachineFixResult =>
@@ -174,7 +175,7 @@ export function helperStaleFix(finding: Finding): MachineFixResult
 export function rootIgnoreDetect(context: FixCtx): Finding[]
 {
     const out: Finding[] = [];
-    for (const family of ['project', 'global'] as const)
+    for (const family of roots.FAMILIES)
     {
         const used = context.inventory.roots && context.inventory.roots[family];
         const root = used && used.path;
@@ -184,13 +185,13 @@ export function rootIgnoreDetect(context: FixCtx): Finding[]
         const secrets = path.join(root, roots.FILES.secrets);
         const helper = path.join(root, roots.FILES.helper);
         const secretsGap = roots.gitIgnores(secrets) === false;
-        const helperGap = family === 'project' && path.basename(root) !== '.alfred' && roots.gitIgnores(helper) === true;
+        const helperGap = family === 'project' && path.basename(root) !== ALFRED_DATA && roots.gitIgnores(helper) === true;
         const signIns = path.join(root, roots.FILES.signIns);
-        const signInsGap = roots.gitIgnores(path.join(signIns, 'tokens')) === false;
+        const signInsGap = roots.gitIgnores(path.join(signIns, roots.SIGN_IN_PROBE)) === false;
         const unignore = gap.unignore || [];
         const found = [secretsGap && `git would commit ${secrets}`, signInsGap && `git would commit ${signIns}/`, helperGap && `git ignores ${helper}, which a project-scope server needs committed`, unignore.length && `git ignores ${unignore.map((file) => path.join(root, file)).join(' and ')}, which a committed entry names`].filter(Boolean).join('; ');
         const base = { id: 'root-ignore', row: null, name: root, scope: family, found, path: root, family };
-        if (path.basename(root) === '.alfred') { out.push({ ...base, blocked: `${root} is alfred-code's - add ${[secretsGap && roots.FILES.secrets, signInsGap && `${roots.FILES.signIns}/`].filter(Boolean).join(' and ')} to its .gitignore yourself` }); continue; }
+        if (path.basename(root) === ALFRED_DATA) { out.push({ ...base, blocked: `${root} is alfred-code's - add ${[secretsGap && roots.FILES.secrets, signInsGap && `${roots.FILES.signIns}/`].filter(Boolean).join(' and ')} to its .gitignore yourself` }); continue; }
         if (gap.excluded) { out.push({ ...base, blocked: `a .gitignore above excludes ${root} - remove that line (git check-ignore -v ${root} names it): git never re-includes a file inside an excluded folder` }); continue; }
         const lines = rootIgnoreLines(root);
         const fixes = { secrets: secretsGap && lines.lack.includes(lines.mine ? '*' : roots.FILES.secrets), helper: helperGap && lines.mine && lines.lack.includes(`!${roots.FILES.helper}`), signIns: signInsGap && lines.lack.includes(lines.mine ? '*' : `${roots.FILES.signIns}/`), unignore: lines.mine ? unignore.filter((file) => lines.lack.includes(`!${file}`)) : [] };
@@ -212,7 +213,7 @@ export function rootIgnoreFix(finding: Finding): MachineFixResult
     const still = [
         finding.fixes!.secrets && roots.gitIgnores(path.join(finding.path!, roots.FILES.secrets)) === false && `git would still commit ${path.join(finding.path!, roots.FILES.secrets)}`,
         finding.fixes!.helper && roots.gitIgnores(path.join(finding.path!, roots.FILES.helper)) === true && `git still ignores ${path.join(finding.path!, roots.FILES.helper)}`,
-        finding.fixes!.signIns && roots.gitIgnores(path.join(finding.path!, roots.FILES.signIns, 'tokens')) === false && `git would still commit ${path.join(finding.path!, roots.FILES.signIns)}/`,
+        finding.fixes!.signIns && roots.gitIgnores(path.join(finding.path!, roots.FILES.signIns, roots.SIGN_IN_PROBE)) === false && `git would still commit ${path.join(finding.path!, roots.FILES.signIns)}/`,
         ...(finding.fixes!.unignore || []).filter((file) => roots.gitIgnores(path.join(finding.path!, file)) === true).map((file) => `git still ignores ${path.join(finding.path!, file)}`),
     ].filter(Boolean);
     return { ok: !still.length, detail: still.length ? `${result.detail}; ${still.join('; ')}` : result.detail, restart: false };

@@ -209,11 +209,11 @@ export interface McpRemoveStep
 }
 export type RegistrationStep = McpAddStep | McpReplaceStep | McpMoveStep | McpRemoveStep;
 
-// A list-write upsert: the server, the registration key it is filled from at apply (null: as given), the Cursor file
-// whose copy it takes, and the key files a stdio key is named from.
 // A server a list-write upserts: its entry null until the apply fills it from the registration as read, and the Cursor
 // form planMcp decided.
 export type PlannedServer = Omit<ListServer, 'entry'> & { entry: ServerEntry | null; form?: string | null | undefined };
+// A list-write upsert: the server, the registration key it is filled from at apply (null: as given), the Cursor file
+// whose copy it takes, and the key files a stdio key is named from.
 export interface ListUpsert
 {
     server: PlannedServer; // stored - do not rename

@@ -10,7 +10,10 @@ import * as rename from './rename.ts';
 import { rootOfEntry } from '../entries/locations.ts';
 import { bridgeParts } from '../entries/entry.ts';
 import { fetchStep } from '../entries/names.ts';
+import { pathFor } from '../entries/platform.ts';
 import * as declines from '../core/declines.ts';
+import { ALFRED_DATA } from '../core/constants.ts';
+import { GITIGNORE_ALL } from '../apply/constants.ts';
 import * as cli from '../core/claude-cli.ts';
 import * as inventory from '../inventory/inventory.ts';
 import * as hud from '../hud/hud-statusline.ts';
@@ -86,13 +89,13 @@ function ignoredByGit(context: FixCtx, rel: string): boolean | null
 
 export function dataFolderIgnoreDetect(context: FixCtx): Finding[]
 {
-    const pathApi = context.platform === 'win32' ? path.win32 : path.posix;
+    const pathApi = pathFor(context.platform);
     const tools = C.fixOf(context, 'data-folder-ignore')!.tool;
     const seen = new Set<string>();
     const out: Finding[] = [];
     for (const registration of context.inventory.registrations)
     {
-        if (registration.own || registration.alfredRetired || registration.choice === 'own' || !tools.includes(registration.rowId!)) continue;
+        if (!C.isManaged(registration) || !tools.includes(registration.rowId!)) continue;
         // starts here: a project-scope one not rejected, or a parent's not rejected and not shadowed by a nearer one
         if (registration.scope === 'inherited' ? registration.approval === 'rejected' || registration.shadowed : registration.scope !== 'project' || registration.approval === 'rejected') continue;
         const row = C.rowOf(context, registration.rowId!)!;
@@ -112,7 +115,7 @@ export function dataFolderIgnoreDetect(context: FixCtx): Finding[]
         const gitIgnores = ignoredByGit(context, rel);
         if (gitIgnores === true) continue;
         if (gitIgnores === null && context.machine.exists(own)) continue;
-        if (gitIgnores === null && /^\.alfred\//.test(rel) && context.machine.exists(pathApi.join(context.inventory.project, '.alfred', '.gitignore'))) continue;
+        if (gitIgnores === null && rel.startsWith(`${ALFRED_DATA}/`) && context.machine.exists(pathApi.join(context.inventory.project, ALFRED_DATA, '.gitignore'))) continue;
         // a .gitignore of the user's that leaves the data out is theirs to change: the fix never writes over it
         if (gitIgnores === false && context.machine.exists(own))
         {
@@ -125,7 +128,7 @@ export function dataFolderIgnoreDetect(context: FixCtx): Finding[]
         }
         out.push({
             id: 'data-folder-ignore', row: registration.rowId, name: registration.name, scope: registration.scope,
-            found: `${rel} - its data folder when Claude starts here - is not git-ignored: ${folder} gets no .gitignore of its own${/^\.alfred\//.test(rel) ? ' and no .alfred/.gitignore covers it' : ''}`,
+            found: `${rel} - its data folder when Claude starts here - is not git-ignored: ${folder} gets no .gitignore of its own${rel.startsWith(`${ALFRED_DATA}/`) ? ' and no .alfred/.gitignore covers it' : ''}`,
             proposal: { path: folder },
         });
     }
@@ -146,7 +149,7 @@ function leftoverCopy(context: FixCtx, registration: InvRegistration, root: stri
     const slashed = rel.split(pathApi.sep).join('/');
     const gitIgnores = ignoredByGit(context, slashed);
     if (gitIgnores === true) return null;
-    if (gitIgnores === null && (context.machine.exists(pathApi.join(folder, '.gitignore')) || (/^\.alfred\//.test(slashed) && context.machine.exists(pathApi.join(context.inventory.project, '.alfred', '.gitignore'))))) return null;
+    if (gitIgnores === null && (context.machine.exists(pathApi.join(folder, '.gitignore')) || (slashed.startsWith(`${ALFRED_DATA}/`) && context.machine.exists(pathApi.join(context.inventory.project, ALFRED_DATA, '.gitignore'))))) return null;
     return {
         folder,
         finding: {
@@ -165,7 +168,7 @@ export function dataFolderIgnoreFix(finding: Finding, _context: FixCtx): Machine
     {
         if (fs.existsSync(file)) return { ok: true, restart: false, detail: `${file} exists - left as it is` };
         fs.mkdirSync(finding.proposal!.path!, { recursive: true });
-        fs.writeFileSync(file, '*\n');
+        fs.writeFileSync(file, GITIGNORE_ALL);
         return { ok: true, restart: false, detail: `wrote ${file} holding *` };
     }
     catch (caught) { const error = caught as NodeJS.ErrnoException; return { ok: false, detail: `could not write ${file}: ${error.message}` }; }
@@ -210,12 +213,12 @@ function npmCacheOf(context: FixCtx, registration: InvRegistration, memo: Map<st
 // Every server that starts in this folder, a parent folder's included: the npx cache is the machine's, so fix run in a
 // child folder repairs the parent's server too. One rejected here, or a parent's that a nearer server of its name
 // shadows, does not start here.
-const startsHere = (context: FixCtx, registration: InvRegistration) => !registration.own && !registration.alfredRetired && registration.choice !== 'own' && registration.approval !== 'rejected' && !(registration.scope === 'inherited' && registration.shadowed)
+const startsHere = (context: FixCtx, registration: InvRegistration) => C.isManaged(registration) && registration.approval !== 'rejected' && !(registration.scope === 'inherited' && registration.shadowed)
     && C.fixOf(context, 'npx-cache-entry')!.tool.includes(registration.rowId!);
 
 export function npxCacheEntryDetect(context: FixCtx): Finding[]
 {
-    const pathApi = context.platform === 'win32' ? path.win32 : path.posix;
+    const pathApi = pathFor(context.platform);
     const memo = new Map<string, string | null>();
     const seen = new Set<string>();
     const out: Finding[] = [];
@@ -239,7 +242,7 @@ export function npxCacheEntryDetect(context: FixCtx): Finding[]
 // Remove that folder, never another: it must be a 16-hex folder directly under an _npx folder. -> { ok, detail, fetch }
 export function npxCacheEntryFix(finding: Finding, context: FixCtx): MachineFixResult
 {
-    const pathApi = context.platform === 'win32' ? path.win32 : path.posix;
+    const pathApi = pathFor(context.platform);
     const folder = finding.proposal!.path!;
     if (!NPX_FOLDER.test(pathApi.basename(folder)) || pathApi.basename(pathApi.dirname(folder)) !== '_npx') return { ok: false, detail: `${folder} is not an npx cache folder - left as it is` };
     try { fs.rmSync(folder, { recursive: true, force: true }); }

@@ -6,20 +6,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as account from '../core/account.ts';
 import * as roots from '../roots/roots.ts';
+import { ALL_SCOPES, MCP_JSON, RECOMMENDED_SUFFIX } from '../core/constants.ts';
 import { parseJson } from '../core/json-file.ts';
 import { fingerprintKey } from '../catalog/catalog.ts';
-import { matchesFingerprint } from './inventory.ts';
+import { serverKey } from '../mcps-list/mcps-list.ts';
+import { catalogMatch } from './fingerprint.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Live, OwnEntry } from '../mcps-list/types.ts';
 import type { DeclaredServer, ExistingItem, Inventory, InvRegistration, PluginServer, ServersDoc } from './types.ts';
 
-// inventory.ts requires this file lazily, inside buildInventory
-
 // the rows with a hosted route: the only ones a connector can be
 export const HOSTED_ROWS = ['context7', 'github', 'gitlab', 'atlassian', 'sentry'];
 export const CHOICES = { mcp: ['own', 'manage'], plugin: ['own', 'add'], connector: ['own', 'add'] };
-const RECOMMENDED = ' (Recommended)';
 
 // `--connectors <Name>,<Name>`: the names, trimmed, each once.
 export const parseConnectors = (arg: unknown): string[] => [...new Set(String(arg == null ? '' : arg).split(',').map((part) => part.trim()).filter(Boolean))];
@@ -47,14 +46,14 @@ function serversIn(doc: ServersDoc | null): DeclaredServer[]
 export function pluginServers(installPath: unknown): DeclaredServer[]
 {
     if (!installPath || typeof installPath !== 'string') return [];
-    const out = serversIn(readJsonFile(path.join(installPath, '.mcp.json')));
+    const out = serversIn(readJsonFile(path.join(installPath, MCP_JSON)));
     const manifest = readJsonFile(path.join(installPath, '.claude-plugin', 'plugin.json'));
     const decl = manifest && manifest.mcpServers;
     if (decl && typeof decl === 'object' && !Array.isArray(decl)) out.push(...serversIn({ mcpServers: decl }));
     for (const serverPath of typeof decl === 'string' ? [decl] : Array.isArray(decl) ? decl.filter((item) => typeof item === 'string') : [])
     {
         const rel = path.relative(installPath, path.resolve(installPath, serverPath));
-        if (!serverPath.startsWith('./') || !rel || rel.startsWith('..') || path.isAbsolute(rel) || rel === '.mcp.json') continue;
+        if (!serverPath.startsWith('./') || !rel || rel.startsWith('..') || path.isAbsolute(rel) || rel === MCP_JSON) continue;
         out.push(...serversIn(readJsonFile(path.join(installPath, rel))));
     }
     const seen = new Set<string>();
@@ -64,26 +63,19 @@ export function pluginServers(installPath: unknown): DeclaredServer[]
 // The key of the catalog fingerprint a launch matches, in matchEntry's order. -> string | null
 export function fingerprintOf(entry: ServerEntry | null | undefined, catalog: Catalog): string | null
 {
-    if (!entry || typeof entry !== 'object') return null;
-    for (const row of catalog.tools)
-    {
-        if (row.kind !== 'mcp') continue;
-        for (const routeDefinition of Object.values(row.routes))
-        {
-            const matchedFingerprint = routeDefinition.fingerprints.find((fingerprint) => matchesFingerprint(entry, fingerprint));
-            if (matchedFingerprint) return fingerprintKey(matchedFingerprint);
-        }
-    }
-    return null;
+    const match = catalogMatch(entry, catalog);
+    return match ? fingerprintKey(match.fingerprint) : null;
 }
 
 const labelOf = (catalog: Catalog, rowId: string | null) => (catalog.byId.get(rowId!) || { label: rowId }).label;
+// The key of a plugin's server, as itemOf reads it back.
+const pluginServerKey = (server: PluginServer): string => `plugin-mcp:${server.plugin}/${server.server}`;
 const regItem = (registration: InvRegistration, catalog: Catalog): ExistingItem => ({
-    key: `mcp:${registration.name}~${registration.scope}`, kind: 'mcp', rowId: registration.rowId, label: labelOf(catalog, registration.rowId), family: roots.familyOf(registration.scope),
+    key: serverKey(registration), kind: 'mcp', rowId: registration.rowId, label: labelOf(catalog, registration.rowId), family: roots.familyOf(registration.scope),
     fingerprint: fingerprintOf(registration.entry, catalog), choice: registration.choice || null, name: registration.name, scope: registration.scope,
 });
 const pluginItem = (server: PluginServer, catalog: Catalog): ExistingItem => ({
-    key: `plugin-mcp:${server.plugin}/${server.server}`, kind: 'plugin', rowId: server.rowId, label: labelOf(catalog, server.rowId), family: 'project',
+    key: pluginServerKey(server), kind: 'plugin', rowId: server.rowId, label: labelOf(catalog, server.rowId), family: 'project',
     fingerprint: fingerprintOf(server.entry, catalog), choice: server.choice || null, plugin: server.plugin, server: server.server,
 });
 function connectorItem(name: string, inventory: Inventory, catalog: Catalog): ExistingItem | null
@@ -93,7 +85,7 @@ function connectorItem(name: string, inventory: Inventory, catalog: Catalog): Ex
     const recorded = ((inventory.lists && inventory.lists.global && inventory.lists.global.own) || []).find((ownEntry) => ownEntry.connector === name);
     return { key: `connector:${name}`, kind: 'connector', rowId, label: labelOf(catalog, rowId), family: 'global', fingerprint: null, choice: (recorded && recorded.choice) || null, connector: name };
 }
-const asked = (registration: InvRegistration) => registration.rowId && !registration.alfredRetired && ['project', 'local', 'user'].includes(registration.scope);
+const asked = (registration: InvRegistration) => registration.rowId && !registration.alfredRetired && ALL_SCOPES.includes(registration.scope);
 
 // D6's three kinds, each with its recorded choice (null: never answered, or its launch changed since). A registration whose
 // helper or data folder points into a root of this plugin is 0.2.0's own - managed, never asked - and is left out.
@@ -139,13 +131,13 @@ export function recordEntry(item: ExistingItem, choice: string): OwnEntry
     return { connector: item.connector, choice };
 }
 
-// What is here now, for the list-write step to drop what is gone (mcpsList.mergeOwn). `connectors`: the list this run
+// What is here now, for the list-write step to drop what is gone (mcps-list.ts ownOf). `connectors`: the list this run
 // passed, or null - a run without one keeps every connector entry (R14).
 export function liveOf(inventory: Inventory, catalog: Catalog, connectors: string[] | null = null): Live
 {
     const servers: Record<string, string | null> = {};
-    for (const registration of (inventory.registrations || []).filter(asked)) servers[`mcp:${registration.name}~${registration.scope}`] = fingerprintOf(registration.entry, catalog);
-    for (const server of (inventory.pluginServers || []).filter((candidate) => candidate.rowId)) servers[`plugin-mcp:${server.plugin}/${server.server}`] = fingerprintOf(server.entry, catalog);
+    for (const registration of (inventory.registrations || []).filter(asked)) servers[serverKey(registration)] = fingerprintOf(registration.entry, catalog);
+    for (const server of (inventory.pluginServers || []).filter((candidate) => candidate.rowId)) servers[pluginServerKey(server)] = fingerprintOf(server.entry, catalog);
     return { servers, connectors: Array.isArray(connectors) ? connectors : null };
 }
 
@@ -154,8 +146,8 @@ export function liveOf(inventory: Inventory, catalog: Catalog, connectors: strin
 export function offerRule(inventory: Inventory, catalog: Catalog, answers: Record<string, string> | null = {}): { own: Set<string | null>; add: Map<string | null, string> }
 {
     const byKey = new Map<string, string>();
-    for (const registration of (inventory.registrations || []).filter((candidate) => asked(candidate) && candidate.choice)) byKey.set(`mcp:${registration.name}~${registration.scope}`, registration.choice!);
-    for (const server of (inventory.pluginServers || []).filter((candidate) => candidate.rowId && candidate.choice)) byKey.set(`plugin-mcp:${server.plugin}/${server.server}`, server.choice!);
+    for (const registration of (inventory.registrations || []).filter((candidate) => asked(candidate) && candidate.choice)) byKey.set(serverKey(registration), registration.choice!);
+    for (const server of (inventory.pluginServers || []).filter((candidate) => candidate.rowId && candidate.choice)) byKey.set(pluginServerKey(server), server.choice!);
     for (const ownEntry of (inventory.lists && inventory.lists.global && inventory.lists.global.own) || []) if (typeof ownEntry.connector === 'string' && ownEntry.choice) byKey.set(`connector:${ownEntry.connector}`, ownEntry.choice);
     for (const [key, choice] of Object.entries(answers || {})) byKey.set(key, choice);
     const own = new Set<string | null>();
@@ -190,7 +182,7 @@ export function ownQuestion(item: ExistingItem)
     const options = isRegistration
         ? [{ label: 'Keep it on its own', choice: 'own', description: 'nothing in this plugin changes it' }, { label: 'Let alfred-tools manage it', choice: 'manage', description: 'configure, update and fix look after it from now on' }]
         : [{ label: `Keep it with ${ownerOf(item)}`, choice: 'own', description: `install does not offer ${item.label} here` }, { label: "Let install offer alfred-tools' own as well", choice: 'add', description: `${item.label} is offered again - ${twoServers(item.label, ownerOf(item))}` }];
-    const labeled = options.map((option, i) => ({ ...option, label: `${option.label}${i === 0 ? RECOMMENDED : ''}` }));
+    const labeled = options.map((option, i) => ({ ...option, label: `${option.label}${i === 0 ? RECOMMENDED_SUFFIX : ''}` }));
     const what = isRegistration ? `${item.name} (${scopeWord(item.scope)}) is on its own` : item.kind === 'plugin' ? `${item.label} is left with the ${ownerOf(item)} plugin` : `${item.label} is left with claude.ai (${item.connector})`;
     return {
         question: { id: `own-${item.key}`, header: 'On its own', multiSelect: false, question: `${what}. Who looks after it?`, options: labeled.map(({ label, description }) => ({ label, description })) },

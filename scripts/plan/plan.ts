@@ -1,9 +1,5 @@
-#!/usr/bin/env node
-// THE PLAN - answers in, an ordered list of operations out. Nothing here changes anything.
-//
-//   node plan.ts <inventory.json> <answers.json> [--out <plan.json>]     the plan, printed, and written for apply.ts
-//   node plan.ts --questions <inventory.json> [<picks.json>]              every ask the walk makes, as data
-//   either takes --data <plugin data dir> after its files: the roots map (spec D2)
+// THE PLAN - answers in, an ordered list of operations out. Nothing here changes anything. Its command line is
+// scripts/plan.ts, whose forms plan/command.ts's USAGE lists.
 //
 // A fresh add builds its entry from catalog/tools.json. A rename, a move, a route or location change (configure) starts
 // from the registration as read - its pin, its cut-off, the args and env the user added - and changes only what the
@@ -26,13 +22,11 @@ import * as existing from '../inventory/existing.ts';
 import * as mcpOrder from '../mcps-list/mcp-order.ts';
 import { cursorSteps } from './cursor-steps.ts';
 import { changedOutside, denyReadSteps } from './repair-tail.ts';
-import { deepEqual } from '../core/json-file.ts';
 import { makeCtx } from './context.ts';
 import { planMcp } from './pick.ts';
 import { fileSteps } from './root-files.ts';
 import { retireContextSteps, rewritesOf } from './retire-context.ts';
 import { planChange, planRemove, planExisting, planRootChange, movedLists } from './change.ts';
-export { deepEqual };
 import { repointWaits } from '../fix/rename.ts';
 import type { Inventory, InvRegistration } from '../inventory/types.ts';
 import type { Answers, Plan, PlanCtx, PlanOptions, PlanStep } from './types.ts';
@@ -42,7 +36,7 @@ import type { Answers, Plan, PlanCtx, PlanOptions, PlanStep } from './types.ts';
 // A folder under the plugin's former name waits to move (spec D3): install and configure write nothing beside it - a
 // new helper no longer reads ~/.preferred-tools - and send the user to update, which moves it.
 export const MOVE_FIRST = ".preferred-tools is this plugin's old folder - run /alfred-tools:update first, which moves it";
-export const moveWaits = (context: { project: string; home: string; platform: string }): boolean => roots.pendingMoves(context).some((move) => move.state === 'move');
+const moveWaits = (context: { project: string; home: string; platform: string }): boolean => roots.pendingMoves(context).some((move) => move.state === 'move');
 export const REPOINT_FIRST = "a server still names .preferred-tools, this plugin's old folder - run /alfred-tools:update first, which points it at .alfred-tools";
 // the stop's line, or null: a folder to move first, else a managed server still naming a moved one
 export function waitsFor(context: { project: string; home: string; platform: string }, registrations: InvRegistration[]): string | null

@@ -6,12 +6,13 @@
 // aside with .0.4.bak added. Install and configure do the same the first time they write a family
 // (plan/lists.ts), with the same importUnlisted.
 import fs from 'node:fs';
-import path from 'node:path';
 import * as roots from '../roots/roots.ts';
+import { ALFRED_DATA } from '../core/constants.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import { importUnlisted, adoptedClients } from '../plan/lists.ts';
 import { SCOPES, folderList, cursorSteps } from '../plan/cursor-steps.ts';
 import { helperParts } from '../entries/entry.ts';
+import { pathFor } from '../entries/platform.ts';
 import { readGuardOf, denyReadStep, configDirsWithPlugin } from '../plan/repair-tail.ts';
 import * as kept from '../core/kept.ts';
 import * as keys from '../keys/keys.ts';
@@ -19,13 +20,14 @@ import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import * as workspace from '../roots/workspace.ts';
 import { deepEqual } from '../core/json-file.ts';
 import * as serenaConfig from '../apply/serena-config.ts';
+import { isManaged } from './common.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRow } from '../catalog/types.ts';
 import type { ListServer, OldRecord } from '../mcps-list/types.ts';
 import type { CursorWritePlanStep, ListCtx, ListWriteStep, McpAddStep, McpReplaceStep, PlannedServer, PlanStep, SerenaBaseModesStep, SerenaConfigInitStep, SerenaProjectFolderStep } from '../plan/types.ts';
 import type { DriftWhere, Finding, FixCtx } from './types.ts';
 
-const pathOf = (context: { platform: string }) => (context.platform === 'win32' ? path.win32 : path.posix);
+const pathOf = (context: { platform: string }) => pathFor(context.platform);
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 // The family's roots as install would take them: the root in use, else the recommended one.
@@ -40,7 +42,7 @@ export function listImportDetect(context: FixCtx): Finding[]
     const pathApi = pathOf(context);
     const resolvedRoots = rootsOf(context);
     const out: Finding[] = [];
-    for (const family of ['project', 'global'] as const)
+    for (const family of roots.FAMILIES)
     {
         const list = context.inventory.lists && context.inventory.lists[family];
         // a list or record this plugin cannot read, or one a newer plugin wrote, is left as it is
@@ -66,7 +68,7 @@ export function listImportSteps(finding: Finding, context: FixCtx): PlanStep[]
     const root = pathApi.dirname(finding.name);
     const existed = fs.existsSync(root);
     const steps: PlanStep[] = [];
-    if (!existed && pathApi.basename(root) !== '.alfred')
+    if (!existed && pathApi.basename(root) !== ALFRED_DATA)
         steps.push({ op: 'root-ignore', path: root, why: `the new root ${root}: its .gitignore keeps the key file, the list and the data out of git` });
     const read = lists.readList(finding.name);
     const own = read && !read.state ? read.own : [];
@@ -144,7 +146,7 @@ export function serenaBaseModesDetect(context: FixCtx): Finding[]
 {
     const out: Finding[] = [];
     const seen = new Set<string>();
-    for (const registration of (context.inventory.registrations || []).filter((candidate) => candidate.rowId === 'serena' && !candidate.own && !candidate.alfredRetired && candidate.choice !== 'own' && candidate.scope !== 'inherited'))
+    for (const registration of (context.inventory.registrations || []).filter((candidate) => candidate.rowId === 'serena' && isManaged(candidate) && candidate.scope !== 'inherited'))
     {
         const home = registration.entry && registration.entry.env && registration.entry.env.SERENA_HOME;
         if (!home) continue;
@@ -167,7 +169,7 @@ export function serenaProjectFolderDetect(context: FixCtx): Finding[]
 {
     const out: Finding[] = [];
     const seen = new Set<string>();
-    for (const registration of (context.inventory.registrations || []).filter((candidate) => candidate.rowId === 'serena' && !candidate.own && !candidate.alfredRetired && candidate.choice !== 'own' && candidate.scope !== 'inherited'))
+    for (const registration of (context.inventory.registrations || []).filter((candidate) => candidate.rowId === 'serena' && isManaged(candidate) && candidate.scope !== 'inherited'))
     {
         const home = registration.entry && registration.entry.env && registration.entry.env.SERENA_HOME;
         if (!home) continue;
@@ -251,7 +253,7 @@ export function clientDriftDetect(context: FixCtx): Finding[]
         if (same(kept.maskCredentials(copy, row), kept.maskCredentials(want, row))) return undefined;
         return out.push(driftOf(server, app, 'differs', { ...where, keyGuard: keyGuardOf(copy, row, server.route), keyEmpty: keyEmptyOf(copy, want, row, server.route), rowGone: !cursorMcp.matchesRow(copy, row) }));
     };
-    for (const family of ['project', 'global'] as const)
+    for (const family of roots.FAMILIES)
     {
         const list = usableList(context, family);
         if (!list) continue;
@@ -364,7 +366,7 @@ export function cursorFileDetect(context: FixCtx): Finding[]
 {
     const cctx = cursorCtx(context);
     const out: Finding[] = [];
-    for (const family of ['project', 'global'] as const)
+    for (const family of roots.FAMILIES)
     {
         const file = cursorMcp.fileFor(family, cctx);
         const why = cursorMcp.refusal(cursorMcp.readCursor(file));

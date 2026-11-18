@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { MCP_JSON } from './constants.ts';
 import { parseJson } from './json-file.ts';
 import type { Account, AccountFile, AccountProject, Env, ReadState, ServerEntry } from './types.ts';
 
@@ -79,7 +80,7 @@ export function readRegistration(name: string, scope: string, project: string, e
 {
     if (scope === 'project')
     {
-        const state = readState<AccountProject>(path.join(project, '.mcp.json'));
+        const state = readState<AccountProject>(path.join(project, MCP_JSON));
         return state.doc && state.doc.mcpServers ? state.doc.mcpServers[name] : undefined;
     }
     const account = readAccount(env, project);

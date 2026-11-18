@@ -9,7 +9,9 @@ import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
 import * as existing from '../inventory/existing.ts';
 import { keyOf, targetOf } from '../inventory/inventory.ts';
+import { isManaged } from '../fix/common.ts';
 import { planMcp } from './pick.ts';
+import { SCOPES } from './cursor-steps.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Inventory, InvList, InvRegistration, PluginRow } from '../inventory/types.ts';
 import type { Family } from '../roots/types.ts';
@@ -37,21 +39,21 @@ export function planRootChange(answers: Answers, inventory: Inventory, context: 
     const pathApi = pathFor(context.platform);
     for (const family of answers.rootChange || [])
     {
-        if (!['project', 'global'].includes(family)) { out.errors.push(`rootChange: '${family}' is not a root family - project or global`); continue; }
+        if (!roots.FAMILIES.some((candidate) => candidate === family)) { out.errors.push(`rootChange: '${family}' is not a root family - project or global`); continue; }
         const next = context.roots && context.roots[family as Family];
         if (!next) continue; // the roots answer's error is already in the plan
         const used = inventory.roots && Object.hasOwn(inventory.roots, family) ? inventory.roots[family as Family] : roots.inUse(inventory, family as Family, { ...context, catalog });
         if (!used) { out.unchanged.push(`rootChange: no ${family} root is in use here - nothing to move`); continue; }
         if (used.path === next) { out.unchanged.push(`rootChange: the ${family} root is already ${next}`); continue; }
-        const inOld = (filePath: string): boolean => { const rel = pathApi.relative(used.path, filePath); return rel === '' || (!rel.startsWith('..') && !pathApi.isAbsolute(rel)); };
+        const inOld = (filePath: string): boolean => { const relativePath = pathApi.relative(used.path, filePath); return relativePath === '' || (!relativePath.startsWith('..') && !pathApi.isAbsolute(relativePath)); };
         // the root's own files move with it (D1): the list, serena's context and mcp-remote's sign-in folder - each that is
         // there, renamed whole, before any registration names the new root
         const exists = context.exists || ((filePath: string) => fs.existsSync(filePath));
         const list = inventory.lists && inventory.lists[family];
-        const scopes = family === 'global' ? ['user'] : ['project', 'local'];
+        const scopes = family === 'global' ? SCOPES.global : SCOPES.project;
         // serena's context moves only for a serena that keeps it in the root (an alfred-code home); one on an editable home gets
         // a fresh copy in its new home, and the root's old copy is retired by the plan (plan/retire-context.ts)
-        const keepsRootContext = inventory.registrations.some((registration) => registration.rowId && !registration.own && !registration.alfredRetired && registration.choice !== 'own' && scopes.includes(registration.scope)
+        const keepsRootContext = inventory.registrations.some((registration) => registration.rowId && isManaged(registration) && scopes.includes(registration.scope)
             && contextArgAt(registration.entry) >= 0 && !(registration.entry.env && registration.entry.env.SERENA_HOME && serenaConfig.editableHome(registration.entry.env.SERENA_HOME, { platform: context.platform }).ok));
         for (const fileName of [roots.FILES.list, roots.FILES.serenaContext, roots.FILES.signIns])
         {
@@ -64,7 +66,7 @@ export function planRootChange(answers: Answers, inventory: Inventory, context: 
         const secretsNew = pathApi.join(next, roots.FILES.secrets);
         let keyed = false;
         context.uses.push({ family, root: next });
-        for (const registration of inventory.registrations.filter((candidate) => candidate.rowId && !candidate.own && !candidate.alfredRetired && candidate.choice !== 'own' && scopes.includes(candidate.scope)))
+        for (const registration of inventory.registrations.filter((candidate) => candidate.rowId && isManaged(candidate) && scopes.includes(candidate.scope)))
         {
             const row = catalog.byId.get(registration.rowId!);
             // a target changed in this run is planned there, into the new root as well
@@ -90,7 +92,7 @@ export function planRootChange(answers: Answers, inventory: Inventory, context: 
         // standard root the helper reads itself); a local server elsewhere is configured in its own project
         if (family === 'global' && !roots.standard('global', context).some((standardRoot) => standardRoot.root === used.path))
         {
-            for (const registration of inventory.registrations.filter((candidate) => candidate.rowId && !candidate.own && !candidate.alfredRetired && candidate.choice !== 'own' && candidate.scope === 'local'))
+            for (const registration of inventory.registrations.filter((candidate) => candidate.rowId && isManaged(candidate) && candidate.scope === 'local'))
             {
                 const parts = helperParts(registration.entry && registration.entry.headersHelper);
                 const row = catalog.byId.get(registration.rowId!);

@@ -2,14 +2,16 @@
 import path from 'node:path';
 import { keyOf, fromHere } from '../inventory/inventory.ts';
 import { pinOf } from '../inventory/table.ts';
-import { ROUTE_WORD, RECOMMENDED_SUFFIX, recommendedScope, scopesFor, SCOPE_ORDER, PARENT_HELPER_IN_CHILD, CHILD_FOLDER_REMEDY, SCOPE_LABEL, scopeText } from './asks-keys.ts';
+import { ROUTE_WORD, RECOMMENDED_SUFFIX, recommendedScope, scopesFor, SCOPE_ORDER, PARENT_HELPER_IN_CHILD, CHILD_FOLDER_REMEDY, SCOPE_LABEL, scopeText, capitalized } from './asks-keys.ts';
 import { installedItems, rootInUse, ROOT_LABEL, ROOT_MOVES, packed } from './asks-picks.ts';
-import * as X from '../inventory/existing.ts';
+import * as existingServers from '../inventory/existing.ts';
+import * as roots from '../roots/roots.ts';
+import { LABEL, PREFIX } from './record-constants.ts';
+import { MAX_NAME_LENGTH, MAX_OPTIONS } from './constants.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { Current } from '../entries/types.ts';
 import type { Installed, Inventory } from '../inventory/types.ts';
 import type { AskCtx, Question, ToolOpts } from './types.ts';
-import type { Family } from '../roots/types.ts';
 
 // The configure pick: one option per installed registration, then the servers left on their own, then one per root
 // folder in use (spec D7, R3). `keys` maps each label to the key the answers use (`mcp:<name>~<scope>`, `root:<family>`).
@@ -23,14 +25,14 @@ export function changeQuestions(inventory: Inventory, catalog: Catalog, context:
     const items = installedItems(inventory, catalog, describe);
     // the servers left on their own (spec D6, R3): a group of their own, whose pick keeps them so or hands them over
     const group = { id: 'own', label: 'On their own' };
-    for (const it of X.ownItems(inventory, catalog))
+    for (const ownItem of existingServers.ownItems(inventory, catalog))
     {
-        const label = it.kind === 'mcp' ? `${it.name} (${it.label}, ${it.scope}) - on its own` : it.kind === 'plugin' ? `${it.server} (${it.label}, from ${X.ownerOf(it)}) - on its own` : `${it.connector} (${it.label}, claude.ai) - on its own`;
-        const description = it.kind === 'mcp' ? 'left on its own at install - pick it to keep it so or let alfred-tools manage it' : `left with ${X.ownerOf(it)} - pick it to keep it so or let install offer alfred-tools' own beside it`;
-        items.push({ group, label, description, target: { kind: 'own', key: it.key } });
+        const label = ownItem.kind === 'mcp' ? `${ownItem.name} (${ownItem.label}, ${ownItem.scope}) - on its own` : ownItem.kind === 'plugin' ? `${ownItem.server} (${ownItem.label}, from ${existingServers.ownerOf(ownItem)}) - on its own` : `${ownItem.connector} (${ownItem.label}, claude.ai) - on its own`;
+        const description = ownItem.kind === 'mcp' ? 'left on its own at install - pick it to keep it so or let alfred-tools manage it' : `left with ${existingServers.ownerOf(ownItem)} - pick it to keep it so or let install offer alfred-tools' own beside it`;
+        items.push({ group, label, description, target: { kind: 'own', key: ownItem.key } });
     }
     const rootGroup = { id: 'roots', label: 'Root folders' };
-    for (const family of ['project', 'global'] as Family[])
+    for (const family of roots.FAMILIES)
     {
         const used = rootInUse(inventory, family, { ...context, catalog });
         if (used) items.push({ group: rootGroup, label: ROOT_LABEL[family]!, description: `${used.path} - pick it to move ${ROOT_MOVES[family]} to another folder`, target: { kind: 'root', key: `root:${family}` } });
@@ -50,8 +52,8 @@ export function routeQuestion(row: CatalogRow, current: string | null | undefine
     const order = [first, ...ids.filter((routeId) => routeId !== first)];
     const text: Record<string, string> = { remote: 'run by the vendor - no local runtime needed', local: 'runs on this machine', bridge: 'the hosted server at a URL filled from .mcps-secrets each start - a small proxy runs here through npx' };
     return {
-        id: `route-${row.id}`, header: 'Route', multiSelect: false, question: ids.length > 2 ? `${row.label}: which route?` : `${row.label}: hosted or local?`,
-        options: order.map((routeId, i) => ({ label: `${ROUTE_WORD[routeId]![0]!.toUpperCase()}${ROUTE_WORD[routeId]!.slice(1)}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: text[routeId]! })),
+        id: `${PREFIX.route}${row.id}`, header: 'Route', multiSelect: false, question: ids.length > 2 ? `${row.label}: which route?` : `${row.label}: hosted or local?`,
+        options: order.map((routeId, i) => ({ label: `${capitalized(ROUTE_WORD[routeId]!)}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: text[routeId]! })),
     };
 }
 
@@ -88,14 +90,14 @@ export function scopeQuestion(row: CatalogRow, inventory: Inventory, { route, cu
     const order = scopeOrder(row, inventory, { route: routeId, current, copyOf, context: context });
     if (order.length < 2) return null;
     return {
-        id: `scope-${row.id}`, header: 'Scope', multiSelect: false,
+        id: `${PREFIX.scope}${row.id}`, header: 'Scope', multiSelect: false,
         question: current ? `${row.label}: which scope? Another one moves '${current.name || row.label}' there; /alfred-tools:install adds a second copy instead.` : `${row.label}: which scope?`,
-        options: order.slice(0, 4).map((scope, i) => ({ label: `${SCOPE_LABEL[scope]}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: scope === strandedScope(row, routeId, current, context) ? STRANDED_TEXT : `${scopeText(scope)}${scope === 'project' && hostedKeyed(row, routeId) ? CHILD_NO_KEY : ''}` })),
+        options: order.slice(0, MAX_OPTIONS).map((scope, i) => ({ label: `${SCOPE_LABEL[scope]}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: scope === strandedScope(row, routeId, current, context) ? STRANDED_TEXT : `${scopeText(scope)}${scope === 'project' && hostedKeyed(row, routeId) ? CHILD_NO_KEY : ''}` })),
     };
 }
 
 // a per-project registration name: the project folder's name before the tool's
-const perProjectName = (row: CatalogRow, context: AskCtx | null | undefined) => (context ? `${path.basename(context.project).replace(/[^A-Za-z0-9_-]+/g, '-')}-${row.name}`.slice(0, 64) : `project-${row.name}`);
+const perProjectName = (row: CatalogRow, context: AskCtx | null | undefined) => (context ? `${path.basename(context.project).replace(/[^A-Za-z0-9_-]+/g, '-')}-${row.name}`.slice(0, MAX_NAME_LENGTH) : `project-${row.name}`);
 
 // The registration name a `names` answer stands for: 'keep' (or none) - the name it has now, else the original;
 // 'prefixed' - the per-project name; else the name itself.
@@ -107,11 +109,11 @@ export function nameFor(row: CatalogRow, name: string | null | undefined, curren
 
 export function nameQuestion(row: CatalogRow, inventory: Inventory, { current = null, copyOf = [], context: context = null }: ToolOpts = {}): Question
 {
-    const orig = row.name;
-    const shadows = copyOf.find((copy) => copy.name === orig);
-    const options = current && current.name !== orig
-        ? [{ label: `Keep \`${current.name}\`${RECOMMENDED_SUFFIX}`, description: 'the name it has now' }, { label: `Use \`${orig}\``, description: 'the original name' }]
-        : [{ label: `Keep \`${orig}\`${RECOMMENDED_SUFFIX}`, description: shadows ? `the original name; in this project it is used instead of ${shadows.scope === 'inherited' ? `the one inherited from ${fromHere(inventory, shadows.from!)}` : 'the copy for every project'}` : 'the original name' }, { label: `Use \`${perProjectName(row, context)}\``, description: 'a per-project name' }];
-    return { id: `name-${row.id}`, header: 'Name', multiSelect: false, question: `${row.label}: registration name?`, options };
+    const original = row.name;
+    const shadows = copyOf.find((copy) => copy.name === original);
+    const options = current && current.name !== original
+        ? [{ label: `${LABEL.keep}\`${current.name}\`${RECOMMENDED_SUFFIX}`, description: 'the name it has now' }, { label: `Use \`${original}\``, description: 'the original name' }]
+        : [{ label: `${LABEL.keep}\`${original}\`${RECOMMENDED_SUFFIX}`, description: shadows ? `the original name; in this project it is used instead of ${shadows.scope === 'inherited' ? `the one inherited from ${fromHere(inventory, shadows.from!)}` : 'the copy for every project'}` : 'the original name' }, { label: `Use \`${perProjectName(row, context)}\``, description: 'a per-project name' }];
+    return { id: `${PREFIX.name}${row.id}`, header: 'Name', multiSelect: false, question: `${row.label}: registration name?`, options };
 }
 

@@ -1,19 +1,15 @@
-#!/usr/bin/env node
 // THE TABLE - the whole catalog for this OS as one numbered table, with what is installed at each scope.
-//
-//   node table.ts <inventory.json>
 //
 // Printed to the tool result, never written to a file. A cell holds, for each server installed at that scope,
 // `<name> [<route>, <pin>]`. A registration that matches no row is the user's: it is named under the table and nothing
 // in this plugin touches it.
 import * as catalogLib from '../catalog/catalog.ts';
 import { fromHere } from './inventory.ts';
+import { ALL_SCOPES } from '../core/constants.ts';
 import { pinnedVersion, launchArgs } from '../fix/common.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { Inventory, Shadow } from './types.ts';
-
-const SCOPES = ['local', 'project', 'user'];
 
 // The pin a registration carries: the package version, the image tag, or null (a hosted URL, a binary).
 export function pinOf(row: CatalogRow, routeId: string | null, entry: ServerEntry): string | null | undefined
@@ -35,16 +31,16 @@ export function renderTable(inventory: Inventory, catalog: Catalog = catalogLib.
     const rows = catalog.tools.filter((row) => row.os.includes(inventory.os));
     const body = rows.map((row, i) =>
     {
-        const cells: Record<string, string[]> = Object.fromEntries(SCOPES.map((scope) => [scope, []]));
+        const cells: Record<string, string[]> = Object.fromEntries(ALL_SCOPES.map((scope) => [scope, []]));
         for (const registration of inventory.registrations.filter((candidate) => candidate.rowId === row.id && !candidate.alfredRetired && candidate.scope !== 'inherited'))
         {
             const pin = pinOf(row, registration.route, registration.entry);
             cells[registration.scope]!.push(`${registration.name} [${registration.route}${pin ? `, ${pin}` : ''}]`);
         }
         const group = catalog.groups.find((catalogGroup) => catalogGroup.id === row.group);
-        return [String(i + 1), group!.label, row.label, row.kind, Object.keys(row.routes).join('/'), ...SCOPES.map((scope) => cellOf(cells[scope]!))];
+        return [String(i + 1), group!.label, row.label, row.kind, Object.keys(row.routes).join('/'), ...ALL_SCOPES.map((scope) => cellOf(cells[scope]!))];
     });
-    const head = ['#', 'group', 'tool', 'kind', 'routes', ...SCOPES];
+    const head = ['#', 'group', 'tool', 'kind', 'routes', ...ALL_SCOPES];
     const widths = head.map((heading, column) => Math.max(heading.length, ...body.map((bodyRow) => bodyRow[column]!.length)));
     const line = (cols: string[]) => cols.map((value, column) => value.padEnd(widths[column]!)).join('  ').trimEnd();
     const out = [line(head), line(widths.map((width) => '-'.repeat(width))), ...body.map(line)];

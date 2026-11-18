@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { slashes, pathFor } from './platform.ts';
+import { ALFRED_DATA, ROOT_NAME } from '../core/constants.ts';
 import type { Env, ServerEntry } from '../core/types.ts';
 import type { CatalogRow } from '../catalog/types.ts';
 import type { DefaultRoot, Machine, Root } from './types.ts';
@@ -26,8 +27,8 @@ export function logicalRoot(text: string, context: Machine): Root
     const root = parseRoot(text, context);
     if (root.kind !== 'abs') return root;
     const pathApi = pathFor(context.platform);
-    const rel = pathApi.relative(context.project, root.path);
-    if (rel && !rel.startsWith('..') && !pathApi.isAbsolute(rel)) return { kind: 'project', rel: slashes(rel) };
+    const relativePath = pathApi.relative(context.project, root.path);
+    if (relativePath && !relativePath.startsWith('..') && !pathApi.isAbsolute(relativePath)) return { kind: 'project', rel: slashes(relativePath) };
     const homeRel = pathApi.relative(context.home, root.path);
     if (homeRel && !homeRel.startsWith('..') && !pathApi.isAbsolute(homeRel)) return { kind: 'home', rel: slashes(homeRel) };
     return root;
@@ -129,7 +130,7 @@ export function alfredData(context: Machine, enabled: unknown): boolean
 {
     if (!enabled) return false;
     const exists = context.exists || ((filePath: string) => fs.existsSync(filePath));
-    return Boolean(exists(pathFor(context.platform).join(context.project, '.alfred', '.gitignore')));
+    return Boolean(exists(pathFor(context.platform).join(context.project, ALFRED_DATA, '.gitignore')));
 }
 
 // Why .alfred/<name> cannot hold this tool's data, or null.
@@ -137,7 +138,7 @@ export function alfredNameProblem(name: string, context: Machine): string | null
 {
     // macOS and Windows file systems ignore case: '.alfred/Docs' is alfred-code's docs folder there
     if (ALFRED_ENTRIES.includes(String(name).toLowerCase())) return `'${name}' is one of alfred-code's own entries under .alfred (${ALFRED_ENTRIES.join(', ')}) - pick another name or folder`;
-    const at = pathFor(context.platform).join(context.project, '.alfred', name);
+    const at = pathFor(context.platform).join(context.project, ALFRED_DATA, name);
     const exists = context.exists || ((filePath: string) => fs.existsSync(filePath));
     if (!exists(at)) return null;
     // a path that cannot be read is not reported as a file
@@ -152,7 +153,7 @@ export function rootOf(family: string, context: Machine): string
     const pathApi = pathFor(context.platform);
     const set = context.roots && context.roots[family as 'project' | 'global'];
     if (set) return set;
-    return family === 'global' ? pathApi.join(context.home, '.alfred-tools') : pathApi.join(context.project, '.alfred-tools');
+    return family === 'global' ? pathApi.join(context.home, ROOT_NAME) : pathApi.join(context.project, ROOT_NAME);
 }
 
 // The scope family whose root holds a scope's files: user scope is the global root's, project and local scope the project
@@ -174,7 +175,7 @@ export function recommendedSide(row: CatalogRow, scope: string, context: Machine
 export function otherPlace(_row: CatalogRow, name: string, side: string, context: Machine | null = null): Root
 {
     if (context && context.platform && (context.roots || context.project)) return logicalRoot(pathFor(context.platform).join(rootOf(side === 'account' ? 'global' : 'project', context), name), context);
-    return side === 'account' ? { kind: 'home', rel: `.alfred-tools/${name}` } : { kind: 'project', rel: `.alfred-tools/${name}` };
+    return side === 'account' ? { kind: 'home', rel: `${ROOT_NAME}/${name}` } : { kind: 'project', rel: `${ROOT_NAME}/${name}` };
 }
 
 // The root an installed entry carries, in written form, from the row's first derived key.

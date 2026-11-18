@@ -1,11 +1,10 @@
-#!/usr/bin/env node
 // THE UPDATE ENGINE - what is installed and behind its release: every plugin, the pinned MCP servers, the helper, bridge
 // and serena-context copies, and the new ways to pass data (fix's `upgrade` rows, the old plugins' uninstall among them).
 //
-//   node update.ts --check [--json] [--no-refresh] [--project <dir>] [--data <dir>]   read-only (it refreshes the marketplace clones)
-//   node update.ts --questions [--no-refresh] [--project <dir>] [--data <dir>]        the asks, as data
-//   --data: the plugin's data folder, whose roots map finds the records - a server left on its own (spec D6) is skipped
-//   node update.ts --apply <id,id | all | none> [--input retired-declined=<id>~<scope>,...] [--project <dir>] [--tmp <dir>]  changes the install
+// Its command line is scripts/update.ts, whose usage update/command.ts prints: --check [--json] is read-only (it
+// refreshes the marketplace clones), --questions prints the asks as data, and --apply <id,id | all | none> [--input
+// retired-declined=<id>~<scope>,...] [--tmp <dir>] changes the install. Each takes --project, --no-refresh and --data:
+// the plugin's data folder, whose roots map finds the records - a server left on its own (spec D6) is skipped.
 //
 // An offer id is `plugin:<plugin id>~<scope>`, `mcp:<name>~<scope>`, `helper:<file>` (an
 // mcp-headers.js copy older than this plugin's), `bridge:<file>`, `context:<file>` (serena's, 0.5.0), or `upgrade:<fix id>:<name>~<scope>` (`:<path>` for a
@@ -31,6 +30,7 @@ import { mcpOffers, cursorPinOffers } from './offers-pins.ts';
 import { helperOffers, upgradeOffers } from './offers-files.ts';
 import * as rename from '../fix/rename.ts';
 import { signInNames } from './sign-in-moves.ts';
+import { FAMILIES } from '../roots/roots.ts';
 import type { Env } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
@@ -83,9 +83,9 @@ export async function checkUpdates(context: UpdateCtx): Promise<UpdateCheck>
 function cursorOffers(context: UpdateCtx, out: UpdateCheck): void
 {
     const home = account.homeDir(context.env);
-    const cctx = { platform: context.inventory.os, env: context.env, home, project: context.project };
-    if (!cursorMcp.cursorFound(cctx, context.inventory)) return;
-    for (const family of ['project', 'global'] as const)
+    const cursorContext = { platform: context.inventory.os, env: context.env, home, project: context.project };
+    if (!cursorMcp.cursorFound(cursorContext, context.inventory)) return;
+    for (const family of FAMILIES)
     {
         const list = context.inventory.lists && context.inventory.lists[family];
         if (list && (list.note || list.cursorOffer === 'declined')) continue;
@@ -98,7 +98,7 @@ function cursorOffers(context: UpdateCtx, out: UpdateCheck): void
         if (!servers.length || !file) continue;
         const root = path.dirname(file);
         const upserts = servers.map((server) => ({ server: { ...server, clients: ['claude', 'cursor'] }, cursorFile: null }));
-        const taken = takenNames(context.inventory, { ...cctx, catalog: context.catalog }, upserts);
+        const taken = takenNames(context.inventory, { ...cursorContext, catalog: context.catalog }, upserts);
         out.cursorOffers.push({ id: `cursor-offer:${root}`, family, root, list: file, servers: servers.map((server) => ({ name: server.name, scope: server.scope })), taken, needs: brought.length ? pending!.id : null, signIns: signInNames(servers, context.catalog) });
     }
 }
@@ -113,7 +113,7 @@ export function ordered(picked: (Offer | string)[], catalog: Catalog): (Offer | 
     return picked.map((choice, i) => ({ choice: choice, i })).sort((left, right) => rank(left.choice) - rank(right.choice) || at(left.choice) - at(right.choice) || left.i - right.i).map((entry) => entry.choice);
 }
 
-export const behind = (out: UpdateCheck): boolean => out.offers.length + out.unchecked.length > 0;
+const behind = (out: UpdateCheck): boolean => out.offers.length + out.unchecked.length > 0;
 
 export function renderUpdates(out: UpdateCheck): string
 {

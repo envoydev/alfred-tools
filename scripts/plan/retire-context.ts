@@ -12,7 +12,7 @@ const contextFileOf = (entry: ServerEntry | null | undefined, context: RetireCtx
     const at = contextArgAt(entry);
     return at >= 0 ? roots.absOf(entry!.args![at], rootContext(context)) : null;
 };
-const keyOf = (name: string, scope: string) => `${name}\u0000${scope}`;
+const nameScopeKey = (name: string, scope: string) => `${name}\u0000${scope}`;
 
 // The registrations other than `except` that name `file` as their --context: the inventory's, and the Cursor copies the
 // lists hold. -> their names
@@ -20,10 +20,10 @@ function namedBy(file: string, context: RetireCtx, except: Set<string>): string[
 {
     const names = new Set<string>();
     for (const registration of context.inventory.registrations)
-        if (!except.has(keyOf(registration.name, registration.scope)) && contextFileOf(registration.entry, context) === file) names.add(registration.name);
+        if (!except.has(nameScopeKey(registration.name, registration.scope)) && contextFileOf(registration.entry, context) === file) names.add(registration.name);
     for (const list of Object.values(context.inventory.lists || {}))
         for (const server of (list && !list.note ? list.servers : []))
-            if (!except.has(keyOf(server.name, server.scope)) && contextFileOf(server.cursorEntry, context) === file) names.add(server.name);
+            if (!except.has(nameScopeKey(server.name, server.scope)) && contextFileOf(server.cursorEntry, context) === file) names.add(server.name);
     return [...names];
 }
 
@@ -44,7 +44,7 @@ export function retireContextSteps(context: RetireCtx, rewrites: Rewrite[]): Ret
 {
     const pathApi = pathFor(context.platform);
     const familyRoots = roots.resolveRoots(context.inventory, null, rootContext(context)).roots;
-    const except = new Set(rewrites.map((rewrite) => keyOf(rewrite.name, rewrite.scope)));
+    const except = new Set(rewrites.map((rewrite) => nameScopeKey(rewrite.name, rewrite.scope)));
     const out = new Map<string, RetireShippedStep>();
     for (const rewrite of rewrites)
     {

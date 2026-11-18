@@ -24,7 +24,7 @@ export const REG_OPS = ['mcp-add', 'mcp-replace', 'mcp-move', 'mcp-remove'];
 // beside it. -> null | { servers, own, state? }
 export function foundList(inventory: Inventory, file: string, pathApi: path.PlatformPath): FoundList | null
 {
-    for (const family of ['project', 'global'])
+    for (const family of roots.FAMILIES)
     {
         const familyList = inventory.lists && inventory.lists[family];
         if (familyList && familyList.file === file) return familyList.note ? { servers: [], own: [], state: 'noted' } : { servers: familyList.servers || [], own: familyList.own || [] };
@@ -50,8 +50,8 @@ export function adoptedClients(inventory: Inventory, family: Family): { clients:
 
 // The managed registrations of a family that its list does not name yet (list-import, and a plan's first touch): each
 // as read, kept (every key value the marker), with the apps the family's listed servers share (adoptedClients). A
-// registration on its own is not one, unless this run's `answers` (mcp key -> 'own' | 'manage') hand it back. opts:
-// { answers, roots: { project, global } }
+// registration on its own is not one, unless this run's `answers` (mcp key -> 'own' | 'manage') hand it back; `roots`
+// are the root folders ({ project, global }) whose key files the stdio chain reads.
 export function importUnlisted(inventory: Inventory, family: Family, catalog: Catalog, { answers = {}, roots: rootFolders = {}, platform }: { answers?: Record<string, string | undefined>; roots?: { project?: string | null | undefined; global?: string | null | undefined }; platform?: string } = {}): ListServer[]
 {
     const familyList = inventory.lists && inventory.lists[family];
@@ -71,7 +71,7 @@ export function importUnlisted(inventory: Inventory, family: Family, catalog: Ca
 const ownChanged = (foundEntry: FoundList | null, next: OwnEntry[]): boolean => (!foundEntry || foundEntry.state ? next.length > 0 : JSON.stringify(next) !== JSON.stringify(foundEntry.own));
 
 // The list-write steps of a plan. `regSteps`: the plan's steps; its registration steps give the upserts and drops. The
-// own part runs only for a plan that read the answers (`ctx.recordLive`): fix.ts has none.
+// own part runs only for a plan that read the answers (`context.recordLive`): fix.ts has none.
 export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<PlanOut, 'notes'>, regSteps: PlanStep[] = []): (ListWriteStep | FileStep)[]
 {
     const pathApi = pathFor(context.platform);
@@ -89,7 +89,7 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
     const seen = (file: string | null | undefined, family: string) => { if (file && !found.has(file)) found.set(file, { list: foundList(inventory, file, pathApi), family }); };
     for (const family of Object.keys(targets)) seen(targets[family], family);
     if (context.recordLive)
-        for (const family of ['project', 'global'])
+        for (const family of roots.FAMILIES)
         {
             seen(inventory.lists && inventory.lists[family] && inventory.lists[family].file, family);
             for (const file of lists.listFiles(inventory, family as Family, context)) seen(file, family);
@@ -180,7 +180,7 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
                 entries.set(key, { ownEntry: ownEntry, from: file });
             }
         }
-        for (const family of ['project', 'global'])
+        for (const family of roots.FAMILIES)
             for (const ownEntry of (context.recordEntries && context.recordEntries[family]) || [])
             {
                 const key = roots.recordKey(ownEntry);
@@ -207,9 +207,9 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
     // the first touch: a family this plan writes that has no list yet is imported as list-import does
     const retire: FileStep[] = [];
     const answers: Record<string, string | undefined> = {};
-    for (const family of ['project', 'global']) for (const ownEntry of (context.recordEntries && context.recordEntries[family]) || []) answers[roots.recordKey(ownEntry)!] = ownEntry.choice;
+    for (const family of roots.FAMILIES) for (const ownEntry of (context.recordEntries && context.recordEntries[family]) || []) answers[roots.recordKey(ownEntry)!] = ownEntry.choice;
     const taken = new Set([...regSteps.filter((step): step is RegistrationStep => REG_OPS.includes(step.op)).flatMap((step) => [lists.regKey(step), step.op === 'mcp-move' && step.from ? lists.serverKey(step.from) : null]), ...(context.clientsOnly || []).map((clientsChange) => clientsChange.key)].filter(Boolean));
-    for (const family of ['project', 'global'])
+    for (const family of roots.FAMILIES)
     {
         const familyList = inventory.lists && inventory.lists[family];
         if (!targets[family] || !plans.has(targets[family]!) || (familyList && (!familyList.old || familyList.note))) continue;

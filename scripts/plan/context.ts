@@ -8,8 +8,6 @@ import type { MadeCtx, PlanOptions } from './types.ts';
 // 'A', 'A and B', 'A, B and C'
 export const andList = (items: string[]): string => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 
-export const SCOPES = ['local', 'project', 'user'];
-
 export function makeCtx(inventory: Inventory, options: PlanOptions = {}): MadeCtx
 {
     const context = {

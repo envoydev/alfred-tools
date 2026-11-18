@@ -7,6 +7,7 @@ import { templateNames } from '../copied/mcp-bridge.js';
 import { parsePairs } from '../copied/mcp-headers.js';
 import { pathFor, pythonRequest } from './platform.ts';
 import { alfredSerenaHome, applyRoot, familyOf, rootOf, rootOfEntry } from './locations.ts';
+import { FILES } from '../core/constants.ts';
 import { signInParts } from './sign-in.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow, CatalogRules } from '../catalog/types.ts';
@@ -78,7 +79,7 @@ export function mergeSettings(entry: ServerEntry, route: CatalogRoute, pairs: Re
 
 // ---- the header helper (spec D4) ------------------------------------------------------------------------------------
 
-// One path in a `headersHelper` command, written so the shell that runs it passes it to node whole (Review Focus 1).
+// One path in a `headersHelper` command, written so the shell that runs it passes it to node whole.
 // `style`: 'posix' - single quotes, a quote inside as '\\'' ; 'win32' - forward slashes, which node takes and cmd,
 // PowerShell and Git Bash all pass as they are, in double quotes when needed; 'portable' - the committed file's relative
 // path, read by any OS's shell, in double quotes when needed. Letters, digits and _ . / : @ + , = - need no quotes.
@@ -134,7 +135,7 @@ export function helperParts(command: unknown): HelperParts | null
 {
     if (typeof command !== 'string') return null;
     const argv = helperArgv(command);
-    const at = argv.findIndex((argument) => /mcp-headers\.js$/.test(argument));
+    const at = argv.findIndex((argument) => argument.endsWith(FILES.helper));
     if (at < 0) return null;
     const args = argv.slice(at + 1);
     const parsed = parsePairs(args.slice(2));
@@ -145,7 +146,7 @@ export function helperParts(command: unknown): HelperParts | null
 // Where a registration at `scope` finds the helper: absolute at every scope, in the root of the scope's family (F7).
 function helperPathFor(scope: string, context: Machine): string
 {
-    return pathFor(context.platform).join(rootOf(familyOf(scope), context), 'mcp-headers.js');
+    return pathFor(context.platform).join(rootOf(familyOf(scope), context), FILES.helper);
 }
 
 // The helper's third argument: the global root, at local scope only and only when it is a named folder - the helper reads
@@ -191,10 +192,8 @@ export const helperFor = (route: CatalogRoute, scope: string, context: Machine, 
 // Where a bridge registration at `scope` finds mcp-bridge.js: beside the helper, absolute at every scope.
 export function bridgePathFor(scope: string, context: Machine): string
 {
-    return pathFor(context.platform).join(rootOf(familyOf(scope), context), 'mcp-bridge.js');
+    return pathFor(context.platform).join(rootOf(familyOf(scope), context), FILES.bridge);
 }
-
-const CONTEXT_FILE = 'serena-context.yml';
 
 // serena's context file (D7): in the entry's SERENA_HOME when serena's own settings there are the plugin's to keep (an
 // editable home), else in the scope's family root; absolute at every scope. With no entry it is the root's.
@@ -202,8 +201,8 @@ function contextPathFor(scope: string, context: Machine, entry: ServerEntry | nu
 {
     const pathApi = pathFor(context.platform);
     const home = entry && entry.env && entry.env.SERENA_HOME;
-    if (home && !alfredSerenaHome(home)) return pathApi.join(home, CONTEXT_FILE);
-    return pathApi.join(rootOf(familyOf(scope), context), CONTEXT_FILE);
+    if (home && !alfredSerenaHome(home)) return pathApi.join(home, FILES.serenaContext);
+    return pathApi.join(rootOf(familyOf(scope), context), FILES.serenaContext);
 }
 
 // The --context an entry runs with points at this plugin's file (any root) - the path form D7 writes, not a name such as
@@ -233,7 +232,7 @@ export function bridgeParts(entry: ServerEntry | null | undefined): BridgeParts 
     if (!entry || typeof entry !== 'object' || typeof entry.command !== 'string' || !Array.isArray(entry.args)) return null;
     if (path.basename(entry.command.replace(/\\/g, '/')).replace(/\.exe$/i, '').toLowerCase() !== 'node') return null;
     const args = entry.args.map(String);
-    const at = args.findIndex((argument) => argument.replace(/\\/g, '/').split('/').pop() === 'mcp-bridge.js');
+    const at = args.findIndex((argument) => argument.replace(/\\/g, '/').split('/').pop() === FILES.bridge);
     if (at < 0 || !args[at + 1]) return null;
     const [template, keyName = null, scheme = null, packageSpec = null, ...after] = args.slice(at + 1);
     const parsed = parsePairs(after);

@@ -1,4 +1,5 @@
-// Names: whether a registration name is usable at its scope.
+// Names and first starts: whether a registration name is usable at its scope, and the fetch step that readies a
+// written registration's first start.
 import { throughCmd } from '../core/cmd-line.ts';
 import { bridgeParts } from './entry.ts';
 import type { ServerEntry } from '../core/types.ts';
@@ -30,6 +31,10 @@ export function fetchStep(name: string, entry: ServerEntry | null | undefined, r
     return step;
 }
 
+// npm's fetch of one package into its cache, running nothing of it. `-e 0`, not `-e ''`: on Windows the fetch goes
+// through cmd.exe, where an empty argument is dropped.
+const npmFetchArgv = (packageSpec: string): string[] => ['npm', 'exec', '--yes', '--package', packageSpec, '--', 'node', '-e', '0'];
+
 // uvx's options that take the next argument as their value, so a fetch keeps the value with its option.
 const UVX_VALUE = new Set(['--python', '-p', '--exclude-newer', '--from', '--with', '--with-requirements', '--with-editable', '--index', '--index-url', '--extra-index-url']);
 function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: string | null | undefined): FetchStep | null
@@ -39,7 +44,7 @@ function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: str
     if (bridge)
     {
         if (!bridge.packageSpec) return null;
-        const npmArgv = ['npm', 'exec', '--yes', '--package', bridge.packageSpec, '--', 'node', '-e', '0'];
+        const npmArgv = npmFetchArgv(bridge.packageSpec);
         const argv = /^[A-Za-z]:/.test(bridge.path) ? ['cmd', '/c', ...npmArgv] : npmArgv;
         return { op: 'fetch', name, row: rowId, what: bridge.packageSpec, argv, env: entry.env || {}, why: `${rowId || name}: fetch ${bridge.packageSpec} so the first start answers in time` };
     }
@@ -53,8 +58,7 @@ function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: str
     {
         what = args.find((argument) => !argument.startsWith('-'));
         if (!what) return null;
-        // `-e 0`, not `-e ''`: on Windows the fetch goes through cmd.exe, where an empty argument is dropped
-        argv = ['npm', 'exec', '--yes', '--package', what, '--', 'node', '-e', '0'];
+        argv = npmFetchArgv(what);
     }
     else if (/^uvx(\.exe)?$/i.test(cmd || ''))
     {

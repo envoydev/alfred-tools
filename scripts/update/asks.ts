@@ -2,6 +2,8 @@
 import { RECOMMENDED_SUFFIX } from '../plan/asks-keys.ts';
 import { chunk } from '../plan/asks-picks.ts';
 import { cursorNameQuestion, STATIC, cursorOfferQuestion } from '../plan/asks-other.ts';
+import { MAX_OPTIONS, MAX_QUESTIONS } from '../plan/constants.ts';
+import { MAX_HEADER_LENGTH } from './constants.ts';
 import type { Question } from '../plan/types.ts';
 import type { CursorOffer, UpdateCheck } from './types.ts';
 
@@ -20,8 +22,8 @@ export function questions(out: UpdateCheck)
     for (const [groupKey, title, header] of groups)
     {
         const list = items.filter((item) => item.group === groupKey);
-        chunk(list, 4).forEach((part) => pickQuestions.push({
-            id: `update-${groupKey}`, header: header || title.slice(0, 12), multiSelect: true, question: `${title}: which do you want to update?`,
+        chunk(list, MAX_OPTIONS).forEach((part) => pickQuestions.push({
+            id: `update-${groupKey}`, header: header || title.slice(0, MAX_HEADER_LENGTH), multiSelect: true, question: `${title}: which do you want to update?`,
             // AskUserQuestion takes 2 to 4 options: a group of one gets 'None of these' beside it
             options: [...part.map((item) => ({ label: item.kind === 'upgrade' ? `${item.label}: ${item.fix}` : `${item.label}: ${item.from || '?'} -> ${item.to || 'latest'}`, description: item.id })), ...(part.length === 1 ? [{ label: 'None of these', description: 'none' }] : [])],
         }));
@@ -34,7 +36,7 @@ export function questions(out: UpdateCheck)
         offer.options = offer.options.map((option, i) => (i === 0 ? { ...option, description: `${option.description}; ${note}` } : option));
     }
     if (!out.offers.length) offer.options = offer.options.filter((option) => option.label !== `All of them${RECOMMENDED_SUFFIX}`).map((option, i) => (i === 0 ? { ...option, label: `${option.label}${RECOMMENDED_SUFFIX}` } : option));
-    return { offer, pick: chunk(pickQuestions, 4), ...cursor };
+    return { offer, pick: chunk(pickQuestions, MAX_QUESTIONS), ...cursor };
 }
 
 // 'a lists no version - pick it under Pick which', 'a and b list ...', 'a, b and c list ...'

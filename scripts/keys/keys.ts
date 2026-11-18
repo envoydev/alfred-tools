@@ -3,49 +3,27 @@
 // A key is read here, in the process that writes the registration, and goes nowhere else: never printed, never in a file
 // a command line names, never asked for. The user fills the key files by hand; the plugin writes names only.
 //
-//   .mcps-secrets      one per root folder (the project root, the global root), in the dotenv grammar below. A hosted
+//   .mcps-secrets      one per root folder (the project root, the global root), in the header helper's dotenv grammar. A hosted
 //                      route's key is read by mcp-headers.js when Claude Code connects (hostedChain), a stdio route's by
 //                      the apply (stdioChain); project scope takes no stdio key.
 //   the 0.1.x files    alfred-code's two stores and alfred-tools' own key files: read for a name only (oldHolding),
 //                      so a blocked fix can say where a key still sits.
-import fs from 'node:fs';
 import path from 'node:path';
+import { readDotenv, valueIn as helperValueIn } from '../copied/mcp-headers.js';
+import { ALFRED_DATA, FILES, FORMER_ROOT_NAME, ROOT_NAME } from '../core/constants.ts';
+import { PLACEHOLDER, valueAt } from '../core/kept.ts';
 import { pathFor } from '../entries/platform.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
 import type { FileNames, KeyChain, KeyHit, TokenField } from './types.ts';
 
 // 0.1.x's key file, at this plugin's folder and at its former one (spec D2), read in that order
-const KEY_FILES = [path.join('.alfred-tools', '.secrets'), path.join('.preferred-tools', '.secrets')];
-const alfredStores = (project: string): string[] => ['.secrets', '.sensitive-data'].map((storeName) => path.join(project, '.alfred', storeName));
+const KEY_FILES = [path.join(ROOT_NAME, '.secrets'), path.join(FORMER_ROOT_NAME, '.secrets')];
+const alfredStores = (project: string): string[] => ['.secrets', '.sensitive-data'].map((storeName) => path.join(project, ALFRED_DATA, storeName));
 
-// alfred-code's dotenv grammar (v3.2.1 stack/hooks/layout.js readDotenv): `KEY=value`, `export ` allowed before it, one
-// pair of matching quotes around the trimmed value dropped; `#` and `;` lines and blank lines are comments, any other line
-// is skipped. A BOM decides UTF-16 or UTF-8. -> { KEY: value } | null when the file cannot be read
-const LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/;
-const COMMENT = /^\s*(?:[#;]|$)/;
-// A value as written: inside matching quotes it stands as it is; unquoted, a note after whitespace and # is dropped -
-// `NAME=abc # work` is abc, `NAME=abc#1` is abc#1
-const unquote = (raw: string): string =>
-{
-    const match = /^\s*(["'])(.*?)\1(?:\s+#.*)?\s*$/.exec(raw);
-    return match ? match[2]! : raw.replace(/\s+#.*$/, '').trim();
-};
-export function readDotenv(file: string): Record<string, string> | null
-{
-    let buffer: Buffer;
-    try { buffer = fs.readFileSync(file); }
-    catch { return null; }
-    const text = buffer[0] === 0xff && buffer[1] === 0xfe ? buffer.subarray(2).toString('utf16le') : buffer.toString('utf8').replace(/^﻿/, '');
-    const values: Record<string, string> = {};
-    for (const line of text.split(/\r?\n/))
-    {
-        if (COMMENT.test(line)) continue;
-        const match = LINE.exec(line);
-        if (match) values[match[1]!] = unquote(match[2]!);
-    }
-    return values;
-}
+// A key file's names and values, read with the header helper's dotenv grammar (copied/mcp-headers.js), so a plan reads
+// a key file the way the helper reads it when Claude Code connects.
+export { readDotenv };
 
 // A name D9 offers for a key: the catalog's default, or a key-shaped name (ending in TOKEN, KEY or PAT, in any case) that
 // holds the row word (GITHUB, SENTRY, CONTEXT7) - a key kept under a name the catalog does not use; a webhook secret or a
@@ -69,8 +47,8 @@ export function tokenFields(entry: ServerEntry | null | undefined, route: Catalo
     return out;
 }
 
-export const valueAt = (entry: unknown, at: (string | number)[]): unknown => at.reduce<unknown>((current, segment) => (current == null ? undefined : (current as Record<string | number, unknown>)[segment]), entry);
-export const PLACEHOLDER = /^\s*(?:[A-Za-z][\w-]*\s+)?(?:\$\{[A-Za-z_][A-Za-z0-9_]*(?::-[^}]*)?\})+\s*$/;
+// valueAt and PLACEHOLDER are core/kept.ts's, which masks by them too; plan, apply, cursor, fix and mcps-list read them here.
+export { PLACEHOLDER, valueAt };
 
 // fillKeys(entry, row, routeId, scope, found) -> a copy with each token field set by the target scope: at project scope
 // the route's ${VAR} form, whatever the entry held; at local and user scope the found value in the route's form, or, when
@@ -92,16 +70,16 @@ export function fillKeys(entry: ServerEntry, row: CatalogRow | null | undefined,
 }
 
 // ---- .mcps-secrets (spec D3) -----------------------------------------------------------------------------------------
-// One key file per root folder, `.mcps-secrets`, in the grammar above, its values written by the user alone. A hosted
+// One key file per root folder, `.mcps-secrets`, in the helper's grammar, its values written by the user alone. A hosted
 // route's key is read by the header helper (mcp-headers.js) when Claude Code connects, a stdio route's by the apply; each
 // chain below is the order its reader takes, so a plan reads what the registration will read. A value leaves this file
 // only through valueIn, in the process that asked.
-export const SECRETS = '.mcps-secrets';
+export const SECRETS = FILES.secrets;
 export const NAME_RULE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // A chain is built in the path form of the platform it is for (the plan's or the fix's context), not the host's: a plan for
 // a posix machine run on Windows names `/`-separated files, which the root-matching code reads with the context's own path.
-const pathApiOf = (platform?: string): path.PlatformPath => (platform ? pathFor(platform) : path);
-const secretsIn = (dir: string, platform?: string): string => pathApiOf(platform).join(dir, SECRETS);
+const pathApiOn = (platform?: string): path.PlatformPath => (platform ? pathFor(platform) : path);
+const secretsIn = (dir: string, platform?: string): string => pathApiOn(platform).join(dir, SECRETS);
 const uniq = <Item>(list: Item[]): Item[] => [...new Set(list)];
 
 // hostedChain({ scope, projectRoot, globalRoot, globalNamed, home, platform }) -> the files the helper reads, in order: the root
@@ -109,10 +87,10 @@ const uniq = <Item>(list: Item[]): Item[] => [...new Set(list)];
 // when it is a named folder (the helper's third argument); then ~/.alfred-tools, then ~/.alfred.
 export function hostedChain({ scope, projectRoot, globalRoot, globalNamed = false, home, platform }: KeyChain): string[]
 {
-    const pathApi = pathApiOf(platform);
+    const pathApi = pathApiOn(platform);
     const beside = scope === 'user' ? globalRoot : projectRoot;
     const named = scope === 'local' && globalNamed ? globalRoot : null;
-    return uniq(([beside, named, pathApi.join(home, '.alfred-tools'), pathApi.join(home, '.alfred')].filter(Boolean) as string[]).map((dir) => secretsIn(dir, platform)));
+    return uniq(([beside, named, pathApi.join(home, ROOT_NAME), pathApi.join(home, ALFRED_DATA)].filter(Boolean) as string[]).map((dir) => secretsIn(dir, platform)));
 }
 
 // stdioChain({ scope, projectRoot, globalRoot, platform }) -> the files the apply reads a stdio key from: local scope the project
@@ -127,17 +105,12 @@ export function stdioChain({ scope, projectRoot, globalRoot, platform }: Omit<Ke
 // The first non-empty value of `name` in `files` -> { value, file } | null. An empty value counts as missing.
 export function valueIn(files: string[], name: string): KeyHit | null
 {
-    for (const file of files)
-    {
-        const values = readDotenv(file);
-        if (values && values[name]) return { value: values[name], file };
-    }
-    return null;
+    return helperValueIn(name, files);
 }
 
-// The names each file holds with a value -> [{ file, names }]. Every value is dropped here.
 // The names a key file defines, filled or not - the values stay in this process. [] when the file cannot be read.
 export const namesIn = (file: string): string[] => Object.keys(readDotenv(file) || {});
+// The names each file holds with a value -> [{ file, names }]. Every value is dropped here.
 export const filledNames = (files: string[]): FileNames[] => files.map((file) => ({ file, names: Object.entries(readDotenv(file) || {}).filter(([, value]) => value !== '').map(([name]) => name) }));
 
 // The key files 0.1.x read, which 0.2.0 reads for names only: alfred-code's store in the project and in each parent folder

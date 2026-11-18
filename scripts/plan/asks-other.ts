@@ -3,6 +3,7 @@ import { RECOMMENDED_SUFFIX, keyStateOf } from './asks-keys.ts';
 import { installedItems, packed } from './asks-picks.ts';
 import { scopeQuestion, nameQuestion, scopeOrder, nameFor } from './asks-tool.ts';
 import { DEFAULT_HOST_DESCRIPTION, REWIND_ANOTHER, REWIND_MAX_OPTIONS } from './asks-other-constants.ts';
+import { LABEL, PREFIX, WALK_QUESTION } from './record-constants.ts';
 import { recordedPicks } from './record.ts';
 import { locationQuestion } from './asks-location.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
@@ -17,10 +18,10 @@ import type { Asked, DriftAsk, LocationAnswer, Picks, Question, QuestionOption, 
 export function toolAsk(row: CatalogRow, inventory: Inventory, { route, scope = null, name = null, current = null, context: context = null, catalog: _catalog, copyOf = [] }: ToolOpts = {}): ToolAsk
 {
     const routeId = route || (current && current.route) || row.recommendedRoute;
-    const scopeQ = scopeQuestion(row, inventory, { route: routeId, current, copyOf, context: context });
-    const nameQ = nameQuestion(row, inventory, { current, copyOf, context: context });
+    const scopeAsk = scopeQuestion(row, inventory, { route: routeId, current, copyOf, context: context });
+    const nameAsk = nameQuestion(row, inventory, { current, copyOf, context: context });
     const located = Boolean(row.locations && context);
-    const questions = located ? [] : [scopeQ, nameQ].filter(Boolean) as Question[];
+    const questions = located ? [] : [scopeAsk, nameAsk].filter(Boolean) as Question[];
     let answers: Record<string, LocationAnswer> = {};
     // one place left: no location question, and the walk writes this as the location (a move must not fall back to
     // 'keep' where the folder it uses now cannot stay)
@@ -41,12 +42,12 @@ export function toolAsk(row: CatalogRow, inventory: Inventory, { route, scope = 
     if (row.routes[routeId]!.optionalArgs && row.routes[routeId]!.optionalArgs!.executablePath)
     {
         const has = Boolean(sameRoute && current!.executablePath);
-        const named = { label: 'A browser binary I name', description: 'sets --executable-path to the binary you name, asked next' };
-        const engine = { label: 'Default for this engine', description: has ? 'drops --executable-path' : row.id.endsWith('chrome') || row.id.endsWith('msedge') ? 'the branded browser installed on this machine' : "Playwright's own build" };
+        const named = { label: LABEL.browserNamed, description: 'sets --executable-path to the binary you name, asked next' };
+        const engine = { label: LABEL.browserDefault, description: has ? 'drops --executable-path' : row.id.endsWith('chrome') || row.id.endsWith('msedge') ? 'the branded browser installed on this machine' : "Playwright's own build" };
         questions.push({
-            id: `browser-${row.id}`, header: 'Browser', multiSelect: false, question: `${row.label}: which browser binary?`,
+            id: `${PREFIX.browser}${row.id}`, header: 'Browser', multiSelect: false, question: `${row.label}: which browser binary?`,
             options: has
-                ? first([{ label: `Keep \`${current!.executablePath}\``, description: 'the binary it uses now' }, engine])
+                ? first([{ label: `${LABEL.keep}\`${current!.executablePath}\``, description: 'the binary it uses now' }, engine])
                 : first([engine, named]),
         });
     }
@@ -57,7 +58,7 @@ export function toolAsk(row: CatalogRow, inventory: Inventory, { route, scope = 
         const inUse = choices.findIndex((choice) => current && choice.value === current.host);
         const ordered = inUse > 0 ? [choices[inUse]!, ...choices.filter((_choice, i) => i !== inUse)] : choices;
         questions.push({
-            id: `host-${row.id}`, header: 'Host', multiSelect: false, question: `${row.label}: which ${row.params[0]!.label}?`,
+            id: `${PREFIX.host}${row.id}`, header: 'Host', multiSelect: false, question: `${row.label}: which ${row.params[0]!.label}?`,
             options: first(ordered.map((choice) => ({ label: choice.label, description: choice.value }))),
         });
     }
@@ -65,10 +66,10 @@ export function toolAsk(row: CatalogRow, inventory: Inventory, { route, scope = 
     {
         const host = current && current.host && current.host !== row.params[0]!.default ? current.host : null;
         questions.push({
-            id: `host-${row.id}`, header: 'Host', multiSelect: false, question: `${row.label}: which ${row.params[0]!.label}?`,
+            id: `${PREFIX.host}${row.id}`, header: 'Host', multiSelect: false, question: `${row.label}: which ${row.params[0]!.label}?`,
             options: host
-                ? first([{ label: `Keep ${host}`, description: 'the host it uses now' }, { label: row.params[0]!.default, description: DEFAULT_HOST_DESCRIPTION }])
-                : first([{ label: row.params[0]!.default, description: DEFAULT_HOST_DESCRIPTION }, { label: 'A self-managed host', description: 'your own GitLab host name, asked next' }]),
+                ? first([{ label: `${LABEL.keep}${host}`, description: 'the host it uses now' }, { label: row.params[0]!.default, description: DEFAULT_HOST_DESCRIPTION }])
+                : first([{ label: row.params[0]!.default, description: DEFAULT_HOST_DESCRIPTION }, { label: LABEL.hostSelfManaged, description: 'your own GitLab host name, asked next' }]),
         });
     }
     // an optional key (spec D5, F2): asked at every scope but for a stdio route at project scope, which runs keyless; the
@@ -80,17 +81,17 @@ export function toolAsk(row: CatalogRow, inventory: Inventory, { route, scope = 
         const file = keyState && keyState.files[0];
         const hint = route.helper && route.helper.hint ? `; ${route.helper.hint}` : '';
         const useKey = route.helper
-            ? { label: 'Use a key from .mcps-secrets', description: `mcp-headers.js reads it each time Claude Code connects${file ? `, from ${file} first` : ''} - never written into the registration${hint}` }
-            : { label: 'Use a key from .mcps-secrets', description: `the apply writes it into the registration from ${file || '.mcps-secrets'}, never printed` };
+            ? { label: `${LABEL.useKey} from .mcps-secrets`, description: `mcp-headers.js reads it each time Claude Code connects${file ? `, from ${file} first` : ''} - never written into the registration${hint}` }
+            : { label: `${LABEL.useKey} from .mcps-secrets`, description: `the apply writes it into the registration from ${file || '.mcps-secrets'}, never printed` };
         const noKey = route.keyless === 'oauth'
             ? { label: 'Sign in with OAuth', description: 'run /mcp once in a session to log in' }
             : { label: 'No key - lower rate limits', description: 'works anonymously' };
         questions.push({
-            id: `token-${row.id}`, header: 'API key', multiSelect: false, question: `${row.label}: send an API key?`,
+            id: `${PREFIX.token}${row.id}`, header: 'API key', multiSelect: false, question: `${row.label}: send an API key?`,
             options: first([noKey, useKey], current ? Boolean(sameRoute && current.token) : true),
         });
     }
-    return { first: located ? [scopeQ, nameQ].filter(Boolean) as Question[] : null, questions: questions, answers, only };
+    return { first: located ? [scopeAsk, nameAsk].filter(Boolean) as Question[] : null, questions: questions, answers, only };
 }
 
 // The questions toolAsk gives after `first`: for a row without a data folder, its whole call.
@@ -122,7 +123,7 @@ export function cursorNameQuestion({ file, name, sameRow }: Taken): Asked<string
 // drift and drift-missing (spec D9): a list entry whose copy in one app was edited or removed by hand. Keeping the edit
 // is recommended - a hand edit is deliberate - unless the copy holds a key-shaped string outside its key field: then
 // Restore or Leave. An inherited copy (a workspace member's, D4a) is the folder above's: Restore from it or Leave.
-// f: { name, scope, app, change, keyGuard, keyEmpty, rowGone, inherited } -> { question, answers: { <label>: value } }
+// driftAsk: { name, scope, app, change, keyGuard, keyEmpty, rowGone, inherited } -> { question, answers: { <label>: value } }
 export function driftQuestion(driftAsk: DriftAsk): Asked<string>
 {
     const app = driftAsk.appLabel || (driftAsk.app === 'cursor' ? 'Cursor' : 'Claude Code');
@@ -177,13 +178,13 @@ function clientsOptions(firstIsCursor: boolean): { options: QuestionOption[]; an
 export function clientsQuestion(found: boolean): Asked<string[]>
 {
     const { options, answers } = clientsOptions(found);
-    return { question: { id: 'clients', header: 'Apps', multiSelect: false, question: 'Which apps should these servers be set up for?', options }, answers };
+    return { question: { id: WALK_QUESTION.clients, header: 'Apps', multiSelect: false, question: 'Which apps should these servers be set up for?', options }, answers };
 }
 // configure: `current` is the list entry's clients (none listed yet: Claude Code only)
 export function targetClientsQuestion(key: string, name: string, current: string[] | null | undefined): Asked<string[]>
 {
     const { options, answers } = clientsOptions((current || []).includes('cursor'));
-    return { question: { id: `clients-${key}`, header: 'Apps', multiSelect: false, question: `Set up ${name} for which apps?`, options }, answers };
+    return { question: { id: `${PREFIX.clients}${key}`, header: 'Apps', multiSelect: false, question: `Set up ${name} for which apps?`, options }, answers };
 }
 
 // rewind (spec D1b): which recorded pick to answer again, the one recorded last first. More than three
@@ -217,11 +218,11 @@ export const STATIC = {
         { label: `Change tools${RECOMMENDED_SUFFIX}`, description: 'pick installed tools, servers on their own or a root folder, then what to change' },
         { label: 'Remove tools', description: 'choose the servers to remove' },
         { label: 'Done', description: 'nothing changes' } ] },
-    settings: { id: 'settings', header: 'Settings', multiSelect: false, question: 'How do you want to set the tools up?', options: [
+    settings: { id: WALK_QUESTION.settings, header: 'Settings', multiSelect: false, question: 'How do you want to set the tools up?', options: [
         { label: `Use the recommended settings for all${RECOMMENDED_SUFFIX}`, description: 'route, scope, name and location as recommended' },
         { label: 'Set each tool', description: 'ask route, scope, name and location per tool' } ] },
     // one pick (spec F1): the same choice, about that tool alone
-    settingsOne: (tool: string): Question => ({ id: 'settings', header: 'Settings', multiSelect: false, question: `How do you want to set ${tool} up?`, options: [
+    settingsOne: (tool: string): Question => ({ id: WALK_QUESTION.settings, header: 'Settings', multiSelect: false, question: `How do you want to set ${tool} up?`, options: [
         { label: `Use the recommended settings for ${tool}${RECOMMENDED_SUFFIX}`, description: 'route, scope, name and location as recommended' },
         { label: `Set ${tool} up`, description: 'ask its route, scope, name and location' } ] }),
     apply: { id: 'apply', header: 'Apply', multiSelect: false, question: 'Apply this plan?', options: [

@@ -7,7 +7,7 @@ import path from 'node:path';
 import { replaceFile } from './replace-file.ts';
 import type { Declined, DeclinedFile, Outcome } from './types.ts';
 
-export const FILE = 'retired-declined.json';
+const FILE = 'retired-declined.json';
 const fileOf = (dataDir: string): string => path.join(dataDir, FILE);
 export const same = (first: Declined, second: Declined): boolean => first.id === second.id && first.scope === second.scope;
 
@@ -39,7 +39,7 @@ export function add(dataDir: string | null | undefined, items: Declined[]): Outc
     if (!dataDir) return { ok: false, detail: 'no plugin data folder given - the decline is not recorded, so the offer comes back next time' };
     const doc = load(dataDir);
     if (doc && doc.bad) return { ok: false, detail: `${fileOf(dataDir)} is not JSON - nothing recorded; fix or delete it` };
-    const declined = doc ? doc.declined! : [];
+    const declined = doc ? doc.declined : [];
     for (const it of items) if (!declined.some((entry) => same(entry, it))) declined.push({ id: it.id, scope: it.scope });
     fs.mkdirSync(dataDir, { recursive: true });
     const file = fileOf(dataDir);

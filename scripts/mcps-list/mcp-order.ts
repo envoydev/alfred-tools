@@ -6,8 +6,9 @@
 // The one write to .mcp.json that is not the claude CLI's (the user's ruling, 2026-11-11). It never fails an apply: a file
 // that is not plain JSON, a check that does not hold or a failed write leaves the file as it was, with a warning.
 import fs from 'node:fs';
-import path from 'node:path';
+import { pathApiOf } from '../entries/platform.ts';
 import { matchEntry } from '../inventory/inventory.ts';
+import { MCP_JSON } from '../core/constants.ts';
 import type { ServerMap } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { InventoryView } from '../roots/types.ts';
@@ -119,7 +120,7 @@ export function withOrderStep<Step extends StepLike>(steps: Step[], project: str
 {
     const writes = steps.some((step) => (['mcp-add', 'mcp-replace'].includes(step.op as string) && step.scope === 'project') || (step.op === 'mcp-move' && step.to && (step.to as StepEnd).scope === 'project'));
     if (!writes) return steps;
-    const pathApi = /^(?:[A-Za-z]:[\\/]|\\\\)/.test(project) ? path.win32 : path.posix;
-    return [...steps, { op: 'order-mcp-json', file: pathApi.join(project, '.mcp.json'), own, why: ORDER_REASON } as OrderStep];
+    const pathApi = pathApiOf(project);
+    return [...steps, { op: 'order-mcp-json', file: pathApi.join(project, MCP_JSON), own, why: ORDER_REASON } as OrderStep];
 }
 

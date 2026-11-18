@@ -5,14 +5,15 @@
 //
 // The write follows the record's rules (D8 of 0.2.0): a temporary file then a rename; an unchanged list is not rewritten;
 // a list from a newer version, or one that cannot be read, is never replaced; a file that is not JSON is kept as
-// <file>.bak first; the file goes when both arrays are empty. apply.ts's own helpers are not required here, since
-// apply.ts requires the planner, which requires this module.
+// <file>.bak first; the file goes when both arrays are empty.
 import fs from 'node:fs';
 import path from 'node:path';
 import * as roots from '../roots/roots.ts';
 import * as keys from '../keys/keys.ts';
 import * as kept from '../core/kept.ts';
-import { deepEqual } from '../core/json-file.ts';
+import { deepEqual, stripBom } from '../core/json-file.ts';
+import { replaceFile } from '../core/replace-file.ts';
+import { pathFor } from '../entries/platform.ts';
 import type { Outcome, ServerEntry } from '../core/types.ts';
 import type { CatalogRow } from '../catalog/types.ts';
 import type { TokenField } from '../keys/types.ts';
@@ -34,7 +35,7 @@ export function readList(file: string): ListRead | null
     catch (caught) { const err = caught as NodeJS.ErrnoException;  return err.code === 'ENOENT' || err.code === 'ENOTDIR' ? null : empty(file, `cannot be read (${err.code})`, 'unreadable'); }
     let doc: RawDoc | null;
     // the former name's marker (spec D2) - it is JSON-safe, so the text is swapped before the parse
-    try { doc = JSON.parse(text.replace(/^﻿/, '').replaceAll(kept.OLD_MARKER, kept.MARKER)) as RawDoc | null; }
+    try { doc = JSON.parse(stripBom(text).replaceAll(kept.OLD_MARKER, kept.MARKER)) as RawDoc | null; }
     catch { return empty(file, 'is not JSON', 'bad'); }
     if (doc && typeof doc === 'object' && doc.version !== LIST_VERSION && newerOrBad(doc.version) === 'newer')
         return empty(file, `is version ${doc.version}, newer than this plugin's ${LIST_VERSION}`, 'newer');
@@ -54,7 +55,7 @@ export const listFile = (root: string): string => path.join(root, roots.FILES.li
 // Where the commands look for a family's list: oldRecordFiles' folders, in its order, with the list's name.
 export function listFiles(inventory: InventoryView, family: Family, context: RootsCtx): string[]
 {
-    const pathApi = context.platform === 'win32' ? path.win32 : path.posix;
+    const pathApi = pathFor(context.platform);
     return oldRecordFiles(inventory, family, context).map((file) => pathApi.join(pathApi.dirname(file), roots.FILES.list));
 }
 
@@ -65,8 +66,8 @@ export const serverKey = (server: { name: string; scope: string }): string => `m
 export function regKey(step: StepLike | null | undefined): string | null
 {
     if (!step || typeof step.op !== 'string' || !step.op.startsWith('mcp-')) return null;
-    if (step.op === 'mcp-move' && step.to) return `mcp:${(step.to as StepEnd).name}~${(step.to as StepEnd).scope}`;
-    return typeof step.name === 'string' && typeof step.scope === 'string' ? `mcp:${step.name}~${step.scope}` : null;
+    if (step.op === 'mcp-move' && step.to) return serverKey(step.to as StepEnd);
+    return typeof step.name === 'string' && typeof step.scope === 'string' ? serverKey({ name: step.name, scope: step.scope }) : null;
 }
 
 // The list with this plan's changes: each upsert replaces the server with its key in place or is appended, each drop
@@ -88,8 +89,6 @@ export function mergeList(list: Omit<McpsList, 'version'> | null | undefined, { 
     return doc;
 }
 
-const same = deepEqual;
-
 // Writes `doc` over `file`, `read` being readList(file) as the plan or apply found it. -> { ok, detail }
 export function writeList(file: string, doc: { version?: number | undefined; servers?: ListServer[] | undefined; own?: OwnEntry[] | undefined; cursorOffer?: string | undefined }, read: ListRead | null | undefined): Outcome
 {
@@ -106,14 +105,12 @@ export function writeList(file: string, doc: { version?: number | undefined; ser
     }
     const out: McpsList = { version: LIST_VERSION, servers, own };
     if (doc.cursorOffer === 'declined') out.cursorOffer = 'declined';
-    if (read && !read.state && same(out, { version: read.version, servers: read.servers, own: read.own, ...(read.cursorOffer ? { cursorOffer: read.cursorOffer } : {}) }))
+    if (read && !read.state && deepEqual(out, { version: read.version, servers: read.servers, own: read.own, ...(read.cursorOffer ? { cursorOffer: read.cursorOffer } : {}) }))
         return { ok: true, detail: `${file} already holds these servers - left as it is` };
     fs.mkdirSync(path.dirname(file), { recursive: true });
     let backup: string | null = null;
     if (read && read.state === 'bad' && fs.existsSync(file)) { backup = `${file}.bak`; fs.copyFileSync(file, backup); }
-    const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, `${JSON.stringify(out, null, 2)}\n`);
-    fs.renameSync(tmp, file);
+    replaceFile(file, `${JSON.stringify(out, null, 2)}\n`);
     const count = servers.length;
     return { ok: true, detail: `wrote ${file} (${count} server${count === 1 ? '' : 's'})${backup ? ` - the old file kept as ${backup}` : ''}` };
 }
@@ -121,7 +118,7 @@ export function writeList(file: string, doc: { version?: number | undefined; ser
 // The value a token field holds, from its template: '${VAR}' -> the whole value, 'Bearer ${VAR}' -> what follows.
 function valueOf(entry: ServerEntry, field: TokenField, tokenVar: string): string | null
 {
-    const value = field.at.reduce<unknown>((current, segment) => (current == null ? undefined : (current as Record<string | number, unknown>)[segment]), entry);
+    const value = keys.valueAt(entry, field.at);
     if (typeof value !== 'string') return null;
     const [before, after] = field.template.split(`\${${tokenVar}}`);
     if (after === undefined || !value.startsWith(before!) || !value.endsWith(after)) return null;
@@ -145,11 +142,9 @@ export function fromRegistration(registration: Registration, row: CatalogRow | n
 }
 
 // ---- the 0.4.x record, <root>/<roots.FILES.record> ----------------------------------------------------------------
-// Read only: the servers the user left on their own until list-import moves them into a list's `own` (0.5.0). Moved here
-// from roots.ts unchanged, under the names the list's code reads them by.
+// Read only: the servers the user left on their own until list-import moves them into a list's `own` (0.5.0).
 
-export const OLD_RECORD_VERSION = 1;
-const pathFor = (platform: string) => (platform === 'win32' ? path.win32 : path.posix);
+const OLD_RECORD_VERSION = 1;
 const versionNote = (file: string, version: unknown, current: number): string => (newerOrBad(version) === 'newer' ? `${file} is version ${version}, newer than this plugin's ${current}` : `${file} is version ${JSON.stringify(version)}, not ${current}`);
 
 // Where the commands look for the record (D6): the mapped root, the two standard folders, then every root a managed
@@ -185,7 +180,7 @@ export function readOldRecord(file: string): OldRecord | null
 // another fingerprint (null: present, not compared); a connector only when `live.connectors` is a list that lacks it -
 // a run that did not pass the connectors keeps every one (R14). An entry of no known shape is dropped.
 // live: { servers: { <key>: fingerprint | null }, connectors: string[] | null }
-export function mergeOwn(record: { servers?: OwnEntry[] | undefined } | null | undefined, entries: OwnEntry[] | null | undefined, live: Live | null | undefined): OldRecord
+function mergeOwn(record: { servers?: OwnEntry[] | undefined } | null | undefined, entries: OwnEntry[] | null | undefined, live: Live | null | undefined): OldRecord
 {
     const out: OwnEntry[] = [];
     const at = new Map<string, number>();

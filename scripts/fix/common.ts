@@ -1,13 +1,10 @@
 // Shared pieces of the fix detectors. A detector is `detect(ctx) -> findings[]`; a registration fix is
 // `fix(entry, finding, ctx, input) -> entry` (a pure edit of the entry AS READ, so the user's pin, cut-off and added
 // args or env survive); a machine fix is `fix(finding, ctx) -> { ok, detail }` and changes the machine.
-//
-// ctx = { inv, catalog, platform, arch, env, home, rules, machine } - `machine` is the only way a detector looks at the
-// machine, so a test replaces it.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { launchTokens, bareName } from '../inventory/inventory.ts';
+import { launchTokens, bareName } from '../inventory/fingerprint.ts';
 import * as E from '../entries/locations.ts';
 import * as serenaConfig from '../apply/serena-config.ts';
 import { pathFor } from '../entries/platform.ts';
@@ -19,10 +16,13 @@ import type { Finding, FixCtx, MachineProbe } from './types.ts';
 export const fixOf = (context: Pick<FixCtx, 'catalog'>, id: string): FixRow | undefined => context.catalog.fixes.find((fixRow) => fixRow.id === id);
 export const rowOf = (context: Pick<FixCtx, 'catalog'>, id: string): CatalogRow | undefined => context.catalog.byId.get(id);
 
+// A registration this plugin manages: not the user's own, not an alfred-code leftover, not one left on its own (spec D6).
+export const isManaged = (registration: InvRegistration): boolean => !registration.own && !registration.alfredRetired && registration.choice !== 'own';
+
 // The registrations a fix row covers: matched to one of its tools by what they launch, not the user's own, not an
 // alfred-code leftover, not one left on its own (spec D6), and not inherited from a parent folder (fixed by running fix
 // there).
-export const registrationsOf = (context: Pick<FixCtx, 'catalog' | 'inventory'>, fixId: string): InvRegistration[] => context.inventory.registrations.filter((registration) => !registration.own && !registration.alfredRetired && registration.choice !== 'own' && registration.scope !== 'inherited' && fixOf(context, fixId)!.tool.includes(registration.rowId!));
+export const registrationsOf = (context: Pick<FixCtx, 'catalog' | 'inventory'>, fixId: string): InvRegistration[] => context.inventory.registrations.filter((registration) => isManaged(registration) && registration.scope !== 'inherited' && fixOf(context, fixId)!.tool.includes(registration.rowId!));
 export const routeOf = (context: Pick<FixCtx, 'catalog'>, registration: { rowId: string | null; route: string | null }): CatalogRoute | undefined => rowOf(context, registration.rowId!)!.routes[registration.route!];
 
 // The executable a registration launches, looking through a `cmd /c` wrapper.
@@ -66,7 +66,7 @@ export function pinnedVersion(entry: ServerEntry, packageSpec: string): string |
 
 // ---- the machine ---------------------------------------------------------------------------------------------------
 
-export function onPath(name: string, env: Env, platform: string): string | null
+function onPath(name: string, env: Env, platform: string): string | null
 {
     const key = Object.keys(env).find((variableName) => variableName.toUpperCase() === 'PATH');
     const win = platform === 'win32';
@@ -74,7 +74,7 @@ export function onPath(name: string, env: Env, platform: string): string | null
     for (const dir of String((key && env[key]) || '').split(win ? ';' : ':').filter(Boolean))
         for (const candidate of names)
         {
-            const file = (win ? path.win32 : path.posix).join(dir, candidate);
+            const file = pathFor(platform).join(dir, candidate);
             try { if (fs.statSync(file).isFile()) return file; } catch { /* next */ }
         }
     return null;
@@ -87,7 +87,7 @@ export function realMachine({ env = process.env, platform = process.platform }: 
         realpath: (file: string) => { try { return fs.realpathSync(file); } catch { return null; } },
         which: (name: string) => onPath(name, env, platform),
         // npm and npx are .cmd shims on Windows; a shell is what runs them
-        // `opts.cwd` and `opts.env` (merged over the machine's) are for the audit, which runs in a temp folder
+        // `options.cwd` and `options.env` (merged over the machine's) are for the audit, which runs in a temp folder
         run: (cmd: string, args: string[], options: { cwd?: string; env?: Env } = {}) => spawnSync(cmd, args, { encoding: 'utf8', env: { ...env, ...(options.env || {}) }, cwd: options.cwd, shell: platform === 'win32' && /^(npm|npx)$/.test(cmd), windowsHide: true }),
         nodeVersion: process.versions.node,
     };

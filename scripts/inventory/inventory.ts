@@ -1,7 +1,4 @@
-#!/usr/bin/env node
 // THE INVENTORY - what is installed, read-only, no server started.
-//
-//   node inventory.ts --project <dir> --json <out> [--data <plugin data dir>]   (--data: the roots map, spec D2)
 //
 // Reads the project's .mcp.json, the account file (user servers, and this project's local servers), the .mcp.json of
 // every folder above (inherited: listed, never changed from here) and `claude plugin list --json`, and matches each
@@ -14,15 +11,17 @@ import * as catalogLib from '../catalog/catalog.ts';
 import * as account from '../core/account.ts';
 import * as cli from '../core/claude-cli.ts';
 import * as kept from '../core/kept.ts';
+import { ALL_SCOPES, MCP_JSON } from '../core/constants.ts';
 import * as roots from '../roots/roots.ts';
-import { bridgeParts } from '../entries/entry.ts';
-import { signInParts } from '../entries/sign-in.ts';
+import { pathFor } from '../entries/platform.ts';
+import { ALFRED_CODE_PLUGIN, INVENTORY_VERSION, WINDOWS_MCP_MARKETPLACE } from './constants.ts';
+import { catalogMatch } from './fingerprint.ts';
 import * as existing from './existing.ts';
 import { workspaceOf } from '../roots/workspace.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import type { Account, Env, FileState, ServerEntry, ServerMap } from '../core/types.ts';
-import type { Catalog, Fingerprint } from '../catalog/types.ts';
+import type { Catalog } from '../catalog/types.ts';
 import type { Family, InventoryView, RootsCtx } from '../roots/types.ts';
 import type { CursorOf } from '../cursor/types.ts';
 import type { OwnEntry } from '../mcps-list/types.ts';
@@ -30,80 +29,16 @@ import type { Approval, ApprovalCtx, BuildOptions, Installed, InvList, InvRegist
 
 const { readState } = account;
 
+// fingerprint.ts is its home; tests/cursor-mcp.test.ts:191 reads it from here.
+export { matchesFingerprint } from './fingerprint.ts';
+
 // ---- matching a registration to a row -------------------------------------------------------------------------------
-
-// `cmd /c npx ...` and `cmd.exe /d /s /c npx ...` are the Windows spelling of `npx ...`: look through the wrapper.
-export function launchTokens(entry: ServerEntry): { command: string; args: string[] }
-{
-    const command = String(entry.command || '');
-    let args = Array.isArray(entry.args) ? entry.args.map(String) : [];
-    if (/^cmd(\.exe)?$/i.test(path.basename(command)))
-    {
-        const at = args.findIndex((argument) => /^\/c$/i.test(argument));
-        if (at >= 0) return { command: args[at + 1] || '', args: args.slice(at + 2) };
-    }
-    return { command, args };
-}
-
-// 'serena-agent@2.1.0', 'mcp-memory-service[sqlite]==12.1.1', '@playwright/mcp@0.0.83', 'ghcr.io/x/y:v2' -> the bare name.
-export function bareName(token: string): string
-{
-    const lead = token.startsWith('@') ? '@' : '';
-    const body = lead ? token.slice(1) : token;
-    const cut = body.search(/[@=\[<>~!:]/);
-    return lead + (cut >= 0 ? body.slice(0, cut) : body);
-}
-
-const flagValue = (args: string[], flag: string): string | undefined =>
-{
-    for (let i = 0; i < args.length; i++)
-    {
-        if (args[i] === flag) return args[i + 1];
-        if (args[i]!.startsWith(`${flag}=`)) return args[i]!.slice(flag.length + 1);
-    }
-    return undefined;
-};
-
-export function matchesFingerprint(entry: ServerEntry, fingerprint: Fingerprint): boolean
-{
-    // a bridge (0.4.0): `node <root>/mcp-bridge.js <template> ...`, matched by the file's exact name and the template's host
-    // and path - never by the URL branch below, which would take every hosted URL for a fingerprint with no host
-    const bridge = bridgeParts(entry);
-    if (fingerprint.bridge) return Boolean(bridge) && bridge!.template.replace(/^https?:\/\//i, '').toLowerCase().startsWith(fingerprint.bridge);
-    if (bridge) return false;
-    const byUrl = (url: unknown) =>
-    {
-        if (fingerprint.pkg || fingerprint.command) return false;
-        let parsedUrl: URL;
-        try { parsedUrl = new URL(String(url)); } catch { return false; }
-        if (fingerprint.host && parsedUrl.hostname.toLowerCase() !== fingerprint.host) return false;
-        return parsedUrl.pathname.startsWith(fingerprint.pathPrefix || '/');
-    };
-    // the shared sign-in form (0.5.0, D5): mcp-remote with MCP_REMOTE_CONFIG_DIR, matched by its URL as an http entry, so
-    // it is the row's remote route; a hand-made mcp-remote entry has no parts and matches no row below
-    const signIn = signInParts(entry);
-    if (signIn) return byUrl(signIn.url);
-    if (entry.url || entry.type === 'http' || entry.type === 'sse') return byUrl(entry.url);
-    const { command, args } = launchTokens(entry);
-    if (fingerprint.command) return path.basename(command).replace(/\.(exe|cmd)$/i, '') === fingerprint.command;
-    if (!fingerprint.pkg) return false;
-    // the first argument that names the package; a flag value like --from <spec> is such an argument
-    const named = args.filter((argument) => !argument.startsWith('-')).some((argument) => bareName(argument) === fingerprint.pkg);
-    if (!named) return false;
-    return fingerprint.flag ? flagValue(args, fingerprint.flag) === fingerprint.value : true;
-}
 
 // The catalog row and route a registration's launch belongs to, or null (the user's own).
 export function matchEntry(entry: ServerEntry | null | undefined, catalog: Catalog): { rowId: string; route: string } | null
 {
-    if (!entry || typeof entry !== 'object') return null;
-    for (const row of catalog.tools)
-    {
-        if (row.kind !== 'mcp') continue;
-        for (const [route, routeDefinition] of Object.entries(row.routes))
-            if (routeDefinition.fingerprints.some((fingerprint) => matchesFingerprint(entry, fingerprint))) return { rowId: row.id, route };
-    }
-    return null;
+    const match = catalogMatch(entry, catalog);
+    return match ? { rowId: match.rowId, route: match.route } : null;
 }
 
 // ---- reading the scopes ---------------------------------------------------------------------------------------------
@@ -125,7 +60,7 @@ export function ancestorMcpFiles(project: string): { dir: string; file: string }
     const out: { dir: string; file: string }[] = [];
     for (let dir = realOf(project), up = path.dirname(dir); up !== dir; dir = up, up = path.dirname(dir))
     {
-        const file = path.join(up, '.mcp.json');
+        const file = path.join(up, MCP_JSON);
         if (fs.existsSync(file)) out.push({ dir: up, file });
     }
     return out;
@@ -162,7 +97,7 @@ function approvalOf(name: string, context: ApprovalCtx): Approval
     return 'pending';
 }
 
-export function pluginRows(listJson: PluginListRow[], project: string, env: Env, catalog: Catalog, _alfredCheck?: unknown): PluginRow[]
+function pluginRows(listJson: PluginListRow[], project: string, env: Env, catalog: Catalog): PluginRow[]
 {
     const rows: PluginRow[] = [];
     const here = [...hereSettings(project), settingsOf('user', project, env)].map((file) => readState<SettingsDoc>(file).doc);
@@ -174,7 +109,7 @@ export function pluginRows(listJson: PluginListRow[], project: string, env: Env,
         if (scoped && listRow.projectPath && account.projectKey(listRow.projectPath) !== account.projectKey(project)) continue; // another project's
         let enabled = listRow.enabled;
         let enabledFrom: PluginRow['enabledFrom'] = 'list';
-        if (['user', 'project', 'local'].includes(listRow.scope))
+        if (ALL_SCOPES.includes(listRow.scope))
         {
             const flag = flagIn(readState<SettingsDoc>(settingsOf(listRow.scope, project, env)).doc, listRow.id);
             if (typeof flag === 'boolean') { enabled = flag; enabledFrom = 'settings'; }
@@ -198,11 +133,11 @@ export function buildInventory({ project, env = process.env, platform = process.
 {
     const proj = path.resolve(project);
     const out: Inventory = {
-        version: 1, project: proj, os: platform, arch, cli: null, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false,
+        version: INVENTORY_VERSION, project: proj, os: platform, arch, cli: null, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false,
         sources: {},
     };
 
-    const mcpJsonState = readState<McpJsonDoc>(path.join(proj, '.mcp.json'));
+    const mcpJsonState = readState<McpJsonDoc>(path.join(proj, MCP_JSON));
     const acct = account.readAccount(env, proj, platform);
     out.sources = { project: { file: mcpJsonState.file, state: mcpJsonState.state }, account: { file: acct.file, state: acct.state }, local: { file: acct.file, state: acct.state }, user: { file: acct.file, state: acct.state } };
     for (const [scope, source] of [['project', mcpJsonState], ['local', acct], ['user', acct]] as [string, { file: string; state: FileState; error: string | null }][])
@@ -276,7 +211,7 @@ export function buildInventory({ project, env = process.env, platform = process.
     let listJson: PluginListRow[] = [];
     try { listJson = JSON.parse(list.stdout || '[]') as PluginListRow[]; } catch { out.unreadable.push({ scope: 'plugins', file: 'claude plugin list --json', state: 'malformed', error: 'not JSON' }); }
     out.plugins = pluginRows(listJson, proj, env, catalog);
-    out.alfredCodeEnabled = out.plugins.some((pluginRow) => pluginRow.plugin === 'alfred-code' && pluginRow.enabled);
+    out.alfredCodeEnabled = out.plugins.some((pluginRow) => pluginRow.plugin === ALFRED_CODE_PLUGIN && pluginRow.enabled);
     // each MCP server a plugin that loads here provides, read from its install folder and matched as a registration is
     const installPath = new Map((Array.isArray(listJson) ? listJson : []).map((listRow): [string, string | undefined] => [`${listRow.id}~${listRow.scope}`, listRow.installPath]));
     for (const pluginRow of out.plugins.filter((candidate) => candidate.enabledHere))
@@ -303,7 +238,7 @@ function listOf(inventory: InventoryView, family: Family, context: RootsCtx): In
         const list = lists.readList(file);
         if (list) return { file, servers: list.servers, own: list.own, ...(list.cursorOffer ? { cursorOffer: list.cursorOffer } : {}), ...(list.note ? { note: list.note, state: list.state } : {}) };
     }
-    const pathApi = context.platform === 'win32' ? path.win32 : path.posix;
+    const pathApi = pathFor(context.platform);
     for (const old of lists.oldRecordFiles(inventory, family, context))
     {
         const record = lists.readOldRecord(old);
@@ -372,7 +307,7 @@ export function windowsMcpServers(inventory: { registrations: InvRegistration[];
     const wins = new Map<string, InvRegistration>();
     for (const registration of starts.slice().sort((left, right) => NEAREST[left.scope]! - NEAREST[right.scope]!)) if (!wins.has(registration.name)) wins.set(registration.name, registration);
     // one plugin id is one server, however many scopes hold an install row for it (S28): the nearest row names it
-    const loads = (inventory.plugins || []).filter((pluginRow) => (pluginRow.enabledHere ?? pluginRow.enabled) && !(pluginRow.errors || []).length && pluginRow.marketplace === 'envoydev' && WINDOWS_MCP_PLUGINS.includes(pluginRow.plugin));
+    const loads = (inventory.plugins || []).filter((pluginRow) => (pluginRow.enabledHere ?? pluginRow.enabled) && !(pluginRow.errors || []).length && pluginRow.marketplace === WINDOWS_MCP_MARKETPLACE && WINDOWS_MCP_PLUGINS.includes(pluginRow.plugin));
     const nearest = new Map<string, PluginRow>();
     for (const pluginRow of loads.slice().sort((left, right) => NEAREST[left.scope]! - NEAREST[right.scope]!)) if (!nearest.has(pluginRow.id)) nearest.set(pluginRow.id, pluginRow);
     return [

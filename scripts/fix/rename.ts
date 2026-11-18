@@ -31,7 +31,7 @@ const isDir = (dir: string): boolean => { try { return fs.lstatSync(dir).isDirec
 
 // Each default root whose `.alfred-tools` exists while its `.preferred-tools` is gone or holds no root files - moved.
 export const movedRoots = (context: FixCtx): MovedRoot[] => movedAt(machineOf(context));
-export function movedAt(machine: Machine): MovedRoot[]
+function movedAt(machine: Machine): MovedRoot[]
 {
     const pathApi = pathFor(machine.platform);
     const out: MovedRoot[] = [];
@@ -114,7 +114,7 @@ export function rootRepointDetect(context: FixCtx): Finding[]
     const managed = C.registrationsOf(context, 'root-repoint');
     const out: Finding[] = [];
     const seen = new Set<string>();
-    for (const family of ['project', 'global'] as const)
+    for (const family of roots.FAMILIES)
     {
         const list = context.inventory.lists && context.inventory.lists[family];
         const servers = list && !list.note && !list.old ? list.servers || [] : [];
@@ -208,7 +208,7 @@ export function rootMoveDetect(context: FixCtx): Finding[]
 }
 
 // True when this run is the plugin under its former id - its data folder is named after it (A1).
-export const runsAsFormer = (data: string | null | undefined): boolean => Boolean(data) && path.basename(data!).startsWith('preferred-tools-');
+export const runsAsFormer = (data: string | null | undefined): boolean => Boolean(data) && path.basename(data!).startsWith(roots.FORMER_DATA_PREFIX);
 
 // The roots map the former plugin kept (spec D4), while this plugin's data folder has none: { from, to } files, and
 // `note` when it cannot be read as a map; else null.
@@ -231,7 +231,7 @@ export function repointWaits(registrations: InvRegistration[], machine: Machine)
 }
 
 // A map's roots that sit in a moved folder, pointed at the new one; the input is left as it was.
-export function repointMap(map: RootsMap, moved: MovedRoot[], machine: Machine): RootsMap
+function repointMap(map: RootsMap, moved: MovedRoot[], machine: Machine): RootsMap
 {
     const one = (root: string | null): string | null => (root ? repointText(root, moved, machine, false) : root);
     return { version: map.version, global: one(map.global), projects: Object.fromEntries(Object.entries(map.projects).map(([key, root]) => [key, one(root)!])) };

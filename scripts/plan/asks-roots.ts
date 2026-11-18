@@ -1,6 +1,7 @@
 import { installedOf } from '../inventory/inventory.ts';
 import * as roots from '../roots/roots.ts';
 import { RECOMMENDED_SUFFIX } from './asks-keys.ts';
+import { PREFIX } from './record-constants.ts';
 import { scopeOrder } from './asks-tool.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { Family } from '../roots/types.ts';
@@ -25,7 +26,7 @@ export function needsRoot(row: CatalogRow, routeId: string): boolean
 }
 
 // The families the questions input needs a root for: each pick at its answered (else recommended) scope.
-export function rootFamilies(inventory: Inventory, picks: Picks | null | undefined, catalog: Catalog, context: AskCtx): Family[]
+function rootFamilies(inventory: Inventory, picks: Picks | null | undefined, catalog: Catalog, context: AskCtx): Family[]
 {
     const out = new Set<string>();
     const routes = (picks && picks.routes) || {};
@@ -39,7 +40,7 @@ export function rootFamilies(inventory: Inventory, picks: Picks | null | undefin
         const scope = scopes[id] || scopeOrder(row, inventory, { route: routeId, context: context, copyOf: installedOf(inventory, id) })[0]!;
         out.add(roots.familyOf(scope));
     }
-    return (['project', 'global'] as Family[]).filter((family) => out.has(family));
+    return roots.FAMILIES.filter((family) => out.has(family));
 }
 
 // -> { question, answers: { <label as shown>: { family, id, root } } }
@@ -47,7 +48,7 @@ export function rootQuestion(inventory: Inventory, family: Family, context: AskC
 {
     const options = roots.options(inventory, family, context).map((option, i) => ({ ...option, label: `${option.label}${i === 0 ? RECOMMENDED_SUFFIX : ''}` }));
     return {
-        question: { id: `root-${family}`, header: ROOT_HEADER[family]!, multiSelect: false, question: ROOT_TEXT[family]!, options: options.map((option) => ({ label: option.label, description: option.description! })) },
+        question: { id: `${PREFIX.root}${family}`, header: ROOT_HEADER[family]!, multiSelect: false, question: ROOT_TEXT[family]!, options: options.map((option) => ({ label: option.label, description: option.description! })) },
         answers: Object.fromEntries(options.map((option) => [option.label, { family, id: option.id, root: option.root }])),
     };
 }

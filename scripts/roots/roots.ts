@@ -3,27 +3,37 @@
 // record of the user's answers and, unless it is `.alfred`, a `.gitignore`. The roots map in the plugin's data folder
 // finds a named root again when no registration points into it.
 //
-// Nothing here writes: the apply's file steps do. A ctx stands in for the machine - { project, home, platform, exists,
-// catalog } - so the options and the root in use are tested without a disk.
+// Nothing here writes but writeMap, the roots map in the plugin's data folder: the apply's file steps write the roots.
+// A context stands in for the machine - { project, home, platform, exists, catalog } - so the options and the root in
+// use are tested without a disk.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as account from '../core/account.ts';
+import { ALFRED_DATA, FILES, FORMER_ROOT_NAME, ROOT_NAME } from '../core/constants.ts';
+import { replaceFile } from '../core/replace-file.ts';
 import { rootOfEntry, alfredData } from '../entries/locations.ts';
+import { pathFor } from '../entries/platform.ts';
 import { helperParts, bridgeParts, helperNameOf } from '../entries/entry.ts';
 import * as helper from '../copied/mcp-headers.js';
 import { load } from '../catalog/catalog.ts';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
-import type { Catalog } from '../catalog/types.ts';
+import type { Catalog, CatalogRow } from '../catalog/types.ts';
+import type { ServerEntry } from '../core/types.ts';
 import type { Machine, Roots } from '../entries/types.ts';
 import type { Family, IgnoreGap, InUse, InventoryView, MapRead, PendingMove, RecordEntry, Resolved, RootAnswer, RootOption, RootReg, RootsCtx, RootsMap, ShippedKind, ShippedState } from './types.ts';
 
-export const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json', signIns: 'mcp-remote-v1', serenaContext: 'serena-context.yml' };
-// The root folder's name, and the one this plugin gave it under its former name (preferred-tools until 0.4.0, spec D3)
-export const ROOT_NAME = '.alfred-tools';
-export const FORMER_ROOT_NAME = '.preferred-tools';
+// A root folder's names: their home is core/constants.ts, which entries/ and keys/ can import (this file imports both).
+export { FILES, FORMER_ROOT_NAME, ROOT_NAME };
+// The file git is asked about inside mcp-remote's sign-in folder: whether git would commit it says whether the folder's
+// contents are ignored.
+export const SIGN_IN_PROBE = 'tokens';
+// The plugin's data folder under its former id is named with this prefix (spec D4).
+export const FORMER_DATA_PREFIX = 'preferred-tools-';
+// The two scope families, each with its root folder: project (project and local scope) and global (user scope).
+export const FAMILIES: readonly Family[] = ['project', 'global'];
 // The names that make a folder a root that holds something (spec D3 'holds root files'); its contents are never read.
-export const ROOT_FILE_NAMES = [FILES.secrets, FILES.helper, FILES.bridge, FILES.list, FILES.record, FILES.serenaContext, '.secrets'];
+const ROOT_FILE_NAMES = [FILES.secrets, FILES.helper, FILES.bridge, FILES.list, FILES.record, FILES.serenaContext, '.secrets'];
 export function holdsRootFiles(dir: string): boolean
 {
     let names: string[];
@@ -64,14 +74,14 @@ export function pendingMoves(context: { project: string; home: string; platform:
 }
 // The read guard (0.5.0, ruling 13): two deny rules in Claude Code's settings that keep a session's Read tool out of
 // mcp-remote's sign-in tokens and the key file, wherever a root sits.
-export const READ_GUARD = { signIns: 'Read(//**/mcp-remote-v1/**)', secrets: 'Read(//**/.mcps-secrets)' };
+export const READ_GUARD = { signIns: `Read(//**/${FILES.signIns}/**)`, secrets: `Read(//**/${FILES.secrets})` };
 export const GITIGNORE = '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n';
 // serena's context file (spec D7): its number, on its first line
 export const SERENA_CONTEXT_VERSION = 2;
 const MAP_VERSION = 1;
 
-const pathFor = (platform: string) => (platform === 'win32' ? path.win32 : path.posix);
-export const familyOf = (scope: string): Family => (scope === 'user' ? 'global' : 'project');
+// The scope family a scope belongs to: entries/locations.ts's, read here by plan/, update/ and fix/.
+export { familyOf } from '../entries/locations.ts';
 const SCOPES_OF: Record<Family, string[]> = { project: ['project', 'local'], global: ['user'] };
 const existsOf = (context: Machine) => context.exists || ((filePath: string) => fs.existsSync(filePath));
 let loaded: Catalog | null = null;
@@ -95,7 +105,7 @@ export function readMap(dataDir: string | null | undefined): MapRead
     const file = path.join(dataDir, FILES.map);
     let text: string;
     try { text = fs.readFileSync(file, 'utf8'); }
-    catch (caught) { const err = caught as NodeJS.ErrnoException; return err.code === 'ENOENT' ? emptyMap() : { ...emptyMap(), note: `${file} cannot be read (${err.code}) - read as empty`, state: 'unreadable' }; }
+    catch (caught) { const error = caught as NodeJS.ErrnoException; return error.code === 'ENOENT' ? emptyMap() : { ...emptyMap(), note: `${file} cannot be read (${error.code}) - read as empty`, state: 'unreadable' }; }
     let doc: { version?: unknown; projects?: unknown; global?: unknown } | null;
     try { doc = JSON.parse(text) as typeof doc; }
     catch { return { ...emptyMap(), note: `${file} is not JSON - read as empty`, state: 'bad' }; }
@@ -111,10 +121,7 @@ export function readMap(dataDir: string | null | undefined): MapRead
 export function writeMap(dataDir: string, map: RootsMap): void
 {
     fs.mkdirSync(dataDir, { recursive: true });
-    const file = path.join(dataDir, FILES.map);
-    const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, `${JSON.stringify({ version: MAP_VERSION, global: map.global, projects: map.projects }, null, 2)}\n`);
-    fs.renameSync(tmp, file);
+    replaceFile(path.join(dataDir, FILES.map), `${JSON.stringify({ version: MAP_VERSION, global: map.global, projects: map.projects }, null, 2)}\n`);
 }
 
 // The data folder the plugin had under its former name (spec D4): `<plugins>/data/preferred-tools-<marketplace>` beside
@@ -123,7 +130,7 @@ export function dataSibling(dataDir: string | null | undefined): string | null
 {
     if (!dataDir) return null;
     const base = path.basename(dataDir);
-    return /^alfred-tools-/.test(base) ? path.join(path.dirname(dataDir), base.replace(/^alfred-tools-/, 'preferred-tools-')) : null;
+    return /^alfred-tools-/.test(base) ? path.join(path.dirname(dataDir), base.replace(/^alfred-tools-/, FORMER_DATA_PREFIX)) : null;
 }
 
 // The map's key for a project: its trust root (the git root, else the folder), as the account file keys it.
@@ -143,8 +150,8 @@ export function withRoot(map: RootsMap | null | undefined, family: string, proje
 export function standard(family: string, context: Machine): { id: string; root: string }[]
 {
     const pathApi = pathFor(context.platform);
-    if (family === 'global') return [{ id: 'alfred-tools', root: pathApi.join(context.home, '.alfred-tools') }, { id: 'home-alfred', root: pathApi.join(context.home, '.alfred') }];
-    return [{ id: 'alfred', root: pathApi.join(context.project, '.alfred') }, { id: 'alfred-tools', root: pathApi.join(context.project, '.alfred-tools') }];
+    if (family === 'global') return [{ id: 'alfred-tools', root: pathApi.join(context.home, ROOT_NAME) }, { id: 'home-alfred', root: pathApi.join(context.home, ALFRED_DATA) }];
+    return [{ id: 'alfred', root: pathApi.join(context.project, ALFRED_DATA) }, { id: 'alfred-tools', root: pathApi.join(context.project, ROOT_NAME) }];
 }
 
 // A written path as an absolute one: `~`, `${HOME}` / `${USERPROFILE}`, absolute, else relative to the project.
@@ -168,6 +175,18 @@ export function helperPathOf(command: unknown): string | null
 
 const managed = (registration: RootReg, family: Family) => registration.rowId && !registration.alfredRetired && registration.choice !== 'own' && SCOPES_OF[family].includes(registration.scope);
 
+// The folder above a registration's data folder, which may be a root: null with no data folder, or with one under a
+// variable other than the home's.
+function dataParentOf(row: CatalogRow | null | undefined, entry: ServerEntry | undefined, context: Machine): string | null
+{
+    if (!row || !row.locations || !entry) return null;
+    let rootText: string | null;
+    try { rootText = rootOfEntry(row, entry); }
+    catch { rootText = null; }
+    if (!rootText || rootText.includes('${') && !/^\$\{(?:HOME|USERPROFILE)\}/.test(rootText)) return null;
+    return pathFor(context.platform).dirname(absOf(rootText, context));
+}
+
 // The roots the family's managed registrations point into, helpers first, then data folders: [{ path }]. A data folder
 // counts only when its parent is a standard folder or holds one of the root's files - a tool's default folder in the home
 // (~/.serena) is not a root.
@@ -175,25 +194,19 @@ export function registrationRoots(inventory: InventoryView, family: Family, cont
 {
     const pathApi = pathFor(context.platform);
     const exists = existsOf(context);
-    const regs = (inventory.registrations || []).filter((registration) => managed(registration, family));
+    const managedRegistrations = (inventory.registrations || []).filter((registration) => managed(registration, family));
     const out: string[] = [];
-    for (const registration of regs)
+    for (const registration of managedRegistrations)
     {
         const file = helperPathOf(registration.entry && registration.entry.headersHelper);
         if (file) out.push(pathApi.dirname(absOf(file, context)));
     }
     const known = standard(family, context).map((standardRoot) => standardRoot.root);
     const catalog = catalogOf(context);
-    for (const registration of regs)
+    for (const registration of managedRegistrations)
     {
-        const row = catalog.byId.get(registration.rowId!);
-        if (!row || !row.locations || !registration.entry) continue;
-        let rootStr: string | null;
-        try { rootStr = rootOfEntry(row, registration.entry); }
-        catch { rootStr = null; }
-        if (!rootStr || rootStr.includes('${') && !/^\$\{(?:HOME|USERPROFILE)\}/.test(rootStr)) continue;
-        const parent = pathApi.dirname(absOf(rootStr, context));
-        if (known.includes(parent) || Object.values(FILES).some((fileName) => fileName !== FILES.map && exists(pathApi.join(parent, fileName)))) out.push(parent);
+        const parent = dataParentOf(catalog.byId.get(registration.rowId!), registration.entry, context);
+        if (parent && (known.includes(parent) || Object.values(FILES).some((fileName) => fileName !== FILES.map && exists(pathApi.join(parent, fileName))))) out.push(parent);
     }
     return [...new Set(out)];
 }
@@ -222,17 +235,17 @@ const NAMED_GLOBAL_TAIL = "a project-scope helper does not read keys here - keep
 export function options(inventory: InventoryView, family: Family, context: RootsCtx): RootOption[]
 {
     const exists = existsOf(context);
-    const [alfred, preferred] = standard('project', context) as [{ id: string; root: string }, { id: string; root: string }];
-    const [homePt, homeAlfred] = standard('global', context) as [{ id: string; root: string }, { id: string; root: string }];
+    const [alfred, projectAlfredTools] = standard('project', context) as [{ id: string; root: string }, { id: string; root: string }];
+    const [homeAlfredTools, homeAlfred] = standard('global', context) as [{ id: string; root: string }, { id: string; root: string }];
     const list: RootOption[] = family === 'global'
         ? [
-            { ...homePt, label: '~/.alfred-tools', description: `${homePt.root} - one folder for every project on this machine` },
+            { ...homeAlfredTools, label: '~/.alfred-tools', description: `${homeAlfredTools.root} - one folder for every project on this machine` },
             ...(exists(homeAlfred.root) ? [{ ...homeAlfred, label: '~/.alfred', description: `${homeAlfred.root} - alfred-code's folder in your home, shared with it` }] : []),
             { id: 'named', root: null, label: 'A folder you name', description: `a folder of yours, asked next - ${NAMED_GLOBAL_TAIL}` },
         ]
         : [
             ...(alfredData(context, inventory.alfredCodeEnabled) ? [{ ...alfred, label: '.alfred in this project', description: `${alfred.root} - kept out of git by alfred-code` }] : []),
-            { ...preferred, label: '.alfred-tools in this project', description: `${preferred.root} - its own .gitignore keeps the keys, the record and the data out of git` },
+            { ...projectAlfredTools, label: '.alfred-tools in this project', description: `${projectAlfredTools.root} - its own .gitignore keeps the keys, the record and the data out of git` },
             { id: 'named', root: null, label: 'A folder you name', description: 'a folder of yours inside this project, asked next' },
         ];
     const used = inUse(inventory, family, context);
@@ -266,14 +279,6 @@ export function resolveNamed(family: string, text: unknown, context: Machine): {
     return { root: pathApi.join(context.project, ...parts) };
 }
 
-// A root as a registration writes it: relative to the project with `/` at project scope, absolute otherwise.
-export function rootStrFor(root: string, scope: string, context: Machine): string
-{
-    if (scope !== 'project') return root;
-    const pathApi = pathFor(context.platform);
-    return pathApi.relative(context.project, root).split(pathApi.sep).join('/') || '.';
-}
-
 // The roots a run uses. `answers`: { project: { id, path? }, global: { id, path? } } - an option id from the root
 // question, `path` the folder typed for 'named'. No answer: the family's recommended root (D2's first option). ->
 // { roots: { project, global, globalNamed }, errors: [reason] }, the roots absolute.
@@ -281,7 +286,7 @@ export function resolveRoots(inventory: InventoryView, answers: Partial<Record<F
 {
     const out: Roots = {};
     const errors: string[] = [];
-    for (const family of ['project', 'global'] as const)
+    for (const family of FAMILIES)
     {
         const answer = (answers && answers[family]) || null;
         const rootOptions = options(inventory, family, context);
@@ -328,13 +333,8 @@ export function pointsIntoRoot(registration: RootReg, inventory: InventoryView, 
         const ours = state === 'absent' ? Boolean(helperNameOf(command)) : number !== null;
         return ours ? pathApi.dirname(absolutePath) : null;
     }
-    const row = registration.rowId ? catalogOf(context).byId.get(registration.rowId) : null;
-    if (!row || !row.locations || !registration.entry) return null;
-    let rootStr: string | null;
-    try { rootStr = rootOfEntry(row, registration.entry); }
-    catch { rootStr = null; }
-    if (!rootStr || rootStr.includes('${') && !/^\$\{(?:HOME|USERPROFILE)\}/.test(rootStr)) return null;
-    const parent = pathApi.dirname(absOf(rootStr, context));
+    const parent = dataParentOf(registration.rowId ? catalogOf(context).byId.get(registration.rowId) : null, registration.entry, context);
+    if (!parent) return null;
     const map = (inventory.roots && inventory.roots.map) || emptyMap();
     const known = [...standard('project', context), ...standard('global', context)].map((standardRoot) => standardRoot.root).concat([map.global, ...Object.values(map.projects || {})].filter(Boolean) as string[]);
     const exists = existsOf(context);
@@ -389,9 +389,9 @@ export function ignoreGap(root: string, family: string, { writes = [] }: { write
     if (ignored === false) return { reason: `git would commit ${secrets}`, secrets: true };
     if (ignored === null) return null;
     // mcp-remote's sign-in folder (0.5.0, D5): its tokens are as private as the key file
-    const signIns = gitIgnores(path.join(root, FILES.signIns, 'tokens')) === false;
+    const signIns = gitIgnores(path.join(root, FILES.signIns, SIGN_IN_PROBE)) === false;
     const file = path.join(root, FILES.helper);
-    const projectRoot = family === 'project' && path.basename(root) !== '.alfred';
+    const projectRoot = family === 'project' && path.basename(root) !== ALFRED_DATA;
     // the bridge and serena's context (0.5.0, D7): a committed entry names them too, when they are there or this plan
     // writes them
     const unignore = projectRoot ? [FILES.bridge, FILES.serenaContext].filter((fileName) => (writes.includes(fileName) || fs.existsSync(path.join(root, fileName))) && gitIgnores(path.join(root, fileName)) === true) : [];

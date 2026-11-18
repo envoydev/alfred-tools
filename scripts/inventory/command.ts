@@ -1,7 +1,9 @@
 // The inventory command: reads its flags, builds the inventory and writes or prints it.
+//
+//   node inventory.ts --project <dir> --json <out> [--data <plugin data dir>]   (--data: the roots map, spec D2)
 import { blockingStdio } from '../core/json-file.ts';
 import { checkedTarget, writeJsonNoFollow } from '../core/temp-write.ts';
-import { JSON_FILE_REFUSAL, REFUSED_EXIT_CODE } from './constants.ts';
+import { CLI_MISSING_EXIT_CODE, JSON_FILE_REFUSAL, REFUSED_EXIT_CODE } from './constants.ts';
 import { buildInventory, keptOf } from './inventory.ts';
 
 export function runInventoryCommand(argv: string[]): number
@@ -17,7 +19,7 @@ export function runInventoryCommand(argv: string[]): number
     if (!inventory.cli!.ok)
     {
         console.error('alfred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.');
-        return 3;
+        return CLI_MISSING_EXIT_CODE;
     }
     if (outFile) writeJsonNoFollow(outFile, keptOf(inventory));
     else console.log(JSON.stringify(keptOf(inventory), null, 2));

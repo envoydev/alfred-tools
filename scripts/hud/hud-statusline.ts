@@ -1,5 +1,4 @@
-#!/usr/bin/env node
-// hud-statusline.js - what is left of claude-hud's setup once 0.5.0 dropped the claude-hud row (spec D8, D9): the
+// hud-statusline.ts - what is left of claude-hud's setup once 0.5.0 dropped the claude-hud row (spec D8, D9): the
 // recognisers that tell claude-hud's own statusLine from any other, and the removal the `retired-plugin` uninstall runs.
 // Ported from alfred-code scripts/hud-statusline.js; MOUNT_RE is copied below.
 //
@@ -12,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { configDir as accountDir } from '../core/account.ts';
 import { parseJson } from '../core/json-file.ts';
+import { pathFor } from '../entries/platform.ts';
 import type { Env } from '../core/types.ts';
 import type { Classified, Exists, Expected, ExpectedInput, ShapeVars } from './types.ts';
 
@@ -45,7 +45,7 @@ function shapeRe(template: string, source: string): RegExp
 }
 
 // setup.md:478-485 - the label a statusLine that is not claude-hud's is reported under.
-export function sourceLabel(command: string): string
+function sourceLabel(command: string): string
 {
     if (command.includes('claude-pace')) return 'claude-pace';
     if (command.includes('cc-statusline') || command.includes('ccstatusline')) return 'cc-statusline';
@@ -65,7 +65,7 @@ function cmdPath(env: Env, exists: Exists): string
 function pathDirs(env: Env, platform: string): string[]
 {
     const key = Object.keys(env).find((variableName) => variableName.toUpperCase() === 'PATH');
-    const pathApi = platform === 'win32' ? path.win32 : path.posix;
+    const pathApi = pathFor(platform);
     return String((key && env[key]) || '').split(platform === 'win32' ? ';' : ':').filter((directory) => directory && pathApi.isAbsolute(directory));
 }
 

@@ -7,8 +7,9 @@ import { checkHostedSettings, currentHostedSettings, defaultHostedSettings, pair
 import { currentOf, buildEntry, applyContext, bridgeParts, helperParts, helperGlobalRoot, bridgePathFor, renameTemplate, helperFor, subst, mergeSettings, contextArgAt } from '../entries/entry.ts';
 import { signInParts, signInFormOf } from '../entries/sign-in.ts';
 import { nameProblem, fetchStep } from '../entries/names.ts';
-import { recommendedScope, keyStateOf, heldKey, PARENT_HELPER_IN_CHILD, CHILD_FOLDER_REMEDY } from './asks-keys.ts';
+import { recommendedScope, keyStateOf, heldKey, PARENT_HELPER_IN_CHILD, CHILD_FOLDER_REMEDY, ALL_SCOPES } from './asks-keys.ts';
 import * as keys from '../keys/keys.ts';
+import { ALFRED_DATA } from '../core/constants.ts';
 import * as kept from '../core/kept.ts';
 import * as roots from '../roots/roots.ts';
 import { templateNames } from '../copied/mcp-bridge.js';
@@ -18,7 +19,8 @@ import * as serenaConfig from '../apply/serena-config.ts';
 import { serenaConfigInitStep } from './serena-init.ts';
 import { keyOf, fromHere, otherWindowsMcp } from '../inventory/inventory.ts';
 import { deepEqual } from '../core/json-file.ts';
-import { SCOPES, andList } from './context.ts';
+import { andList } from './context.ts';
+import { MAX_NAME_LENGTH } from './constants.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { Current, Root, Roots } from '../entries/types.ts';
@@ -28,7 +30,7 @@ import type { PickAnswer, Plan, PlanCtx, RootUses } from './types.ts';
 
 // ---- one MCP pick ---------------------------------------------------------------------------------------------------
 
-export function projectName(context: { project: string }): string
+function projectName(context: { project: string }): string
 {
     return path.basename(context.project).replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
 }
@@ -37,7 +39,7 @@ function resolveName(pick: PickAnswer, row: CatalogRow, current: Current | null,
 {
     const nameAnswer = pick.name === undefined ? 'keep' : pick.name;
     if (nameAnswer === 'keep') return current ? current.name : row.name;
-    if (nameAnswer === 'prefixed') return `${projectName(context)}-${row.name}`.slice(0, 64);
+    if (nameAnswer === 'prefixed') return `${projectName(context)}-${row.name}`.slice(0, MAX_NAME_LENGTH);
     return nameAnswer;
 }
 
@@ -52,7 +54,7 @@ function wantedRoot(row: CatalogRow, pick: PickAnswer, current: Current | null, 
     // an .alfred project root holds alfred-code's own entries: a registration of this family is never given a name
     // that is one (a registration already under that name keeps it)
     const pathApi = pathFor(context.platform);
-    if (scope !== 'user' && !(current && current.name === name) && context.roots && context.roots.project === pathApi.join(context.project, '.alfred'))
+    if (scope !== 'user' && !(current && current.name === name) && context.roots && context.roots.project === pathApi.join(context.project, ALFRED_DATA))
     {
         const problem = alfredNameProblem(name, context);
         if (problem) return { error: problem };
@@ -68,7 +70,7 @@ function wantedRoot(row: CatalogRow, pick: PickAnswer, current: Current | null, 
         if (!context.alfredHere) return { error: 'alfred-code is not set up here (no .alfred/.gitignore) - pick another folder' };
         const problem = alfredNameProblem(name, context);
         if (problem) return { error: problem };
-        root = { kind: 'project', rel: `.alfred/${name}` };
+        root = { kind: 'project', rel: `${ALFRED_DATA}/${name}` };
     }
     else if (locationAnswer.side === 'alfred')
     {
@@ -121,7 +123,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
     if (!route) return out.errors.push(`${row.id}: no ${routeId} route (routes: ${Object.keys(row.routes).join(', ')})`);
     // a fresh pick's scope: the recommended one (spec D5, F2)
     const scope = pick.scope || (current ? current.scope : recommendedScope(row, routeId));
-    if (!SCOPES.includes(scope)) return out.errors.push(`${row.id}: unknown scope '${scope}'`);
+    if (!ALL_SCOPES.includes(scope)) return out.errors.push(`${row.id}: unknown scope '${scope}'`);
     // a stdio route that needs a key holds it written in, which the committed .mcp.json never carries (spec D5); a
     // registration already there is configure's to keep
     // a bridge holds names only (0.4.0, Ruling 6)
@@ -320,7 +322,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
         const was = signInParts(entry);
         const httpUrl = row.params && params.host ? subst(route.url, params) : (was ? was.url : entry.url);
         const exists = context.exists || ((filePath) => fs.existsSync(filePath));
-        if (clients.includes('cursor') && root && (exists(root) || pathApi.basename(root) === '.alfred') && roots.gitIgnores(pathApi.join(root, roots.FILES.signIns, 'tokens')) === false)
+        if (clients.includes('cursor') && root && (exists(root) || pathApi.basename(root) === ALFRED_DATA) && roots.gitIgnores(pathApi.join(root, roots.FILES.signIns, roots.SIGN_IN_PROBE)) === false)
         {
             out.notes.push(`${root}: git would commit ${roots.FILES.signIns}/ - ${name} is set up for Claude Code only; /alfred-tools:fix (root-ignore) covers it, then configure adds Cursor`);
             clients = clients.filter((client) => client !== 'cursor');

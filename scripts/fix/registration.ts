@@ -10,6 +10,7 @@ import { validWindowsSerenaHome, serenaWindowsHome, serenaSpaceFree } from '../e
 import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
 import * as C from './common.ts';
+import { ONE_VAR } from './constants.ts';
 import { windowsMcpServers, fromHere } from '../inventory/inventory.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import type { Env, ServerEntry } from '../core/types.ts';
@@ -255,7 +256,6 @@ export function serenaContextFix(entry: ServerEntry, finding: Finding): ServerEn
 // default name. A stdio registration stores its key and not the key's name, so an empty one is never guessed at (R7): the
 // default name may hold another account's key.
 const PICK_NAME = "pick the key's name with /alfred-tools:configure";
-const ONE_VAR = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
 
 // The key inside a token field: the field's text less the route template's text around ${VAR}.
 function keyIn(value: unknown, template: string, tokenVar: string): string
@@ -279,7 +279,7 @@ export function tokenSyncDetect(context: FixCtx): Finding[]
         const fields = keys.tokenFields(registration.entry, route);
         if (!fields.length) return null;
         const tokenVar = route.tokenVar!;
-        const key = keyIn(fields[0]!.at.reduce<unknown>((node, segment) => (node as Record<string | number, unknown>)[segment], registration.entry), fields[0]!.template, tokenVar);
+        const key = keyIn(keys.valueAt(registration.entry, fields[0]!.at), fields[0]!.template, tokenVar);
         const chain = stdioChainOf(context, registration.scope);
         const extra = { route: registration.route, chain };
         if (key === '') return C.finding('token-sync', registration, `the registration's ${tokenVar} is empty`, { ...extra, blocked: PICK_NAME });
@@ -310,7 +310,7 @@ function cursorBehind(context: FixCtx, registration: InvRegistration, route: Cat
     const fields = copy ? keys.tokenFields(copy, route) : [];
     const at = keys.valueIn(chain, server.key);
     if (!fields.length || !at) return null;
-    const held = keyIn(fields[0]!.at.reduce<unknown>((node, segment) => (node == null ? node : (node as Record<string | number, unknown>)[segment]), copy), fields[0]!.template, route.tokenVar!);
+    const held = keyIn(keys.valueAt(copy, fields[0]!.at), fields[0]!.template, route.tokenVar!);
     if (held === at.value) return null;
     return C.finding('token-sync', registration, `Cursor's copy in ${file} holds a key other than ${server.key} in ${at.file}`, { ...extra, keyName: server.key, cursorOnly: true });
 }

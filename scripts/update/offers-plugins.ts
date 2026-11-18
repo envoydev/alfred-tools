@@ -1,12 +1,10 @@
 // The plugin offers: each installed plugin behind its marketplace's release.
 import fs from 'node:fs';
 import path from 'node:path';
-import * as inventory from '../inventory/inventory.ts';
+import { bareName } from '../inventory/fingerprint.ts';
 import { clone, compareVersions, pinnedVersion } from '../fix/common.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { PluginOffer, UpdateCheck, UpdateCtx } from './types.ts';
-
-const { bareName } = inventory;
 
 // ---- the pin, edited -------------------------------------------------------------------------------------------------
 
@@ -18,7 +16,7 @@ export function bumpEntry(entry: ServerEntry, packageName: string, to: string, c
     if (!from) return null;
     const bumped = clone(entry);
     let done = false;
-    bumped.args = (bumped.args || []).map((argument, _index, _all) =>
+    bumped.args = (bumped.args || []).map((argument) =>
     {
         if (!done && !argument.startsWith('-') && bareName(argument) === packageName && argument.endsWith(from)) { done = true; return argument.slice(0, argument.length - from.length) + to; }
         return argument;
@@ -33,7 +31,7 @@ export function bumpEntry(entry: ServerEntry, packageName: string, to: string, c
 
 // The version a marketplace lists for a plugin, from its clone: the plugin's own plugin.json when the entry points at a
 // folder in the clone (that file wins over the entry), else the entry's `version`. null: not listed.
-export function listedVersion(installLocation: string | null | undefined, pluginName: string): string | null
+function listedVersion(installLocation: string | null | undefined, pluginName: string): string | null
 {
     if (!installLocation) return null;
     let file = installLocation;

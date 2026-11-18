@@ -1,8 +1,9 @@
 // The pick questions: which tools, in calls of at most four, and which apps.
 import { installedOf, fromHere, otherWindowsMcp } from '../inventory/inventory.ts';
 import * as roots from '../roots/roots.ts';
-import { HEADER } from './asks-keys.ts';
-import * as X from '../inventory/existing.ts';
+import { HEADER, capitalized } from './asks-keys.ts';
+import * as existingServers from '../inventory/existing.ts';
+import { MAX_OPTIONS, MAX_QUESTIONS } from './constants.ts';
 import { homeDir } from '../core/account.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { Family, InUse } from '../roots/types.ts';
@@ -26,7 +27,7 @@ export function packed(items: PickItem[], { id, question, none }: { id: string; 
     for (const group of [...new Set(items.map((item) => item.group))])
     {
         const mine = items.filter((item) => item.group === group);
-        const partCount = Math.ceil(mine.length / 4);
+        const partCount = Math.ceil(mine.length / MAX_OPTIONS);
         for (let partIndex = 0, at = 0; partIndex < partCount; partIndex++)
         {
             const size = Math.floor(mine.length / partCount) + (partIndex < mine.length % partCount ? 1 : 0);
@@ -37,11 +38,11 @@ export function packed(items: PickItem[], { id, question, none }: { id: string; 
     for (let i = 0; i < parts.length; i++)
     {
         if (parts[i]!.length !== 1) continue;
-        const prev = parts[i - 1];
+        const previous = parts[i - 1];
         const next = parts[i + 1];
-        if (prev && prev.length < 4) { prev.push(...parts.splice(i, 1)[0]!); i--; }
-        else if (next && next.length < 4) { next.unshift(...parts.splice(i, 1)[0]!); i--; }
-        else if (prev) parts[i]!.unshift(prev.pop()!);
+        if (previous && previous.length < MAX_OPTIONS) { previous.push(...parts.splice(i, 1)[0]!); i--; }
+        else if (next && next.length < MAX_OPTIONS) { next.unshift(...parts.splice(i, 1)[0]!); i--; }
+        else if (previous) parts[i]!.unshift(previous.pop()!);
         else if (next) parts[i]!.push(next.shift()!);
     }
     const out = parts.map((part, partIndex): Question =>
@@ -51,10 +52,10 @@ export function packed(items: PickItem[], { id, question, none }: { id: string; 
         if (options.length === 1) options.push({ label: 'None of these', description: none });
         return {
             id: `${id}-${partIndex}`, header: one ? HEADER[one.id]! : 'Tools', multiSelect: true,
-            question: one ? `${one.label}: ${question}` : `${question[0]!.toUpperCase()}${question.slice(1)}`, options,
+            question: one ? `${one.label}: ${question}` : capitalized(question), options,
         };
     });
-    return chunk(out, 4);
+    return chunk(out, MAX_QUESTIONS);
 }
 
 // The install pick: the rows for this OS not installed in this project. A server installed only for every project (user
@@ -72,7 +73,7 @@ const offeredForInstall = (row: CatalogRow, inventory: Inventory) =>
 export function alsoProvided(inventory: Inventory, rowId: string, connectors: string[] | null | undefined): { owner: string; tag: string }[]
 {
     const out: { owner: string; tag: string }[] = [];
-    if ((connectors || []).some((connector) => X.matchConnector(connector) === rowId)) out.push({ owner: 'claude.ai', tag: 'also connected through claude.ai' });
+    if ((connectors || []).some((connector) => existingServers.matchConnector(connector) === rowId)) out.push({ owner: 'claude.ai', tag: 'also connected through claude.ai' });
     const enabled = new Set((inventory.plugins || []).filter((plugin) => plugin.enabledHere ?? plugin.enabled).map((plugin) => plugin.id));
     const owners = (inventory.pluginServers || []).filter((server) => server.rowId === rowId && enabled.has(server.plugin)).map((server) => server.plugin.split('@')[0]!);
     for (const owner of new Set(owners)) out.push({ owner, tag: `also provided by the ${owner} plugin` });
@@ -84,7 +85,7 @@ export function alsoProvided(inventory: Inventory, rowId: string, connectors: st
 // this session has loaded; a row one of them, or an enabled plugin, provides says so in its label (spec F4).
 export function pickQuestions(inventory: Inventory, catalog: Catalog, existing: Record<string, string> | null | undefined = {}, connectors: string[] | null = null): Question[][]
 {
-    const rule = X.offerRule(inventory, catalog, existing);
+    const rule = existingServers.offerRule(inventory, catalog, existing);
     const items: PickItem[] = [];
     for (const group of catalog.groups)
         for (const row of catalog.tools.filter((toolRow) => toolRow.group === group.id && toolRow.os.includes(inventory.os) && offeredForInstall(toolRow, inventory) && !rule.own.has(toolRow.id)))
@@ -99,7 +100,7 @@ export function pickQuestions(inventory: Inventory, catalog: Catalog, existing: 
             const keep = `${stays.join(' and ')} ${stays.length > 1 ? 'stay' : 'stays'}${user.length ? '' : stays.length > 1 ? ' in their folders' : ' in its folder'}`;
             // windows-mcp 0.8.8 keeps one per desktop healthy; a copy under the row's own name replaces that one here
             const others = row.id === 'windows-control' ? otherWindowsMcp(inventory, row.name) : [];
-            const warn = `${others.length ? `; another windows-mcp already starts here (${others.join(', ')}) - keep one per desktop` : ''}${rule.add.has(row.id) ? `; ${X.twoServers(row.label, rule.add.get(row.id)!)}` : ''}`;
+            const warn = `${others.length ? `; another windows-mcp already starts here (${others.join(', ')}) - keep one per desktop` : ''}${rule.add.has(row.id) ? `; ${existingServers.twoServers(row.label, rule.add.get(row.id)!)}` : ''}`;
             items.push({ group: group, label: `${row.label}${tags.length ? ` (${tags.join('; ')})` : ''}`, description: `${have.length ? `adds this project's own copy; ${keep} - ${row.summary}` : row.summary}${warn}` });
         }
     return packed(items, { id: 'pick', question: 'which tools do you want to install?', none: 'install nothing' });

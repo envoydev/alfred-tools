@@ -6,6 +6,7 @@ import { HELPER_VERSION } from '../copied/mcp-headers.js';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import { homeDir } from '../core/account.ts';
 import * as fixLib from '../fix/fix.ts';
+import { isManaged } from '../fix/common.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { ShippedKind } from '../roots/types.ts';
 import type { Finding } from '../fix/types.ts';
@@ -19,12 +20,12 @@ export function helperOffers(context: UpdateCtx, out: UpdateCheck): void
 {
     const pathApi = pathFor(context.inventory.os);
     const rootContext = { project: context.project, home: homeDir(context.env), platform: context.inventory.os, catalog: context.catalog };
-    const dirs = new Set((['project', 'global'] as const).map((family) => context.inventory.roots && context.inventory.roots[family] && context.inventory.roots[family].path).filter(Boolean) as string[]);
+    const dirs = new Set(roots.FAMILIES.map((family) => context.inventory.roots && context.inventory.roots[family] && context.inventory.roots[family].path).filter(Boolean) as string[]);
     const bridgeDirs = new Set<string>();
     const contextDirs = new Set<string>();
     for (const registration of context.inventory.registrations || [])
     {
-        if (!registration.rowId || registration.own || registration.alfredRetired || registration.choice === 'own' || registration.scope === 'inherited') continue;
+        if (!registration.rowId || !isManaged(registration) || registration.scope === 'inherited') continue;
         // serena's context file (0.5.0, D7), where the entry names this plugin's
         const at = contextArgAt(registration.entry);
         if (at >= 0) contextDirs.add(pathApi.dirname(roots.absOf(registration.entry.args![at], rootContext)));
@@ -64,8 +65,8 @@ export function upgradeOffers(context: UpdateCtx, out: UpdateCheck): void
 {
     const catalog = upgradeCatalog(context.catalog);
     if (!catalog.fixes.length) return;
-    const fctx = fixLib.makeCtx({ inventory: context.inventory, catalog, env: context.env, machine: context.machine, data: context.data });
-    for (const finding of fixLib.detectAll(fctx).found)
+    const fixContext = fixLib.makeCtx({ inventory: context.inventory, catalog, env: context.env, machine: context.machine, data: context.data });
+    for (const finding of fixLib.detectAll(fixContext).found)
     {
         // an uninstall the user turned down is theirs to keep: no offer, no note, nothing waiting (spec D9)
         if (finding.declined) continue;

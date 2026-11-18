@@ -1,7 +1,7 @@
 // The Windows command line a runtime or client is started with: argument quoting for cmd.exe, shared by every script that
 // spawns something through the shell (claude-cli.ts, fetch, sign-in).
 import path from 'node:path';
-import { CMD_PROGRAM_PATTERN, CMD_RUN_FLAG_PATTERN, DEFAULT_PATHEXT, PATH_LIST_SEPARATOR, PATH_SEPARATOR_PATTERN, SHIM_FILE_PATTERN, SHIM_NAME_PATTERN } from './cmd-line-constants.ts';
+import { CMD_META_PATTERN, CMD_PROGRAM_PATTERN, CMD_RUN_FLAG_PATTERN, DEFAULT_PATHEXT, PATH_LIST_SEPARATOR, PATH_SEPARATOR_PATTERN, QUOTED_PATH_ENTRY_PATTERN, SHIM_FILE_PATTERN, SHIM_NAME_PATTERN } from './constants.ts';
 
 // One argument as the Windows argv rules read it - the node npm's claude.cmd starts parses its line this way: wrapped in
 // quotes, a run of backslashes before a quote doubled plus one for the quote, a run before the closing quote doubled,
@@ -23,15 +23,14 @@ export function argvQuote(arg: string): string
 // time through its `%*`, so each metacharacter is caret-escaped twice (cmdArg); a real .exe (`uvx`, `docker`) gets only the
 // first read, so one level (cmdArgOnce) - two would reach its argv as `^--help^`. This is cross-spawn's
 // `escapeArgument(arg, doubleEscapeMetaChars)`: double only for a shim (docs/sources.md).
-const META = /([()\][%!^"`<>&|;, *?])/g;
-export const cmdArgOnce = (arg: string): string => argvQuote(arg).replace(META, '^$1');
-export const cmdArg = (arg: string): string => cmdArgOnce(arg).replace(META, '^$1');
+export const cmdArgOnce = (arg: string): string => argvQuote(arg).replace(CMD_META_PATTERN, '^$1');
+export const cmdArg = (arg: string): string => cmdArgOnce(arg).replace(CMD_META_PATTERN, '^$1');
 
 // An environment variable as a Windows environment block has it: the name in any case, and the last of the keys that match.
 function envValue(env: Record<string, string | undefined>, name: string): string | undefined
 {
-    const matching = Object.keys(env).filter((key) => key.toUpperCase() === name);
-    return matching.length ? env[matching[matching.length - 1]!] : undefined;
+    const last = Object.keys(env).filter((key) => key.toUpperCase() === name).at(-1);
+    return last === undefined ? undefined : env[last];
 }
 
 // The file a command name runs on Windows, as cmd.exe finds it: a name with a path or an extension is looked up as written
@@ -46,7 +45,7 @@ export function resolveOnPath(name: string, env: Record<string, string | undefin
     if ((hasPath || hasExtension) && exists(asWritten)) return asWritten;
     if (hasPath) return null;
     const extensions = [...(hasExtension ? [''] : []), ...(envValue(env, 'PATHEXT') || DEFAULT_PATHEXT).split(PATH_LIST_SEPARATOR).filter(Boolean)];
-    const directories = [...(cwd === undefined ? [] : [cwd]), ...(envValue(env, 'PATH') ?? '').split(PATH_LIST_SEPARATOR).map((directory) => directory.replace(/^"(.*)"$/, '$1')).filter(Boolean)];
+    const directories = [...(cwd === undefined ? [] : [cwd]), ...(envValue(env, 'PATH') ?? '').split(PATH_LIST_SEPARATOR).map((directory) => directory.replace(QUOTED_PATH_ENTRY_PATTERN, '$1')).filter(Boolean)];
     for (const directory of directories)
     {
         for (const extension of extensions)

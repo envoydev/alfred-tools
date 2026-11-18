@@ -21,6 +21,7 @@ import { ensureCommonjs } from '../apply/file-steps.ts';
 import * as fixLib from '../fix/fix.ts';
 import { plan } from '../plan/plan.ts';
 import * as declines from '../core/declines.ts';
+import { PREFIX } from '../core/tmpdir.ts';
 import type { Declined } from '../core/types.ts';
 import type { InvList } from '../inventory/types.ts';
 import type { Log } from '../apply/types.ts';
@@ -114,8 +115,8 @@ function updateHelper(offer: FileOffer, log: Log): boolean
 function updateUpgrade(context: UpdateCtx, offer: UpgradeOffer, dir: string, log: Log): boolean
 {
     const projectInventory = inventory.buildInventory({ project: context.project, env: context.env, run: context.runCli, data: context.data, catalog: context.catalog });
-    const fctx = fixLib.makeCtx({ inventory: projectInventory, catalog: upgradeCatalog(context.catalog), env: context.env, machine: context.machine, data: context.data });
-    const result = fixLib.applyFixes(fctx, [offer.fix], { only: offer.name, name: offer.name, scope: offer.scope || undefined, tmp: dir, log, runCli: context.runCli, fetchFile: false, quietRecheck: true });
+    const fixContext = fixLib.makeCtx({ inventory: projectInventory, catalog: upgradeCatalog(context.catalog), env: context.env, machine: context.machine, data: context.data });
+    const result = fixLib.applyFixes(fixContext, [offer.fix], { only: offer.name, name: offer.name, scope: offer.scope || undefined, tmp: dir, log, runCli: context.runCli, fetchFile: false, quietRecheck: true });
     if (result.fetch && result.fetch.fetch.length) context.fetches!.push(result.fetch);
     for (const finding of result.applied.filter((candidate) => candidate.kind === 'registration')) { context.restart = true; context.touched!.add(`${finding.name}~${finding.scope}`); }
     // a plugin taken out leaves the session's plugins as they were until it reloads
@@ -181,7 +182,7 @@ export function applyUpdates(context: UpdateCtx, ids: string[], out: UpdateCheck
     // the new ways to pass data first - list-import, a registration's, then a file's or folder's - and the pins after
     // them (updateUpgrade)
     const chosen = ordered(picked, context.catalog);
-    const dir = tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'alfred-tools-'));
+    const dir = tmp || fs.mkdtempSync(path.join(os.tmpdir(), PREFIX));
     result.dir = dir;
     context.fetches = [];
     context.restart = false;

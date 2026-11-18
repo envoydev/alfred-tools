@@ -3,7 +3,6 @@
 // `catch { return {} }` reader turns into 'the file is empty'. One leading BOM is stripped; anything else wrong with the
 // text - a BOM plus garbage included - still throws, so it still counts as unreadable.
 // Ported from alfred-code scripts/install/json-file.js; blockingStdio is alfred-code stack/hooks/hook-prelude.js's.
-import fs from 'node:fs';
 import type { HandleOf } from './types.ts';
 
 export const stripBom = (text: string): string => (typeof text === 'string' && text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text);
@@ -11,15 +10,16 @@ export const stripBom = (text: string): string => (typeof text === 'string' && t
 // JSON.parse of text that may start with a BOM; throws on anything unparseable.
 export const parseJson = (text: string): unknown => JSON.parse(stripBom(text));
 
-// The file's parsed value, or `{}` when it is absent or unreadable.
-export const readJson = (file: string): unknown => { try { return parseJson(fs.readFileSync(file, 'utf8')); } catch { return {}; } };
-
 // A pipe closed early must not truncate the last lines of a script's output: make stdout and stderr blocking.
 export function blockingStdio(streams: NodeJS.WriteStream[] = [process.stdout, process.stderr]): void
 {
     for (const stream of streams)
     {
-        try { if (stream && (stream as unknown as HandleOf)._handle && typeof (stream as unknown as HandleOf)._handle!.setBlocking === 'function') (stream as unknown as HandleOf)._handle!.setBlocking!(true); }
+        try
+        {
+            const handle = stream ? (stream as unknown as HandleOf)._handle : null;
+            if (handle && typeof handle.setBlocking === 'function') handle.setBlocking(true);
+        }
         catch { /* a stream that cannot block keeps Node's default */ }
     }
 }
