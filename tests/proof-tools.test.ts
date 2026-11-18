@@ -115,9 +115,9 @@ test('every answers fixture plans cleanly', async () =>
     {
         const env = ctx.env;
         const run = (name: string, argv: string[]) => golden.runEntry(golden.TREE, name, argv, { cwd: ctx.w.project, env });
-        const inv = path.join(ctx.tmp, 'inventory.json');
-        // plan.ts writes --out only in a folder tmpdir.ts made, in the world's own temp folder
+                // inventory.ts --json and plan.ts --out write only in a folder tmpdir.ts made, here the world's own temp folder
         const outDir = fs.mkdtempSync(path.join(fs.realpathSync(env['TMPDIR']!), 'alfred-tools-'));
+        const inv = path.join(outDir, 'inventory.json');
         const planOf = async (file: string) =>
         {
             assert.strictEqual((await run('inventory', ['--json', inv, '--data', ctx.data])).code, 0);

@@ -1,10 +1,8 @@
 // The plan command: reads its files and flags, prints the plan or the questions, and writes the plan file. The three
 // modes that write the walk's files (--record, --rewind, --skip) are record-modes.ts.
 import fs from 'node:fs';
-import path from 'node:path';
 import { blockingStdio } from '../core/json-file.ts';
-import { isOurTempDir } from '../core/tmpdir.ts';
-import { writeJsonNoFollow } from '../core/temp-write.ts';
+import { checkedTarget, writeJsonNoFollow } from '../core/temp-write.ts';
 import { plan } from './plan.ts';
 import { renderPlan } from './render.ts';
 import * as existing from '../inventory/existing.ts';
@@ -64,7 +62,8 @@ export function runPlanCommand(argv: string[]): number
     if (args.error) { console.error(`plan.ts: ${args.error}\n${USAGE}`); return 2; }
     if (args.mode === 'record' || args.mode === 'rewind' || args.mode === 'skip') return runRecordMode(args);
     // the pre-approved call writes only in the run's temp folder, as the record modes do
-    if (args.out && !isOurTempDir(path.dirname(args.out))) { console.error(`plan.ts: ${REFUSAL.outFolder}`); return EXIT_CODE.refused; }
+    const outFile = args.out ? checkedTarget(args.out) : undefined;
+    if (outFile === null) { console.error(`plan.ts: ${REFUSAL.outFolder}`); return EXIT_CODE.refused; }
     const [invFile, second] = args.files;
     if (!invFile || (args.mode === 'plan' && !second)) { console.error(USAGE); return 2; }
     const inventory = read(invFile) as Inventory;
@@ -77,7 +76,7 @@ export function runPlanCommand(argv: string[]): number
         return 0;
     }
     const madePlan = plan(inventory, read(second!) as Answers, { env: process.env, connectors: args.connectors !== null ? existing.parseConnectors(args.connectors) : null });
-    if (args.out) writeJsonNoFollow(args.out, madePlan);
+    if (outFile) writeJsonNoFollow(outFile, madePlan);
     console.log(renderPlan(madePlan));
     return madePlan.errors.length ? 1 : 0;
 }

@@ -348,3 +348,38 @@ test('--out replaces a link planted at the file or its .tmp name instead of writ
     assert.ok(!fs.lstatSync(target).isSymbolicLink());
     assert.ok(Array.isArray((w.read(target) as { steps: unknown[] }).steps));
 });
+
+test('--out and the record files resolve through the checked folder, so <dir>/<link>/../x lands nowhere outside it', (t) => {
+    const w = work(t, I, {}, { picks: { gitlab: {} } });
+    const elsewhere = makeTempDir();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'outside-'));
+    t.after(() => { fs.rmSync(elsewhere, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); });
+    // path.join would collapse the `..` by text: the call must get it as typed
+    const through = (link: string, name: string) => `${path.join(w.dir, link)}${path.sep}..${path.sep}${name}`;
+    fs.mkdirSync(path.join(outside, 'sub'));
+    fs.mkdirSync(path.join(elsewhere, 'sub'));
+    fs.symlinkSync(path.join(outside, 'sub'), path.join(w.dir, 'to-outside'));
+    fs.symlinkSync(path.join(elsewhere, 'sub'), path.join(w.dir, 'to-ours'));
+    // the folder the text names is outside every tmpdir.ts folder: refused, nothing written
+    const refused = w.run(w.inventory, w.answers, '--out', through('to-outside', 'victim.json'));
+    assert.strictEqual(refused.status, 2, refused.stderr);
+    assert.deepStrictEqual(fs.readdirSync(outside), ['sub']);
+    // the folder it names is another of ours: written there, the folder that was checked
+    const written = w.run(w.inventory, w.answers, '--out', through('to-ours', 'planned.json'));
+    assert.strictEqual(written.status, 0, written.stderr);
+    assert.ok(fs.existsSync(path.join(elsewhere, 'planned.json')));
+    assert.ok(!fs.existsSync(path.join(w.dir, 'planned.json')));
+    // a record file through the same link is refused the same way
+    const record = w.run('--skip', through('to-outside', 'inventory.json'), w.picks, w.answers, 'gitlab');
+    assert.strictEqual(record.status, 2, record.stderr);
+});
+
+test('--out with no file name (a folder, ..) is refused with exit 2, not a crash', (t) => {
+    const w = work(t, I, {}, { picks: { gitlab: {} } });
+    for (const out of [`${w.dir}${path.sep}..`, `${w.dir}${path.sep}.`, w.dir])
+    {
+        const refused = w.run(w.inventory, w.answers, '--out', out);
+        assert.strictEqual(refused.status, 2, `${out}: ${refused.stderr}`);
+        assert.match(refused.stderr, /^plan\.ts: --out/);
+    }
+});

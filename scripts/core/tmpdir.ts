@@ -13,14 +13,16 @@ import path from 'node:path';
 
 export const PREFIX = 'alfred-tools-';
 const MAX_AGE_MS = 24 * 3600 * 1000;
-const tempRoot = (): string => fs.realpathSync(os.tmpdir());
+// the native form: the OS follows a link before a `..`, where Node's own realpath collapses the `..` by text first
+export const realPathOf = (target: string): string => fs.realpathSync.native(target);
+const tempRoot = (): string => realPathOf(os.tmpdir());
 
 // true for a folder this plugin made: its real parent is the real temp folder and its name starts alfred-tools-
 export function isOurTempDir(dir: string): boolean
 {
     try
     {
-        const real = fs.realpathSync(dir);
+        const real = realPathOf(dir);
         return path.dirname(real) === tempRoot() && path.basename(real).startsWith(PREFIX) && fs.statSync(real).isDirectory();
     }
     catch { return false; }
@@ -31,7 +33,7 @@ export function releaseTempDir(dir: string | null | undefined, log: (line: strin
 {
     if (!dir) return false;
     if (!isOurTempDir(dir)) { log(`${dir} left as it is: not a folder alfred-tools made in the temp folder`); return false; }
-    fs.rmSync(fs.realpathSync(dir), { recursive: true, force: true });
+    fs.rmSync(realPathOf(dir), { recursive: true, force: true });
     return true;
 }
 

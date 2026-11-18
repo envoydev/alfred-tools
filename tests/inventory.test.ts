@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { world, writeJson, accountKey } from './helpers.ts';
+import { makeTempDir } from '../scripts/core/tmpdir.ts';
 import * as inv from '../scripts/inventory/inventory.ts';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import * as account from '../scripts/core/account.ts';
@@ -288,10 +289,11 @@ test('the inventory reads only: no write call reaches the CLI and no server star
 
 test('the CLI form writes the JSON file and prints one line; a missing claude stops with one line', () => {
     const w = world();
+    const tmp = makeTempDir();
     try
     {
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { a: SERENA, b: { command: 'node' } } });
-        const out = path.join(w.dir, 'inv.json');
+        const out = path.join(tmp, 'inv.json');
         const r = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'inventory.ts'), '--project', w.project, '--json', out], { encoding: 'utf8', env: w.env });
         assert.strictEqual(r.status, 0, r.stderr);
         assert.match(r.stdout, /inventory: 2 registrations \(1 match a catalog row, 1 are your own\), 0 plugins/);
@@ -305,11 +307,12 @@ test('the CLI form writes the JSON file and prints one line; a missing claude st
         assert.match(r2.stderr, /the claude CLI is not on PATH/);
         assert.strictEqual(r2.stderr.trim().split('\n').length, 1);
     }
-    finally { w.clean(); }
+    finally { w.clean(); fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
 test('the CLI form writes every credential value as the marker; nothing it prints holds one', () => {
     const w = world();
+    const tmp = makeTempDir();
     try
     {
         const token = `sntryu_${crypto.randomBytes(16).toString('hex')}`;
@@ -319,7 +322,7 @@ test('the CLI form writes every credential value as the marker; nothing it print
             mine: { command: 'node', args: ['srv.js'], env: { API_KEY: key, MODE: 'x' } },
         } });
         const script = path.join(import.meta.dirname, '..', 'scripts', 'inventory.ts');
-        const out = path.join(w.dir, 'inv.json');
+        const out = path.join(tmp, 'inv.json');
         const r = spawnSync(process.execPath, [script, '--project', w.project, '--json', out], { encoding: 'utf8', env: w.env });
         assert.strictEqual(r.status, 0, r.stderr);
         const printed = spawnSync(process.execPath, [script, '--project', w.project], { encoding: 'utf8', env: w.env });
@@ -331,7 +334,7 @@ test('the CLI form writes every credential value as the marker; nothing it print
         assert.strictEqual(sentry.rowId, 'sentry', 'still matched by what it launches');
         assert.deepStrictEqual(regs.find((x: { name: string }) => x.name === 'mine').entry.env, { API_KEY: MARKER, MODE: 'x' });
     }
-    finally { w.clean(); }
+    finally { w.clean(); fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
 // ---- inherited servers: the .mcp.json files above the project, as Claude Code reads them (docs/sources.md, '.mcp.json
@@ -566,6 +569,7 @@ test('windowsMcpServers: one plugin id installed at two scopes is one server, at
 
 test('the inventory reads trust and the roots map from --data', () => {
     const w = world();
+    const tmp = makeTempDir();
     try
     {
         const data = path.join(w.dir, 'data');
@@ -584,13 +588,13 @@ test('the inventory reads trust and the roots map from --data', () => {
         writeJson(account.accountFile(w.env), { projects: { [accountKey(w.project)]: { hasTrustDialogAccepted: false } } });
         assert.strictEqual(build(w, { data }).trusted, false);
         // the CLI passes --data through
-        const out = path.join(w.dir, 'inv.json');
+        const out = path.join(tmp, 'inv.json');
         const r = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'inventory.ts'), '--project', w.project, '--json', out, '--data', data], { encoding: 'utf8', env: w.env });
         assert.strictEqual(r.status, 0, r.stderr);
         const file = JSON.parse(fs.readFileSync(out, 'utf8'));
         assert.deepStrictEqual([file.trusted, file.roots.project], [false, { path: named, from: 'map' }]);
     }
-    finally { w.clean(); }
+    finally { w.clean(); fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
 test("the inventory reads each enabled plugin's MCP servers, matched to a row, and the kept file masks them", () => {
@@ -675,4 +679,34 @@ test('inv.workspace is alfred-code\'s workspace as read, and no workspace withou
         assert.deepStrictEqual([i.workspace!.root, i.workspace!.members], [path.resolve(w.project), [path.join(path.resolve(w.project), 'a')]]);
     }
     finally { w.clean(); }
+});
+
+test('--json outside a folder tmpdir.ts made is refused with exit 2 and writes nothing', () => {
+    const w = world();
+    const tmp = makeTempDir();
+    try
+    {
+        const script = path.join(import.meta.dirname, '..', 'scripts', 'inventory.ts');
+        const target = path.join(w.dir, 'inv.json');
+        const refused = spawnSync(process.execPath, [script, '--project', w.project, '--json', target], { encoding: 'utf8', env: w.env });
+        assert.strictEqual(refused.status, 2, refused.stderr);
+        assert.match(refused.stderr, /^alfred-tools: --json/);
+        assert.ok(!fs.existsSync(target));
+        // a link planted at the file or its .tmp name is replaced, never written through
+        const victim = path.join(w.dir, 'victim.txt');
+        fs.writeFileSync(victim, 'untouched');
+        fs.symlinkSync(victim, path.join(tmp, 'inv.json'));
+        fs.symlinkSync(victim, path.join(tmp, 'inv.json.tmp'));
+        const made = spawnSync(process.execPath, [script, '--project', w.project, '--json', path.join(tmp, 'inv.json')], { encoding: 'utf8', env: w.env });
+        assert.strictEqual(made.status, 0, made.stderr);
+        assert.strictEqual(fs.readFileSync(victim, 'utf8'), 'untouched');
+        assert.ok(!fs.lstatSync(path.join(tmp, 'inv.json')).isSymbolicLink());
+        // <tmp>/<link to outside>/../x.json is refused, not written through the link
+        fs.mkdirSync(path.join(w.dir, 'sub'));
+        fs.symlinkSync(path.join(w.dir, 'sub'), path.join(tmp, 'to-outside'));
+        const through = spawnSync(process.execPath, [script, '--project', w.project, '--json', `${path.join(tmp, 'to-outside')}${path.sep}..${path.sep}x.json`], { encoding: 'utf8', env: w.env });
+        assert.strictEqual(through.status, 2, through.stderr);
+        assert.ok(!fs.existsSync(path.join(w.dir, 'x.json')));
+    }
+    finally { w.clean(); fs.rmSync(tmp, { recursive: true, force: true }); }
 });

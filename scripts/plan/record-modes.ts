@@ -4,8 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as catalogLib from '../catalog/catalog.ts';
-import { isOurTempDir } from '../core/tmpdir.ts';
-import { writeJsonNoFollow } from '../core/temp-write.ts';
+import { checkedTarget, writeJsonNoFollow } from '../core/temp-write.ts';
 import { parseJson } from '../core/json-file.ts';
 import { rewindQuestion } from './asks-other.ts';
 import { SCOPE_LABEL } from './asks-keys.ts';
@@ -18,10 +17,13 @@ import type { Answers, FileRead, Picks, PlanArgs, RecordResult, StepFile, WalkOu
 
 const refuse = (line: string): number => { console.error(`plan.ts: ${line}`); return EXIT_CODE.refused; };
 
-function sitInOneTempFolder(files: string[]): boolean
+// Each file as a path inside its checked folder, all in the one folder; null when any is not
+function sitInOneTempFolder(files: string[]): string[] | null
 {
-    const folders = files.map((file) => path.dirname(file));
-    return folders.every(isOurTempDir) && new Set(folders.map((folder) => fs.realpathSync(folder))).size === 1;
+    const targets = files.map(checkedTarget);
+    if (targets.some((target) => target === null)) return null;
+    const resolved = targets as string[];
+    return new Set(resolved.map((target) => path.dirname(target))).size === 1 ? resolved : null;
 }
 
 // A file that holds one JSON object. A missing file is `{}` when `optional`, else a refusal.
@@ -87,8 +89,9 @@ function skipTarget(inventory: Inventory, picks: Picks, answers: Answers, args: 
 
 export function runRecordMode(args: PlanArgs): number
 {
-    const [inventoryFile, picksFile, answersFile, stepFile] = args.files as [string, string, string, string?];
-    if (!sitInOneTempFolder(args.files)) return refuse(REFUSAL.folder);
+    const sitting = sitInOneTempFolder(args.files);
+    if (sitting === null) return refuse(REFUSAL.folder);
+    const [inventoryFile, picksFile, answersFile, stepFile] = sitting as [string, string, string, string?];
     const inventoryRead = readObject(inventoryFile);
     if ('refused' in inventoryRead) return refuse(inventoryRead.refused);
     const picksRead = readObject(picksFile);
