@@ -27,6 +27,7 @@ import { spawn, spawnSync, spawnSync as spawnx } from 'node:child_process';
 import { once } from 'node:events';
 import { fill, SHAPES } from '../scripts/hud/hud-statusline.ts';
 import * as rootsLib from '../scripts/roots/roots.ts';
+import { writeMinimalConfig } from '../scripts/apply/serena-config.ts';
 import { HELPER_VERSION as HV } from '../scripts/copied/mcp-headers.js';
 import { expandedText } from '../scripts/apply/fetch.ts';
 import { PARENT_HELPER_IN_CHILD } from '../scripts/plan/asks-keys.ts';
@@ -123,8 +124,9 @@ test('a fresh entry from the catalog is clean on every OS - no detector fires on
             assert.deepStrictEqual(m, { rowId: r.id, route: 'local' }, `${r.id} on ${platform} is recognised`);
             const found = detect(ctxFor({ platform, arch, registrations: [reg(r.id, entry, { route: 'local' })] })).found;
             // appium's SDK paths are looked up on the machine by this very fix: with none on it, the finding is blocked
-            assert.deepStrictEqual(found.filter((f) => f.id !== 'appium-sdk-env'), [], `${r.id} on ${platform}/${arch}`);
-            for (const f of found) assert.ok(f.blocked, `${r.id}: ${f.id} should be blocked with nothing on the machine`);
+            // serena-project-folder: the fixture has no disk, and the install writes serena_config.yml before serena starts
+            assert.deepStrictEqual(found.filter((f) => f.id !== 'appium-sdk-env' && f.id !== 'serena-project-folder'), [], `${r.id} on ${platform}/${arch}`);
+            for (const f of found.filter((candidate) => candidate.id !== 'serena-project-folder')) assert.ok(f.blocked, `${r.id}: ${f.id} should be blocked with nothing on the machine`);
         }
     }
 });
@@ -202,9 +204,10 @@ test('uvx-python: a uvx server with no --python gets the row\'s minor first, its
     assert.deepStrictEqual(out.args!.slice(2), bare.args, 'everything the user had follows, in order');
     assert.ok(out.args!.includes('serena-agent@2.0.0'), 'the pin is not moved to the catalog\'s');
     // present: nothing; the other forms of the flag count
-    assert.deepStrictEqual(detect(ctxFor({ registrations: [reg('serena', entry)] })).found, []);
-    assert.deepStrictEqual(detect(ctxFor({ registrations: [reg('serena', { ...bare, args: ['--python=3.12', ...bare.args] })] })).found, []);
-    assert.deepStrictEqual(detect(ctxFor({ registrations: [reg('serena', { ...bare, args: ['-p', '3.12', ...bare.args] })] })).found, []);
+    const foundIds = (registrations: ReturnType<typeof reg>[]) => ids(detect(ctxFor({ registrations })).found).filter((id) => id !== 'serena-project-folder');
+    assert.deepStrictEqual(foundIds([reg('serena', entry)]), []);
+    assert.deepStrictEqual(foundIds([reg('serena', { ...bare, args: ['--python=3.12', ...bare.args] })]), []);
+    assert.deepStrictEqual(foundIds([reg('serena', { ...bare, args: ['-p', '3.12', ...bare.args] })]), []);
     // on Windows ARM64 the request is the x64 build
     const arm = ctxFor({ platform: 'win32', arch: 'arm64', registrations: [reg('memory', { command: 'uvx', args: ['--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: {} })] });
     assert.strictEqual(detect(arm).found.find((f) => f.id === 'uvx-python')!.proposal!.python, 'cpython-3.13-windows-x86_64-none');
@@ -328,12 +331,13 @@ test('serena-telemetry: an absent variable is set to false; a value the user cho
     const entry = fresh('serena');
     const stripped = { ...entry, env: { SERENA_HOME: entry.env!.SERENA_HOME } } as ServerEntry;
     const ctx = ctxFor({ registrations: [reg('serena', stripped)] });
-    const [f] = detect(ctx).found as [Finding];
+    const [f] = detect(ctx).found.filter((candidate) => candidate.id !== 'serena-project-folder') as [Finding];
     assert.strictEqual(f.id, 'serena-telemetry');
     assert.deepStrictEqual(F.serenaTelemetryFix(stripped).env, { SERENA_HOME: entry.env!.SERENA_HOME, SERENA_USAGE_REPORTING: 'false' });
-    assert.deepStrictEqual(detect(ctxFor({ registrations: [reg('serena', entry)] })).found, []);
+    const foundIds = (registration: ServerEntry) => ids(detect(ctxFor({ registrations: [reg('serena', registration)] })).found).filter((id) => id !== 'serena-project-folder');
+    assert.deepStrictEqual(foundIds(entry), []);
     const optedIn = { ...entry, env: { ...entry.env, SERENA_USAGE_REPORTING: 'true' } };
-    assert.deepStrictEqual(detect(ctxFor({ registrations: [reg('serena', optedIn)] })).found, []);
+    assert.deepStrictEqual(foundIds(optedIn), []);
     // an entry with no env at all
     const bare = { command: 'uvx', args: entry.args };
     assert.deepStrictEqual(F.serenaTelemetryFix(bare).env, { SERENA_USAGE_REPORTING: 'false' });
@@ -626,7 +630,7 @@ test('fix detectors never return an inherited registration (data-folder-ignore, 
 {
     const entry = fresh('serena');
     const stripped = { ...entry, env: { SERENA_HOME: entry.env!.SERENA_HOME } } as ServerEntry;
-    assert.deepStrictEqual(ids(detect(ctxFor({ registrations: [reg('serena', stripped)] })).found), ['serena-telemetry'], 'the same entry at local scope has a finding');
+    assert.deepStrictEqual(ids(detect(ctxFor({ registrations: [reg('serena', stripped)] })).found), ['serena-telemetry', 'serena-project-folder'], 'the same entry at local scope has findings');
     assert.deepStrictEqual(detect(ctxFor({ registrations: [reg('serena', stripped, { scope: 'inherited' })] })).found, []);
 });
 
@@ -635,13 +639,13 @@ test('--only narrows by fix id, tool or registration name; the table names the h
     const entry = fresh('serena');
     const stripped = { command: 'uvx', args: entry.args!.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python'), env: { SERENA_HOME: entry.env!.SERENA_HOME! } };
     const ctx = ctxFor({ registrations: [reg('serena', stripped), reg('memory', { command: 'uvx', args: ['--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'] })] });
-    assert.deepStrictEqual(ids(detect(ctx).found).sort(), ['serena-telemetry', 'uvx-python', 'uvx-python']);
-    assert.strictEqual(detect(ctx, 'serena').found.length, 2);
+    assert.deepStrictEqual(ids(detect(ctx).found).sort(), ['serena-project-folder', 'serena-telemetry', 'uvx-python', 'uvx-python']);
+    assert.strictEqual(detect(ctx, 'serena').found.length, 2, 'a file finding is named for its file, so only the two on the registration');
     assert.strictEqual(detect(ctx, 'memory').found.length, 1);
     assert.strictEqual(detect(ctx, 'serena-telemetry').found.length, 1);
     assert.deepStrictEqual(detect(ctx, 'nope').found, []);
     const text = renderFixes(detect(ctx));
-    assert.match(text, /Known problems found \(3\):/);
+    assert.match(text, /Known problems found \(4\):/);
     assert.match(text, /uvx-python +serena \(local\) +no --python/);
     assert.match(renderFixes(detect(ctxFor({ platform: 'win32' }))), /^No known problem found\.\n\nHeld, not checked: serena-windows-ts-shim - left out by the user's ruling/);
 });
@@ -688,6 +692,7 @@ test('apply: two fixes on one registration are ONE replace, from the entry as re
         // context file in the global root, as the install leaves it
         const entry = fresh('serena', process.platform, process.arch, 'user', { project: w.project, home: w.home });
         put(path.join(w.home, '.alfred-tools', 'serena', 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
+        leaveConfig(path.join(w.home, '.alfred-tools', 'serena'));
         const theirs = {
             command: 'uvx',
             args: entry.args!.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python').map((a) => (a === 'serena-agent@2.1.0' ? 'serena-agent@2.0.0' : a)).concat(['--verbose']),
@@ -969,6 +974,7 @@ const ctxData = (w: World, data: string) => makeCtx({ inventory: inventory.build
 const logged = () => { const lines: string[] = []; return { lines, log: (...a: string[]) => lines.push(a.join(' ')), text: () => lines.join('\n') }; };
 const gitInit = (dir: string) => { fsx.mkdirSync(dir, { recursive: true }); assert.strictEqual(spawnx('git', ['init', '-q', dir]).status, 0); };
 const helperAt = (root: string, number: number | string, extra = '') => put(path.join(root, 'mcp-headers.js'), rootsLib.helperSource().replace(/^\/\/ alfred-tools mcp-headers \d+/, `// alfred-tools mcp-headers ${number}`) + extra);
+const leaveConfig = (home: string) => writeMinimalConfig(path.join(home, 'serena_config.yml'), home);
 const shownOf = (d: Detected) => `${renderFixes(d)}${JSON.stringify(d)}`;
 
 test('key-to-helper: a ${VAR} filled in the chain is moved to the helper under that name', () =>
@@ -1688,6 +1694,7 @@ test('the file pass runs after the registration pass, detects on what it wrote, 
         // uvx-python fires on it: no python request (its context file in place, as the install leaves it)
         const entry = fresh('serena', process.platform, process.arch, 'local', { project: w.project, home: w.home });
         put(path.join(w.project, '.alfred-tools', 'serena', 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
+        leaveConfig(path.join(w.project, '.alfred-tools', 'serena'));
         seed(w, 'serena', 'local', { ...entry, args: entry.args!.filter((a, i, all) => a !== '--python' && all[i - 1] !== '--python') });
         const l = logged();
         const res = applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
@@ -1924,7 +1931,7 @@ test('serena-base-modes: Apply all found runs the op and the finding is gone', (
         const l = logged();
         const res = applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
-        assert.strictEqual(fsx.readFileSync(cfg, 'utf8'), 'base_modes: []\nauth_secret: s3cr3t-fixture\n');
+        assert.match(fsx.readFileSync(cfg, 'utf8'), /^base_modes: \[\]\nauth_secret: s3cr3t-fixture\n(project_serena_folder_location: .*\n)?$/, 'the base modes line is the only one changed');
         assert.ok(!l.text().includes('s3cr3t'));
         assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-base-modes'), []);
         // an alfred-code 2.x home is never found
@@ -1932,6 +1939,50 @@ test('serena-base-modes: Apply all found runs the op and the finding is gone', (
         put(path.join(alfredHome, 'serena_config.yml'), 'base_modes:\n- editing\n');
         seed(w, 'serena2', 'project', { ...e, env: { ...e.env, SERENA_HOME: alfredHome } });
         assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-base-modes'), []);
+    }
+    finally { w.clean(); }
+});
+
+test('serena-project-folder finds a home without the key and names in-tree .serena folders', () =>
+{
+    const w = world();
+    try
+    {
+        const home = path.join(ptRoot(w), 'serena');
+        const e = SERENA_OLD(home);
+        e.args[e.args.indexOf('claude-code')] = path.join(home, 'serena-context.yml');
+        put(path.join(home, 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
+        seed(w, 'serena', 'local', e);
+        const proj = path.join(w.dir, 'repos', 'shop');
+        const clean = path.join(w.dir, 'repos', 'clean');
+        put(path.join(proj, '.serena', 'project.yml'), 'project_name: shop\n');
+        fsx.mkdirSync(clean, { recursive: true });
+        const cfg = path.join(home, 'serena_config.yml');
+        put(cfg, `projects:\n- ${proj}\n- ${clean}\nbase_modes: []\nauth_secret: s3cr3t-fixture\n`);
+        const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-project-folder');
+        assert.deepStrictEqual(found.map((f) => [f.name, f.kind]), [[cfg, 'file']]);
+        assert.ok(!shownOf(detectAll(ctxOf(w))).includes('s3cr3t'));
+        const l = logged();
+        const res = applyFixes(ctxOf(w), ['serena-project-folder'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.strictEqual(res.failed, null, l.text());
+        assert.strictEqual(fsx.readFileSync(cfg, 'utf8'), `projects:\n- ${proj}\n- ${clean}\nbase_modes: []\nauth_secret: s3cr3t-fixture\nproject_serena_folder_location: '${home}/projects/$projectFolderName'\n`);
+        assert.ok(l.text().includes(`serena keeps using ${proj}/.serena until it is moved to ${home}/projects/shop`), l.text());
+        assert.ok(!l.text().includes(`${clean}/.serena`), 'a project with no in-tree folder is not named');
+        assert.ok(!l.text().includes('s3cr3t'));
+        assert.ok(fsx.existsSync(path.join(proj, '.serena', 'project.yml')), 'nothing is moved or deleted');
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-project-folder'), []);
+        // a home with no config yet is found, and the fix writes the file
+        const bare = path.join(ptRoot(w), 'bare');
+        seed(w, 'serena2', 'project', { ...e, env: { ...e.env, SERENA_HOME: bare } });
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-project-folder').map((f) => f.name), [path.join(bare, 'serena_config.yml')]);
+        assert.strictEqual(applyFixes(ctxOf(w), ['serena-project-folder'], { tmp: path.join(w.dir, 'tmp2'), log: l.log }).failed, null, l.text());
+        assert.match(fsx.readFileSync(path.join(bare, 'serena_config.yml'), 'utf8'), /^projects: \[\]\nbase_modes: \[\]\nproject_serena_folder_location: /);
+        // an alfred-code 2.x home and a $ home are not found
+        const alfredHome = path.join(w.project, '.alfred', 'serena', 'home');
+        put(path.join(alfredHome, 'serena_config.yml'), 'base_modes: []\n');
+        seed(w, 'serena3', 'project', { ...e, env: { ...e.env, SERENA_HOME: alfredHome } });
+        seed(w, 'serena4', 'user', { ...e, env: { ...e.env, SERENA_HOME: path.join(w.dir, '$odd', 'serena') } });
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-project-folder'), []);
     }
     finally { w.clean(); }
 });

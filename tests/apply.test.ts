@@ -19,7 +19,7 @@ import { HELPER_VERSION as HV } from '../scripts/copied/mcp-headers.js';
 import { fetchStep } from '../scripts/entries/names.ts';
 import { BRIDGE_VERSION as BV } from '../scripts/copied/mcp-bridge.js';
 import { tmpdir } from 'node:os';
-import { rootIgnoreLines, rootIgnore, denyRead, listWrite } from '../scripts/apply/file-steps.ts';
+import { rootIgnoreLines, rootIgnore, denyRead, listWrite, serenaConfigInit } from '../scripts/apply/file-steps.ts';
 import { readList } from '../scripts/mcps-list/mcps-list.ts';
 import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
 import type { World } from './types.ts';
@@ -86,7 +86,7 @@ test('a fresh install writes through the CLI at each scope, and every add is rea
         // the slow half is handed to fetch.ts, never run here: no download and no `claude mcp get` inside the apply
         assert.ok(!w.calls().some((a) => a[0] === 'mcp' && a[1] === 'get'), 'apply asks the CLI for no status');
         assert.deepStrictEqual(w.fetches(), [], 'apply runs no runtime');
-        assert.match(r.text, /6\. later  serena: fetch serena-agent@/);
+        assert.match(r.text, /7\. later  serena: fetch serena-agent@/);
         // each root got its .gitignore first (R13): the project root for serena, the global root for playwright-chrome
         for (const root of [path.join(w.project, '.alfred-tools'), path.join(w.home, '.alfred-tools')]) assert.strictEqual(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), GITIGNORE, root);
         assert.match(r.text, /Fetch next, in the background \(a first download can take minutes\): .*fetch\.json/);
@@ -97,6 +97,9 @@ test('a fresh install writes through the CLI at each scope, and every add is rea
         // the data folders got a .gitignore holding *: local scope in the project root, user scope in the global root
         assert.strictEqual(fs.readFileSync(path.join(w.project, '.alfred-tools', 'serena', '.gitignore'), 'utf8'), '*\n');
         assert.strictEqual(fs.readFileSync(path.join(w.home, '.alfred-tools', 'playwright-chrome', '.gitignore'), 'utf8'), '*\n');
+        // serena's settings file is written before the registration, with its project folder key
+        const serenaHome = path.join(w.project, '.alfred-tools', 'serena');
+        assert.match(fs.readFileSync(path.join(serenaHome, 'serena_config.yml'), 'utf8'), /^projects: \[\]\nbase_modes: \[\]\nproject_serena_folder_location: '.*\/projects\/\$projectFolderName'\n$/);
         // the project's own .gitignore is never created or edited
         assert.ok(!fs.existsSync(path.join(w.project, '.gitignore')));
     }
@@ -1525,6 +1528,23 @@ test('write-serena-context writes an absent and a lower file, keeps a higher or 
         r = runSteps(w, [step]);
         assert.strictEqual(fs.readFileSync(dest, 'utf8'), newer);
         assert.ok(r.text.includes(`serena-context.yml in ${root} is newer than this plugin - update alfred-tools`), r.text);
+    }
+    finally { w.clean(); }
+});
+
+test('serena-config-init that cannot write says so and does not fail the apply', () => {
+    const w = world();
+    try
+    {
+        const blocker = path.join(w.dir, 'blocker');
+        fs.writeFileSync(blocker, 'a file where a folder should go');
+        const home = path.join(blocker, 'serena');
+        const result = serenaConfigInit(path.join(home, 'serena_config.yml'), home);
+        assert.strictEqual(result.ok, true);
+        assert.match(result.detail, /not written .* after serena's first start/);
+        const ok = serenaConfigInit(path.join(w.dir, 'h2', 'serena_config.yml'), path.join(w.dir, 'h2'));
+        assert.match(ok.detail, /wrote .*serena_config\.yml with project_serena_folder_location/);
+        assert.strictEqual(fs.readFileSync(path.join(w.dir, 'h2', '.gitignore'), 'utf8'), '*\n', 'a home this step creates is git-ignored');
     }
     finally { w.clean(); }
 });

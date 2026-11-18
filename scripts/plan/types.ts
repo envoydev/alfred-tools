@@ -246,6 +246,22 @@ export interface SerenaBaseModesStep
     shared?: unknown; // stored - do not rename
     why: string; // stored - do not rename
 }
+// serena's settings file for a home it has not started in: projects, base_modes and its project folder key
+export interface SerenaConfigInitStep
+{
+    op: 'serena-config-init'; // stored - do not rename
+    file: string; // stored - do not rename
+    home: string; // stored - do not rename
+    why: string; // stored - do not rename
+}
+// the project folder key set in a serena_config.yml that lacks it or holds another value
+export interface SerenaProjectFolderStep
+{
+    op: 'serena-project-folder'; // stored - do not rename
+    file: string; // stored - do not rename
+    home: string; // stored - do not rename
+    why: string; // stored - do not rename
+}
 export interface DenyReadStep
 {
     op: 'deny-read'; // stored - do not rename
@@ -261,7 +277,7 @@ export interface RecordRootStep
     root: string; // stored - do not rename
     why: string; // stored - do not rename
 }
-export type PlanStep = RegistrationStep | (FetchStep & { scope?: string }) | ListWriteStep | CursorWritePlanStep | PathStep | MoveRootFileStep | FileStep | RetireShippedStep | EnsureKeyNameStep | SerenaBaseModesStep | DenyReadStep | RecordRootStep | OrderStep;
+export type PlanStep = RegistrationStep | (FetchStep & { scope?: string }) | ListWriteStep | CursorWritePlanStep | PathStep | MoveRootFileStep | FileStep | RetireShippedStep | EnsureKeyNameStep | SerenaBaseModesStep | SerenaConfigInitStep | SerenaProjectFolderStep | DenyReadStep | RecordRootStep | OrderStep;
 
 // The lines a plan prints beside its steps.
 export interface KeyLine

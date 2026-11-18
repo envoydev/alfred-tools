@@ -265,6 +265,25 @@
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D7, F9"
     },
     {
+      "id": "serena-project-folder",
+      "upgrade": "0.6.0",
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "tool": [
+        "serena"
+      ],
+      "kind": "file",
+      "symptom": "a managed serena's <SERENA_HOME>/serena_config.yml does not set project_serena_folder_location, so serena keeps each project's .serena folder inside the project (not an alfred-code 2.x home)",
+      "detect": "serenaProjectFolderDetect",
+      "fix": null,
+      "steps": "serenaProjectFolderSteps",
+      "verifiedOn": "this build: tests/fix.test.ts serena-project-folder (2026-11-18)",
+      "source": "docs/superpowers/specs/2026-11-18-session-issues-design.md Part B"
+    },
+    {
       "id": "list-import",
       "upgrade": "0.5.0",
       "tool": [

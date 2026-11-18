@@ -21,7 +21,7 @@ import * as serenaConfig from '../apply/serena-config.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRow } from '../catalog/types.ts';
 import type { ListServer, OldRecord } from '../mcps-list/types.ts';
-import type { CursorWritePlanStep, ListWriteStep, McpAddStep, McpReplaceStep, PlannedServer, PlanStep, SerenaBaseModesStep } from '../plan/types.ts';
+import type { CursorWritePlanStep, ListWriteStep, McpAddStep, McpReplaceStep, PlannedServer, PlanStep, SerenaBaseModesStep, SerenaConfigInitStep, SerenaProjectFolderStep } from '../plan/types.ts';
 import type { DriftWhere, Finding, FixCtx } from './types.ts';
 
 const pathOf = (context: { platform: string }) => (context.platform === 'win32' ? path.win32 : path.posix);
@@ -126,6 +126,35 @@ export function serenaBaseModesDetect(context: FixCtx): Finding[]
 }
 
 export const serenaBaseModesSteps = (finding: Finding): SerenaBaseModesStep[] => [{ op: 'serena-base-modes', file: finding.file!, shared: finding.shared, why: `${finding.file}: base_modes: [], so serena's manual names only the tools it has` }];
+
+// serena-project-folder (0.6.0, Part B): a managed serena's home, other than an alfred-code 2.x one and one holding a $, whose
+// serena_config.yml lacks project_serena_folder_location or holds another value - or is not there yet. The steps write the
+// file when it is missing and set the key, and name each project that still keeps a .serena folder in its own tree.
+export function serenaProjectFolderDetect(context: FixCtx): Finding[]
+{
+    const out: Finding[] = [];
+    const seen = new Set<string>();
+    for (const registration of (context.inventory.registrations || []).filter((candidate) => candidate.rowId === 'serena' && !candidate.own && !candidate.alfredRetired && candidate.choice !== 'own' && candidate.scope !== 'inherited'))
+    {
+        const home = registration.entry && registration.entry.env && registration.entry.env.SERENA_HOME;
+        if (!home) continue;
+        const editable = serenaConfig.editableHome(home, { platform: context.platform });
+        const file = serenaConfig.configOf(home);
+        if (!editable.ok || 'error' in serenaConfig.folderValue(home) || seen.has(file)) continue;
+        seen.add(file);
+        if (serenaConfig.folderState(file, home) === 'same') continue;
+        out.push({ id: 'serena-project-folder', name: file, scope: null, file, path: home, shared: Boolean(editable.shared), found: `${file} does not set ${serenaConfig.FOLDER_KEY} - serena keeps each project's .serena folder inside the project`, ...(editable.shared ? { note: serenaConfig.planNote(registration.entry, { platform: context.platform }) } : {}) });
+    }
+    return out;
+}
+
+export const serenaProjectFolderSteps = (finding: Finding): (SerenaConfigInitStep | SerenaProjectFolderStep)[] =>
+{
+    const file = finding.file!;
+    const home = finding.path!;
+    const init: SerenaConfigInitStep[] = serenaConfig.folderState(file, home) === 'absent' && !fs.existsSync(file) ? [{ op: 'serena-config-init', file, home, why: `${file}: written with its project folders under ${home}/projects` }] : [];
+    return [...init, { op: 'serena-project-folder', file, home, why: `${file}: ${serenaConfig.FOLDER_KEY} under ${home}/projects, so serena keeps each project's .serena folder there` }];
+};
 
 // ---- client-drift and cursor-file (0.5.0, D9) -------------------------------------------------------------------------
 // A list entry whose copy in Claude Code or in Cursor was edited or removed by hand. Both sides are compared after

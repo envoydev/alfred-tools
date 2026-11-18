@@ -8,6 +8,7 @@ import * as roots from '../roots/roots.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { readRegistration, rowOf } from './cli-steps.ts';
+import { writeMinimalConfig } from './serena-config.ts';
 import { HELPER_VERSION } from '../copied/mcp-headers.js';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import type { ListServer, McpsList } from '../mcps-list/types.ts';
@@ -109,6 +110,25 @@ export function writeShipped(kind: ShippedKind, root: string): StepResult
     if (state === 'edited') return withPkg(`${file} changed since alfred-tools wrote it - left; /alfred-tools:fix rewrites it`);
     fs.writeFileSync(file, roots.shippedSource(kind));
     return withPkg(state === 'lower' ? `rewrote ${file} (${word} ${number} -> ${version()})` : `wrote ${file} (${word} ${version()})`);
+}
+// serena's settings file for a home it has not started in. A failure is a line, never a failed apply: serena's first start
+// writes its own file, and the fetch step sets the key after it.
+export function serenaConfigInit(file: string, home: string): StepResult
+{
+    try
+    {
+        // a home this step creates gets the .gitignore writeShipped gives one, so the file's auth_secret is never committed
+        if (!fs.existsSync(home))
+        {
+            fs.mkdirSync(home, { recursive: true });
+            fs.writeFileSync(path.join(home, '.gitignore'), '*\n');
+        }
+        return { ok: true, detail: writeMinimalConfig(file, home).detail };
+    }
+    catch (error)
+    {
+        return { ok: true, detail: `${file} not written (${error instanceof Error ? error.message : String(error)}) - the project folder key is set after serena's first start` };
+    }
 }
 export const writeHelper = (root: string): StepResult => writeShipped('helper', root);
 

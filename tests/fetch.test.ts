@@ -274,9 +274,39 @@ test('fetch empties base_modes after serena\'s first start', async () => {
             log: (...a) => lines.push(a.join(' ')),
         });
         assert.deepStrictEqual(res.started, ['serena']);
-        assert.strictEqual(fs.readFileSync(path.join(home, 'serena_config.yml'), 'utf8'), 'base_modes: []\nauth_secret: s3cr3t-fixture\n');
+        assert.strictEqual(fs.readFileSync(path.join(home, 'serena_config.yml'), 'utf8'), `base_modes: []\nauth_secret: s3cr3t-fixture\nproject_serena_folder_location: '${home}/projects/$projectFolderName'\n`);
         assert.ok(lines.some((l) => l.includes(`set base_modes: [] in ${path.join(home, 'serena_config.yml')}`)), lines.join('\n'));
         assert.ok(!lines.join('\n').includes('s3cr3t'));
+    }
+    finally { w.clean(); }
+});
+
+test('after serena\'s first start the folder key is checked', async () => {
+    const w = world();
+    try
+    {
+        const home = path.join(w.project, '.alfred-tools', 'serena');
+        const S = { command: 'uvx', args: [...UVX.args], env: { SERENA_HOME: home } };
+        writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { serena: S } });
+        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), fetchJob(w.project, [{ ...fetchStep('serena', S, 'serena')!, scope: 'project' }], []));
+        // the install wrote the minimal file; serena's first start saves its own without the key
+        fs.mkdirSync(home, { recursive: true });
+        fs.writeFileSync(path.join(home, 'serena_config.yml'), `projects: []\nbase_modes: []\nproject_serena_folder_location: '${home}/projects/$projectFolderName'\n`);
+        const lines: string[] = [];
+        await runFetchJob(JSON.parse(fs.readFileSync(file, 'utf8')), {
+            env: w.env,
+            runFetch: () => ({ status: 0 }),
+            start: async (entry) => { fs.writeFileSync(path.join(entry.env!.SERENA_HOME!, 'serena_config.yml'), 'projects: []\nauth_secret: s3cr3t-fixture\n'); return { ok: true, ms: 1 }; },
+            log: (...a) => lines.push(a.join(' ')),
+        });
+        const config = fs.readFileSync(path.join(home, 'serena_config.yml'), 'utf8');
+        assert.ok(config.includes(`project_serena_folder_location: '${home}/projects/$projectFolderName'`), config);
+        assert.ok(lines.some((l) => l.includes('dropped project_serena_folder_location') && l.includes(`serena: project folders set to ${home}/projects`)), lines.join('\n'));
+        assert.ok(!lines.join('\n').includes('s3cr3t'));
+        // a key serena kept is not announced again
+        const kept: string[] = [];
+        await runFetchJob(JSON.parse(fs.readFileSync(file, 'utf8')), { env: w.env, runFetch: () => ({ status: 0 }), start: async () => ({ ok: true, ms: 1 }), log: (...a) => kept.push(a.join(' ')) });
+        assert.ok(!kept.some((l) => l.includes('project folders set')), kept.join('\n'));
     }
     finally { w.clean(); }
 });

@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import { plan } from '../scripts/plan/plan.ts';
+import { serenaConfigInitStep } from '../scripts/plan/serena-init.ts';
 import { renderPlan, argvOf, reconnectLine } from '../scripts/plan/render.ts';
 import { makeCtx } from '../scripts/plan/context.ts';
 import { fileSteps } from '../scripts/plan/root-files.ts';
@@ -90,6 +91,31 @@ test('serena, fresh, per OS: python request, cut-off, telemetry off, home by the
     assert.strictEqual(s.entry.env!.SERENA_USAGE_REPORTING, 'false');
     assert.strictEqual(s.entry.env!.SERENA_HOME, '/work/shop/.alfred-tools/serena');
     assert.strictEqual(plan(inv(LINUX), pickOne('serena'), opts('/home/me')).steps.find((x) => x.op === 'mcp-add')!.entry.args![1], '3.13');
+});
+
+test('serena install inits its config before the registration', () => {
+    const p = plan(inv(MAC), pickOne('serena'), opts('/Users/me'));
+    assert.deepStrictEqual(p.errors, []);
+    const ops = p.steps.map((s) => s.op);
+    const init = p.steps.find((s) => s.op === 'serena-config-init');
+    assert.ok(init && init.op === 'serena-config-init');
+    assert.strictEqual(init.file, '/work/shop/.alfred-tools/serena/serena_config.yml');
+    assert.strictEqual(init.home, '/work/shop/.alfred-tools/serena');
+    assert.ok(ops.indexOf('serena-config-init') < ops.indexOf('mcp-add'), ops.join());
+    assert.ok(renderPlan(p).includes('writes /work/shop/.alfred-tools/serena/serena_config.yml'), renderPlan(p));
+    assert.ok(p.notes.some((n) => n.includes('project_serena_folder_location') && n.includes('/work/shop/.alfred-tools/serena/projects')), p.notes.join('\n'));
+    // a config already there is left to serena and the fix row
+    const there = plan(inv(MAC), pickOne('serena'), opts('/Users/me', { exists: (f) => f.endsWith('serena_config.yml') }));
+    assert.ok(!there.steps.some((s) => s.op === 'serena-config-init'));
+    // an alfred-code 2.x home and an entry with no home get no step
+    const alfred = { command: 'uvx', args: [], env: { SERENA_HOME: '/work/shop/.alfred/serena/home' } };
+    assert.strictEqual(serenaConfigInitStep(alfred, { platform: 'darwin', exists: () => false }), null);
+    assert.strictEqual(serenaConfigInitStep({ command: 'uvx', args: [] }, { platform: 'darwin', exists: () => false }), null);
+    // a home holding a $ gets a note and no step
+    const dollar = plan(inv(MAC), pickOne('serena', { location: { side: 'path', path: '/work/$shop/serena' } }), opts('/Users/me'));
+    assert.deepStrictEqual(dollar.errors, []);
+    assert.ok(!dollar.steps.some((s) => s.op === 'serena-config-init'));
+    assert.ok(dollar.notes.some((n) => n.includes('holds a $')), dollar.notes.join('\n'));
 });
 
 test('serena on Windows: SERENA_HOME is absolute, in backslashes and space-free; x64 uses 3.13, ARM64 the x64 build', () => {

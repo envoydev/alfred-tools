@@ -189,15 +189,23 @@ export async function runFetchJob(job: FetchJob, { env = process.env, runFetch =
             continue;
         }
         log(`${stepNumber}. ...    starting '${step.name}' once (a first start can download more, such as a model)`);
+        // serena writes its settings at that start (D7), where the home is one the plugin may edit
+        const home = step.row === 'serena' && entry.env && entry.env.SERENA_HOME;
+        const editable = Boolean(home) && serenaConfig.editableHome(home as string, { platform: process.platform }).ok;
+        const keyWasThere = editable && serenaConfig.folderState(serenaConfig.configOf(home as string), home as string) === 'same';
         const startResult = await start(entry, { cwd, env });
         if (startResult.ok)
         {
             report.started.push(step.name);
             log(`${stepNumber}. ok     '${step.name}' answered its first start in ${(startResult.ms / 1000).toFixed(1)}s`);
-            // serena wrote its settings at that start: base_modes: [] (D7), where the home is one the plugin may edit
-            const home = step.row === 'serena' && entry.env && entry.env.SERENA_HOME;
-            if (home && serenaConfig.editableHome(home, { platform: process.platform }).ok)
-                log(`${stepNumber}. ok     ${serenaConfig.emptyBaseModes(serenaConfig.configOf(home)).detail}`);
+            if (home && editable)
+            {
+                const file = serenaConfig.configOf(home);
+                log(`${stepNumber}. ok     ${serenaConfig.emptyBaseModes(file).detail}`);
+                // serena's first save can drop a key the plugin wrote before it started: the line says so
+                const folder = serenaConfig.setProjectFolder(file, home);
+                if (folder.changed) log(`${stepNumber}. ok     ${keyWasThere ? `serena's first start dropped ${serenaConfig.FOLDER_KEY} - ` : ''}serena: project folders set to ${home}/projects`);
+            }
         }
         else warn(stepNumber, `'${step.name}' did not answer its first start (${startResult.why}) - the registration stays; its first session start tries again`);
     }

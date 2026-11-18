@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as sc from '../scripts/apply/serena-config.ts';
+import { projectsOf } from '../scripts/apply/serena-projects.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import type { McpAddStep } from '../scripts/plan/types.ts';
 import type { Inventory } from '../scripts/inventory/types.ts';
@@ -73,7 +74,7 @@ test('a Windows <profile>\\.serena home is edited and the plan carries the share
     assert.deepStrictEqual(sc.editableHome('C:\\Users\\me\\.serena', { platform: 'win32', home: 'C:\\Users\\me' }), { ok: true, shared: true });
     assert.deepStrictEqual(sc.editableHome('C:\\serena-home', { platform: 'win32', home: 'C:\\Users\\Jo Smith' }), { ok: true, shared: true });
     const entry = { command: 'uvx', args: [], env: { SERENA_HOME: 'C:\\Users\\me\\.serena' } };
-    assert.strictEqual(sc.planNote(entry, { platform: 'win32', home: 'C:\\Users\\me' }), 'serena\'s settings at C:\\Users\\me\\.serena\\serena_config.yml are shared with any other Serena on this machine; base_modes: [] applies to all of them');
+    assert.strictEqual(sc.planNote(entry, { platform: 'win32', home: 'C:\\Users\\me' }), 'serena\'s settings at C:\\Users\\me\\.serena\\serena_config.yml are shared with any other Serena on this machine; base_modes: [] and project_serena_folder_location (each project\'s .serena folder under C:\\Users\\me\\.serena/projects) apply to all of them');
 });
 
 test('install\'s plan carries the base_modes line for each serena home kind', () => {
@@ -81,7 +82,7 @@ test('install\'s plan carries the base_modes line for each serena home kind', ()
     const p = plan(inv, { picks: { serena: { scope: 'project' } } }, { home: '/h', env: {}, exists: () => false, machine: { docker: true } });
     assert.deepStrictEqual(p.errors, []);
     const home = (p.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry.env!.SERENA_HOME;
-    assert.ok(p.notes.includes(`serena's settings at ${home}/serena_config.yml: base_modes: [] after its first start, so its manual names only the tools it has`), p.notes.join('\n'));
+    assert.ok(p.notes.includes(`serena's settings at ${home}/serena_config.yml: base_modes: [] after its first start, so its manual names only the tools it has; project_serena_folder_location puts each project's .serena folder under ${home}/projects`), p.notes.join('\n'));
     // an alfred-code 2.x home
     const alfred = { command: 'uvx', args: [], env: { SERENA_HOME: '/work/shop/.alfred/serena/home' } };
     assert.strictEqual(sc.planNote(alfred, { platform: 'darwin' }), 'serena\'s settings at /work/shop/.alfred/serena/home/serena_config.yml are alfred-code\'s - base_modes is left; its manual still names edit tools serena does not have');
@@ -149,4 +150,13 @@ test('folderState reads same, other and absent', () => {
     assert.strictEqual(sc.folderState(fileWith(`${sc.FOLDER_KEY}: "$projectDir/.serena"\n`), home), 'other');
     assert.strictEqual(sc.folderState(fileWith(`${sc.FOLDER_KEY}: '/h/serena/projects/$projectFolderName' # mine\n`), '/h/serena'), 'same');
     assert.strictEqual(sc.folderState(path.join(tmp, 'none3', 'serena_config.yml'), home), 'absent');
+});
+
+test('projectsOf reads a block or flow list of scalars and nothing else', () => {
+    const file = path.join(tmp, 'projects-list.yml');
+    fs.writeFileSync(file, "auth_secret: s3cr3t-fixture\nprojects:\n  - /a/one\n  - '/b/it''s'\n  # a comment\n  - \"/c/three\"  # trailing\nbase_modes: []\n- /not/listed\n");
+    assert.deepStrictEqual(projectsOf(file), ['/a/one', "/b/it's", '/c/three']);
+    fs.writeFileSync(file, "projects: [/x/one, '/y/two']\n");
+    assert.deepStrictEqual(projectsOf(file), ['/x/one', '/y/two']);
+    assert.deepStrictEqual(projectsOf(path.join(tmp, 'none.yml')), []);
 });

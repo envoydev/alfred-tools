@@ -14,6 +14,7 @@ import { templateNames } from '../copied/mcp-bridge.js';
 import { useRoots } from './root-files.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import * as serenaConfig from '../apply/serena-config.ts';
+import { serenaConfigInitStep } from './serena-init.ts';
 import { keyOf, fromHere, otherWindowsMcp } from '../inventory/inventory.ts';
 import { deepEqual } from '../core/json-file.ts';
 import { SCOPES, andList } from './context.ts';
@@ -436,6 +437,8 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
         useRoots(context, scope, uses);
         signInRoot();
         record();
+        const configInit = row.id === 'serena' ? serenaConfigInitStep(entry, context) : null;
+        if (configInit) out.steps.push(configInit);
         if (ensure) out.steps.push({ op: 'ensure-dir', path: ensure, why: `${row.id}: data folder, with a .gitignore holding * so the project's own .gitignore is never edited` });
         out.steps.push({ op: 'mcp-add', name, scope, entry, row: row.id, route: routeId, ...withKey, ...withFilled, why: `${row.id}: add (${routeId}) at ${scope} scope` });
         if (fetch) out.steps.push(fetch);

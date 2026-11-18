@@ -54,7 +54,7 @@ test('the fix engine against the REAL CLI: detect, apply as one replace, read ba
     const ctx = () => makeCtx({ inventory: h.inventory(project), env: h.env, machine });
     const found = detectAll(ctx()).found;
     // and the 0.4.x install moves onto the list
-    assert.deepStrictEqual(found.map((f) => f.id).sort(), ['list-import', 'serena-context', 'serena-telemetry', 'uvx-python']);
+    assert.deepStrictEqual(found.map((f) => f.id).sort(), ['list-import', 'serena-context', 'serena-project-folder', 'serena-telemetry', 'uvx-python']);
     const lines: string[] = [];
     const res = applyFixes(ctx(), ['all'], { tmp: path.join(h.root, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
     assert.strictEqual(res.failed, null, lines.join('\n'));

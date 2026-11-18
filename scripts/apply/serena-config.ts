@@ -179,7 +179,9 @@ export function planNote(entry: ServerEntry | null | undefined, context: { platf
     const file = configOf(home);
     const editable = editableHome(home, context);
     if (!editable.ok) return editable.reason;
-    if (editable.shared) return `serena's settings at ${file} are shared with any other Serena on this machine; base_modes: [] applies to all of them`;
-    return `serena's settings at ${file}: base_modes: [] after its first start, so its manual names only the tools it has`;
+    const folder = folderValue(home);
+    if ('error' in folder) return `serena's settings at ${file}: ${folder.error}; its folders stay in each project`;
+    if (editable.shared) return `serena's settings at ${file} are shared with any other Serena on this machine; base_modes: [] and ${FOLDER_KEY} (each project's .serena folder under ${home}/projects) apply to all of them`;
+    return `serena's settings at ${file}: base_modes: [] after its first start, so its manual names only the tools it has; ${FOLDER_KEY} puts each project's .serena folder under ${home}/projects`;
 }
 
