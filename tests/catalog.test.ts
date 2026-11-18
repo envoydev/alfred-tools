@@ -192,7 +192,7 @@ test('every fix row has the fields the brief names and points at an existing row
     assert.strictEqual(new Set(cat.fixes.map((f) => f.id)).size, cat.fixes.length);
     assert.deepStrictEqual(cat.fixes.map((f) => f.id), ['root-move', 'root-repoint', 'serena-windows-home', 'serena-windows-ts-shim', 'uvx-python', 'windows-arm-python',
         'windows-npx-cmd', 'playwright-webmcp', 'appium-sdk-env', 'serena-telemetry', 'token-sync', 'serena-context', 'serena-base-modes', 'serena-project-folder', 'list-import', 'retired-plugin', 'read-guard', 'client-drift', 'cursor-file', 'windows-mcp-one-per-desktop', 'data-folder-ignore', 'npx-cache-entry',
-        'key-to-helper', 'helper-missing', 'helper-stale', 'root-ignore', 'project-relative-path', 'mcp-order', 'helper-child-folder']);
+        'key-to-helper', 'helper-foreign', 'helper-missing', 'helper-stale', 'root-ignore', 'project-relative-path', 'mcp-order', 'helper-child-folder']);
     for (const f of cat.fixes)
     {
         for (const k of FIX as (keyof typeof f)[]) assert.ok(f[k] !== undefined && f[k] !== '', `${f.id} lacks ${k}`);

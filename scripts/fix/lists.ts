@@ -9,8 +9,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as roots from '../roots/roots.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
-import { importUnlisted } from '../plan/lists.ts';
-import { SCOPES, folderList } from '../plan/cursor-steps.ts';
+import { importUnlisted, adoptedClients } from '../plan/lists.ts';
+import { SCOPES, folderList, cursorSteps } from '../plan/cursor-steps.ts';
+import { helperParts } from '../entries/entry.ts';
 import { readGuardOf, denyReadStep } from '../plan/repair-tail.ts';
 import * as kept from '../core/kept.ts';
 import * as keys from '../keys/keys.ts';
@@ -21,7 +22,7 @@ import * as serenaConfig from '../apply/serena-config.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRow } from '../catalog/types.ts';
 import type { ListServer, OldRecord } from '../mcps-list/types.ts';
-import type { CursorWritePlanStep, ListWriteStep, McpAddStep, McpReplaceStep, PlannedServer, PlanStep, SerenaBaseModesStep, SerenaConfigInitStep, SerenaProjectFolderStep } from '../plan/types.ts';
+import type { CursorWritePlanStep, ListCtx, ListWriteStep, McpAddStep, McpReplaceStep, PlannedServer, PlanStep, SerenaBaseModesStep, SerenaConfigInitStep, SerenaProjectFolderStep } from '../plan/types.ts';
 import type { DriftWhere, Finding, FixCtx } from './types.ts';
 
 const pathOf = (context: { platform: string }) => (context.platform === 'win32' ? path.win32 : path.posix);
@@ -29,6 +30,9 @@ const plural = (count: number, word: string) => `${count} ${word}${count === 1 ?
 
 // The family's roots as install would take them: the root in use, else the recommended one.
 const rootsOf = (context: FixCtx) => roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
+
+// What a server brought into a list where only some servers have Cursor is told: it is Claude Code only, and configure adds Cursor.
+export const mixedNote = (names: string[]): string => `${names.join(', ')}: set up for Claude Code only - the list's servers are not all on Cursor; /alfred-tools:configure (Apps) adds Cursor`;
 
 // -> [{ id, name: <list file>, scope: null, family, servers, record: <the 0.4.x record> | null, found }]
 export function listImportDetect(context: FixCtx): Finding[]
@@ -48,7 +52,8 @@ export function listImportDetect(context: FixCtx): Finding[]
         const record = list && list.old ? list.old : fs.existsSync(beside) ? beside : null;
         if (!servers.length && !record) continue;
         const what = [servers.length ? `${plural(servers.length, 'managed server')} not in it (${servers.map((server) => server.name).join(', ')})` : null, record ? `${record} still holds the servers left on their own` : null].filter(Boolean);
-        out.push({ id: 'list-import', name: file, scope: null, family, servers, record, found: `${file}: ${what.join('; ')}` });
+        const afterNote = servers.length && adoptedClients(context.inventory, family).mixed ? mixedNote(servers.map((server) => server.name)) : undefined;
+        out.push({ id: 'list-import', name: file, scope: null, family, servers, record, found: `${file}: ${what.join('; ')}`, ...(afterNote ? { afterNote } : {}) });
     }
     return out;
 }
@@ -68,17 +73,35 @@ export function listImportSteps(finding: Finding, context: FixCtx): PlanStep[]
     const old = finding.record ? roots.ownOnly((lists.readOldRecord(finding.record) || {} as Partial<OldRecord>).servers) : [];
     const have = new Set(own.map(roots.recordKey));
     const keep = [...own, ...old.filter((entry) => !have.has(roots.recordKey(entry)))];
-    steps.push({
+    // a server brought for Cursor whose helper is this plugin's gets Cursor's bridge copy, so the bridge is in the root
+    const twoForms = finding.servers!.filter((server) => (server.clients || []).includes('cursor') && helperParts(server.entry.headersHelper));
+    const bridge = pathApi.join(root, roots.FILES.bridge);
+    if (twoForms.length && ['absent', 'lower'].includes(roots.shippedState('bridge', bridge).state))
+        steps.push({ op: 'write-bridge', path: root, why: `${root}: mcp-bridge.js, which fills a hosted URL from .mcps-secrets each time the server starts` });
+    const write: ListWriteStep = {
         op: 'list-write', file: finding.name, family: finding.family!,
-        upserts: finding.servers!.map((server) => ({ server, after: null, cursorFile: null })), drops: [],
+        upserts: finding.servers!.map((server) => ({ server: twoForms.includes(server) ? { ...server, form: 'two' } : server, after: null, cursorFile: null })), drops: [],
         own: finding.record ? { entries: [], keep, live: null } : null,
         why: `${finding.name}: the servers alfred-tools manages, as read, and the ones left on their own`,
-    });
+    };
+    steps.push(write);
     if (finding.record) steps.push({ op: 'retire-record', file: finding.record, why: `${finding.record}: the 0.4.x record - its entries are in ${finding.name} now` });
     const map = (context.inventory.roots && context.inventory.roots.map) || null;
     const mapped = !map ? null : finding.family === 'global' ? map.global : (map.projects || {})[roots.mapKey(context.inventory.project)];
     if (mapped !== root) steps.push({ op: 'record-root', family: finding.family!, project: context.inventory.project, root, why: `the ${finding.family} root ${root}: written to the roots map, so the commands find it again` });
-    return steps;
+    return [...steps, ...cursorStepsOf(write, context)];
+}
+
+// Cursor's file for the servers this list-write brings for Cursor, read after the list is written (spec C2): the same
+// cursor-write install and configure plan, so a brought server is in both apps in the run that lists it. Taken names
+// the user's own Cursor file holds are left, as the repair tail leaves them.
+function cursorStepsOf(write: ListWriteStep, context: FixCtx): CursorWritePlanStep[]
+{
+    if (!write.upserts.some((upsert) => (upsert.server.clients || []).includes('cursor'))) return [];
+    const tctx: ListCtx = { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, roots: rootsOf(context), uses: [] };
+    const out = { steps: [write] as PlanStep[], notes: [] as string[], errors: [] as string[] };
+    const planned = cursorSteps(context.inventory, tctx, out, {});
+    return out.errors.length ? [] : planned;
 }
 
 // read-guard (0.5.0): a root that holds the key file or mcp-remote's sign-in folder, and Claude Code's settings that do

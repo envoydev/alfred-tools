@@ -110,6 +110,9 @@ export interface Finding
     moveTo?: string; // stored - do not rename
     unmanaged?: string[]; // stored - do not rename
     holders?: string[]; // stored - do not rename
+    afterNote?: string; // stored - do not rename
+    clients?: string[]; // stored - do not rename
+    cursor?: boolean; // stored - do not rename
 }
 // A default root this plugin renamed: the folder under its former name and the one it is now (spec D3).
 export interface MovedRoot

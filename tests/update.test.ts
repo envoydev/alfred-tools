@@ -611,7 +611,7 @@ const listed = (root: string, servers: [string, string, unknown][]) => writeJson
 test('the fix rows update applies are the ones marked upgrade, each with the version that brought its way', () =>
 {
     const catalog = load();
-    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['root-move', '0.5.0'], ['root-repoint', '0.5.0'], ['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['serena-project-folder', '0.6.0'], ['list-import', '0.5.0'], ['retired-plugin', '0.5.0'], ['read-guard', '0.5.0'], ['key-to-helper', '0.2.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
+    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['root-move', '0.5.0'], ['root-repoint', '0.5.0'], ['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['serena-project-folder', '0.6.0'], ['list-import', '0.5.0'], ['retired-plugin', '0.5.0'], ['read-guard', '0.5.0'], ['key-to-helper', '0.2.0'], ['helper-foreign', '0.6.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
 });
 
 test('update offers the new ways to pass data that fix knows - a 0.1.x key header, a relative project path - and applies them after the pins, by registration', async () =>
@@ -1215,6 +1215,57 @@ test('a blocked old-plugin uninstall is a note, not an offer', async () => {
         assert.ok(!out.offers.some((o: { id: string }) => o.id.startsWith('upgrade:retired-plugin:preferred-tools@envoydev')), JSON.stringify(out.offers.map((o: { id: string }) => o.id)));
         assert.ok(out.notes.some((n: string) => /preferred-tools@envoydev.*comes over first/.test(n)), JSON.stringify(out.notes));
         assert.ok(out.offers.some((o: { id: string }) => o.id === 'upgrade:root-move:data'));
+    }
+    finally { w.clean(); }
+});
+
+// ---- adopting a hand-added server (Part C2) -------------------------------------------------------------------------
+
+const NINE = ['atlassian', 'github', 'gitlab', 'context7', 'sentry', 'memory', 'serena', 'windows-control', 'playwright-chrome'];
+// a project root whose list names nine servers, all for both apps, a hand-added my-sonarqube beside them with a helper
+// of the user's own, and made-up key values
+function adoptWorld(w: World, clients: string[][] = NINE.map(() => ['claude', 'cursor']))
+{
+    const pt = path.join(w.project, '.alfred-tools');
+    fs.mkdirSync(pt, { recursive: true });
+    fs.writeFileSync(path.join(pt, '.mcps-secrets'), 'SONARQUBE_TOKEN=tok-123\nSONARQUBE_ORG=acme\n');
+    writeJson(path.join(pt, 'mcps.json'), { version: 1, servers: NINE.map((name, i) => ({ name, scope: 'project', row: name, route: 'local', clients: clients[i], entry: { command: 'node', args: [`${name}.js`] }, key: null })), own: [] });
+    const companion = path.join(pt, 'mcp-headers-sonarqube.js');
+    fs.writeFileSync(companion, '// the user\'s own companion helper\n');
+    const hand = { type: 'http', url: 'https://api.sonarcloud.io/mcp', headersHelper: helperCmd(companion, 'SONARQUBE_TOKEN', 'SONARQUBE_ORG') };
+    assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'my-sonarqube', JSON.stringify(hand), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
+    return { pt, companion };
+}
+
+test('update adopts my-sonarqube once, for both apps', async () =>
+{
+    const w = world();
+    try
+    {
+        const { pt, companion } = adoptWorld(w);
+        const check = JSON.parse((await run(w, ['--check', '--no-refresh', '--json'])).text);
+        const ids = check.offers.map((o: { id: string }) => o.id);
+        assert.ok(ids.includes(`upgrade:list-import:${path.join(pt, 'mcps.json')}`), ids.join('\n'));
+        assert.ok(ids.includes('upgrade:helper-foreign:my-sonarqube~project'), ids.join('\n'));
+
+        const a = await run(w, ['--apply', ids.filter((id: string) => /^upgrade:(list-import|helper-foreign)/.test(id)).join(',')]);
+        assert.strictEqual(a.code, 0, a.text);
+        const servers = readJson(path.join(w.project, '.mcp.json')).mcpServers;
+        const sonar = Object.entries(servers).filter(([, e]) => (e as ServerEntry).url === 'https://api.sonarcloud.io/mcp');
+        assert.deepStrictEqual(sonar.map(([name]) => name), ['my-sonarqube'], 'one registration, under the name the user gave');
+        assert.strictEqual((sonar[0]![1] as ServerEntry).headersHelper, `${helperCmd(path.join(pt, 'mcp-headers.js'), 'SONARQUBE_TOKEN', 'Bearer')} --header SONARQUBE_ORG=SONARQUBE_ORG`);
+        const listedEntries = readJson(path.join(pt, 'mcps.json')).servers.filter((s: { name: string }) => s.name === 'my-sonarqube');
+        assert.strictEqual(listedEntries.length, 1, 'one list entry');
+        assert.deepStrictEqual(listedEntries[0].clients, ['claude', 'cursor']);
+        const copy = readJson(path.join(w.project, '.cursor', 'mcp.json')).mcpServers['my-sonarqube'];
+        assert.ok(copy.args.includes(path.join(pt, 'mcp-bridge.js')) && copy.args.includes('SONARQUBE_ORG=SONARQUBE_ORG'), JSON.stringify(copy));
+        assert.ok(fs.existsSync(path.join(pt, 'mcp-bridge.js')), 'the bridge the copy runs is written');
+        assert.match(a.text, /mcp-headers-sonarqube\.js is no longer used/);
+        assert.ok(fs.existsSync(companion), 'the old companion file is never deleted');
+        assert.ok(!a.text.includes('tok-123') && !a.text.includes('acme'), 'no key value printed');
+
+        const after = JSON.parse((await run(w, ['--check', '--no-refresh', '--json'])).text);
+        assert.deepStrictEqual(after.offers.filter((o: { id: string }) => /list-import|helper-foreign/.test(o.id)), [], 'a second check offers nothing more');
     }
     finally { w.clean(); }
 });

@@ -2736,3 +2736,72 @@ test('retired-plugin offers preferred-tools@envoydev with its text, outside the 
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ---- helper-foreign: a hand-added server with a helper of the user's own (Part C2) ----------------------------------
+
+const ADOPT_NINE = ['atlassian', 'github', 'gitlab', 'context7', 'sentry', 'memory', 'serena', 'windows-control', 'playwright-chrome'];
+function adoptRoot(w: World, { secrets = 'SONARQUBE_TOKEN=tok-123\nSONARQUBE_ORG=acme\n', firstArg = 'SONARQUBE_TOKEN', mixed = false } = {})
+{
+    const pt = ptRoot(w);
+    put(path.join(pt, '.mcps-secrets'), secrets);
+    const clients = (i: number) => (mixed && i === 0 ? ['claude'] : ['claude', 'cursor']);
+    put(path.join(pt, 'mcps.json'), `${JSON.stringify({ version: 1, servers: ADOPT_NINE.map((name, i) => ({ name, scope: 'project', row: name, route: 'local', clients: clients(i), entry: { command: 'node', args: [`${name}.js`] }, key: null })), own: [] }, null, 2)}\n`);
+    const companion = path.join(pt, 'mcp-headers-sonarqube.js');
+    put(companion, '// mine\n');
+    seed(w, 'my-sonarqube', 'project', { type: 'http', url: 'https://api.sonarcloud.io/mcp', headersHelper: `node ${companion} ${firstArg} SONARQUBE_ORG` });
+    return { pt, companion };
+}
+
+test('helper-foreign is blocked when the key is empty', () =>
+{
+    const w = world();
+    try
+    {
+        const { pt } = adoptRoot(w, { secrets: 'SONARQUBE_TOKEN=\nSONARQUBE_ORG=acme\n' });
+        const [f] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-foreign') as [Finding];
+        assert.deepStrictEqual([f.name, f.keyName], ['my-sonarqube', 'SONARQUBE_TOKEN']);
+        assert.strictEqual(f.blocked, `fill SONARQUBE_TOKEN in ${path.join(pt, '.mcps-secrets')}, then run /alfred-tools:fix`);
+        const lines = logged();
+        const res = applyFixes(ctxOf(w), ['helper-foreign'], { log: lines.log });
+        assert.deepStrictEqual(res.applied, []);
+        assert.match(lines.text(), /skipped helper-foreign on my-sonarqube \(project\): fill SONARQUBE_TOKEN/);
+        assert.match(readJson(path.join(w.project, '.mcp.json')).mcpServers['my-sonarqube'].headersHelper, /mcp-headers-sonarqube\.js/, 'the registration is left as it is');
+        // filled in, it is offered; a first argument that is not a name falls back to the row's own
+        put(path.join(pt, '.mcps-secrets'), 'SONARQUBE_TOKEN=tok-123\n');
+        assert.strictEqual((detect(ctxOf(w)).found.find((x) => x.id === 'helper-foreign') as Finding).blocked, undefined);
+    }
+    finally { w.clean(); }
+});
+
+test('helper-foreign names the row\'s key when the foreign helper\'s first argument is not a name', () =>
+{
+    const w = world();
+    try
+    {
+        adoptRoot(w, { firstArg: '--weird' });
+        const [f] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-foreign') as [Finding];
+        assert.strictEqual(f.keyName, 'SONARQUBE_TOKEN');
+        assert.ok(!f.found.includes('tok-123') && !JSON.stringify(f).includes('tok-123'), 'a finding names no key value');
+    }
+    finally { w.clean(); }
+});
+
+test('a mixed list adopts for Claude Code only and names the configure step', () =>
+{
+    const w = world();
+    try
+    {
+        const { pt } = adoptRoot(w, { mixed: true });
+        const lines = logged();
+        const res = applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: lines.log });
+        assert.strictEqual(res.failed, null, lines.text());
+        const listed = readJson(path.join(pt, 'mcps.json')).servers.filter((s: { name: string }) => s.name === 'my-sonarqube');
+        assert.strictEqual(listed.length, 1);
+        assert.deepStrictEqual(listed[0].clients, ['claude']);
+        assert.strictEqual(listed[0].cursorEntry, undefined);
+        assert.ok(!fsx.existsSync(path.join(w.project, '.cursor', 'mcp.json')), 'Cursor gets nothing');
+        assert.match(lines.text(), /my-sonarqube.*Claude Code only.*\/alfred-tools:configure.*Cursor/);
+        assert.match(readJson(path.join(w.project, '.mcp.json')).mcpServers['my-sonarqube'].headersHelper, /mcp-headers\.js SONARQUBE_TOKEN Bearer --header SONARQUBE_ORG=SONARQUBE_ORG$/);
+    }
+    finally { w.clean(); }
+});

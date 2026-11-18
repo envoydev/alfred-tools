@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import { pathFor } from '../entries/platform.ts';
 import { signInParts } from '../entries/sign-in.ts';
+import { helperParts } from '../entries/entry.ts';
 import * as catalogLib from '../catalog/catalog.ts';
 import * as roots from '../roots/roots.ts';
 import * as keys from '../keys/keys.ts';
@@ -24,7 +25,7 @@ import type { CursorWritePlanStep, DenyReadStep, FileStep, ListCtx, ListWriteSte
 // whose list entry and Cursor copy follow a moved root (root-repoint, spec D3), `normalize` re-pointing an entry - a
 // Cursor copy that differs from its list only by the moved root is written, not held. Notes go to ctx.notes.
 // -> [step]
-export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: PlanStep[], { refresh = [], repoint = [], normalize }: { refresh?: { name: string; scope: string }[]; repoint?: { name: string; scope: string }[]; normalize?: ((entry: ServerEntry) => ServerEntry) | undefined } = {}): PlanStep[]
+export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: PlanStep[], { refresh = [], repoint = [], normalize, clientsFor }: { refresh?: { name: string; scope: string }[]; repoint?: { name: string; scope: string }[]; clientsFor?: Map<string, string[]> | undefined; normalize?: ((entry: ServerEntry) => ServerEntry) | undefined } = {}): PlanStep[]
 {
     const catalog = context.catalog || catalogLib.load();
     const notes = context.notes || [];
@@ -36,9 +37,12 @@ export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: P
         const key = lists.regKey(step);
         const familyList = usable(roots.familyOf(step.op === 'mcp-move' ? step.to.scope : step.scope));
         const prior = familyList ? (familyList.servers || []).find((server) => lists.serverKey(server) === key) : null;
-        if (prior && prior.cursorEntry) formFor.set(key!, 'two');
+        // a hosted entry on this plugin's helper that goes to Cursor keeps two forms: the bridge copy is built for it
+        const apps = (clientsFor && clientsFor.get(key!)) || (prior && prior.clients) || [];
+        const entry = 'entry' in step ? step.entry : null;
+        if ((prior && prior.cursorEntry) || (apps.includes('cursor') && entry && helperParts(entry.headersHelper))) formFor.set(key!, 'two');
     }
-    const tctx: ListCtx = { platform: context.platform, project: context.project || inventory.project, home: context.home, env: context.env || {}, catalog, roots: null, uses: [], formFor, exists: context.exists, normalizeCopy: normalize };
+    const tctx: ListCtx = { platform: context.platform, project: context.project || inventory.project, home: context.home, env: context.env || {}, catalog, roots: null, uses: [], formFor, clientsFor, exists: context.exists, normalizeCopy: normalize };
     const out: PlanOut = { steps: [], notes, errors: [] };
     const listW = listSteps(inventory, tctx, out, regSteps);
     // the key's name, from the key files of the roots in use

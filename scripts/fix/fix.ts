@@ -30,7 +30,7 @@ import { realMachine, clone } from './common.ts';
 import { deepEqual } from '../plan/plan.ts';
 import { useRoots, fileSteps } from '../plan/root-files.ts';
 import { reconnectLine } from '../plan/render.ts';
-import { helperNameOf, contextArgAt } from '../entries/entry.ts';
+import { helperNameOf, helperParts, contextArgAt } from '../entries/entry.ts';
 import { fetchStep } from '../entries/names.ts';
 import * as mcpOrder from '../mcps-list/mcp-order.ts';
 import * as keys from '../keys/keys.ts';
@@ -309,7 +309,9 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
             continue;
         }
         steps.push({ op: 'mcp-replace', name: registration.name, scope: registration.scope, entry, old: registration.entry, row: registration.rowId, route: registration.route, why: `${list.map((finding) => finding.id).join(' + ')}: rewrite '${registration.name}' from the registration as read` });
-        if (entry.headersHelper && !registration.entry.headersHelper && fileCtx.roots) useRoots(fileCtx, registration.scope, { helper: true, keyFile: null, keyName: null, data: null });
+        // a helper new to the registration - none before, or one of the user's own (helper-foreign) - and, for an app that runs
+        // the bridge, the bridge beside it
+        if (entry.headersHelper && !helperParts(registration.entry.headersHelper) && fileCtx.roots) useRoots(fileCtx, registration.scope, { helper: true, bridge: list.some((finding) => finding.cursor), keyFile: null, keyName: null, data: null });
         // serena's context file (D7) is written into its folder - its home, else the root - before the registration names it
         const contextAt = contextArgAt(entry);
         if (contextAt >= 0 && fileCtx.roots) useRoots(fileCtx, registration.scope, { serenaContext: pathFor(context.platform).dirname(entry.args![contextAt]!) });
@@ -324,7 +326,9 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     const movedNow = repoint.length ? F.movedRoots(context) : [];
     const normalize = movedNow.length ? (entry: ServerEntry) => F.repointEntry(entry, movedNow, F.machineOf(context)) : undefined;
     const tailNotes: string[] = [];
-    const tail = steps.length || refresh.length || repoint.length ? repairTail(context.inventory, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, notes: tailNotes }, steps, { refresh, repoint, normalize }) : [];
+    // a server helper-foreign brings into a list that does not name it yet is listed for the apps its other servers share
+    const clientsFor = new Map(todo.filter((finding) => finding.id === 'helper-foreign' && finding.clients).map((finding): [string, string[]] => [`mcp:${finding.name}~${finding.scope}`, finding.clients!]));
+    const tail = steps.length || refresh.length || repoint.length ? repairTail(context.inventory, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, notes: tailNotes }, steps, { refresh, repoint, normalize, clientsFor }) : [];
     if (steps.length || tail.length)
     {
         // a fix that changes what is fetched (a python request, a cut-off, cmd /c) is fetched once it is written
@@ -398,6 +402,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         const left = after.found.some((candidate) => candidate.id === finding.id && candidate.name === finding.name && candidate.scope === finding.scope && candidate.app === finding.app);
         (left ? result.remaining : result.applied).push(finding);
         log(`${left ? 'STILL FOUND' : 'fixed      '} ${finding.id} on ${where(finding)}`);
+        if (!left && finding.afterNote) log(...finding.afterNote.split('\n').map((line) => `note: ${line}`));
     }
     if (!quietRecheck && (moves.length || result.applied.some((finding) => finding.id === 'root-repoint'))) log('', 'RECHECK - the folders moved; checking again');
     if (result.applied.some((finding) => !noRestart.has(finding))) log('', `Restart Claude Code so the repaired registrations and the language server start fresh${result.fetchFile ? ' - after the fetch reports, so a session start does not download the same package beside it' : ''}.`);

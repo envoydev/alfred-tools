@@ -36,13 +36,27 @@ export function foundList(inventory: Inventory, file: string, pathApi: path.Plat
     return null;
 }
 
+// The apps a server brought into a family's list takes (spec C2): the ones every server already listed has - Cursor too
+// when all of them have it, else Claude Code only. `mixed`: some listed servers have Cursor and some do not, so the
+// brought server's missing Cursor is worth a word. A family with no list yet, or none read, is Claude Code only.
+export function adoptedClients(inventory: Inventory, family: Family): { clients: string[]; mixed: boolean }
+{
+    const familyList = inventory.lists && inventory.lists[family];
+    const listedServers = familyList && !familyList.old && !familyList.note ? familyList.servers || [] : [];
+    const forCursor = listedServers.filter((server) => (server.clients || []).includes('cursor')).length;
+    const all = listedServers.length > 0 && forCursor === listedServers.length;
+    return { clients: all ? ['claude', 'cursor'] : ['claude'], mixed: forCursor > 0 && !all };
+}
+
 // The managed registrations of a family that its list does not name yet (list-import, and a plan's first touch): each
-// as read, kept (every key value the marker), with clients claude. A registration on its own is not one, unless this
-// run's `answers` (mcp key -> 'own' | 'manage') hand it back. opts: { answers, roots: { project, global } }
+// as read, kept (every key value the marker), with the apps the family's listed servers share (adoptedClients). A
+// registration on its own is not one, unless this run's `answers` (mcp key -> 'own' | 'manage') hand it back. opts:
+// { answers, roots: { project, global } }
 export function importUnlisted(inventory: Inventory, family: Family, catalog: Catalog, { answers = {}, roots: rootFolders = {} }: { answers?: Record<string, string | undefined>; roots?: { project?: string | null | undefined; global?: string | null | undefined } } = {}): ListServer[]
 {
     const familyList = inventory.lists && inventory.lists[family];
     const listed = new Set(familyList && !familyList.old && !familyList.note ? (familyList.servers || []).map(lists.serverKey) : []);
+    const { clients } = adoptedClients(inventory, family);
     return (inventory.registrations || [])
         .filter((registration) => registration.rowId && !registration.own && !registration.alfredRetired && registration.scope !== 'inherited' && roots.familyOf(registration.scope) === family)
         .filter((registration) =>
@@ -51,7 +65,7 @@ export function importUnlisted(inventory: Inventory, family: Family, catalog: Ca
             const answer = answers[key];
             return !listed.has(key) && (answer ? answer !== 'own' : registration.choice !== 'own');
         })
-        .map((registration) => lists.fromRegistration(registration, catalog.byId.get(registration.rowId!), ['claude'], keys.stdioChain({ scope: registration.scope, projectRoot: rootFolders.project, globalRoot: rootFolders.global })));
+        .map((registration) => lists.fromRegistration(registration, catalog.byId.get(registration.rowId!), clients, keys.stdioChain({ scope: registration.scope, projectRoot: rootFolders.project, globalRoot: rootFolders.global })));
 }
 
 const ownChanged = (foundEntry: FoundList | null, next: OwnEntry[]): boolean => (!foundEntry || foundEntry.state ? next.length > 0 : JSON.stringify(next) !== JSON.stringify(foundEntry.own));

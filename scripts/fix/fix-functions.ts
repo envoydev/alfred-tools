@@ -1,6 +1,7 @@
 export * from './registration.ts';
 export * from './machine.ts';
 export * from './keys.ts';
+export * from './helper-foreign.ts';
 export * from './paths.ts';
 export * from './lists.ts';
 export * from './rename.ts';
