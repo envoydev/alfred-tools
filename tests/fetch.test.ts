@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { world, writeJson, tempOf } from './helpers.ts';
+import { world, writeJson, tempOf, serenaFolderLine } from './helpers.ts';
 import { fetchStep } from '../scripts/entries/names.ts';
 import { writeJob, fetchJob, runFetchJob, realStart, fetchSpawnArgs } from '../scripts/apply/fetch.ts';
 import { cmdArg } from '../scripts/core/cmd-line.ts';
@@ -277,7 +277,7 @@ test('fetch empties base_modes after serena\'s first start', async () => {
             log: (...a) => lines.push(a.join(' ')),
         });
         assert.deepStrictEqual(res.started, ['serena']);
-        assert.strictEqual(fs.readFileSync(path.join(home, 'serena_config.yml'), 'utf8'), `base_modes: []\nauth_secret: s3cr3t-fixture\nproject_serena_folder_location: '${home}/projects/$projectFolderName'\n`);
+        assert.strictEqual(fs.readFileSync(path.join(home, 'serena_config.yml'), 'utf8'), `base_modes: []\nauth_secret: s3cr3t-fixture\n${serenaFolderLine(home)}\n`);
         assert.ok(lines.some((l) => l.includes(`set base_modes: [] in ${path.join(home, 'serena_config.yml')}`)), lines.join('\n'));
         assert.ok(!lines.join('\n').includes('s3cr3t'));
     }
@@ -294,7 +294,7 @@ test('after serena\'s first start the folder key is checked', async () => {
         const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), fetchJob(w.project, [{ ...fetchStep('serena', S, 'serena')!, scope: 'project' }], []));
         // the install wrote the minimal file; serena's first start saves its own without the key
         fs.mkdirSync(home, { recursive: true });
-        fs.writeFileSync(path.join(home, 'serena_config.yml'), `projects: []\nbase_modes: []\nproject_serena_folder_location: '${home}/projects/$projectFolderName'\n`);
+        fs.writeFileSync(path.join(home, 'serena_config.yml'), `projects: []\nbase_modes: []\n${serenaFolderLine(home)}\n`);
         const lines: string[] = [];
         await runFetchJob(JSON.parse(fs.readFileSync(file, 'utf8')), {
             env: w.env,
@@ -303,7 +303,7 @@ test('after serena\'s first start the folder key is checked', async () => {
             log: (...a) => lines.push(a.join(' ')),
         });
         const config = fs.readFileSync(path.join(home, 'serena_config.yml'), 'utf8');
-        assert.ok(config.includes(`project_serena_folder_location: '${home}/projects/$projectFolderName'`), config);
+        assert.ok(config.includes(serenaFolderLine(home)), config);
         assert.ok(lines.some((l) => l.includes('dropped project_serena_folder_location') && l.includes(`serena: project folders set to ${home}/projects`)), lines.join('\n'));
         assert.ok(!lines.join('\n').includes('s3cr3t'));
         // a key serena kept is not announced again
@@ -323,7 +323,7 @@ test('when serena\'s first start leaves another folder value the log names the v
         writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { serena: S } });
         const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), fetchJob(w.project, [{ ...fetchStep('serena', S, 'serena')!, scope: 'project' }], []));
         fs.mkdirSync(home, { recursive: true });
-        fs.writeFileSync(path.join(home, 'serena_config.yml'), `projects: []\nbase_modes: []\nproject_serena_folder_location: '${home}/projects/$projectFolderName'\n`);
+        fs.writeFileSync(path.join(home, 'serena_config.yml'), `projects: []\nbase_modes: []\n${serenaFolderLine(home)}\n`);
         const lines: string[] = [];
         await runFetchJob(JSON.parse(fs.readFileSync(file, 'utf8')), {
             env: w.env,
@@ -334,7 +334,7 @@ test('when serena\'s first start leaves another folder value the log names the v
         const text = lines.join('\n');
         assert.ok(lines.some((l) => l.includes('project_serena_folder_location') && l.includes('/elsewhere/serena-projects') && l.includes(`serena: project folders set to ${home}/projects`)), text);
         assert.ok(!text.includes('s3cr3t'), 'no other config content is printed');
-        assert.ok(fs.readFileSync(path.join(home, 'serena_config.yml'), 'utf8').includes(`'${home}/projects/$projectFolderName'`));
+        assert.ok(fs.readFileSync(path.join(home, 'serena_config.yml'), 'utf8').includes(serenaFolderLine(home)));
     }
     finally { w.clean(); }
 });

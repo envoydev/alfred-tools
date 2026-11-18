@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { load } from '../scripts/catalog/catalog.ts';
 import { shellArg } from '../scripts/entries/entry.ts';
+import { folderValue } from '../scripts/apply/serena-config.ts';
 import type { World } from './types.ts';
 
 // every ${VAR} a catalog route reads its key from
@@ -93,3 +94,14 @@ export function files(dir: string): string[]
 // forward slashes on Windows (entries/entry.ts shellArg, style 'win32'), as it is elsewhere
 export const helperCmd = (file: string, name: string, scheme: string) => `node ${shellArg(file, process.platform === 'win32' ? 'win32' : 'posix')} ${name} ${scheme}`;
 
+
+// The project_serena_folder_location line the product writes for a serena home: its value is single-quoted with / separators
+// whatever the host, so an expectation built from the raw home breaks on Windows (`\` in the home).
+export function serenaFolderLine(home: string): string
+{
+    const wanted = folderValue(home);
+    if ('error' in wanted) throw new Error(wanted.error);
+    return `project_serena_folder_location: ${wanted.value}`;
+}
+// A path in the / form the product writes into serena's config and its log lines.
+export const slashed = (file: string): string => file.replace(/\\/g, '/');

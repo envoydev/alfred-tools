@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import path from 'node:path';
-import { world, readJson, helperCmd, writeJson, files } from './helpers.ts';
+import { world, readJson, helperCmd, writeJson, files, serenaFolderLine, slashed } from './helpers.ts';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import * as inventory from '../scripts/inventory/inventory.ts';
 import { pythonRequest } from '../scripts/entries/platform.ts';
@@ -2079,8 +2079,8 @@ test('serena-project-folder finds a home without the key and names in-tree .sere
         const l = logged();
         const res = applyFixes(ctxOf(w), ['serena-project-folder'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
-        assert.strictEqual(fsx.readFileSync(cfg, 'utf8'), `projects:\n- ${proj}\n- ${clean}\nbase_modes: []\nauth_secret: s3cr3t-fixture\nproject_serena_folder_location: '${home}/projects/$projectFolderName'\n`);
-        assert.ok(l.text().includes(`serena keeps using ${proj}/.serena until it is moved to ${home}/projects/shop`), l.text());
+        assert.strictEqual(fsx.readFileSync(cfg, 'utf8'), `projects:\n- ${proj}\n- ${clean}\nbase_modes: []\nauth_secret: s3cr3t-fixture\n${serenaFolderLine(home)}\n`);
+        assert.ok(l.text().includes(`serena keeps using ${proj}/.serena until it is moved to ${slashed(home)}/projects/shop`), l.text());
         assert.ok(!l.text().includes(`${clean}/.serena`), 'a project with no in-tree folder is not named');
         assert.ok(!l.text().includes('s3cr3t'));
         assert.ok(fsx.existsSync(path.join(proj, '.serena', 'project.yml')), 'nothing is moved or deleted');
