@@ -2,7 +2,7 @@
 import path from 'node:path';
 import { keyOf, fromHere } from '../inventory/inventory.ts';
 import { pinOf } from '../inventory/table.ts';
-import { ROUTE_WORD, RECOMMENDED_SUFFIX, recommendedScope, scopesFor, SCOPE_ORDER, PARENT_HELPER_IN_CHILD, SCOPE_LABEL, scopeText } from './asks-keys.ts';
+import { ROUTE_WORD, RECOMMENDED_SUFFIX, recommendedScope, scopesFor, SCOPE_ORDER, PARENT_HELPER_IN_CHILD, CHILD_FOLDER_REMEDY, SCOPE_LABEL, scopeText } from './asks-keys.ts';
 import { installedItems, rootInUse, ROOT_LABEL, ROOT_MOVES, packed } from './asks-picks.ts';
 import * as X from '../inventory/existing.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
@@ -79,7 +79,7 @@ const STRANDED_TEXT = 'the scope it has now - it reads its key from the environm
 // The scope question, or null when one scope is left.
 // A hosted keyed route at project scope: a session started in a child folder runs no parent folder's helper (M1). The
 // bridge has a helper block too, but its own process reads the key, so it connects there (F3)
-const CHILD_NO_KEY = PARENT_HELPER_IN_CHILD ? '' : "; a session started in a child folder connects without the key - Claude Code does not run a parent folder's helper there";
+const CHILD_NO_KEY = PARENT_HELPER_IN_CHILD ? '' : `; a session started in a child folder connects without the key - Claude Code does not run a parent folder's helper there; ${CHILD_FOLDER_REMEDY}`;
 const hostedKeyed = (row: CatalogRow, routeId: string) => Boolean(row.routes && row.routes[routeId] && row.routes[routeId].helper && row.routes[routeId].runtime !== 'bridge');
 
 export function scopeQuestion(row: CatalogRow, inventory: Inventory, { route, current = null, copyOf = [], context: context = null }: ToolOpts = {}): Question | null

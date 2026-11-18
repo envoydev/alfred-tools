@@ -29,6 +29,8 @@ export const SCOPE_ORDER = ['user', 'project', 'local'];
 // M1 (docs/sources.md 'Claude Code - headersHelper', 2026-11-11, Claude Code 2.1.322): does a parent folder's helper,
 // named by absolute path, run in a session started in a child folder? Measured: no.
 export const PARENT_HELPER_IN_CHILD = false;
+// what a user does about it, said wherever a plan or an ask says a child folder's session has no key
+export const CHILD_FOLDER_REMEDY = 'start a session in the folder that holds `.mcp.json`, or move the server to Global with configure';
 
 // Where a route's key is, by name only (spec D3, D9): { variable, kind, scope, files, found } - or null for a route that
 // takes no key. `variable` is the catalog's default name; `kind` 'helper' for a hosted route (mcp-headers.js reads the
@@ -160,8 +162,7 @@ export function heldKey(entry: ServerEntry, route: CatalogRoute | null | undefin
 }
 
 // Every scope for every row (the user's ruling, 2026-11-10: 'It must give options as user/project/local'). The one left
-// out: project for serena on Windows when this machine's profile path has a space - its home must be absolute and
-// space-free, and the committed file can only name it as ${USERPROFILE}\.serena.
+// out: project for a stdio route that needs a key, which holds it written in - the committed .mcp.json never carries one.
 export function scopesFor(row: CatalogRow, routeId: string, _context: AskCtx | null | undefined = null): string[]
 {
     // a stdio route that needs a key holds it written in, which the .mcp.json in this folder never carries (spec D5)

@@ -2314,7 +2314,7 @@ test('every scope question words Project as the folder\'s .mcp.json that names t
     assert.strictEqual((SCOPE_TEXT as Record<string, string> & { project: string }).project, want);
     // a hosted keyed route adds why a child folder's session has no key (docs/sources.md M1); the bridge connects there
     // (F3), so its Project option says nothing of the kind
-    const child = PARENT_HELPER_IN_CHILD ? '' : "; a session started in a child folder connects without the key - Claude Code does not run a parent folder's helper there";
+    const child = PARENT_HELPER_IN_CHILD ? '' : "; a session started in a child folder connects without the key - Claude Code does not run a parent folder's helper there; start a session in the folder that holds `.mcp.json`, or move the server to Global with configure";
     for (const [id, route, tail] of [['memory', 'local', ''], ['context7', 'remote', child], ['context7', 'local', ''], ['sentry', 'bridge', '']])
     {
         const q = scopeQuestion(catalog.byId.get(id!)!, inv(MAC), { route, context: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
@@ -2351,14 +2351,16 @@ test('a hosted keyed registration gets its reconnect line in the plan: filled, u
     finally { w.clean(); }
 });
 
-test('the project-scope helper note says why, once', () => {
+const REMEDY = 'start a session in the folder that holds `.mcp.json`, or move the server to Global with configure';
+
+test('the project-scope helper note says why and names the remedy, once', () => {
     const p = plan(inv(MAC, { trusted: true }), { picks: { github: { route: 'remote', scope: 'project' }, context7: { route: 'remote', scope: 'project', token: true } } }, opts('/Users/me'));
-    const why = "a session started in a child folder connects without this key - Claude Code does not run a parent folder's helper there; pick Global, or install it in that folder too";
+    const why = "a session started in a child folder connects without this key - Claude Code does not run a parent folder's helper there; start a session in the folder that holds `.mcp.json`, or move the server to Global with configure";
     const child = p.notes.filter((n) => /child (folder|project)/.test(n));
     if (PARENT_HELPER_IN_CHILD) return assert.deepStrictEqual(child, []);
     assert.deepStrictEqual(child.sort(), [`context7: ${why}`, `github: ${why}`]);
     const q = scopeQuestion(catalog.byId.get('github')!, inv(MAC), { route: 'remote', context: { project: '/work/shop', platform: 'darwin', home: '/Users/me', env: {}, exists: () => false } });
-    assert.match(q!.options.find((o) => o.label.startsWith('Project'))!.description, /; a session started in a child folder connects without the key - Claude Code does not run a parent folder's helper there$/);
+    assert.ok(q!.options.find((o) => o.label.startsWith('Project'))!.description!.endsWith(`; a session started in a child folder connects without the key - Claude Code does not run a parent folder's helper there; ${REMEDY}`));
 });
 
 test('buildEntry for the sentry bridge at local, project and user scope', () => {

@@ -7,7 +7,7 @@ import { checkHostedSettings, currentHostedSettings, defaultHostedSettings, pair
 import { currentOf, buildEntry, applyContext, bridgeParts, helperParts, helperGlobalRoot, bridgePathFor, renameTemplate, helperFor, subst, mergeSettings, contextArgAt } from '../entries/entry.ts';
 import { signInParts, signInFormOf } from '../entries/sign-in.ts';
 import { nameProblem, fetchStep } from '../entries/names.ts';
-import { recommendedScope, keyStateOf, heldKey, PARENT_HELPER_IN_CHILD } from './asks-keys.ts';
+import { recommendedScope, keyStateOf, heldKey, PARENT_HELPER_IN_CHILD, CHILD_FOLDER_REMEDY } from './asks-keys.ts';
 import * as keys from '../keys/keys.ts';
 import * as kept from '../core/kept.ts';
 import * as roots from '../roots/roots.ts';
@@ -425,7 +425,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
     {
         if (scope !== 'user' && inventory.trusted === false) once(`accept the trust dialog the next time Claude Code starts in ${context.project} - until then the server connects without its key`);
         // docs/sources.md M1: a parent folder's helper does not run in a child folder's session, named relative or absolute
-        if (scope === 'project' && !PARENT_HELPER_IN_CHILD) out.notes.push(`${row.id}: a session started in a child folder connects without this key - Claude Code does not run a parent folder's helper there; pick Global, or install it in that folder too`);
+        if (scope === 'project' && !PARENT_HELPER_IN_CHILD) out.notes.push(`${row.id}: a session started in a child folder connects without this key - Claude Code does not run a parent folder's helper there; ${CHILD_FOLDER_REMEDY}`);
         once('node must be on the PATH Claude Code starts with - mcp-headers.js runs under it, as this plugin\'s commands do');
     }
     // how a hosted keyed server connects once written (spec F3): its reconnect line, printed by render and repeated by the apply
