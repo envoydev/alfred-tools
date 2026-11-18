@@ -1009,7 +1009,7 @@ test('an entry update does not write is named and its list entry left unchanged'
     const w = world();
     try
     {
-        install(w, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'local' }, memory: {} } });
+        install(w, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'local' }, memory: { scope: 'local' } } });
         const before = JSON.stringify(listed0(w, 'memory'));
         const cursorBefore = JSON.stringify(cursorCopy(w, 'memory'));
         const m = localReg(w, 'memory').entry;
@@ -1031,7 +1031,7 @@ test('update neither re-adds a missing copy nor rewrites a drifted Cursor copy',
     const w = world();
     try
     {
-        install(w, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'local' }, memory: {}, 'playwright-chrome': {} } });
+        install(w, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'local' }, memory: { scope: 'local' }, 'playwright-chrome': { scope: 'local' } } });
         // memory gone from Claude Code, playwright-chrome gone from Cursor, serena edited in Cursor
         cli.runClaude(['mcp', 'remove', 'memory', '-s', 'local'], { cwd: w.project, env: w.env });
         const doc = readJson(projectCursor(w));

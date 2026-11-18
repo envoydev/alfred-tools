@@ -113,8 +113,13 @@ The first five plus `kit:check` are what CI runs, in that order.
   it. A stdio keyed route is written in by `apply.ts` at local and global scope, and is not offered at project scope.
   The 0.1.x key files (alfred-code's store, `.alfred-tools/.secrets`) are read for names only. `scripts/keys/keys.ts` holds
   the chains. No key in a file a command line names (`scripts/core/kept.ts`), none printed, none asked for. A key is the
-  recommended way into every hosted route (2026-11-11), recommended at Global scope, since Claude Code runs no parent
-  folder's helper in a child folder; with no key, a route that has OAuth uses it. The bridge (0.4.0) reads the key and
+  recommended way into every hosted route (2026-11-11); with no key, a route that has OAuth uses it. Every route
+  Project scope is offered for recommends Project, a stdio route whose key is required (not offered Project) Local
+  (the user's consolidation request, 2026-11-18: 'install scope is not consolidated' - one project's servers in one
+  scope and one root, not spread over Global and Local). This reverses 2026-11-11's 'recommended at Global' for a hosted
+  keyed route, at a known cost: Claude Code runs no parent folder's helper in a child folder, so a session started in a
+  child folder connects such a server without its key - start a session in the folder that holds `.mcp.json`, or move
+  the server to Global with configure; the scope question and the plan say so. The bridge (0.4.0) reads the key and
   the URL's names through the helper's reader, and passes the key to mcp-remote in its environment only.
 - **A sign-in is mcp-remote's, kept in the root** (0.5.0, the user's rulings 12 and 13, 2026-11-13). A keyless OAuth
   route set up for both apps runs mcp-remote with `MCP_REMOTE_CONFIG_DIR` set to the root, so one sign-in in

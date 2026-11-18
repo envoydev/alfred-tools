@@ -4,7 +4,7 @@
 // picks.json as the commands do.
 import test from 'node:test';
 import assert from 'node:assert';
-import { scopeOfLabel, recommendedScope, PARENT_HELPER_IN_CHILD, settingsQuestion } from '../scripts/plan/asks-keys.ts';
+import { scopeOfLabel, recommendedScope, settingsQuestion } from '../scripts/plan/asks-keys.ts';
 import { routeQuestion, scopesFor } from '../scripts/plan/asks-tool.ts';
 import { STATIC, clientsQuestion } from '../scripts/plan/asks-other.ts';
 import { allQuestions } from '../scripts/plan/asks-all.ts';
@@ -179,7 +179,7 @@ test('gitlab asks scope, name, host and its key in one call', () => {
     const steps = walk(inv(MAC), { rows: ['gitlab'], walk: 'each', done: ['clients', 'settings'] });
     const q = steps.find((s) => s.id === 'gitlab:questions');
     assert.deepStrictEqual(q!.call!.map((x) => x.id), ['scope-gitlab', 'name-gitlab', 'host-gitlab', 'token-gitlab']);
-    assert.deepStrictEqual(steps.map((s) => s.id), ['gitlab:questions', 'root:global', 'gitlab:keys']);
+    assert.deepStrictEqual(steps.map((s) => s.id), ['gitlab:questions', 'root:project', 'gitlab:keys']);
 });
 
 test('every catalog row on every OS asks at most four questions per step', () => {
@@ -220,10 +220,31 @@ test('the key is first and recommended at install for context7, sentry, gitlab a
     assert.strictEqual(t!.questions!.find((x) => x.id === 'token-gitlab')!.options[0]!.label, 'Sign in with OAuth (Recommended)');
 });
 
-test('the recommended scope for a hosted key follows M1', () => {
-    for (const id of ['gitlab', 'atlassian', 'context7', 'sentry', 'github'])
-        assert.strictEqual(recommendedScope(catalog.byId.get(id)!, 'remote'), PARENT_HELPER_IN_CHILD ? 'project' : 'user', id);
-    assert.strictEqual(recommendedScope(catalog.byId.get('serena')!, 'local'), 'local');
+test('every route Project is offered for recommends Project', () => {
+    for (const id of ['context7', 'github', 'gitlab', 'atlassian', 'sentry', 'sonarqube'])
+        assert.strictEqual(recommendedScope(catalog.byId.get(id)!, 'remote'), 'project', `${id} remote`);
+    // context7's key is optional and absent there, so its local route is offered Project and runs keyless
+    for (const id of ['context7', 'serena', 'memory', 'playwright-chrome', 'appium', 'macos-control'])
+    {
+        assert.ok(scopesFor(catalog.byId.get(id)!, 'local').includes('project'), `${id} local is offered project`);
+        assert.strictEqual(recommendedScope(catalog.byId.get(id)!, 'local'), 'project', `${id} local`);
+    }
+    assert.strictEqual(recommendedScope(catalog.byId.get('sentry')!, 'bridge'), 'project');
+    // a stdio route whose key is required is not offered Project: Local
+    for (const id of ['github', 'sentry'])
+    {
+        assert.ok(!scopesFor(catalog.byId.get(id)!, 'local').includes('project'), `${id} local is not offered project`);
+        assert.strictEqual(recommendedScope(catalog.byId.get(id)!, 'local'), 'local', `${id} local`);
+    }
+});
+
+test('a recommended walk lands in one scope', () => {
+    const ids = ['serena', 'memory', 'github', 'atlassian', 'sonarqube', 'playwright-chrome'];
+    const p = plan(inv(MAC), { picks: Object.fromEntries(ids.map((id) => [id, {}])) }, { home: HOME.darwin, env: {}, exists: () => false, machine: { docker: true } });
+    assert.deepStrictEqual(p.errors, []);
+    const adds = p.steps.filter((s) => s.op === 'mcp-add') as { row: string; scope: string }[];
+    assert.deepStrictEqual(adds.map((a) => a.row).sort(), [...ids].sort());
+    assert.deepStrictEqual([...new Set(adds.map((a) => a.scope))], ['project']);
 });
 
 // ---- the bridge (0.4.0) ---------------------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 import path from 'node:path';
 import { keyOf, fromHere } from '../inventory/inventory.ts';
 import { pinOf } from '../inventory/table.ts';
-import { ROUTE_WORD, RECOMMENDED_SUFFIX, recommendedScope, SCOPE_ORDER, PARENT_HELPER_IN_CHILD, SCOPE_LABEL, scopeText } from './asks-keys.ts';
+import { ROUTE_WORD, RECOMMENDED_SUFFIX, recommendedScope, scopesFor, SCOPE_ORDER, PARENT_HELPER_IN_CHILD, SCOPE_LABEL, scopeText } from './asks-keys.ts';
 import { installedItems, rootInUse, ROOT_LABEL, ROOT_MOVES, packed } from './asks-picks.ts';
 import * as X from '../inventory/existing.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
@@ -55,17 +55,7 @@ export function routeQuestion(row: CatalogRow, current: string | null | undefine
     };
 }
 
-// Every scope for every row (the user's ruling, 2026-11-10: 'It must give options as user/project/local'). The one left
-// out: project for serena on Windows when this machine's profile path has a space - its home must be absolute and
-// space-free, and the committed file can only name it as ${USERPROFILE}\.serena.
-export function scopesFor(row: CatalogRow, routeId: string, _context: AskCtx | null | undefined = null): string[]
-{
-    // a stdio route that needs a key holds it written in, which the .mcp.json in this folder never carries (spec D5)
-    const route = row.routes && row.routes[routeId];
-    // a bridge holds names only, never a key (0.4.0)
-    const stdioKey = routeId !== 'remote' && route && route.runtime !== 'bridge' && route.authMode === 'token';
-    return ['local', 'project', 'user'].filter((scope) => scope !== 'project' || !stdioKey);
-}
+export { scopesFor };
 
 // The scopes offered, the recommended one first. `current` is the registration configure changes; for an install,
 // `copyOf` lists this row's registrations at other scopes (the copy for every project), whose scopes are not offered again.

@@ -108,18 +108,19 @@ questions and what to choose.
 
 **Scope** - where the registration lives:
 
-- **Global** (Claude Code's user scope; `~/.cursor/mcp.json` in Cursor): every project on this machine. Recommended for
-  a hosted server with a key (github, gitlab, atlassian, sentry, context7 with a key).
-- **Project**: this project's `.mcp.json` (and `.cursor/mcp.json`), which you commit. Teammates get the server too,
-  but the paths in it are this machine's, so a clone on another machine points at yours - run `/alfred-tools:fix`
-  there.
-- **Local**: this project, only you. Recommended for the local tools (serena, memory, the browsers, appium, desktop
-  control): their paths and runtime are this machine's. Cursor has no private file per project, so a Local server set
-  up for Cursor goes in `.cursor/mcp.json`, which a project usually commits; the plan says so when git would commit
-  it - add `.cursor/mcp.json` to `.gitignore` to keep it yours.
+- **Project** (recommended for every server it is offered for, so one project's servers sit in one scope and one root):
+  this project's `.mcp.json` (and `.cursor/mcp.json`), which you commit. Teammates get the server too, but the paths in
+  it are this machine's, so a clone on another machine points at yours - run `/alfred-tools:fix` there.
+- **Global** (Claude Code's user scope; `~/.cursor/mcp.json` in Cursor): every project on this machine. Pick it for a
+  server you want everywhere, or for a hosted server with a key you use from child folders (see below).
+- **Local**: this project, only you. Recommended only where Project is not offered: a local route that needs a key
+  (github's Docker and sentry's npm routes), which is written into the registration. Cursor has no private file per
+  project, so a Local server set up for Cursor goes in `.cursor/mcp.json`, which a project usually commits; the plan
+  says so when git would commit it - add `.cursor/mcp.json` to `.gitignore` to keep it yours.
 
 A hosted server with a key at Project scope connects without its key in a session started in a subfolder: Claude Code
-does not run a parent folder's key helper there. Pick Global for those, or start Claude in the project folder.
+does not run a parent folder's key helper there. Start a session in the folder that holds `.mcp.json`, or move the
+server to Global with configure.
 
 **Route** - for context7, github and sentry: 'Hosted' (the vendor's server, nothing to run) is recommended; 'Local'
 runs the server on your machine. sentry also has 'Bridge', for one organization and project (see

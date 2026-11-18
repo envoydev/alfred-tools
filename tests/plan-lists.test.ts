@@ -664,7 +664,7 @@ test('install names a listed server missing from Claude Code and re-adds nothing
     const w = world();
     try
     {
-        const first = plan(inventoryLib.buildInventory({ project: w.project, env: w.env }), { clients: ['claude'], picks: { memory: {}, serena: { scope: 'local' } } }, { home: w.home, env: w.env });
+        const first = plan(inventoryLib.buildInventory({ project: w.project, env: w.env }), { clients: ['claude'], picks: { memory: { scope: 'local' }, serena: { scope: 'local' } } }, { home: w.home, env: w.env });
         assert.strictEqual(apply(first, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
         cli.runClaude(['mcp', 'remove', 'memory', '-s', 'local'], { cwd: w.project, env: w.env });
         const s = inventoryLib.buildInventory({ project: w.project, env: w.env }).registrations.find((r) => r.name === 'serena');

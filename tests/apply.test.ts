@@ -110,7 +110,7 @@ test('a re-run with the same answers makes no CLI call and says so', () => {
     const w = world();
     try
     {
-        const answers = { picks: { serena: {}, context7: { route: 'remote', scope: 'project' } } };
+        const answers = { picks: { serena: { scope: 'local' }, context7: { route: 'remote', scope: 'project' } } };
         const first = walk(w, answers);
         assert.strictEqual(first.report.failed, null, first.text);
         const before = w.calls().length;

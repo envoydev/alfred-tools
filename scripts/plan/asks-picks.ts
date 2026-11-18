@@ -58,7 +58,7 @@ export function packed(items: PickItem[], { id, question, none }: { id: string; 
 }
 
 // The install pick: the rows for this OS not installed in this project. A server installed only for every project (user
-// scope, even where Global is its recommended scope - a hosted keyed route) or inherited from a parent folder's .mcp.json
+// scope, though Project is what install recommends) or inherited from a parent folder's .mcp.json
 // is offered too: picking it adds this project's own copy beside that one (the user's ruling, docs/build-prompt.md). A
 // server installed here is configure's.
 const offeredForInstall = (row: CatalogRow, inventory: Inventory) =>

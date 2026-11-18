@@ -197,10 +197,15 @@ deleted.
 **Scopes and paths.** Every route offers user, project and local scope (the user's rulings, 2026-11-10: 'It must give
 options as user/project/local' and 'Allow project, test first'), labelled Global, Project and Local (D1), the
 recommended scope first, then Global, Project, Local - except a stdio route that needs a key, which is not offered at
-project scope (D5: the committed file carries no key). A local route recommends `local`: its paths and Python are this
-machine's, and project scope commits this machine's launch form (`cmd /c` on Windows, the x64 Python on Windows ARM64).
-A hosted route recommends global scope when it will use a key (D5), and a key is the recommended answer for every
-hosted route since 0.3.0; with no key it recommends `project`. A `project` registration lands in the committed
+project scope (D5: the committed file carries no key). Every route Project is offered for recommends `project` (the
+user's consolidation request, 2026-11-18: 'install scope is not consolidated' - one scope and one root per project),
+and a stdio route that needs a key, which is not offered there, recommends `local`. This reverses the earlier rules
+that a local route recommends `local` and a hosted route that will use a key recommends global scope (D5). The costs: a
+local route's committed `.mcp.json` names this machine's launch form (`cmd /c` on Windows, the x64 Python on Windows
+ARM64), as it already does under 'Absolute, always' below; a hosted keyed route connects without its key in a session
+started in a child folder, as Claude Code runs no parent folder's helper there (M1) - start a session in the folder
+that holds `.mcp.json`, or move the server to Global with configure. A key is the recommended answer for every hosted
+route since 0.3.0. A `project` registration lands in the committed
 `.mcp.json`. Since 0.3.0 it carries absolute paths, like the other scopes (the user's ruling, 2026-11-11: 'Absolute,
 always (Recommended)' - one data folder whatever folder Claude starts in, at the cost that `.mcp.json` names this
 machine's path, so a teammate's clone points at yours); 'never a key' stands. 0.2.0 wrote a row's data folder relative
@@ -287,8 +292,8 @@ with, while the key sat in a file (the user's Windows workspace, 2026-11-10).
   from a terminal or an agent's shell tool, it reads no key file and prints `{}` with one stderr line, so a key never
   lands in a transcript, with or without a secret guard installed (the user's ruling, 2026-11-11).
 - **D5 - Routes and scopes.** A hosted keyed route (github; context7, sentry, gitlab and atlassian when a key is picked,
-  sentry's scheme `Sentry-Bearer`, atlassian's `Basic`) uses the helper at every scope and is recommended at global
-  scope. Since 0.3.0 a key is the recommended answer for every hosted route, and Project scope's description says a
+  sentry's scheme `Sentry-Bearer`, atlassian's `Basic`) uses the helper at every scope and is recommended at project
+  scope (2026-11-18, the consolidation request; it was global scope until then). Since 0.3.0 a key is the recommended answer for every hosted route, and Project scope's description says a
   session started in a child folder connects without the key (M1). A stdio keyed route (github's
   Docker, sentry's npm) is written in at local and global scope and not offered at project scope; context7's npm route
   runs keyless there. Since 0.3.0 (Optional 3) a machine path at project scope is written absolute like every other

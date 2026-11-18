@@ -159,18 +159,27 @@ export function heldKey(entry: ServerEntry, route: CatalogRoute | null | undefin
     return typeof value === 'string' && value !== '' && !keys.PLACEHOLDER.test(value) ? value : null;
 }
 
-// local for a local route (its paths and Python are this machine's); for a hosted route that can send a key, the scope M1
-// settles (spec F2): global while a parent folder's helper does not run in a child folder's session (a global helper has
-// an absolute path, needs no folder trust and serves every session, a workspace child included), else project. A user
-// who then picks OAuth or no key keeps the scope picked. A hosted route with no key: project.
+// Every scope for every row (the user's ruling, 2026-11-10: 'It must give options as user/project/local'). The one left
+// out: project for serena on Windows when this machine's profile path has a space - its home must be absolute and
+// space-free, and the committed file can only name it as ${USERPROFILE}\.serena.
+export function scopesFor(row: CatalogRow, routeId: string, _context: AskCtx | null | undefined = null): string[]
+{
+    // a stdio route that needs a key holds it written in, which the .mcp.json in this folder never carries (spec D5)
+    const route = row.routes && row.routes[routeId];
+    // a bridge holds names only, never a key (0.4.0)
+    const stdioKey = routeId !== 'remote' && route && route.runtime !== 'bridge' && route.authMode === 'token';
+    return ['local', 'project', 'user'].filter((scope) => scope !== 'project' || !stdioKey);
+}
+
+// Project for every route scopesFor offers it to, Local for the one it does not (a stdio route that needs a key: it holds
+// the key written in, which the committed .mcp.json never carries). One scope and one root per project (G1, the user's
+// request of 2026-11-18: 'install scope is not consolidated'); this reverses 2026-11-11's Global for a hosted keyed
+// route. The cost (R1, M1): a session started in a child folder runs no parent folder's helper, so such a server
+// connects there without its key - scopeQuestion and the plan note say so (CHILD_NO_KEY), and `configure` moves it to
+// Global. A user who then picks OAuth or no key keeps the scope picked.
 export function recommendedScope(row: CatalogRow, routeId: string): string
 {
-    // a bridge holds names only and connects in a child folder too (0.4.0 Ruling 6): this project's own server
-    if (row.routes[routeId] && row.routes[routeId].runtime === 'bridge') return 'project';
-    if (routeId !== 'remote') return 'local';
-    const route = row.routes[routeId];
-    if (!route || !route.helper) return 'project';
-    return PARENT_HELPER_IN_CHILD ? 'project' : 'user';
+    return scopesFor(row, routeId).includes('project') ? 'project' : 'local';
 }
 // an optional key is sent by default when a name D9 offers is filled in the chain the chosen scope reads
 export const keyToSend = (keyState: KeyState | null | undefined): boolean => Boolean(keyState && keyState.found);
