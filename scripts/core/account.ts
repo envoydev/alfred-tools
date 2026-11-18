@@ -30,14 +30,6 @@ export function localRoot(project: string): string
     return result.status === 0 && result.stdout.trim() ? path.resolve(result.stdout.trim()) : project;
 }
 
-// `~` and `~/x` to the home directory (the script expands it; the server never sees a `~`).
-export function expandHome(inputPath: string, env: Env = process.env): string
-{
-    if (inputPath === '~') return homeDir(env);
-    if (/^~[\\/]/.test(inputPath)) return path.join(homeDir(env), inputPath.slice(2));
-    return inputPath;
-}
-
 // A JSON file as a state, never a throw: ok | missing | empty | malformed (| unreadable).
 export function readState<Doc = Record<string, unknown>>(file: string): ReadState<Doc>
 {

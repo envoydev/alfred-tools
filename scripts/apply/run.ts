@@ -1,7 +1,5 @@
-#!/usr/bin/env node
-// APPLY - runs a plan's operations in order through the `claude` CLI, reads each back, and stops at the first failure.
-//
-//   node apply.ts <plan.json> [--tmp <dir>] [--data <plugin data dir>]
+// APPLY - runs a plan's operations in order through the `claude` CLI, reads each back, and stops at the first failure;
+// scripts/apply.ts runs it.
 //
 // The CLI is the only writer of .mcp.json and the account file, but for the order-mcp-json step (mcp-order.ts), which
 // reorders .mcp.json's servers and changes no value (the user's ruling, 2026-11-11); this file otherwise only reads them back. Everything applied
@@ -34,11 +32,12 @@ import { addAndVerify, rowOf, removeAndVerify, restoreBy, makeRunner, restoreSte
 import { rootIgnore, writeHelper, writeShipped, moveRootFile, ensureKeyName, listWrite, retireRecord, retireShipped, serenaConfigInit, denyRead, recordRoot, failureLists } from './file-steps.ts';
 import { emptyBaseModes, setProjectFolder } from './serena-config.ts';
 import { inTreeLines } from './serena-projects.ts';
+import { GITIGNORE_ALL } from './constants.ts';
 import type { Endpoint, McpAddStep, McpMoveStep, McpReplaceStep, PlanStep, Reconnect } from '../plan/types.ts';
 import type { ApplyCtx, ApplyOptions, ApplyPlan, ApplyReport, StepResult, Status } from './types.ts';
 
-// One operation. { ok, detail, extra[] }
-export function runStep(step: PlanStep, context: ApplyCtx): StepResult
+// One operation. -> { ok, detail, unchanged? }
+function runStep(step: PlanStep, context: ApplyCtx): StepResult
 {
     const call = context.call!;
     switch (step.op)
@@ -46,7 +45,7 @@ export function runStep(step: PlanStep, context: ApplyCtx): StepResult
         case 'ensure-dir': {
             const existed = fs.existsSync(step.path);
             fs.mkdirSync(step.path, { recursive: true });
-            if (!existed) fs.writeFileSync(path.join(step.path, '.gitignore'), '*\n');
+            if (!existed) fs.writeFileSync(path.join(step.path, '.gitignore'), GITIGNORE_ALL);
             return { ok: true, detail: existed ? `${step.path} exists - left as it is` : `created ${step.path} with a .gitignore holding *` };
         }
         case 'root-ignore': return rootIgnore(step.path);
@@ -186,7 +185,7 @@ export const refusedLine = ({ name, variable, hint }: Pick<Reconnect, 'name' | '
 
 // After the read-back: each hosted keyed server's reconnect line, then a refused key named - or, in a folder whose trust
 // is not accepted, the trust line, since the helper never ran and the key never left the file.
-export function reconnectLines(reconnect: Reconnect[], statuses: Status[], project: string): string[]
+function reconnectLines(reconnect: Reconnect[], statuses: Status[], project: string): string[]
 {
     const lines = reconnect.map(reconnectLine);
     for (const reconnectEntry of reconnect.filter((entry) => entry.filled))

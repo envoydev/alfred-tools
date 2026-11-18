@@ -1,4 +1,5 @@
 // Names: whether a registration name is usable at its scope.
+import { throughCmd } from '../core/cmd-line.ts';
 import { bridgeParts } from './entry.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
@@ -21,7 +22,6 @@ export function nameProblem(name: string, { catalog, taken = [], self = null }: 
 // after 30000ms', and the first session start meets the same limit. So a written registration is followed by a fetch of
 // exactly what it launches - same pin, same cut-off, from its env - into the runtime's cache. -> a plan step, or null for a
 // launch with nothing to fetch (a hosted URL, a binary) or, given the entry it replaces, one that fetches the same thing.
-const UVX_VALUE = new Set(['--python', '-p', '--exclude-newer', '--from', '--with', '--with-requirements', '--with-editable', '--index', '--index-url', '--extra-index-url']);
 export function fetchStep(name: string, entry: ServerEntry | null | undefined, rowId?: string | null | undefined, old?: ServerEntry | null): FetchStep | null
 {
     const step = fetchOf(name, entry, rowId);
@@ -30,6 +30,8 @@ export function fetchStep(name: string, entry: ServerEntry | null | undefined, r
     return step;
 }
 
+// uvx's options that take the next argument as their value, so a fetch keeps the value with its option.
+const UVX_VALUE = new Set(['--python', '-p', '--exclude-newer', '--from', '--with', '--with-requirements', '--with-editable', '--index', '--index-url', '--extra-index-url']);
 function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: string | null | undefined): FetchStep | null
 {
     if (!entry || !entry.command) return null;
@@ -43,7 +45,7 @@ function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: str
     }
     let cmd: string | undefined = entry.command;
     let args = (entry.args || []).slice();
-    const viaCmd = /^cmd(\.exe)?$/i.test(cmd) && /^\/c$/i.test(args[0] || '');
+    const viaCmd = throughCmd(cmd, args);
     if (viaCmd) { cmd = args[1]; args = args.slice(2); }
     let argv: string[];
     let what: string | undefined;

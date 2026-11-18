@@ -5,9 +5,11 @@
 // byte, writes through a temporary file with the file's own mode, and never prints, returns or logs the file's text.
 import fs from 'node:fs';
 import path from 'node:path';
+import { replaceFile } from '../core/replace-file.ts';
+import { alfredSerenaHome } from '../entries/locations.ts';
 import type { ServerEntry } from '../core/types.ts';
 
-export const CONFIG = 'serena_config.yml';
+const CONFIG = 'serena_config.yml';
 const KEY = /^base_modes[ \t]*:(.*?)(\r?)$/;
 
 export const configOf = (home: string): string => (/^[A-Za-z]:[\\/]|\\\\/.test(home) ? path.win32 : path.posix).join(home, CONFIG);
@@ -85,11 +87,7 @@ export function emptyBaseModes(file: string): { changed: boolean; detail: string
 // The file's new text through a temporary file, with the file's own mode.
 function replaceInPlace(file: string, next: string): void
 {
-    const tmp = `${file}.${process.pid}.tmp`;
-    const mode = fs.statSync(file).mode & 0o777;
-    fs.writeFileSync(tmp, next, { mode });
-    fs.chmodSync(tmp, mode);
-    fs.renameSync(tmp, file);
+    replaceFile(file, next, fs.statSync(file).mode & 0o777);
 }
 
 export const FOLDER_KEY = 'project_serena_folder_location';
@@ -173,8 +171,7 @@ export function writeMinimalConfig(file: string, home: string): { wrote: boolean
 // on the machine reads too. -> { ok, shared?, reason? }
 export function editableHome(home: string, context: { platform?: string; home?: string } = {}): { ok: false; reason: string; shared?: undefined } | { ok: true; shared: boolean; reason?: undefined }
 {
-    const posixHome = String(home || '').replace(/\\/g, '/').replace(/\/+$/, '');
-    if (/(^|\/)\.alfred\/serena\/home$/.test(posixHome))
+    if (alfredSerenaHome(home))
         return { ok: false, reason: `serena's settings at ${configOf(home)} are alfred-code's - base_modes is left; its manual still names edit tools serena does not have` };
     return { ok: true, shared: context.platform === 'win32' };
 }

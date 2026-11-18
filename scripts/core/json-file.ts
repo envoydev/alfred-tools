@@ -14,6 +14,7 @@ export const parseJson = (text: string): unknown => JSON.parse(stripBom(text));
 // The file's parsed value, or `{}` when it is absent or unreadable.
 export const readJson = (file: string): unknown => { try { return parseJson(fs.readFileSync(file, 'utf8')); } catch { return {}; } };
 
+// A pipe closed early must not truncate the last lines of a script's output: make stdout and stderr blocking.
 export function blockingStdio(streams: NodeJS.WriteStream[] = [process.stdout, process.stderr]): void
 {
     for (const stream of streams)
@@ -23,8 +24,8 @@ export function blockingStdio(streams: NodeJS.WriteStream[] = [process.stdout, p
     }
 }
 
-// Two JSON values the same, whatever their key order (moved from plan.ts, which re-exports it).
-export function sortKeys(value: unknown): unknown
+// Two JSON values the same, whatever their key order: each compared with every object's keys sorted.
+function sortKeys(value: unknown): unknown
 {
     if (Array.isArray(value)) return value.map(sortKeys);
     if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortKeys((value as Record<string, unknown>)[key])]));

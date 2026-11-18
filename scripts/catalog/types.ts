@@ -123,8 +123,6 @@ export interface DangerousTool
     why: string; // stored - do not rename
 }
 
-export type RouteName = 'local' | 'remote' | 'bridge';
-
 export interface CatalogRow
 {
     id: string; // stored - do not rename

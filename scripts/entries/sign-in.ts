@@ -1,16 +1,21 @@
 // One sign-in for both apps (spec D5, ruling 12): the mcp-remote form with its sign-in kept in the family's root.
+import { throughCmd } from '../core/cmd-line.ts';
 import type { ServerEntry } from '../core/types.ts';
-import type { Catalog } from '../catalog/types.ts';
+import type { Catalog, CatalogPackage } from '../catalog/types.ts';
 import type { SignInParts } from './types.ts';
 
 // ---- one sign-in for both apps (spec D5, ruling 12) ----------------------------------------------------------------
+
+// mcp-remote's pin and cut-off, which the catalog keeps once, on sentry's bridge route; tests/catalog.test.ts holds that
+// route and its pinned mcp-remote, so none of the three lookups comes back empty.
+export const mcpRemotePackage = (catalog: Catalog): CatalogPackage => catalog.byId.get('sentry')!.routes.bridge!.package!;
 
 // A hosted route picked with no key, for Claude Code and Cursor: mcp-remote with its sign-in kept in the family's root
 // (MCP_REMOTE_CONFIG_DIR), so both apps share one OAuth sign-in. The pin and cut-off are the catalog's mcp-remote, the
 // bridge route's package. Windows launches npx through cmd /c, as every npx entry.
 export function signInFormOf(url: string, root: string, catalog: Catalog, context: { platform?: string | undefined } | null | undefined): ServerEntry
 {
-    const packageSpec = catalog.byId.get('sentry')!.routes.bridge!.package!;
+    const packageSpec = mcpRemotePackage(catalog);
     const args = ['-y', `${packageSpec.name}@${packageSpec.version}`, url];
     const launch = context && context.platform === 'win32' ? { command: 'cmd', args: ['/c', 'npx', ...args] } : { command: 'npx', args };
     return { type: 'stdio', ...launch, env: { npm_config_before: packageSpec.cutoff, MCP_REMOTE_CONFIG_DIR: root } };
@@ -23,7 +28,7 @@ export function signInParts(entry: ServerEntry | null | undefined): SignInParts 
     if (!entry || typeof entry !== 'object' || typeof entry.command !== 'string' || !Array.isArray(entry.args)) return null;
     let cmd = entry.command;
     let args = entry.args.map(String);
-    if (/^cmd(\.exe)?$/i.test(cmd) && /^\/c$/i.test(args[0] || '')) { cmd = args[1] || ''; args = args.slice(2); }
+    if (throughCmd(cmd, args)) { cmd = args[1] || ''; args = args.slice(2); }
     if (cmd.replace(/\\/g, '/').split('/').pop()!.replace(/\.(cmd|exe)$/i, '').toLowerCase() !== 'npx') return null;
     const at = args.findIndex((argument) => /^mcp-remote@\S+$/.test(argument));
     if (at < 0) return null;

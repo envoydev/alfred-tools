@@ -5,6 +5,9 @@ import type { CatalogRoute, CatalogRules } from '../catalog/types.ts';
 
 export const pathFor = (platform: string): path.PlatformPath => (platform === 'win32' ? path.win32 : path.posix);
 export const slashes = (pathText: string): string => pathText.replace(/\\/g, '/');
+// The path flavour a path is written in: one that starts with a drive (C:\ or C:/) or a UNC prefix is Windows', any other
+// POSIX's.
+export const pathApiOf = (pathText: string): path.PlatformPath => (/^(?:[A-Za-z]:[\\/]|\\\\)/.test(pathText) ? path.win32 : path.posix);
 
 // An x64 node emulated on ARM reports arch x64 and PROCESSOR_ARCHITECTURE AMD64, so the machine-wide
 // PROCESSOR_IDENTIFIER ('ARMv8 (64-bit) Family 8 ...') is what still tells the truth there (alfred-code uv-python.js).

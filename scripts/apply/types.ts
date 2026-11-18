@@ -2,7 +2,7 @@
 import type { CliOptions, CliResult, Env, Outcome, ServerEntry } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { FetchStep } from '../entries/types.ts';
-import type { Expect, Plan } from '../plan/types.ts';
+import type { Expect, McpAddStep, McpMoveStep, McpReplaceStep, Plan } from '../plan/types.ts';
 
 // What one step reports: ok and why, and for a deny-read whether the file had every rule already.
 export interface StepResult extends Outcome
@@ -12,6 +12,9 @@ export interface StepResult extends Outcome
 
 // The lines a script prints, one argument per line.
 export type Log = (...lines: string[]) => void;
+
+// The steps that write a registration's entry: an add, a replace and a move.
+export type WriteStep = McpAddStep | McpReplaceStep | McpMoveStep;
 
 // One run of the claude CLI, which a test replaces.
 export type RunCli = (args: string[], options?: CliOptions) => CliResult;

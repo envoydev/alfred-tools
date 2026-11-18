@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // REFRESH THE CATALOG'S PINS - a repo script (`npm run refresh-pins`), never run by an install or an update.
 //
 //   node scripts/refresh-pins.ts            print what would move
@@ -48,7 +47,7 @@ export async function refresh(tools: ToolsFile, { registry, now = Date.now() }: 
 
 export const serialize = (tools: ToolsFile): string => `${JSON.stringify(tools, null, 2)}\n`;
 
-export function renderPins(out: Refresh, { write }: { write: boolean }): string
+function renderPins(out: Refresh, { write }: { write: boolean }): string
 {
     const lines: string[] = [];
     if (out.changes.length)
@@ -57,7 +56,7 @@ export function renderPins(out: Refresh, { write }: { write: boolean }): string
         const width = Math.max(...out.changes.map((change) => `${change.row}/${change.route}`.length));
         for (const change of out.changes) lines.push(`  ${`${change.row}/${change.route}`.padEnd(width)}  ${change.package} ${change.from} -> ${change.to}  (${change.ageDays} days old)`);
     }
-    else lines.push('refresh-pins: every pin is at the newest release that is at least 7 days old');
+    else lines.push(`refresh-pins: every pin is at the newest release that is at least ${registryLib.AGE_DAYS} days old`);
     for (const [title, list] of [['Held back', out.held], ['Could not check', out.errors]] as const)
         if (list.length) lines.push(`${title}:`, ...list.map((line) => `  ${line}`));
     if (out.changes.length && write)

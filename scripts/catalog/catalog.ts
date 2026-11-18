@@ -1,10 +1,9 @@
 // The catalog, loaded and indexed. Everything else reads rows through here, so the shape lives in one place.
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Catalog, CatalogRow, Fingerprint, FixesFile, ReservedFile, ToolsFile } from './types.ts';
+import type { Catalog, Fingerprint, FixesFile, ReservedFile, ToolsFile } from './types.ts';
 
 export const CATALOG_DIR = path.join(import.meta.dirname, '..', '..', 'catalog');
-export const readJson = (name: string): unknown => JSON.parse(fs.readFileSync(path.join(CATALOG_DIR, name), 'utf8'));
 
 export function load(dir: string = CATALOG_DIR): Catalog
 {
@@ -23,7 +22,4 @@ export function fingerprintKey(fingerprint: Fingerprint): string
     if (fingerprint.command) return `cmd:${fingerprint.command}`;
     return `url:${fingerprint.host || '*'}${fingerprint.pathPrefix || ''}`;
 }
-
-export const routesOf = (row: CatalogRow): string[] => (row.kind === 'mcp' ? Object.keys(row.routes) : []);
-export const supportedOn = (row: CatalogRow, platform: string): boolean => row.os.includes(platform);
 

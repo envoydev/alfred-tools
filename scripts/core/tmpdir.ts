@@ -1,6 +1,5 @@
-#!/usr/bin/env node
-// Prints a fresh temp folder in the form this machine's Node resolves (mktemp -d gives a POSIX path that a native Windows
-// Node cannot open). The walk keeps its inventory, answers and plan files in it.
+// A fresh temp folder in the form this machine's Node resolves (mktemp -d gives a POSIX path that a native Windows Node
+// cannot open), which scripts/tmpdir.ts prints. The walk keeps its inventory, answers and plan files in it.
 //
 // The folder holds what one command hands from script to script, so the last script that runs on it removes it
 // (`release`): apply.ts, update.ts --apply or fix.ts --apply when no fetch file goes on, else fetch.ts. Only a folder
@@ -38,7 +37,7 @@ export function releaseTempDir(dir: string | null | undefined, log: (line: strin
 }
 
 // this plugin's folders older than 24 hours; a folder another user owns, or one that is not a folder, is skipped
-export function sweepTempDirs(now: number = Date.now()): void
+function sweepTempDirs(now: number = Date.now()): void
 {
     const root = tempRoot();
     for (const name of fs.readdirSync(root))

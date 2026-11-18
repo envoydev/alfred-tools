@@ -4,6 +4,7 @@
 // so update offers it no more and fix lists it as advice only. Written through a temporary file.
 import fs from 'node:fs';
 import path from 'node:path';
+import { replaceFile } from './replace-file.ts';
 import type { Declined, DeclinedFile, Outcome } from './types.ts';
 
 export const FILE = 'retired-declined.json';
@@ -42,9 +43,7 @@ export function add(dataDir: string | null | undefined, items: Declined[]): Outc
     for (const it of items) if (!declined.some((entry) => same(entry, it))) declined.push({ id: it.id, scope: it.scope });
     fs.mkdirSync(dataDir, { recursive: true });
     const file = fileOf(dataDir);
-    const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, `${JSON.stringify({ version: 1, declined }, null, 2)}\n`);
-    fs.renameSync(tmp, file);
+    replaceFile(file, `${JSON.stringify({ version: 1, declined }, null, 2)}\n`);
     return { ok: true, detail: `recorded in ${file}: ${items.map((item) => `${item.id} (${item.scope})`).join(', ')} - not offered again` };
 }
 

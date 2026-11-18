@@ -33,8 +33,6 @@ export function logicalRoot(text: string, context: Machine): Root
     return root;
 }
 
-export const homeVar = (platform: string): string => (platform === 'win32' ? '${USERPROFILE}' : '${HOME}');
-
 // ${NAME} and ${NAME:-fallback} in an MCP entry, as Claude Code expands them (2.1.322, read from its own expander): a
 // variable that is set gives its value, an empty one included; the fallback is used only when it is unset; an unset
 // ${NAME} with no fallback stays as written and is named. -> { value, unset: [NAME] }
@@ -63,7 +61,7 @@ export function formatRoot(root: Root, _scope: string, context: Machine): { valu
 }
 
 // root + sub, in the written form: joined with the OS's separator at every scope
-export function withSub(rootStr: string, sub: string, _scope: string, context: Machine): string
+function withSub(rootStr: string, sub: string, _scope: string, context: Machine): string
 {
     if (!sub) return rootStr;
     return pathFor(context.platform).join(rootStr, sub);
@@ -88,6 +86,13 @@ export function serenaSpaceFree(context: Pick<Machine, 'env'>): Root
 export function validWindowsSerenaHome(rootStr: string): boolean
 {
     return path.win32.isAbsolute(rootStr) && !/\s/.test(rootStr) && !rootStr.includes('/') && /^[A-Za-z]:\\/.test(rootStr);
+}
+
+// alfred-code 2.x's serena home (.alfred/serena/home), shared with its old setup: serena's settings there are never the
+// plugin's to edit.
+export function alfredSerenaHome(home: string): boolean
+{
+    return /(^|\/)\.alfred\/serena\/home$/.test(String(home || '').replace(/\\/g, '/').replace(/\/+$/, ''));
 }
 
 // The default root for a row (before the user's answer), as a logical root: the project folder (memory: the account
@@ -120,14 +125,6 @@ export const ALFRED_ENTRIES = ['docs', 'state', 'statistics', 'workspace', 'flow
 
 // alfred-code is set up in this project: enabled for it AND <project>/.alfred/.gitignore is there, the file that keeps
 // its data out of git.
-// A value that names this machine: an absolute path (POSIX, a drive, UNC) or ~, with no ${VAR} in it. Every scope
-// takes one since 0.3.0 (project scope names this machine's paths); fix rows still read it to tell such a value apart.
-export function machinePath(value: unknown): boolean
-{
-    if (typeof value !== 'string' || value.includes('${')) return false;
-    return /^(\/|~|\\\\)/.test(value) || /^[A-Za-z]:[\\/]/.test(value);
-}
-
 export function alfredData(context: Machine, enabled: unknown): boolean
 {
     if (!enabled) return false;
@@ -158,6 +155,10 @@ export function rootOf(family: string, context: Machine): string
     return family === 'global' ? pathApi.join(context.home, '.alfred-tools') : pathApi.join(context.project, '.alfred-tools');
 }
 
+// The scope family whose root holds a scope's files: user scope is the global root's, project and local scope the project
+// root's.
+export const familyOf = (scope: string): 'project' | 'global' => (scope === 'user' ? 'global' : 'project');
+
 // The location side recommended for a row at a scope (spec D2, F6): the data folder sits in the root of the scope's
 // family - 'project' (the project root) at project and local scope, 'account' (the global root) at global scope. serena
 // on Windows needs an absolute, space-free home: a root with a space gives 'default' (the profile's .serena, else a
@@ -175,9 +176,6 @@ export function otherPlace(_row: CatalogRow, name: string, side: string, context
     if (context && context.platform && (context.roots || context.project)) return logicalRoot(pathFor(context.platform).join(rootOf(side === 'account' ? 'global' : 'project', context), name), context);
     return side === 'account' ? { kind: 'home', rel: `.alfred-tools/${name}` } : { kind: 'project', rel: `.alfred-tools/${name}` };
 }
-
-// The other place from 'Locations': the account folder for a project default, the project folder for memory.
-export const otherSide = (row: CatalogRow, name: string, context: Machine | null = null): Root => otherPlace(row, name, row.locations!.defaultSide === 'account' ? 'project' : 'account', context);
 
 // The root an installed entry carries, in written form, from the row's first derived key.
 export function rootOfEntry(row: CatalogRow, entry: ServerEntry): string | null

@@ -1,7 +1,9 @@
-// The file steps of an apply (spec D2-D4, D6, D8): each skips what is in place.
+// The file steps of an apply (spec D2-D4, D6, D8): each skips what is in place, so a re-run after a failed add writes
+// nothing again.
 import fs from 'node:fs';
 import path from 'node:path';
 import { stripBom } from '../core/json-file.ts';
+import { replaceFile } from '../core/replace-file.ts';
 import * as keys from '../keys/keys.ts';
 import * as catalogLib from '../catalog/catalog.ts';
 import * as roots from '../roots/roots.ts';
@@ -9,14 +11,13 @@ import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { readRegistration, rowOf } from './cli-steps.ts';
 import { writeMinimalConfig } from './serena-config.ts';
+import { GITIGNORE_ALL } from './constants.ts';
 import { HELPER_VERSION } from '../copied/mcp-headers.js';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import type { ListServer, McpsList } from '../mcps-list/types.ts';
 import type { ShippedKind } from '../roots/types.ts';
 import type { ListWriteStep, RecordRootStep, RetireShippedStep } from '../plan/types.ts';
 import type { ApplyCtx, ApplyPlan, ApplyReport, StepResult } from './types.ts';
-
-// ---- the file steps (spec D2-D4, D6, D8): each skips what is in place, so a re-run after a failed add writes nothing again
 
 // A text file's line ending, and the text with each line appended in it; existing bytes are never rewritten.
 const eolOf = (text: string): string => (/\r\n/.test(text) ? '\r\n' : '\n');
@@ -79,7 +80,7 @@ export function ensureCommonjs(root: string): { wrote: boolean; note: string | n
         return { wrote: true, note: null };
     }
     let type: unknown = null;
-    try { type = JSON.parse(text.replace(/^\uFEFF/, '')).type; } catch { /* not this plugin's to judge */ }
+    try { type = JSON.parse(stripBom(text)).type; } catch { /* not this plugin's to judge */ }
     return { wrote: false, note: type === 'module' ? `${file} says "type": "module" - mcp-headers.js and mcp-bridge.js cannot load there; set it to "commonjs", or remove it` : null };
 }
 
@@ -101,7 +102,7 @@ export function writeShipped(kind: ShippedKind, root: string): StepResult
     if (plain && !fs.existsSync(root))
     {
         fs.mkdirSync(root, { recursive: true });
-        fs.writeFileSync(path.join(root, '.gitignore'), '*\n');
+        fs.writeFileSync(path.join(root, '.gitignore'), GITIGNORE_ALL);
     }
     const packageJsonResult = plain ? { wrote: false, note: null } : ensureCommonjs(root);
     const withPkg = (detail: string): StepResult => ({ ok: true, detail: [detail, packageJsonResult.wrote ? `wrote ${path.join(root, 'package.json')} (type commonjs)` : null, packageJsonResult.note].filter(Boolean).join('; ') });
@@ -121,7 +122,7 @@ export function serenaConfigInit(file: string, home: string): StepResult
         if (!fs.existsSync(home))
         {
             fs.mkdirSync(home, { recursive: true });
-            fs.writeFileSync(path.join(home, '.gitignore'), '*\n');
+            fs.writeFileSync(path.join(home, '.gitignore'), GITIGNORE_ALL);
         }
         return { ok: true, detail: writeMinimalConfig(file, home).detail };
     }
@@ -174,9 +175,7 @@ function writeJson(file: string, doc: unknown, read: { state?: string | undefine
     fs.mkdirSync(path.dirname(file), { recursive: true });
     let backupPath: string | null = null;
     if (read && read.state === 'bad' && fs.existsSync(file)) { backupPath = `${file}.bak`; fs.copyFileSync(file, backupPath); }
-    const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, `${JSON.stringify(doc, null, 2)}\n`);
-    fs.renameSync(tmp, file);
+    replaceFile(file, `${JSON.stringify(doc, null, 2)}\n`);
     return backupPath;
 }
 const readNote = (read: { note?: string | undefined } | null | undefined, backupPath: string | null): string => (read && read.note ? ` - ${read.note}${backupPath ? `; the old file kept as ${backupPath}` : ''}` : '');

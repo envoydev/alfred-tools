@@ -117,7 +117,6 @@ export interface Outcome
     detail: string;
 }
 
-// A pipe closed early must not truncate the last lines of a script's output: make stdout and stderr blocking.
 // A stream's libuv handle, which Node's types do not declare.
 export type HandleOf = { _handle?: { setBlocking?: (blocking: boolean) => void } | null };
 

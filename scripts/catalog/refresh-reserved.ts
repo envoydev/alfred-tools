@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Rebuilds catalog/reserved-names.json from the alfred-code checkout beside this repo (or --alfred <dir>): the names
 // alfred-code's retire path may remove a registration under, which no catalog default and no chosen name may use.
 //   A = every id in meta/retired-plugins.json whose retiredIn is 2.10.1 (the retires that can still fire)
@@ -7,9 +6,10 @@
 // `--check` compares instead of writing. Without a checkout the shipped file is the record.
 import fs from 'node:fs';
 import path from 'node:path';
+import { CATALOG_DIR } from './catalog.ts';
 import type { AlfredFiles, ReservedFile, RetiredRow } from './types.ts';
 
-const FILE = path.join(import.meta.dirname, '..', '..', 'catalog', 'reserved-names.json');
+const FILE = path.join(CATALOG_DIR, 'reserved-names.json');
 
 export function reservedFrom(alfredDir: string): string[]
 {

@@ -1,8 +1,5 @@
-#!/usr/bin/env node
-// FETCH - the slow half of an apply: fills the runtime caches for what apply.ts just registered, starts each new server
-// once, then asks the CLI for each status.
-//
-//   node fetch.ts <fetch.json>
+// FETCH - the slow half of an apply, which scripts/fetch.ts runs: fills the runtime caches for what apply.ts just
+// registered, starts each new server once, then asks the CLI for each status.
 //
 // apply.ts (and update.ts, fix.ts) write fetch.json once the registrations are written and read back. Claude Code gives a
 // server 30 seconds to answer its first start, and a first start can take minutes - measured on macOS, memory's package
@@ -26,6 +23,7 @@ import { expandVars } from '../entries/locations.ts';
 import { bridgeParts } from '../entries/entry.ts';
 import { signInParts } from '../entries/sign-in.ts';
 import * as serenaConfig from './serena-config.ts';
+import { FETCH_LIMIT_MS, KILL_AFTER_MS } from './constants.ts';
 import type { ChildProcessByStdio } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
 import type { Env, ServerEntry } from '../core/types.ts';
@@ -37,7 +35,7 @@ const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVe
 // ${VAR} and ${VAR:-default}, as Claude Code expands them in an MCP entry (entries/locations.ts expandVars)
 export const expandedText = (text: unknown, env: Env): string => expandVars(text, env).value;
 // the first ${VAR} with no default that is not set: a start without it only fails
-export const unsetVar = (entry: ServerEntry, env: Env): string | null => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((match) => match[1]!).find((variableName) => env[variableName] === undefined) || null;
+const unsetVar = (entry: ServerEntry, env: Env): string | null => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((match) => match[1]!).find((variableName) => env[variableName] === undefined) || null;
 
 // How the runtime (npm, uvx, docker) is spawned, never the claude CLI, and with no limit of Claude Code's. Windows: one
 // quoted command line through the shell so npm.cmd resolves, and no args array (Node's DEP0190); the fetch step's own
@@ -45,11 +43,11 @@ export const unsetVar = (entry: ServerEntry, env: Env): string | null => [...JSO
 // `shim` (a Volta `npm.exe` is no shim); without it the name decides. See core/cmd-line.ts spawnArgs.
 export const fetchSpawnArgs = (argv: string[], platform: string, shim?: boolean) => spawnArgs(argv[0]!, argv.slice(1), platform, shim);
 
-export function realFetch(argv: string[], { cwd, env }: { cwd: string; env: Env })
+function realFetch(argv: string[], { cwd, env }: { cwd: string; env: Env })
 {
     const shim = process.platform === 'win32' ? shimOfLaunch(argv[0]!, argv.slice(1), env, fs.existsSync, cwd) : undefined;
     const spawnArguments = fetchSpawnArgs(argv, process.platform, shim);
-    return spawnSync(spawnArguments.file, spawnArguments.args, { cwd, env, encoding: 'utf8', timeout: 1800000, windowsHide: true, shell: spawnArguments.shell, stdio: ['ignore', 'pipe', 'pipe'] });
+    return spawnSync(spawnArguments.file, spawnArguments.args, { cwd, env, encoding: 'utf8', timeout: FETCH_LIMIT_MS, windowsHide: true, shell: spawnArguments.shell, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
 // A server and everything it started: TERM, then KILL after 5 s (Windows: taskkill /T /F). -> Promise, once it is gone
@@ -60,7 +58,7 @@ function stopTree(child: ChildProcessByStdio<Writable, Readable, Readable>): Pro
         if (child.exitCode !== null || child.signalCode !== null) return resolve();
         if (process.platform === 'win32') { spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }); return resolve(); }
         const kill = (signal: NodeJS.Signals) => { try { process.kill(-child.pid!, signal); } catch { /* already gone */ } };
-        const hard = setTimeout(() => { kill('SIGKILL'); resolve(); }, 5000);
+        const hard = setTimeout(() => { kill('SIGKILL'); resolve(); }, KILL_AFTER_MS);
         child.once('exit', () => { clearTimeout(hard); kill('SIGKILL'); resolve(); });
         kill('SIGTERM');
     });
@@ -132,7 +130,7 @@ export const nextLines = (file: string, job: FetchJob): string[] => [
     `  fetches ${job.fetch.map((step) => step.what).join(', ')} and starts each once, then reports the status of ${job.check.join(', ')} (claude mcp get)`,
 ];
 
-// Each server's status line as `claude mcp get` prints it - a health check of up to 30 s each. -> [{ name, out }]
+// Each server's status line as `claude mcp get` prints it - a health check of up to 30 s each. -> [{ name, out, issue }]
 export function serverStatus(names: string[], { cwd, env, runCli = cli.runClaude, log = console.log }: { cwd: string; env: Env; runCli?: RunCli; log?: Log }): Status[]
 {
     if (names.length) log('', 'Status, from the CLI:');
@@ -147,7 +145,7 @@ export function serverStatus(names: string[], { cwd, env, runCli = cli.runClaude
     });
 }
 
-// -> Promise<{ fetched: [what], started: [name], skipped: [line], warnings: [detail], status: [{ name, out }] }>
+// -> Promise<{ fetched: [what], started: [name], skipped: [line], warnings: [detail], status: [{ name, out, issue }] }>
 export async function runFetchJob(job: FetchJob, { env = process.env, runFetch = realFetch, start = realStart, runCli = cli.runClaude, log = console.log }: FetchOptions = {}): Promise<FetchRun>
 {
     const report: FetchRun = { fetched: [], started: [], skipped: [], warnings: [], status: [] };

@@ -6,9 +6,8 @@ import * as keys from '../keys/keys.ts';
 import { templateNames } from '../copied/mcp-bridge.js';
 import { parsePairs } from '../copied/mcp-headers.js';
 import { pathFor, pythonRequest } from './platform.ts';
-import { rootOfEntry, rootOf, applyRoot } from './locations.ts';
+import { alfredSerenaHome, applyRoot, familyOf, rootOf, rootOfEntry } from './locations.ts';
 import { signInParts } from './sign-in.ts';
-import * as serenaConfig from '../apply/serena-config.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow, CatalogRules } from '../catalog/types.ts';
 import type { BridgeParts, BuildAnswers, Current, HelperParts, Machine, Registration } from './types.ts';
@@ -48,7 +47,7 @@ export function subst(text: unknown, values: Record<string, string>): string
 // ---- the server's settings (spec D9) ---------------------------------------------------------------------------------
 
 // appium's SDK homes: resolved on this machine (appium-sdk-env), never a setting
-export const APPIUM_SDK_ENV = ['ANDROID_HOME', 'JAVA_HOME'];
+const APPIUM_SDK_ENV = ['ANDROID_HOME', 'JAVA_HOME'];
 
 // The settings a stdio route's env holds, as [[NAME, value]]: the registration's env when there is one, else the
 // catalog's; the values install resolves (a data folder, an SDK home, the npm cut-off) and the key are not settings.
@@ -144,9 +143,9 @@ export function helperParts(command: unknown): HelperParts | null
 }
 
 // Where a registration at `scope` finds the helper: absolute at every scope, in the root of the scope's family (F7).
-export function helperPathFor(scope: string, context: Machine): string
+function helperPathFor(scope: string, context: Machine): string
 {
-    return pathFor(context.platform).join(rootOf(scope === 'user' ? 'global' : 'project', context), 'mcp-headers.js');
+    return pathFor(context.platform).join(rootOf(familyOf(scope), context), 'mcp-headers.js');
 }
 
 // The helper's third argument: the global root, at local scope only and only when it is a named folder - the helper reads
@@ -172,7 +171,7 @@ export function splitPair(text: string): { header: string; kind: 'name' | 'fixed
 // `<header>=<var>`, then each setting as `<header>:<value>`, in the order the catalog lists them. A command being
 // rewritten (`asRead`: its pairs as read) keeps its `=` pairs and every `:` pair the route does not list as a setting
 // exactly as they were, in that order, and only its settings are replaced.
-export function helperPairs(route: CatalogRoute, settings: Record<string, string> = {}, asRead: string[] | null = null): string[]
+function helperPairs(route: CatalogRoute, settings: Record<string, string> = {}, asRead: string[] | null = null): string[]
 {
     const order = (route.settings || []).map((setting) => setting.header);
     const rank = (header: string) => { const i = order.indexOf(header); return i < 0 ? order.length : i; };
@@ -192,19 +191,19 @@ export const helperFor = (route: CatalogRoute, scope: string, context: Machine, 
 // Where a bridge registration at `scope` finds mcp-bridge.js: beside the helper, absolute at every scope.
 export function bridgePathFor(scope: string, context: Machine): string
 {
-    return pathFor(context.platform).join(rootOf(scope === 'user' ? 'global' : 'project', context), 'mcp-bridge.js');
+    return pathFor(context.platform).join(rootOf(familyOf(scope), context), 'mcp-bridge.js');
 }
 
 const CONTEXT_FILE = 'serena-context.yml';
 
 // serena's context file (D7): in the entry's SERENA_HOME when serena's own settings there are the plugin's to keep (an
 // editable home), else in the scope's family root; absolute at every scope. With no entry it is the root's.
-export function contextPathFor(scope: string, context: Machine, entry: ServerEntry | null | undefined = null): string
+function contextPathFor(scope: string, context: Machine, entry: ServerEntry | null | undefined = null): string
 {
     const pathApi = pathFor(context.platform);
     const home = entry && entry.env && entry.env.SERENA_HOME;
-    if (home && serenaConfig.editableHome(home, { platform: context.platform }).ok) return pathApi.join(home, CONTEXT_FILE);
-    return pathApi.join(rootOf(scope === 'user' ? 'global' : 'project', context), CONTEXT_FILE);
+    if (home && !alfredSerenaHome(home)) return pathApi.join(home, CONTEXT_FILE);
+    return pathApi.join(rootOf(familyOf(scope), context), CONTEXT_FILE);
 }
 
 // The --context an entry runs with points at this plugin's file (any root) - the path form D7 writes, not a name such as
@@ -258,7 +257,7 @@ export function withoutPairs(args: readonly string[]): string[]
 // {SENTRY_SLUG}, and keeps an optional segment's `?`.
 export const renameTemplate = (template: string, names: Record<string, string>): string => template.replace(/\{([A-Za-z_][A-Za-z0-9_]*)(\?)?\}/g, (_match: string, name: string, optional: string | undefined) => `{${names[name] || name}${optional || ''}}`);
 
-// A fresh entry from the catalog. `a` = { rootStr, scope, executablePath, token, keyName, params }. A hosted route that
+// A fresh entry from the catalog. `answers` = { rootStr, scope, executablePath, token, keyName, params }. A hosted route that
 // sends a key gets `headersHelper` and no `headers`: the key stays in .mcps-secrets (spec D4).
 export function buildEntry(row: CatalogRow, routeId: string, answers: BuildAnswers, context: Machine, rules: CatalogRules): ServerEntry
 {

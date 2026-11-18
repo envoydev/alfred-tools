@@ -1,7 +1,7 @@
 // The Windows command line a runtime or client is started with: argument quoting for cmd.exe, shared by every script that
 // spawns something through the shell (claude-cli.ts, fetch, sign-in).
 import path from 'node:path';
-import { DEFAULT_PATHEXT, PATH_LIST_SEPARATOR, PATH_SEPARATOR_PATTERN, SHIM_FILE_PATTERN, SHIM_NAME_PATTERN } from './cmd-line-constants.ts';
+import { CMD_PROGRAM_PATTERN, CMD_RUN_FLAG_PATTERN, DEFAULT_PATHEXT, PATH_LIST_SEPARATOR, PATH_SEPARATOR_PATTERN, SHIM_FILE_PATTERN, SHIM_NAME_PATTERN } from './cmd-line-constants.ts';
 
 // One argument as the Windows argv rules read it - the node npm's claude.cmd starts parses its line this way: wrapped in
 // quotes, a run of backslashes before a quote doubled plus one for the quote, a run before the closing quote doubled,
@@ -58,10 +58,13 @@ export function resolveOnPath(name: string, env: Record<string, string | undefin
     return null;
 }
 
+// A launch written through cmd.exe - `cmd /c <program> ...` - which starts the program named after the /c.
+export const throughCmd = (command: string, args: readonly string[]): boolean => CMD_PROGRAM_PATTERN.test(command) && CMD_RUN_FLAG_PATTERN.test(args[0] || '');
+
 // The program a launch starts: the command, or - when the command is `cmd /c` - what follows it, which cmd would start.
 function launchOf(command: string, args: string[]): { name: string; rest: string[] }
 {
-    const [name = command, ...rest] = /^cmd(\.exe)?$/i.test(command) && /^\/c$/i.test(args[0] || '') ? args.slice(1) : [command, ...args];
+    const [name = command, ...rest] = throughCmd(command, args) ? args.slice(1) : [command, ...args];
     return { name, rest };
 }
 

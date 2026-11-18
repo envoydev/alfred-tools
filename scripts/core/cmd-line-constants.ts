@@ -6,3 +6,6 @@ export const PATH_SEPARATOR_PATTERN = /[\\/]/;
 export const SHIM_FILE_PATTERN = /\.(?:cmd|bat)$/i;
 // the name rule, used only when the name resolves to no file: npm, npx, pnpm and yarn are shims on Windows
 export const SHIM_NAME_PATTERN = /^(?:(?:npm|npx|pnpm|yarn)|.*\.(?:cmd|bat))$/i;
+// a launch through cmd.exe: the program cmd or cmd.exe, then /c before the program it starts
+export const CMD_PROGRAM_PATTERN = /^cmd(\.exe)?$/i;
+export const CMD_RUN_FLAG_PATTERN = /^\/c$/i;

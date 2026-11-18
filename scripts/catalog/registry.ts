@@ -11,7 +11,7 @@ import type { Aged, Choice, FetchFn, NpmDoc, PypiDoc, Release } from './types.ts
 
 export const DAY = 86400000;
 export const AGE_DAYS = 7;
-export const STABLE = { npm: /^\d+\.\d+\.\d+$/, pypi: /^\d+(\.\d+)*$/ }; // no -rc / -beta / a1 / b2 / .dev / .post
+const STABLE = { npm: /^\d+\.\d+\.\d+$/, pypi: /^\d+(\.\d+)*$/ }; // no -rc / -beta / a1 / b2 / .dev / .post
 
 const npmBase = (env: Env): string => (env.ALFRED_TOOLS_NPM_URL || 'https://registry.npmjs.org').replace(/\/$/, '');
 const pypiBase = (env: Env): string => (env.ALFRED_TOOLS_PYPI_URL || 'https://pypi.org/pypi').replace(/\/$/, '');

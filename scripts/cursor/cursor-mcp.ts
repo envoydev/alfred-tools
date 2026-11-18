@@ -8,7 +8,10 @@ import path from 'node:path';
 import * as account from '../core/account.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import { stripBom, deepEqual } from '../core/json-file.ts';
+import { replaceFile } from '../core/replace-file.ts';
 import { bridgeParts, helperParts, withoutPairs } from '../entries/entry.ts';
+import { pathApiOf, pathFor } from '../entries/platform.ts';
+import { mcpRemotePackage } from '../entries/sign-in.ts';
 import * as kept from '../core/kept.ts';
 import * as keys from '../keys/keys.ts';
 import { load } from '../catalog/catalog.ts';
@@ -18,8 +21,6 @@ import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { ListServer } from '../mcps-list/types.ts';
 import type { CursorCtx, CursorDoc, CursorOf, CursorPlace, CursorRead, CursorWriteStep, ListSource, Managed } from './types.ts';
 
-const pathFor = (platform: string) => (platform === 'win32' ? path.win32 : path.posix);
-
 // The Cursor file of a scope family: the project's for project and local scope, the home's for user scope.
 export function fileFor(family: string, context: CursorPlace): string
 {
@@ -27,7 +28,7 @@ export function fileFor(family: string, context: CursorPlace): string
     return family === 'global' ? pathApi.join(context.home || account.homeDir(context.env || process.env), '.cursor', 'mcp.json') : pathApi.join(context.project!, '.cursor', 'mcp.json');
 }
 
-// -> { state: 'absent' | 'ok' | 'symlink' | 'bad' | 'shape', doc, eol }
+// -> { state: 'absent' | 'ok' | 'symlink' | 'bad' | 'shape', doc, lineEnd }
 export function readCursor(file: string): CursorRead
 {
     let stats: fs.Stats;
@@ -122,13 +123,10 @@ export function cursorWrite(step: CursorWriteStep, context: CursorCtx | null | u
     const said = notes.length ? `; ${notes.join('; ')}` : '';
     if (read.state === 'ok' && read.text === text) return { ok: true, detail: `${step.file} already holds these servers - left as it is${said}` };
     fs.mkdirSync(path.dirname(step.file), { recursive: true });
-    const tmp = `${step.file}.${process.pid}.tmp`;
     // the file's own mode is kept: ~/.cursor/mcp.json can hold a stdio route's key (D6), and a user's 0600 stays 0600
     let mode: number | undefined;
     try { mode = fs.statSync(step.file).mode & 0o777; } catch { /* a new file takes the default */ }
-    fs.writeFileSync(tmp, text, mode === undefined ? undefined : { mode });
-    if (mode !== undefined) fs.chmodSync(tmp, mode);
-    fs.renameSync(tmp, step.file);
+    replaceFile(step.file, text, mode);
     const back = readCursor(step.file);
     const wrong = back.state !== 'ok' ? [...managed.keys()] : [...managed.keys()].filter((name) => !skip.includes(name) && !deepEqual(back.doc!.mcpServers[name], managed.get(name)!.entry));
     if (wrong.length) return { ok: false, detail: `${step.file}: ${wrong.join(', ')} did not read back as written` };
@@ -178,7 +176,7 @@ function fillStdioKeys(managed: Map<string, Managed>, context: CursorCtx | null 
 
 // Is this Cursor entry the row's server? A bridge copy (D5) is matched by its URL, as a plain http entry, against the
 // row's fingerprints, and by itself against a `bridge` fingerprint: inventory.matchesFingerprint alone returns false for
-// every bridge entry against a host or path fingerprint. inventory.ts requires this file, so it is required here, late.
+// every bridge entry against a host or path fingerprint.
 export function matchesRow(entry: ServerEntry, row: CatalogRow | null | undefined): boolean
 {
     const fingerprints = Object.values((row && row.routes) || {}).flatMap((route) => route.fingerprints || []);
@@ -217,7 +215,7 @@ export function bridgeFormOf(entry: ServerEntry | null | undefined, catalog: Cat
     if (!entry || typeof entry.headersHelper !== 'string' || otherHeaders(entry).length) return null;
     const helper = helperParts(entry.headersHelper);
     if (!helper || helper.args.length < 2) return null;
-    const pathApi = /^(?:[A-Za-z]:[\\/]|\\\\)/.test(helper.path) ? path.win32 : path.posix;
+    const pathApi = pathApiOf(helper.path);
     const own = [pathApi.join(pathApi.dirname(helper.path), 'mcp-bridge.js'), entry.url!, helper.args[0]!, helper.args[1]!];
     const globalRoot = helper.root ? [helper.root] : [];
     const pairs = helper.pairs.flatMap((pair) => ['--header', pair]);
@@ -228,7 +226,7 @@ export function bridgeFormOf(entry: ServerEntry | null | undefined, catalog: Cat
         const rest = priorParts.globalRoot !== null ? withoutPairs(prior!.args!.slice(at + 6)) : [];
         return { ...prior, command: 'node', args: [...prior!.args!.slice(0, at), ...own, priorParts.packageSpec, ...globalRoot, ...rest, ...pairs], env: { ...(prior!.env || {}) } };
     }
-    const packageSpec = catalog.byId.get('sentry')!.routes.bridge!.package!;
+    const packageSpec = mcpRemotePackage(catalog);
     return { command: 'node', args: [...own, `${packageSpec.name}@${packageSpec.version}`, ...globalRoot, ...pairs], env: { npm_config_before: packageSpec.cutoff } };
 }
 

@@ -1,15 +1,15 @@
 // The CLI steps of an apply: quoting, the calls through the claude CLI, and a key taken back for a replace or a move.
 import * as account from '../core/account.ts';
-import { deepEqual } from '../plan/plan.ts';
+import { deepEqual } from '../core/json-file.ts';
 import * as kept from '../core/kept.ts';
 import * as keys from '../keys/keys.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
-import type { PlanStep, McpReplaceStep } from '../plan/types.ts';
-import type { ApplyCtx, Call, StepResult } from './types.ts';
+import type { PlanStep } from '../plan/types.ts';
+import type { ApplyCtx, Call, StepResult, WriteStep } from './types.ts';
 
 const quote = (text: string): string => (/^[A-Za-z0-9_\-./:=@,+]+$/.test(text) ? text : `'${text.replace(/'/g, "'\\''")}'`);
-export const restoreLine = (name: string, scope: string, entry: ServerEntry): string => `claude mcp add-json ${quote(name)} ${quote(JSON.stringify(entry))} -s ${scope}`;
+const restoreLine = (name: string, scope: string, entry: ServerEntry): string => `claude mcp add-json ${quote(name)} ${quote(JSON.stringify(entry))} -s ${scope}`;
 // the line that puts a registration back by hand, its credential values as the marker
 export function restoreBy(context: { catalog: Catalog }, step: { row?: string | null | undefined }, name: string, scope: string, entry: ServerEntry): string
 {
@@ -60,19 +60,22 @@ export function removeAndVerify(call: Call, context: Pick<ApplyCtx, 'project' | 
     return { ok: true, detail: `removed '${name}' from ${scope} scope` };
 }
 
+const isWriteStep = (step: PlanStep): step is WriteStep => step.op === 'mcp-add' || step.op === 'mcp-replace' || step.op === 'mcp-move';
+
 // A replace or a move read from a kept plan gets its real values back from the registration it was read from: the old
 // name and scope for a move, its own for a replace. -> { step } | { error }
 export function restoreStep(step: PlanStep, context: ApplyCtx): { step: PlanStep; error?: undefined } | { error: string; step?: undefined }
 {
-    if (!['mcp-add', 'mcp-replace', 'mcp-move'].includes(step.op) || !(kept.holdsKept((step as McpReplaceStep).entry) || kept.holdsKept((step as McpReplaceStep).old))) return { step };
+    if (!isWriteStep(step) || !(kept.holdsKept(step.entry) || kept.holdsKept('old' in step ? step.old : undefined))) return { step };
     if (step.op === 'mcp-add') return { error: `'${step.name}' holds a kept value and no registration to take it from - run the command again` };
-    const from = step.op === 'mcp-move' ? step.from : { name: (step as McpReplaceStep).name, scope: (step as McpReplaceStep).scope };
+    const from = step.op === 'mcp-move' ? step.from : { name: step.name, scope: step.scope };
     const changed = { error: `'${from.name}' changed since it was read - run the command again` };
     const source = readRegistration(from.name, from.scope, context.project, context.env);
-    const row = rowOf(context, step as McpReplaceStep);
-    if (!source || ((step as McpReplaceStep).old && !deepEqual(kept.maskCredentials(source, row), (step as McpReplaceStep).old))) return changed;
-    const entry = kept.restore((step as McpReplaceStep).entry, source, row);
-    return entry.error ? changed : { step: { ...step, entry: entry.entry, old: (step as McpReplaceStep).old ? source : (step as McpReplaceStep).old } as PlanStep };
+    const row = rowOf(context, step);
+    if (!source || (step.old && !deepEqual(kept.maskCredentials(source, row), step.old))) return changed;
+    const restored = kept.restore(step.entry, source, row);
+    if (restored.error !== undefined) return changed;
+    return { step: { ...step, entry: restored.entry, old: step.old ? source : step.old } };
 }
 
 // A stdio key at apply (R7): the step's `key` ({ name, files }, the stdio chain the plan named) fills the route's token
@@ -82,18 +85,21 @@ export function restoreStep(step: PlanStep, context: ApplyCtx): { step: PlanStep
 // -> { step, note } - the note names the key and the files, never a value.
 export function fillStep(step: PlanStep, context: ApplyCtx): { step: PlanStep; note: string | null }
 {
-    if (!(step as McpReplaceStep).key || !['mcp-add', 'mcp-replace', 'mcp-move'].includes(step.op)) return { step, note: null };
-    const row = rowOf(context, step as McpReplaceStep);
-    const route = row && row.routes ? row.routes[(step as McpReplaceStep).route!] : null;
-    if (!route || !route.tokenVar) return { step, note: null };
-    const to = step.op === 'mcp-move' ? step.to : { name: (step as McpReplaceStep).name, scope: (step as McpReplaceStep).scope };
+    if (!isWriteStep(step) || !step.key) return { step, note: null };
+    const { key, route: routeId } = step;
+    const row = rowOf(context, step);
+    const route = row && row.routes && routeId !== null ? row.routes[routeId] : null;
+    const tokenVar = route ? route.tokenVar : undefined;
+    if (!route || !tokenVar || routeId === null) return { step, note: null };
+    const to = step.op === 'mcp-move' ? step.to : { name: step.name, scope: step.scope };
     const where = `'${to.name}' (${to.scope})`;
-    const { name, files } = (step as McpReplaceStep).key!;
-    const fill = (value: string): PlanStep => ({ ...step, entry: keys.fillKeys((step as McpReplaceStep).entry, row, (step as McpReplaceStep).route!, to.scope, { [route.tokenVar!]: value }) } as PlanStep);
+    const { name, files } = key;
+    const fill = (value: string): PlanStep => ({ ...step, entry: keys.fillKeys(step.entry, row, routeId, to.scope, { [tokenVar]: value }) });
     const found = keys.valueIn(files, name);
     if (found) return { step: fill(found.value), note: `${name} for ${where} from ${found.file}` };
-    const held = (step as McpReplaceStep).old ? keys.tokenFields((step as McpReplaceStep).old, route).map((field) => field.at.reduce<unknown>((node, segment) => (node == null ? undefined : (node as Record<string, unknown>)[segment]), (step as McpReplaceStep).old)).find((candidate) => typeof candidate === 'string' && candidate !== '' && !keys.PLACEHOLDER.test(candidate) && !candidate.includes(kept.MARKER)) : undefined;
-    if (held !== undefined) return { step: fill(held as string), note: `${name} for ${where} is in none of ${files.join(', ')} - the key it holds is kept; fill ${name} in ${files[0]} to replace it` };
+    const old = 'old' in step ? step.old : undefined;
+    const held = old ? keys.tokenFields(old, route).map((field) => keys.valueAt(old, field.at)).find((candidate) => typeof candidate === 'string' && candidate !== '' && !keys.PLACEHOLDER.test(candidate) && !candidate.includes(kept.MARKER)) : undefined;
+    if (typeof held === 'string') return { step: fill(held), note: `${name} for ${where} is in none of ${files.join(', ')} - the key it holds is kept; fill ${name} in ${files[0]} to replace it` };
     return { step: fill(''), note: `${name} for ${where} is in none of ${files.join(', ')} - written empty: fill ${name} in ${files[0]}, then run /alfred-tools:configure and keep ${name} as the key's name - it writes the key in` };
 }
 
