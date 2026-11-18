@@ -87,17 +87,18 @@ for (const file of textFiles)
 // After a compaction Claude Code re-attaches only the first 5,000 tokens of a command (docs/sources.md), so a longer one
 // loses its tail mid-run: 17,500 characters is 5,000 tokens at about 3.5 characters a token.
 const COMMAND_MAX_CHARS = 17500;
-for (const file of fs.readdirSync(path.join(root, 'commands')).filter((name) => name.endsWith('.md')))
+const commandFiles = fs.readdirSync(path.join(root, 'commands')).filter((name) => name.endsWith('.md')).map((name) => path.join(root, 'commands', name));
+for (const file of commandFiles)
 {
-    const length = fs.readFileSync(path.join(root, 'commands', file), 'utf8').length;
-    if (length > COMMAND_MAX_CHARS) problems.push(`commands/${file}: ${length} characters - over ${COMMAND_MAX_CHARS}, the share of a 5,000-token re-attach (docs/sources.md)`);
+    const length = fs.readFileSync(file, 'utf8').length;
+    if (length > COMMAND_MAX_CHARS) problems.push(`commands/${path.basename(file)}: ${length} characters - over ${COMMAND_MAX_CHARS}, the share of a 5,000-token re-attach (docs/sources.md)`);
 }
 
 // The scripts are .ts and run on Node's type stripping (22.18 and newer): each command says what an older Node prints
 // and what to tell the user, before its first script call in the body (the frontmatter, allowed-tools included, is
 // skipped, as the CALL check skips it). Read with its line breaks folded, since prose wraps.
 const OLD_NODE = 'If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user: alfred-tools needs Node 22.18 or newer - `node --version` shows yours.';
-for (const file of fs.readdirSync(path.join(root, 'commands')).filter((f) => f.endsWith('.md')).map((f) => path.join(root, 'commands', f)))
+for (const file of commandFiles)
 {
     const body = fs.readFileSync(file, 'utf8').replace(/^---\n[\s\S]*?\n---\n/, '').replace(/\s+/g, ' ');
     const call = body.indexOf('node "${CLAUDE_PLUGIN_ROOT}/scripts/');

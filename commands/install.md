@@ -5,8 +5,8 @@ disable-model-invocation: true
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/table.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" *)
 ---
 
-Walk the user through installing tools from alfred-tools that are not installed here yet. The scripts do the work and print what
-you paste; you ask the questions. Argument: `$ARGUMENTS`.
+Walk the user through installing tools from alfred-tools that are not installed here yet. The scripts do the work and
+print what you paste; you ask the questions. Argument: `$ARGUMENTS`.
 
 Install only adds; it never changes, moves or removes a registration. A tool already installed in this project is
 changed or removed with `/alfred-tools:configure`; say so whenever the user asks for that here.
@@ -44,8 +44,9 @@ changed or removed with `/alfred-tools:configure`; say so whenever the user asks
 node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.ts" --json <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
-It reads the registrations, the plugins and the records of earlier answers, and starts no server. Exit 3 with one line means the `claude` CLI is missing: say so and stop. A file
-named as not valid JSON is unreadable: offer nothing that writes there.
+It reads the registrations, the plugins and the records of earlier answers, and starts no server. Exit 3 with one line
+means the `claude` CLI is missing: say so and stop. A file named as not valid JSON is unreadable: offer nothing that
+writes there.
 
 ## 2. The table
 
@@ -95,16 +96,16 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --questions <tmp>/inventory.json <t
 ```
 
 Its `next` is the one step to ask now: `next.id`, `next.call` (the questions, as one `AskUserQuestion`) and, sometimes,
-`next.set` (the one folder left for the tool; the record call writes it). The first step is the apps question, the second
-the settings question, then one tool's steps at a time. Until `next.id` is `done`:
+`next.set` (the one folder left for the tool; the record call writes it). The first step is the apps question, the
+second the settings question, then one tool's steps at a time. Until `next.id` is `done`:
 
 <!-- shared:walk-steps -->
 
 1. Ask `next.call` as printed. When `next.call` is empty, make no call.
 2. When a label is answered by something typed next (listed below), ask it in chat.
 3. Write `<tmp>/step.json` - `{"id": <next.id>, "answers": {<question id>: <label>}}`, an answer with a typed value as
-   `{"label": ..., "typed": ...}`, an 'Other' answer as `{"other": ...}`, and `{}` for
-   `answers` when no call was made - and run:
+   `{"label": ..., "typed": ...}`, an 'Other' answer as `{"other": ...}`, and `{}` for `answers` when no call was made -
+   and run:
 
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --record <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <tmp>/step.json --data "${CLAUDE_PLUGIN_DATA}"
@@ -114,7 +115,8 @@ the settings question, then one tool's steps at a time. Until `next.id` is `done
 
 It records the answers and prints the next step; exit 2 names what to fix.
 
-The apps question is asked once a run, for every tool picked ('Claude Code and Cursor' is recommended when Cursor is found):
+The apps question is asked once a run, for every tool picked ('Claude Code and Cursor' is recommended when Cursor is
+found):
 
 ```ask clients
 Which apps should these servers be set up for?
@@ -191,16 +193,17 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --skip <tmp>/inventory.json <tmp>/p
 node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" <tmp>/inventory.json <tmp>/answers.json --out <tmp>/plan.json --data "${CLAUDE_PLUGIN_DATA}" --connectors "<Name>,<Name>"
 ```
 
-`--connectors` is step 3's list. Paste the output verbatim in a fenced block. Its `mcps.json` lines are the list of the servers alfred-tools manages, `reorders` puts the catalog servers in the user's
-order, `Apps:` names the apps answered, and each `.cursor` write is Cursor's file, whose user entries are kept.
+`--connectors` is step 3's list. Paste the output verbatim in a fenced block. Its `mcps.json` lines are the list of the
+servers alfred-tools manages, `reorders` puts the catalog servers in the user's order, `Apps:` names the apps answered,
+and each `.cursor` write is Cursor's file, whose user entries are kept.
 
-Exit 1 means the plan has errors; show them and rewind the pick each names (below), never go around them. Add the
-audit and 'register anyway' lines from step 5.
+Exit 1 means the plan has errors; show them and rewind the pick each names (below), never go around them. Add the audit
+and 'register anyway' lines from step 5.
 
 <!-- shared:cursor-name -->
 
-A `cursor: <file> already has <name> - answer cursor-name-<name>@<file>` error is not a wrong answer: ask the questions in
-`<tmp>/plan.json` `cursorNames` (id `cursor-name-<name>@<file>`), four per call, as written - the recommended option
+A `cursor: <file> already has <name> - answer cursor-name-<name>@<file>` error is not a wrong answer: ask the questions
+in `<tmp>/plan.json` `cursorNames` (id `cursor-name-<name>@<file>`), four per call, as written - the recommended option
 follows whether the entry there is the same server:
 
 ```ask cursor-name-taken
@@ -250,17 +253,16 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/apply.ts" <tmp>/plan.json --tmp <tmp> --data
 
 Run it with the Bash tool's `timeout: 600000`. Claude Code asks permission for this call itself. It stops at the first
 failure, leaving what was applied in place and naming it; a re-run reuses the files already written. Paste the output
-verbatim. A failure prints
-the line that puts a registration back (`RESTORE BY HAND`): give it to the user as written. A key in it shows as
-`${ALFRED_TOOLS_KEPT}`, never its value: the user puts their key back there.
+verbatim. A failure prints the line that puts a registration back (`RESTORE BY HAND`): give it to the user as written. A
+key in it shows as `${ALFRED_TOOLS_KEPT}`, never its value: the user puts their key back there.
 
 Then report each picked tool as the read-back printed it (name, scope, route). Start step 8.
 
 <!-- shared:key-lines -->
 
 Keys: relay each `key:` line as printed (the name and its file, never a value), then the line the apply prints after the
-read-back for each hosted server that takes a key - the user fixes a missing
-or refused value in the file and reconnects.
+read-back for each hosted server that takes a key - the user fixes a missing or refused value in the file and
+reconnects.
 
 <!-- /shared:key-lines -->
 
@@ -281,18 +283,18 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
 
 <!-- shared:fetch -->
 
-One server at a time, it downloads what the server launches into the runtime's cache and starts it once with no 30-second
-limit, then prints each server's status. Tell the user to restart
-only once it reports, and paste its output verbatim when it finishes; say that a `warn` line changes nothing. When
-background runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit stops it.
+One server at a time, it downloads what the server launches into the runtime's cache and starts it once with no
+30-second limit, then prints each server's status. Tell the user to restart only once it reports, and paste its output
+verbatim when it finishes; say that a `warn` line changes nothing. When background runs are turned off, run it in the
+foreground with `timeout: 600000`, and again if the limit stops it.
 
 <!-- /shared:fetch -->
 
 A session started before it reports begins the same download beside it, and two at once breaks a start: an npx server
-then fails at every start with `ENOENT` until `/alfred-tools:fix` repairs it. After a `warn` line the
-registration stays, and its first session start does the download or first-run work and may time out once - say so. End
-with the restart line: the new registrations load on the next session start, and a project-scope server also needs the
-trust prompt then.
+then fails at every start with `ENOENT` until `/alfred-tools:fix` repairs it. After a `warn` line the registration
+stays, and its first session start does the download or first-run work and may time out once - say so. End with the
+restart line: the new registrations load on the next session start, and a project-scope server also needs the trust
+prompt then.
 
 **Sign-in.** For each server the plan named in an `OAuth:` line that says its browser opens to sign in the first time it
 starts (the shared sign-in), ask once the fetch has reported (sign-in.ts and the fetch both start npx, and two at once
@@ -307,16 +309,15 @@ Sign in to <name> now?
 ```
 
 Then, for 'Sign in now', run `node "${CLAUDE_PLUGIN_ROOT}/scripts/sign-in.ts" "<name>" "<scope>"` with the Monitor tool
-(that line as `command`, a `description` naming the server, `timeout_ms: 330000`) - and tell the
-user the browser opens and the sign-in has five minutes. Each stdout line it prints is an event, at most two:
-`<name>: no browser opened - open this link to sign in: <link>` (relay the link at once and send a PushNotification where
-the session has one; the client keeps waiting), then `<name>: signed in`, or `<name>: sign-in failed: <why>` (exit 1).
-Where Monitor is not available, run it with the Bash tool's `run_in_background: true` and `timeout: 330000` and Read its
-output file for the link line. The sign-in
-returns to `http://localhost:<port>/oauth/callback` on the machine running the client: over SSH, forward that port first
-with `ssh -L <port>:localhost:<port> <host>` (the port is in the link's `redirect_uri`), or open the link in a browser on
-that machine. On a failure say why, that the user can
-run it again, and that otherwise the first session start opens the browser inside its 30-second limit. 'At the next
-session start': say exactly that, and that `/mcp` reconnects the server after the browser sign-in.
+(that line as `command`, a `description` naming the server, `timeout_ms: 330000`) - and tell the user the browser opens
+and the sign-in has five minutes. Each stdout line it prints is an event, at most two:
+`<name>: no browser opened - open this link to sign in: <link>` (relay the link at once and send a PushNotification
+where the session has one; the client keeps waiting), then `<name>: signed in`, or `<name>: sign-in failed: <why>` (exit
+1). Where Monitor is not available, run it with the Bash tool's `run_in_background: true` and `timeout: 330000` and Read
+its output file for the link line. The sign-in returns to `http://localhost:<port>/oauth/callback` on the machine
+running the client: over SSH, forward that port first with `ssh -L <port>:localhost:<port> <host>` (the port is in the
+link's `redirect_uri`), or open the link in a browser on that machine. On a failure say why, that the user can run it
+again, and that otherwise the first session start opens the browser inside its 30-second limit. 'At the next session
+start': say exactly that, and that `/mcp` reconnects the server after the browser sign-in.
 
 <!-- /shared:sign-in -->

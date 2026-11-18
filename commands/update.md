@@ -164,10 +164,10 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
 
 <!-- shared:fetch -->
 
-One server at a time, it downloads what the server launches into the runtime's cache and starts it once with no 30-second
-limit, then prints each server's status. Tell the user to restart
-only once it reports, and paste its output verbatim when it finishes; say that a `warn` line changes nothing. When
-background runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit stops it.
+One server at a time, it downloads what the server launches into the runtime's cache and starts it once with no
+30-second limit, then prints each server's status. Tell the user to restart only once it reports, and paste its output
+verbatim when it finishes; say that a `warn` line changes nothing. When background runs are turned off, run it in the
+foreground with `timeout: 600000`, and again if the limit stops it.
 
 <!-- /shared:fetch -->
 
@@ -191,17 +191,16 @@ Sign in to <name> now?
 ```
 
 Then, for 'Sign in now', run `node "${CLAUDE_PLUGIN_ROOT}/scripts/sign-in.ts" "<name>" "<scope>"` with the Monitor tool
-(that line as `command`, a `description` naming the server, `timeout_ms: 330000`) - and tell the
-user the browser opens and the sign-in has five minutes. Each stdout line it prints is an event, at most two:
-`<name>: no browser opened - open this link to sign in: <link>` (relay the link at once and send a PushNotification where
-the session has one; the client keeps waiting), then `<name>: signed in`, or `<name>: sign-in failed: <why>` (exit 1).
-Where Monitor is not available, run it with the Bash tool's `run_in_background: true` and `timeout: 330000` and Read its
-output file for the link line. The sign-in
-returns to `http://localhost:<port>/oauth/callback` on the machine running the client: over SSH, forward that port first
-with `ssh -L <port>:localhost:<port> <host>` (the port is in the link's `redirect_uri`), or open the link in a browser on
-that machine. On a failure say why, that the user can
-run it again, and that otherwise the first session start opens the browser inside its 30-second limit. 'At the next
-session start': say exactly that, and that `/mcp` reconnects the server after the browser sign-in.
+(that line as `command`, a `description` naming the server, `timeout_ms: 330000`) - and tell the user the browser opens
+and the sign-in has five minutes. Each stdout line it prints is an event, at most two:
+`<name>: no browser opened - open this link to sign in: <link>` (relay the link at once and send a PushNotification
+where the session has one; the client keeps waiting), then `<name>: signed in`, or `<name>: sign-in failed: <why>` (exit
+1). Where Monitor is not available, run it with the Bash tool's `run_in_background: true` and `timeout: 330000` and Read
+its output file for the link line. The sign-in returns to `http://localhost:<port>/oauth/callback` on the machine
+running the client: over SSH, forward that port first with `ssh -L <port>:localhost:<port> <host>` (the port is in the
+link's `redirect_uri`), or open the link in a browser on that machine. On a failure say why, that the user can run it
+again, and that otherwise the first session start opens the browser inside its 30-second limit. 'At the next session
+start': say exactly that, and that `/mcp` reconnects the server after the browser sign-in.
 
 <!-- /shared:sign-in -->
 
