@@ -2,6 +2,7 @@
 import { RECOMMENDED_SUFFIX, keyStateOf } from './asks-keys.ts';
 import { installedItems, packed } from './asks-picks.ts';
 import { scopeQuestion, nameQuestion, scopeOrder, nameFor } from './asks-tool.ts';
+import { DEFAULT_HOST_DESCRIPTION } from './asks-other-constants.ts';
 import { locationQuestion } from './asks-location.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
@@ -65,8 +66,8 @@ export function toolAsk(row: CatalogRow, inventory: Inventory, { route, scope = 
         questions.push({
             id: `host-${row.id}`, header: 'Host', multiSelect: false, question: `${row.label}: which ${row.params[0]!.label}?`,
             options: host
-                ? first([{ label: `Keep ${host}`, description: 'the host it uses now' }, { label: row.params[0]!.default, description: 'the hosted service' }])
-                : first([{ label: row.params[0]!.default, description: 'the hosted service' }, { label: 'A self-managed host', description: 'your own GitLab host name, asked next' }]),
+                ? first([{ label: `Keep ${host}`, description: 'the host it uses now' }, { label: row.params[0]!.default, description: DEFAULT_HOST_DESCRIPTION }])
+                : first([{ label: row.params[0]!.default, description: DEFAULT_HOST_DESCRIPTION }, { label: 'A self-managed host', description: 'your own GitLab host name, asked next' }]),
         });
     }
     // an optional key (spec D5, F2): asked at every scope but for a stdio route at project scope, which runs keyless; the

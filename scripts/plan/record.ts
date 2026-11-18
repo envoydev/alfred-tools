@@ -2,7 +2,8 @@
 // and configure.md's step 5 mapped them by hand at commit 5320179. Pure: the inputs are cloned, never changed.
 import { ROUTE_WORD, scopeOfLabel } from './asks-keys.ts';
 import { TOOLSETS_ASKED, TOOLSETS_HEADER } from './hosted-settings-constants.ts';
-import { BACKTICKED_NAME, DEFAULT_HOST_DESCRIPTION, LABEL, PREFIX, SIDE, VALUE, WALK_QUESTION } from './record-constants.ts';
+import { DEFAULT_HOST_DESCRIPTION } from './asks-other-constants.ts';
+import { BACKTICKED_NAME, LABEL, PREFIX, SIDE, VALUE, WALK_QUESTION } from './record-constants.ts';
 import { resolveAnswer } from './record-resolve.ts';
 import type { Family } from '../roots/types.ts';
 import type { LocationAnswer, RecordInput, RecordResult, Refusal, Resolved, Run, Question, Typed } from './types.ts';
@@ -239,7 +240,7 @@ export function recordStep({ step, built, picks, answers, chosen }: RecordInput)
         const refused = mapOne(run, question, resolved);
         if (refused) return refuse(`${question.id}: ${refused.refused}`);
     }
-    if (step.set) putEntry(run, ['location'], structuredClone(step.set.location));
+    if (step.set) putEntry(run, ['location'], structuredClone(step.set.location), step.set.location.side !== SIDE.keep);
     run.picks.done = run.picks.done?.includes(step.id) ? run.picks.done : [...(run.picks.done ?? []), step.id];
     run.picks.recorded = { ...run.picks.recorded, [step.id]: { tool: key, picks: run.wrotePicks, answers: run.wroteAnswers } };
     seedRows(run);

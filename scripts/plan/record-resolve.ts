@@ -11,12 +11,12 @@ const isTextList = (value: unknown): value is string[] => Array.isArray(value) &
 export const plainLabel = (label: string): string => (label.endsWith(RECOMMENDED_SUFFIX) ? label.slice(0, -RECOMMENDED_SUFFIX.length) : label);
 
 // Which typed value an option takes, read from the builders: a root or a key name or URL name whose value is `named`, a
-// location with no folder of its own, a browser binary, a self-managed host, settings to change, toolsets asked next.
+// location with no value in the answers (asks-location.ts leaves the side-`path` option out of them), a browser binary, a self-managed host, settings to change, toolsets asked next.
 function typedKind(questionId: string, label: string, value: unknown, hasValue: boolean): TypedKind | null
 {
     if (questionId.startsWith(PREFIX.root)) return isRecord(value) && value['id'] === VALUE.named ? 'text' : null;
     if (questionId.startsWith(PREFIX.location))
-        return (hasValue && isRecord(value) && value['side'] === SIDE.path && value['path'] === undefined) || (!hasValue && label.startsWith(LABEL.folderAnother)) ? 'text' : null;
+        return !hasValue || (isRecord(value) && value['side'] === SIDE.path && value['path'] === undefined) ? 'text' : null;
     if (questionId.startsWith(PREFIX.browser)) return label === LABEL.browserNamed ? 'text' : null;
     if (questionId.startsWith(PREFIX.host)) return label === LABEL.hostSelfManaged ? 'text' : null;
     if (questionId.startsWith(PREFIX.keyName) || questionId.startsWith(PREFIX.urlName)) return value === VALUE.named ? 'text' : null;

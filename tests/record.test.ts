@@ -2,6 +2,7 @@
 // guarantees every call keeps. The steps are the walk's own, built by allQuestions and nextQuestion.
 import test from 'node:test';
 import assert from 'node:assert';
+import { recordStep } from '../scripts/plan/record.ts';
 import { attempt, advanceTo, inv, MAC, record, start, stepOf, WIN } from './record-helpers.ts';
 import type { State } from './record-helpers.ts';
 
@@ -62,6 +63,17 @@ test('location: the entry next.answers gives for the label, and Another ...folde
     assert.deepStrictEqual(entryOf(typed, 'serena'), { scope: 'project', name: 'keep', location: { side: 'path', path: 'D:\\serena' } });
     const folder = record(win, { 'location-serena': { other: 'D:\\serena' } });
     assert.deepStrictEqual(entryOf(folder, 'serena'), { scope: 'project', name: 'keep', location: { side: 'path', path: 'D:\\serena' } });
+});
+
+test('a location option that is one of the options but has no value is the typed folder, whatever its wording', () => {
+    const win = advanceTo(each(['serena'], { roots: { project: { id: 'alfred-tools' } } }, inv(WIN)), 'serena:questions');
+    const { step, built } = stepOf(win);
+    const renamed = { ...step, call: step.call!.map((question) => ({ ...question, options: question.options.map((option) => (option.label.startsWith('Another ') ? { ...option, label: 'A folder of mine' } : option)) })) };
+    const result = recordStep({ step: renamed, built, picks: win.picks, answers: win.answers, chosen: { id: step.id, answers: { 'location-serena': { label: 'A folder of mine', typed: 'D:\\serena' } } } });
+    assert.deepStrictEqual((result as { answers: State['answers'] }).answers.picks!['serena'], { scope: 'project', name: 'keep', location: { side: 'path', path: 'D:\\serena' } });
+    const other = recordStep({ step: renamed, built, picks: win.picks, answers: win.answers, chosen: { id: step.id, answers: { 'location-serena': { other: 'D:\\serena' } } } });
+    assert.deepStrictEqual((other as { answers: State['answers'] }).answers.picks!['serena'], { scope: 'project', name: 'keep', location: { side: 'path', path: 'D:\\serena' } });
+    assert.match((recordStep({ step: renamed, built, picks: win.picks, answers: win.answers, chosen: { id: step.id, answers: { 'location-serena': 'A folder of mine' } } }) as { refused: string }).refused, /needs its typed value/);
 });
 
 test("browser: 'A browser binary I name' is the path typed, 'Default for this engine' writes nothing", () => {

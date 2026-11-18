@@ -2,7 +2,8 @@
 // something is written to the target's `change` entry, the one that keeps what it has now is not.
 import test from 'node:test';
 import assert from 'node:assert';
-import { advanceTo, installed, inv, MAC, record, start, stepOf } from './record-helpers.ts';
+import { recordStep } from '../scripts/plan/record.ts';
+import { advanceTo, answersFor, installed, inv, MAC, record, start, stepOf } from './record-helpers.ts';
 import type { State } from './record-helpers.ts';
 import type { PickAnswer } from '../scripts/plan/types.ts';
 
@@ -50,11 +51,23 @@ test("location 'The folder it uses now' writes nothing, another label writes its
     assert.deepStrictEqual(change(record(questions, { 'location-playwright-chrome': labels[1]! })), { row: 'playwright-chrome', location: { side: 'project' } });
 });
 
-test('next.set is written as the location, as the command says', () => {
+test("next.set with side 'keep' writes nothing: the folder it uses now stays", () => {
     const { state, key, change } = target('playwright-chrome', { scope: 'user' });
     const questions = at(state, `${key}:questions`);
     assert.deepStrictEqual(stepOf(questions).step.set, { location: { side: 'keep' } });
-    assert.deepStrictEqual(change(record(questions)), { row: 'playwright-chrome', location: { side: 'keep' } });
+    const next = record(questions);
+    assert.strictEqual(change(next), undefined);
+    assert.deepStrictEqual(next.picks.recorded![`${key}:questions`]!.answers, []);
+});
+
+test("next.set of another side is written as the target's location", () => {
+    const { state, key, change } = target('playwright-chrome', { scope: 'user' });
+    const questions = at(state, `${key}:questions`);
+    const { step, built } = stepOf(questions);
+    const moved = recordStep({ step: { ...step, set: { location: { side: 'project' } } }, built, picks: questions.picks, answers: questions.answers, chosen: { id: step.id, answers: answersFor(step) } });
+    assert.ok(!('refused' in moved));
+    assert.deepStrictEqual((moved as { answers: { change: Record<string, unknown> } }).answers.change[key], { row: 'playwright-chrome', location: { side: 'project' } });
+    assert.strictEqual(change(questions), undefined);
 });
 
 test("browser 'A browser binary I name' writes the path typed; 'Default for this engine' empties a binary it has now", () => {
@@ -64,7 +77,7 @@ test("browser 'A browser binary I name' writes the path typed; 'Default for this
     const has = target('playwright-chrome', { scope: 'user', executablePath: '/opt/chrome' });
     const questions = at(has.state, `${has.key}:questions`);
     assert.strictEqual((has.change(record(questions, { 'browser-playwright-chrome': 'Default for this engine' })) as { executablePath: string }).executablePath, '');
-    assert.strictEqual((has.change(record(questions)) as { executablePath?: string }).executablePath, undefined);
+    assert.strictEqual(has.change(record(questions)), undefined);
 });
 
 test('API key, when it is not first', () => {

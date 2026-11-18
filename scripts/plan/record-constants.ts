@@ -26,12 +26,7 @@ export const LABEL = {
     browserNamed: 'A browser binary I name',
     browserDefault: 'Default for this engine',
     hostSelfManaged: 'A self-managed host',
-    folderAnother: 'Another ',
 } as const;
-
-// The description of a host question's default host (asks-other.ts): the label is the host. A region choice carries its
-// host in its description instead.
-export const DEFAULT_HOST_DESCRIPTION = 'the hosted service';
 
 // What an answer map holds for the options that take a typed value (a root's id is `named` too).
 export const VALUE = { named: 'named', change: 'change', keep: 'keep' } as const;
