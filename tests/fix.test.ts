@@ -2946,3 +2946,90 @@ test('a blocked helper-foreign leaves Cursor\'s foreign-form copy; once the key 
     }
     finally { w.clean(); }
 });
+
+// read-guard lists a config dir once, by its real path: a symlink to another dir or to the current one is no dir of its own
+function symlinkOr(t: { skip: (reason: string) => void }, target: string, link: string): boolean
+{
+    try { fsx.symlinkSync(target, link, 'dir'); return true; }
+    catch (error)
+    {
+        if ((error as NodeJS.ErrnoException).code !== 'EPERM') throw error;
+        t.skip('NOT RUN: this account may not create symlinks (EPERM, Windows without the privilege)');
+        return false;
+    }
+}
+
+test('read-guard gives one finding for a config dir that is a symlink to another config dir with the plugin', (t) =>
+{
+    const w = world();
+    try
+    {
+        const dirs = otherDirsWorld(w);
+        if (!symlinkOr(t, dirs['-personal']!, path.join(w.home, '.claude-work'))) return;
+        assert.deepStrictEqual(configDirsWithPlugin(w.home, dirs['']!).sort(), [dirs['-old']!, dirs['-personal']!].sort(), 'the symlink is not listed beside its target');
+        const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard');
+        assert.deepStrictEqual(found.map((f) => f.name).sort(), [path.join(dirs['-old']!, 'settings.json'), path.join(dirs['-personal']!, 'settings.json')].sort());
+    }
+    finally { w.clean(); }
+});
+
+test('read-guard skips a config dir that is a symlink to the current one', (t) =>
+{
+    const w = world();
+    try
+    {
+        const dirs = otherDirsWorld(w);
+        if (!symlinkOr(t, dirs['']!, path.join(w.home, '.claude-link'))) return;
+        assert.ok(!configDirsWithPlugin(w.home, dirs['']!).includes(path.join(w.home, '.claude-link')));
+        assert.ok(!detectAll(ctxOf(w)).found.some((f) => f.id === 'read-guard' && f.name.startsWith(path.join(w.home, '.claude-link'))));
+    }
+    finally { w.clean(); }
+});
+
+test('read-guard skips a .claude-x that is a file, and a dangling symlink, without a throw', (t) =>
+{
+    const w = world();
+    try
+    {
+        const dirs = otherDirsWorld(w);
+        put(path.join(w.home, '.claude-x'), 'not a folder');
+        if (symlinkOr(t, path.join(w.home, 'gone'), path.join(w.home, '.claude-dangling')))
+        {
+            assert.ok(!configDirsWithPlugin(w.home, dirs['']!).includes(path.join(w.home, '.claude-dangling')));
+        }
+        assert.deepStrictEqual(configDirsWithPlugin(w.home, dirs['']!).sort(), [dirs['-old']!, dirs['-personal']!].sort());
+    }
+    finally { w.clean(); }
+});
+
+test('read-guard with .claude-personal as the current dir reports ~/.claude as the other dir', () =>
+{
+    const w = world();
+    try
+    {
+        const personal = path.join(w.home, '.claude-personal');
+        const plain = path.join(w.home, '.claude');
+        w.env.CLAUDE_CONFIG_DIR = personal;
+        put(path.join(ptRoot(w), '.mcps-secrets'), '');
+        put(path.join(personal, 'settings.json'), JSON.stringify({ permissions: { deny: [SECRETS_RULE] } }));
+        installedIn(personal, installedKeys('alfred-tools@envoydev'));
+        installedIn(plain, installedKeys('alfred-tools@envoydev'));
+        const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard');
+        assert.deepStrictEqual(found.map((f) => f.name), [path.join(plain, 'settings.json')]);
+        assert.deepStrictEqual(configDirsWithPlugin(w.home, personal), [plain]);
+    }
+    finally { w.clean(); }
+});
+
+test('read-guard compares config dirs without case on win32 only, by the platform it is given', () =>
+{
+    const w = world();
+    try
+    {
+        const dirs = otherDirsWorld(w);
+        const shouted = path.join(w.home, '.CLAUDE-PERSONAL');
+        assert.ok(!configDirsWithPlugin(w.home, shouted, 'win32').includes(dirs['-personal']!), 'win32 folds case');
+        assert.ok(configDirsWithPlugin(w.home, dirs['']!, 'linux').includes(dirs['-personal']!));
+    }
+    finally { w.clean(); }
+});

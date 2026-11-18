@@ -143,9 +143,18 @@ export function readGuardOf(context: { platform: string; home: string; env?: Env
 // The config dirs other than `current` that have this plugin installed (Part E): each folder directly under `home` named
 // `.claude` or `.claude-<suffix>` whose plugins/installed_plugins.json is JSON with a key of the plugin's ids. Names
 // only - the file's content is never kept, and one that is absent, not JSON or without a `plugins` object skips the dir.
-export function configDirsWithPlugin(home: string, current: string): string[]
+// Dirs are compared by real path, so a symlink to the current dir or to a dir already listed is no dir of its own (the
+// first name in sort order is the one listed); `platform` (the caller's context) says whether case is folded.
+export function configDirsWithPlugin(home: string, current: string, platform: string = process.platform): string[]
 {
-    const same = (left: string, right: string) => (process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right);
+    const realKey = (dir: string) =>
+    {
+        let real = path.resolve(dir);
+        try { real = fs.realpathSync(dir); } catch { /* not there, or a loop: the resolved form */ }
+        return platform === 'win32' ? real.toLowerCase() : real;
+    };
+    const currentKey = realKey(current);
+    const listed = new Set<string>();
     let names: string[] = [];
     try { names = fs.readdirSync(home); } catch { return []; }
     const found: string[] = [];
@@ -153,12 +162,13 @@ export function configDirsWithPlugin(home: string, current: string): string[]
     {
         if (name !== CONFIG_DIR_NAME && !name.startsWith(`${CONFIG_DIR_NAME}-`)) continue;
         const dir = path.join(home, name);
-        if (same(path.resolve(dir), path.resolve(current))) continue;
+        const key = realKey(dir);
+        if (key === currentKey || listed.has(key)) continue;
         try
         {
             const doc = JSON.parse(fs.readFileSync(path.join(dir, 'plugins', INSTALLED_PLUGINS_FILE), 'utf8').replace(/^\uFEFF/, '')) as { plugins?: unknown } | null;
             const plugins = doc && typeof doc === 'object' ? doc.plugins : null;
-            if (plugins && typeof plugins === 'object' && !Array.isArray(plugins) && Object.keys(plugins).some((key) => PLUGIN_KEY_PREFIXES.some((prefix) => key.startsWith(prefix)))) found.push(dir);
+            if (plugins && typeof plugins === 'object' && !Array.isArray(plugins) && Object.keys(plugins).some((pluginKey) => PLUGIN_KEY_PREFIXES.some((prefix) => pluginKey.startsWith(prefix)))) { found.push(dir); listed.add(key); }
         }
         catch { /* no record, or not JSON: skipped */ }
     }

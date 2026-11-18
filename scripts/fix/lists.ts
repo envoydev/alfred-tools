@@ -127,7 +127,7 @@ export function readGuardDetect(context: FixCtx): Finding[]
     const current = readGuardOf(context, want);
     if (current.bad) out.push(bad(current.file));
     else if (current.rules.length) out.push({ id: 'read-guard', name: current.file, scope: null, rules: current.rules, found: `${current.file} does not deny ${current.rules.join(' or ')} - an AI session's Read tool can open ${why.join(' and ')}` });
-    for (const dir of configDirsWithPlugin(context.home, pathApi.dirname(current.file)))
+    for (const dir of configDirsWithPlugin(context.home, pathApi.dirname(current.file), context.platform))
     {
         const guard = readGuardOf(context, want, dir);
         if (guard.bad) out.push(bad(guard.file));
