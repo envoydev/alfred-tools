@@ -7,12 +7,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { replaceFile } from '../core/replace-file.ts';
 import { alfredSerenaHome } from '../entries/locations.ts';
+import { pathApiOf } from '../entries/platform.ts';
 import type { ServerEntry } from '../core/types.ts';
 
 const CONFIG = 'serena_config.yml';
 const KEY = /^base_modes[ \t]*:(.*?)(\r?)$/;
 
-export const configOf = (home: string): string => (/^[A-Za-z]:[\\/]|\\\\/.test(home) ? path.win32 : path.posix).join(home, CONFIG);
+export const configOf = (home: string): string => pathApiOf(home).join(home, CONFIG);
 
 // The lines of a text with their endings: [[body, eol]].
 function linesOf(text: string): [string, string][]

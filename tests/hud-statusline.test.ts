@@ -115,3 +115,16 @@ test('the claude-hud statusLine is removed only when it is the plugin\'s own', (
     assert.match(removeHudStatusLine(bad, { platform: 'darwin' }).detail, /is not a JSON object/);
     assert.strictEqual(fs.readFileSync(path.join(bad, 'settings.json'), 'utf8'), '{ nope');
 });
+
+test('removing the statusLine keeps the settings file\'s own mode, a group write bit included', { skip: process.platform === 'win32' && 'NOT RUN: POSIX modes' }, () =>
+{
+    const dir = account({ statusLine: { type: 'command', command: SORT_V_FOR(NODE) }, model: 'x' });
+    const file = path.join(dir, 'settings.json');
+    fs.chmodSync(file, 0o664);
+    const before = process.umask(0o022);
+    try { assert.strictEqual(removeHudStatusLine(dir, { platform: 'darwin' }).removed, true); }
+    finally { process.umask(before); }
+    assert.strictEqual(fs.statSync(file).mode & 0o777, 0o664);
+    assert.deepStrictEqual(read(dir), { model: 'x' });
+    assert.deepStrictEqual(fs.readdirSync(dir), ['settings.json'], 'no temporary file left beside it');
+});

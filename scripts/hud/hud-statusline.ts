@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { configDir as accountDir } from '../core/account.ts';
 import { parseJson } from '../core/json-file.ts';
+import { replaceFile } from '../core/replace-file.ts';
 import { pathFor } from '../entries/platform.ts';
 import type { Env } from '../core/types.ts';
 import type { Classified, Exists, Expected, ExpectedInput, ShapeVars } from './types.ts';
@@ -188,11 +189,9 @@ export function removeHudStatusLine(configDir: string, { platform = process.plat
     const { state, label } = classify(doc.statusLine, { platform, want, exists });
     if (state !== 'current' && state !== 'stale') return { removed: false, detail: `the statusLine in ${file} is not claude-hud's (${label || state}) - left as it is` };
     const { statusLine, ...rest } = doc;
-    const tmp = `${file}.${process.pid}.tmp`;
     let mode = 0o600;
     try { mode = fs.statSync(file).mode & 0o777; } catch { /* the default */ }
-    fs.writeFileSync(tmp, `${JSON.stringify(rest, null, 2)}\n`, { mode });
-    fs.renameSync(tmp, file);
+    replaceFile(file, `${JSON.stringify(rest, null, 2)}\n`, mode);
     return { removed: true, detail: `removed claude-hud's statusLine from ${file}` };
 }
 

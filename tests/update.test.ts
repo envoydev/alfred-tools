@@ -319,6 +319,20 @@ test('a marketplace that is not registered is skipped with a line, and a failed 
     finally { w.clean(); }
 });
 
+test('a marketplace list that cannot be read skips each plugin as unread, never as a marketplace not registered', async () =>
+{
+    const w = world();
+    try
+    {
+        const loc = marketplace(w, 'known', [{ name: 'p', version: '2.0.0' }]);
+        seed(w, { markets: [['known', loc]], installed: [['p@known', '1.0.0', 'user']] });
+        const c = await run(w, ['--check', '--no-refresh'], { env: { ...w.env, FAKE_CLAUDE_FAIL: 'marketplace list' } });
+        assert.match(c.text, /p@known \(user\): the marketplace list could not be read \(claude plugin marketplace list --json\), so nothing to compare against/);
+        assert.doesNotMatch(c.text, /is not registered/);
+    }
+    finally { w.clean(); }
+});
+
 // ---- retired-plugin (spec D8, D9) -----------------------------------------------------------------------------------
 
 const HUD = 'claude-hud@claude-hud';
@@ -490,6 +504,30 @@ test('update --apply keeps <tmp> while a fetch file is handed on, and apply() ca
     }
 });
 
+test('update --apply makes its temp folder as tmpdir.ts does, after sweeping this plugin\'s folders older than 24 hours', async () =>
+{
+    const w = world();
+    // update runs in this process: its os.tmpdir() is pointed at the world's own temp folder for the test
+    const saved = { TMPDIR: process.env.TMPDIR, TEMP: process.env.TEMP, TMP: process.env.TMP };
+    try
+    {
+        const t = tempOf(w);
+        Object.assign(process.env, { TMPDIR: t.root, TEMP: t.root, TMP: t.root });
+        const old = t.made();
+        const day = new Date(Date.now() - 25 * 3600 * 1000);
+        fs.utimesSync(old, day, day);
+        const lines: string[] = [];
+        const code = await update.runUpdateCommand(['--apply', 'mcp:nothing~local', '--project', w.project], { env: w.env, out: (line) => lines.push(line), machine: noLsp, now: NOW, registry: fakeRegistry({}) });
+        assert.strictEqual(code, 1, lines.join('\n'));
+        assert.ok(!fs.existsSync(old), 'its own folder older than 24 hours is swept');
+    }
+    finally
+    {
+        for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+        w.clean();
+    }
+});
+
 // ---- a server left on its own (spec D6) --------------------------------------------------------------------------------
 const C7_PINNED = { command: 'npx', args: ['-y', '@upstash/context7-mcp@2.0.0'] };
 const C7_AHEAD = () => fakeRegistry({ 'npm:@upstash/context7-mcp': [{ version: '9.0.0', time: ago(90) }] });
@@ -565,6 +603,24 @@ test('update offers and rewrites a lower-numbered helper copy; leaves a higher o
         assert.strictEqual(fs.readFileSync(lower, 'utf8'), roots.helperSource());
         assert.match(fs.readFileSync(higher, 'utf8'), new RegExp(`^// alfred-tools mcp-headers ${HV + 1}`), 'a higher number is left');
         assert.doesNotMatch((await run(w, ['--check', '--no-refresh'])).text, /Key helpers:/);
+    }
+    finally { w.clean(); }
+});
+
+test('a helper copy that cannot be written is a FAILED line and exit 1, not a crash', { skip: (process.platform === 'win32' || process.getuid?.() === 0) && 'NOT RUN: POSIX modes, and root writes any file' }, async () =>
+{
+    const w = world();
+    try
+    {
+        const pt = path.join(w.project, '.alfred-tools');
+        const lower = path.join(pt, 'mcp-headers.js');
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'github', JSON.stringify({ type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${lower} GITHUB_PERSONAL_ACCESS_TOKEN Bearer` }), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
+        fs.mkdirSync(pt, { recursive: true });
+        fs.writeFileSync(lower, roots.helperSource().replace(/^\/\/ alfred-tools mcp-headers \d+/, '// alfred-tools mcp-headers 0'));
+        fs.chmodSync(lower, 0o444);
+        const a = await run(w, ['--apply', `helper:${lower}`]);
+        assert.strictEqual(a.code, 1, a.text);
+        assert.match(a.text, /^FAILED mcp-headers\.js in .*: /m);
     }
     finally { w.clean(); }
 });

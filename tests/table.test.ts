@@ -101,6 +101,20 @@ test('main reads the inventory file; a missing file exits 2', () =>
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('a file that parses but is not an inventory exits 2 with one line, not a stack trace', () =>
+{
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-table-'));
+    try
+    {
+        const file = path.join(dir, 'plan.json');
+        fs.writeFileSync(file, JSON.stringify({ project: '/proj', steps: [] }));
+        let text = '';
+        assert.strictEqual(runTableCommand([file], { out: (line: string) => { text += `${line}\n`; } }), 2);
+        assert.match(text, /^table: .*plan\.json is not an inventory\n$/);
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('inherited servers are noted by folder and approval, never in a scope column; an unreadable parent file is named', () =>
 {
     const c7: InvRegistration = { ...reg('context7', 'context7', 'inherited', { type: 'http', url: 'https://mcp.context7.com/mcp' }, 'remote'), from: '/', approval: 'pending', shadowed: null };

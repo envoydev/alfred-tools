@@ -166,7 +166,7 @@ export function readOldRecord(file: string): OldRecord | null
     try { text = fs.readFileSync(file, 'utf8'); }
     catch (caught) { const err = caught as NodeJS.ErrnoException;  return err.code === 'ENOENT' || err.code === 'ENOTDIR' ? null : { version: OLD_RECORD_VERSION, servers: [], note: `${file} cannot be read (${err.code}) - read as empty`, state: 'unreadable' }; }
     let doc: RawDoc | null;
-    try { doc = JSON.parse(text) as RawDoc | null; }
+    try { doc = JSON.parse(stripBom(text)) as RawDoc | null; }
     catch { return { version: OLD_RECORD_VERSION, servers: [], note: `${file} is not JSON - read as empty`, state: 'bad' }; }
     if (doc && typeof doc === 'object' && doc.version !== OLD_RECORD_VERSION && newerOrBad(doc.version) === 'newer')
         return { version: OLD_RECORD_VERSION, servers: [], note: `${versionNote(file, doc.version, OLD_RECORD_VERSION)} - read as empty`, state: 'newer' };

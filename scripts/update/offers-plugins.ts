@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { bareName } from '../inventory/fingerprint.ts';
 import { clone, compareVersions, pinnedVersion } from '../fix/common.ts';
+import { MARKETPLACE_LIST_UNREAD } from '../inventory/constants.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { PluginOffer, UpdateCheck, UpdateCtx } from './types.ts';
 
@@ -52,6 +53,7 @@ function listedVersion(installLocation: string | null | undefined, pluginName: s
 export function pluginOffers(context: UpdateCtx, out: UpdateCheck): void
 {
     const refreshed = new Map<string, string | null>();
+    const listUnread = (context.inventory.unreadable || []).some((unreadable) => unreadable.scope === MARKETPLACE_LIST_UNREAD.scope);
     for (const plugin of context.inventory.plugins)
     {
         if (!refreshed.has(plugin.marketplace))
@@ -67,7 +69,7 @@ export function pluginOffers(context: UpdateCtx, out: UpdateCheck): void
         const market = context.inventory.marketplaces.find((marketplace) => marketplace.name === plugin.marketplace);
         const to = listedVersion(market && market.installLocation, plugin.plugin);
         const base: Omit<PluginOffer, 'to'> = { kind: 'plugin', id: `plugin:${plugin.id}~${plugin.scope}`, plugin: plugin.id, scope: plugin.scope, from: plugin.version || null, group: plugin.rowId ? 'catalog' : 'other', label: `${plugin.id} (${plugin.scope})` };
-        if (!market) { out.skipped.push(`${plugin.id} (${plugin.scope}): its marketplace '${plugin.marketplace}' is not registered, so nothing to compare against`); continue; }
+        if (!market) { out.skipped.push(`${plugin.id} (${plugin.scope}): ${listUnread ? `the marketplace list could not be read (${MARKETPLACE_LIST_UNREAD.file})` : `its marketplace '${plugin.marketplace}' is not registered`}, so nothing to compare against`); continue; }
         if (to === null) { out.unchecked.push({ ...base, to: null }); continue; }
         const comparison = compareVersions(plugin.version || '', to);
         const behind = comparison === null ? plugin.version !== to : comparison === -1;

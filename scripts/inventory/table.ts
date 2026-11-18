@@ -26,6 +26,9 @@ export function pinOf(row: CatalogRow, routeId: string | null, entry: ServerEntr
 
 const cellOf = (items: string[]): string => (items.length ? items.join('; ') : '-');
 
+// Whether a parsed file has what renderTable reads unguarded: an object with the OS and a list of registrations.
+export const isInventoryFile = (value: unknown): value is Inventory => typeof value === 'object' && value !== null && 'os' in value && typeof value.os === 'string' && 'registrations' in value && Array.isArray(value.registrations);
+
 export function renderTable(inventory: Inventory, catalog: Catalog = catalogLib.load()): string
 {
     const rows = catalog.tools.filter((row) => row.os.includes(inventory.os));

@@ -160,3 +160,9 @@ test('projectsOf reads a block or flow list of scalars and nothing else', () => 
     assert.deepStrictEqual(projectsOf(file), ['/x/one', '/y/two']);
     assert.deepStrictEqual(projectsOf(path.join(tmp, 'none.yml')), []);
 });
+
+test('configOf joins a POSIX home that holds a backslash pair the POSIX way, a drive or UNC home the Windows way', () => {
+    assert.strictEqual(sc.configOf('/home/u/odd\\\\name'), '/home/u/odd\\\\name/serena_config.yml');
+    assert.strictEqual(sc.configOf('C:\\serena-home'), 'C:\\serena-home\\serena_config.yml');
+    assert.strictEqual(sc.configOf('\\\\server\\share\\serena'), '\\\\server\\share\\serena\\serena_config.yml');
+});

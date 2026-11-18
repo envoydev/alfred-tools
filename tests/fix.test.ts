@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import path from 'node:path';
-import { world, readJson, helperCmd, writeJson, files, serenaFolderLine, slashed } from './helpers.ts';
+import { world, readJson, helperCmd, writeJson, files, serenaFolderLine, slashed, tempOf } from './helpers.ts';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import * as inventory from '../scripts/inventory/inventory.ts';
 import { pythonRequest, pathFor } from '../scripts/entries/platform.ts';
@@ -970,6 +970,31 @@ test('CLI: --detect and --questions print; --apply applies; bad arguments exit 2
     finally { w.clean(); }
 });
 
+test('fix makes its temp folder as tmpdir.ts does: in the real temp folder, after sweeping this plugin\'s folders older than 24 hours', () =>
+{
+    const w = world();
+    // applyFixes runs in this process: its os.tmpdir() is pointed at the world's own temp folder for the test
+    const saved = { TMPDIR: process.env.TMPDIR, TEMP: process.env.TEMP, TMP: process.env.TMP };
+    try
+    {
+        const t = tempOf(w);
+        Object.assign(process.env, { TMPDIR: t.root, TEMP: t.root, TMP: t.root });
+        const old = t.made();
+        const day = new Date(Date.now() - 25 * 3600 * 1000);
+        fs.utimesSync(old, day, day);
+        seed(w, 'serena', 'user', { command: 'uvx', args: ['--python', '3.13', '--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'], env: {} });
+        const run = applyFixes(ctxOf(w), ['serena-telemetry'], { log: () => {} });
+        assert.strictEqual(run.failed, null);
+        assert.ok(!fs.existsSync(old), 'its own folder older than 24 hours is swept');
+        assert.strictEqual(path.dirname(run.tmp ?? ''), fs.realpathSync.native(t.root));
+    }
+    finally
+    {
+        for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+        w.clean();
+    }
+});
+
 // ---- the 0.2.0 key rows (D7): key-to-helper, helper-missing, helper-stale, root-ignore, token-sync on stdio -----------
 
 const SK = 'SENTRY_ACCESS_TOKEN';
@@ -1094,6 +1119,22 @@ test('helper-missing writes the helper; helper-stale rewrites a lower number, na
         assert.strictEqual(higher.blocked, `mcp-headers.js in ${ptRoot(w)} is newer than this plugin - update alfred-tools`);
         applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} });
         assert.match(fsx.readFileSync(file, 'utf8'), new RegExp(`^// alfred-tools mcp-headers ${HV + 1}`), 'never rewritten');
+    }
+    finally { w.clean(); }
+});
+
+test('a machine fix that throws is named FAILED and ends the run, as a registration or file fix does', () =>
+{
+    const w = world();
+    try
+    {
+        const root = ptRoot(w);
+        seed(w, 'github', 'local', { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${path.join(root, 'mcp-headers.js')} ${GK} Bearer` });
+        fsx.writeFileSync(root, 'a file where the root folder should be');
+        const l = logged();
+        const run = applyFixes(ctxOf(w), ['helper-missing'], { log: l.log });
+        assert.match(run.failed ?? '', /^helper-missing: /);
+        assert.match(l.text(), /^FAILED helper-missing: /m);
     }
     finally { w.clean(); }
 });

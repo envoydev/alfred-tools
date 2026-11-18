@@ -280,7 +280,7 @@ export function buildEntry(row: CatalogRow, routeId: string, answers: BuildAnswe
         };
     }
 
-    let entry!: ServerEntry;
+    let entry: ServerEntry | undefined;
     const extra: string[] = [];
     for (const [key, spec] of Object.entries(route.optionalArgs || {}))
     {
@@ -316,6 +316,7 @@ export function buildEntry(row: CatalogRow, routeId: string, answers: BuildAnswe
         }
         if (Object.keys(route.env || {}).length) entry.env = { ...route.env };
     }
+    if (!entry) throw new Error(`${row.id}: no registration form for the '${String(route.runtime)}' runtime`);
     if (row.locations && answers.rootStr !== undefined) entry = applyRoot(entry, row, answers.rootStr!, answers.scope, context);
     // serena's home is set by now: its context file goes in it
     return applyContext(entry, answers.scope, context);

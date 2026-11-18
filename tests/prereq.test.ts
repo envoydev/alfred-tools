@@ -127,6 +127,30 @@ test('main: an answers file, --rows, --json; a bad argument exits 2 and checks n
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('an answers file that is JSON but not answers exits 2 with one line, never "all present"; one saved with a BOM is read', () =>
+{
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-prereq-'));
+    try
+    {
+        const file = path.join(dir, 'answers.json');
+        const m = machine({ bins: { uvx: '/bin/uvx' } });
+        let text = '';
+        const out = (line: string) => { text += `${line}\n`; };
+        for (const bad of ['[]', '"picks"', 'null', '{"picks":"serena"}', '{"picks":{"serena":{"route":7}}}', '{"change":{"mcp:serena~user":{"row":"serena","route":["local"]}}}'])
+        {
+            fs.writeFileSync(file, bad);
+            text = '';
+            assert.strictEqual(runPrereqCommand([file], { env: {}, machine: m, platform: 'darwin', out }), 2, bad);
+            assert.match(text, /^prereq: .*answers\.json is not an answers file - nothing checked\n$/, bad);
+        }
+        fs.writeFileSync(file, `\uFEFF${JSON.stringify({ picks: { serena: {} } })}`);
+        text = '';
+        assert.strictEqual(runPrereqCommand([file], { env: {}, machine: m, platform: 'darwin', out }), 0, text);
+        assert.match(text, /serena \(local\): uvx - ok/);
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('audit: the package is audited in a temp folder with --ignore-scripts and the row\'s cut-off; counts come from npm\'s JSON even when npm exits non-zero; a failure says it did not run', () =>
 {
     const seen: { line: string; cwd: string | undefined; before: string | undefined; pkg: unknown }[] = [];

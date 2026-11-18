@@ -1,12 +1,11 @@
 // The plan command: reads its files and flags, prints the plan or the questions, and writes the plan file. The three
 // modes that write the walk's files (--record, --rewind, --skip) are record-modes.ts.
-import fs from 'node:fs';
 import { blockingStdio } from '../core/json-file.ts';
 import { checkedTarget, writeJsonNoFollow } from '../core/temp-write.ts';
 import { plan } from './plan.ts';
 import { renderPlan } from './render.ts';
 import * as existing from '../inventory/existing.ts';
-import { runRecordMode } from './record-modes.ts';
+import { readObject, runRecordMode } from './record-modes.ts';
 import { EXIT_CODE, REFUSAL } from './record-constants.ts';
 import { walkOutput, withRootsMap } from './walk-output.ts';
 import type { Inventory } from '../inventory/types.ts';
@@ -57,7 +56,6 @@ const USAGE = [
 export function runPlanCommand(argv: string[]): number
 {
     blockingStdio();
-    const read = (filePath: string): unknown => JSON.parse(fs.readFileSync(filePath, 'utf8'));
     const args = parseArgs(argv);
     if (args.error) { console.error(`plan.ts: ${args.error}\n${USAGE}`); return EXIT_CODE.refused; }
     if (args.mode === 'record' || args.mode === 'rewind' || args.mode === 'skip') return runRecordMode(args);
@@ -66,16 +64,20 @@ export function runPlanCommand(argv: string[]): number
     if (outFile === null) { console.error(`plan.ts: ${REFUSAL.outFolder}`); return EXIT_CODE.refused; }
     const [invFile, second] = args.files;
     if (!invFile || (args.mode === 'plan' && !second)) { console.error(USAGE); return EXIT_CODE.refused; }
-    const inventory = read(invFile) as Inventory;
+    const inventoryRead = readObject(invFile);
+    if ('refused' in inventoryRead) { console.error(`plan.ts: ${inventoryRead.refused}`); return EXIT_CODE.refused; }
+    const secondRead = second ? readObject(second) : { value: null };
+    if ('refused' in secondRead) { console.error(`plan.ts: ${secondRead.refused}`); return EXIT_CODE.refused; }
+    const inventory = inventoryRead.value as unknown as Inventory;
     withRootsMap(inventory, args.data);
     if (args.mode === 'questions')
     {
-        const output = walkOutput(inventory, second ? read(second) as Picks : null, args);
+        const output = walkOutput(inventory, secondRead.value as Picks | null, args);
         if ('waits' in output) { console.error(output.waits); return EXIT_CODE.stopped; }
         console.log(JSON.stringify(output, null, 2));
         return EXIT_CODE.ok;
     }
-    const madePlan = plan(inventory, read(second!) as Answers, { env: process.env, connectors: args.connectors !== null ? existing.parseConnectors(args.connectors) : null });
+    const madePlan = plan(inventory, secondRead.value as Answers, { env: process.env, connectors: args.connectors !== null ? existing.parseConnectors(args.connectors) : null });
     if (outFile) writeJsonNoFollow(outFile, madePlan);
     console.log(renderPlan(madePlan));
     return madePlan.errors.length ? EXIT_CODE.stopped : EXIT_CODE.ok;

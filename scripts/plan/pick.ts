@@ -1,6 +1,5 @@
 // One MCP pick: its route, scope, name, root, location, key and settings, as plan steps.
 import fs from 'node:fs';
-import path from 'node:path';
 import { pathFor } from '../entries/platform.ts';
 import { recommendedSide, alfredNameProblem, logicalRoot, otherPlace, parseRoot, alfredRoot, defaultRoot, serenaSpaceFree, formatRoot, validWindowsSerenaHome, applyRoot } from '../entries/locations.ts';
 import { checkHostedSettings, currentHostedSettings, defaultHostedSettings, pairNames, optionalNameNotes } from './hosted-settings.ts';
@@ -20,7 +19,7 @@ import { serenaConfigInitStep } from './serena-init.ts';
 import { keyOf, fromHere, otherWindowsMcp } from '../inventory/inventory.ts';
 import { deepEqual } from '../core/json-file.ts';
 import { andList } from './context.ts';
-import { MAX_NAME_LENGTH } from './constants.ts';
+import { perProjectName } from './asks-tool.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { Current, Root, Roots } from '../entries/types.ts';
@@ -30,16 +29,11 @@ import type { PickAnswer, Plan, PlanCtx, RootUses } from './types.ts';
 
 // ---- one MCP pick ---------------------------------------------------------------------------------------------------
 
-function projectName(context: { project: string }): string
-{
-    return path.basename(context.project).replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
-}
-
 function resolveName(pick: PickAnswer, row: CatalogRow, current: Current | null, context: { project: string }): string
 {
     const nameAnswer = pick.name === undefined ? 'keep' : pick.name;
     if (nameAnswer === 'keep') return current ? current.name : row.name;
-    if (nameAnswer === 'prefixed') return `${projectName(context)}-${row.name}`.slice(0, MAX_NAME_LENGTH);
+    if (nameAnswer === 'prefixed') return perProjectName(row.name, context.project);
     return nameAnswer;
 }
 

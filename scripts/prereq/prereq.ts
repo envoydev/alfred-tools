@@ -13,6 +13,8 @@ import path from 'node:path';
 import * as catalogLib from '../catalog/catalog.ts';
 import { androidSdk, javaHome } from '../fix/registration.ts';
 import { pathFor } from '../entries/platform.ts';
+import { parseJson } from '../core/json-file.ts';
+import { isRecord } from '../plan/record-resolve.ts';
 import { AUDIT_DIR_PREFIX } from './constants.ts';
 import type { Catalog, CatalogPackage } from '../catalog/types.ts';
 import type { Answers } from '../plan/types.ts';
@@ -139,13 +141,23 @@ export function renderPrereqs(report: PrereqReport): string
     return lines.join('\n');
 }
 
+// Whether a parsed answers file has the shape picksFrom reads: an object whose `picks` and `change`, where present, map
+// each id to null or an object whose `row` and `route`, where present, are strings.
+function isAnswersFile(value: unknown): value is Answers
+{
+    const isPick = (pick: unknown): boolean => pick === null || (isRecord(pick) && [pick['row'], pick['route']].every((field) => field === undefined || typeof field === 'string'));
+    const isPickMap = (map: unknown): boolean => map === undefined || (isRecord(map) && Object.values(map).every(isPick));
+    return isRecord(value) && isPickMap(value['picks']) && isPickMap(value['change']);
+}
+
 export function picksFrom(argv: string[], catalog: Catalog): PrereqPick[] | null
 {
     const rows = argv.indexOf('--rows');
     if (rows >= 0) return (argv[rows + 1] || '').split(',').filter(Boolean).map((id) => ({ row: id, route: (catalog.byId.get(id) || {} as { recommendedRoute?: string }).recommendedRoute }));
     const file = argv.find((argument) => !argument.startsWith('--'));
     if (!file) return null;
-    const answers: Answers = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const answers = parseJson(fs.readFileSync(file, 'utf8'));
+    if (!isAnswersFile(answers)) throw new Error(`${file} is not an answers file - nothing checked`);
     // a configure change needs a check only when it moves to another route; the route it keeps is already running
     const changed = Object.values(answers.change || {}).filter((change) => change && change.row && change.route).map((change) => ({ row: change!.row!, route: change!.route }));
     return Object.entries(answers.picks || {}).map(([id, pick]) => ({ row: id, route: (pick && pick.route) || (catalog.byId.get(id) || {} as { recommendedRoute?: string }).recommendedRoute })).concat(changed);

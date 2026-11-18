@@ -355,6 +355,23 @@ test('the CLI form applies a written plan and exits 1 on a failure', () => {
     finally { w.clean(); }
 });
 
+test('the CLI form refuses a plan file it cannot read, or one that is not a plan, with exit 2 and nothing applied', () => {
+    const w = world();
+    try
+    {
+        const script = path.join(import.meta.dirname, '..', 'scripts', 'apply.ts');
+        const missing = spawnSync(process.execPath, [script, path.join(w.dir, 'absent.json')], { encoding: 'utf8', env: w.env });
+        assert.strictEqual(missing.status, 2, missing.stderr);
+        assert.match(missing.stderr, /^apply: cannot read .*absent\.json/m);
+        fs.writeFileSync(path.join(w.dir, 'shape.json'), JSON.stringify({ project: w.project }));
+        const shape = spawnSync(process.execPath, [script, path.join(w.dir, 'shape.json')], { encoding: 'utf8', env: w.env });
+        assert.strictEqual(shape.status, 2, shape.stderr);
+        assert.match(shape.stderr, /shape\.json is not a plan - nothing applied/);
+        assert.strictEqual(fs.existsSync(path.join(w.project, '.mcp.json')), false, 'nothing applied');
+    }
+    finally { w.clean(); }
+});
+
 // ---- live values and the temp folder (no live credential in a file a command line names) -------------------------------
 
 const hex = (n: number) => crypto.randomBytes(n).toString('hex');

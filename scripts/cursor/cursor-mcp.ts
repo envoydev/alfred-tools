@@ -27,7 +27,9 @@ import type { CursorCtx, CursorDoc, CursorOf, CursorPlace, CursorRead, CursorWri
 export function fileFor(family: string, context: CursorPlace): string
 {
     const pathApi = pathFor(context.platform);
-    return family === 'global' ? pathApi.join(context.home || account.homeDir(context.env || process.env), CURSOR_FOLDER, CURSOR_FILE) : pathApi.join(context.project!, CURSOR_FOLDER, CURSOR_FILE);
+    if (family === 'global') return pathApi.join(context.home || account.homeDir(context.env || process.env), CURSOR_FOLDER, CURSOR_FILE);
+    if (!context.project) throw new Error('Cursor\'s project file needs the project folder, and none was given');
+    return pathApi.join(context.project, CURSOR_FOLDER, CURSOR_FILE);
 }
 
 // -> { state: 'absent' | 'ok' | 'symlink' | 'bad' | 'shape', doc, lineEnd }
@@ -81,7 +83,8 @@ export function compose(doc: CursorDoc | null, managed: Map<string, Managed>, { 
     const servers = (doc && doc.mcpServers) || {};
     const at = ({ row }: Managed) => { const i = row === null ? -1 : order.indexOf(row); return i < 0 ? order.length : i; };
     const sorted = [...managed].sort(([, first], [, second]) => at(first) - at(second));
-    const next: ServerMap = {};
+    // null prototypes here and in `out`: a server or a key named __proto__ is the user's own and is kept as one
+    const next: ServerMap = Object.create(null);
     for (const [name, server] of sorted)
     {
         // a skipped name keeps the file's own value, and one the file lacks stays out (spec D1: never re-added)
@@ -96,7 +99,8 @@ export function compose(doc: CursorDoc | null, managed: Map<string, Managed>, { 
         next[name] = value;
     }
     const base = doc && typeof doc === 'object' ? doc : {};
-    const out: Record<string, unknown> = Object.hasOwn(base, 'mcpServers') ? {} : { mcpServers: next };
+    const out: Record<string, unknown> = Object.create(null);
+    if (!Object.hasOwn(base, 'mcpServers')) out['mcpServers'] = next;
     for (const [key, value] of Object.entries(base)) out[key] = key === 'mcpServers' ? next : value;
     return out;
 }
@@ -222,12 +226,12 @@ export const otherHeaders = (entry: ServerEntry | null | undefined): string[] =>
 // kept survives a Claude-side rewrite. Its own `--header` pairs are dropped: the helper's are the source. -> entry | null
 export function bridgeFormOf(entry: ServerEntry | null | undefined, catalog: Catalog, prior: ServerEntry | null = null): ServerEntry | null
 {
-    if (!entry || typeof entry.headersHelper !== 'string' || otherHeaders(entry).length) return null;
+    if (!entry || typeof entry.headersHelper !== 'string' || typeof entry.url !== 'string' || otherHeaders(entry).length) return null;
     const helper = helperParts(entry.headersHelper);
     const [keyName, scheme] = helper ? helper.args : [];
     if (!helper || keyName === undefined || scheme === undefined) return null;
     const pathApi = pathApiOf(helper.path);
-    const own = [pathApi.join(pathApi.dirname(helper.path), FILES.bridge), entry.url!, keyName, scheme];
+    const own = [pathApi.join(pathApi.dirname(helper.path), FILES.bridge), entry.url, keyName, scheme];
     const globalRoot = helper.root ? [helper.root] : [];
     const pairs = helper.pairs.flatMap((pair) => ['--header', pair]);
     const priorParts = prior ? bridgeParts(prior) : null;

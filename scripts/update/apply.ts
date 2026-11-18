@@ -1,6 +1,5 @@
 // Applying the picked offers: plugins, pins, files and the new ways to pass data.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import * as inventory from '../inventory/inventory.ts';
 import { fetchStep } from '../entries/names.ts';
@@ -21,7 +20,7 @@ import { ensureCommonjs } from '../apply/file-steps.ts';
 import * as fixLib from '../fix/fix.ts';
 import { plan } from '../plan/plan.ts';
 import * as declines from '../core/declines.ts';
-import { PREFIX } from '../core/tmpdir.ts';
+import { makeTempDir } from '../core/tmpdir.ts';
 import type { Declined } from '../core/types.ts';
 import type { InvList } from '../inventory/types.ts';
 import type { Log } from '../apply/types.ts';
@@ -99,7 +98,8 @@ function updateHelper(offer: FileOffer, log: Log): boolean
     const kind = offer.kind === 'bridge' ? 'bridge' : offer.kind === 'context' ? 'serenaContext' : 'helper';
     const before = roots.shippedState(kind, offer.file);
     if (before.state !== 'lower') { log(`CHECK  ${offer.label}: now ${before.state} - left as it is`); return false; }
-    fs.writeFileSync(offer.file, roots.shippedSource(kind));
+    try { fs.writeFileSync(offer.file, roots.shippedSource(kind)); }
+    catch (caught) { log(`FAILED ${offer.label}: ${caught instanceof Error ? caught.message : String(caught)}`); return false; }
     // a YAML file needs no package.json
     const packageJson = kind === 'serenaContext' ? {} as { note?: string | null } : ensureCommonjs(path.dirname(offer.file));
     if (packageJson.note) log(`note   ${packageJson.note}`);
@@ -182,7 +182,7 @@ export function applyUpdates(context: UpdateCtx, ids: string[], out: UpdateCheck
     // the new ways to pass data first - list-import, a registration's, then a file's or folder's - and the pins after
     // them (updateUpgrade)
     const chosen = ordered(picked, context.catalog);
-    const dir = tmp || fs.mkdtempSync(path.join(os.tmpdir(), PREFIX));
+    const dir = tmp || makeTempDir();
     result.dir = dir;
     context.fetches = [];
     context.restart = false;

@@ -7,7 +7,7 @@ import { installedItems, rootInUse, ROOT_LABEL, ROOT_MOVES, packed } from './ask
 import * as existingServers from '../inventory/existing.ts';
 import * as roots from '../roots/roots.ts';
 import { LABEL, PREFIX } from './record-constants.ts';
-import { MAX_NAME_LENGTH, MAX_OPTIONS } from './constants.ts';
+import { EDGE_DASHES, MAX_NAME_LENGTH, MAX_OPTIONS, NAME_UNSAFE_RUN, PROJECT_NAME_FALLBACK } from './constants.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { Current } from '../entries/types.ts';
 import type { Installed, Inventory } from '../inventory/types.ts';
@@ -96,15 +96,17 @@ export function scopeQuestion(row: CatalogRow, inventory: Inventory, { route, cu
     };
 }
 
-// a per-project registration name: the project folder's name before the tool's
-const perProjectName = (row: CatalogRow, context: AskCtx | null | undefined) => (context ? `${path.basename(context.project).replace(/[^A-Za-z0-9_-]+/g, '-')}-${row.name}`.slice(0, MAX_NAME_LENGTH) : `project-${row.name}`);
+// A per-project registration name: the project folder's name - each run of characters a name may not hold one dash, and
+// no dash at its ends; 'project' when nothing is left - before the tool's, cut to the name limit. The name question offers
+// it and a 'prefixed' answer writes it (pick.ts), so the two cannot differ.
+export const perProjectName = (rowName: string, project: string | null | undefined): string => `${(project ? path.basename(project).replace(NAME_UNSAFE_RUN, '-').replace(EDGE_DASHES, '') : '') || PROJECT_NAME_FALLBACK}-${rowName}`.slice(0, MAX_NAME_LENGTH);
 
 // The registration name a `names` answer stands for: 'keep' (or none) - the name it has now, else the original;
 // 'prefixed' - the per-project name; else the name itself.
 export function nameFor(row: CatalogRow, name: string | null | undefined, current: Partial<Current> | null | undefined, context: AskCtx | null | undefined): string
 {
     if (!name || name === 'keep') return current ? current.name! : row.name;
-    return name === 'prefixed' ? perProjectName(row, context) : name;
+    return name === 'prefixed' ? perProjectName(row.name, context?.project) : name;
 }
 
 export function nameQuestion(row: CatalogRow, inventory: Inventory, { current = null, copyOf = [], context: context = null }: ToolOpts = {}): Question
@@ -113,7 +115,7 @@ export function nameQuestion(row: CatalogRow, inventory: Inventory, { current = 
     const shadows = copyOf.find((copy) => copy.name === original);
     const options = current && current.name !== original
         ? [{ label: `${LABEL.keep}\`${current.name}\`${RECOMMENDED_SUFFIX}`, description: 'the name it has now' }, { label: `Use \`${original}\``, description: 'the original name' }]
-        : [{ label: `${LABEL.keep}\`${original}\`${RECOMMENDED_SUFFIX}`, description: shadows ? `the original name; in this project it is used instead of ${shadows.scope === 'inherited' ? `the one inherited from ${fromHere(inventory, shadows.from!)}` : 'the copy for every project'}` : 'the original name' }, { label: `Use \`${perProjectName(row, context)}\``, description: 'a per-project name' }];
+        : [{ label: `${LABEL.keep}\`${original}\`${RECOMMENDED_SUFFIX}`, description: shadows ? `the original name; in this project it is used instead of ${shadows.scope === 'inherited' ? `the one inherited from ${fromHere(inventory, shadows.from!)}` : 'the copy for every project'}` : 'the original name' }, { label: `Use \`${perProjectName(original, context?.project)}\``, description: 'a per-project name' }];
     return { id: `${PREFIX.name}${row.id}`, header: 'Name', multiSelect: false, question: `${row.label}: registration name?`, options };
 }
 

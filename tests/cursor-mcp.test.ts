@@ -135,6 +135,17 @@ test('cursor-mcp keeps CRLF and drops the BOM', () => {
     assert.deepStrictEqual(Object.keys(JSON.parse(text).mcpServers), ['serena', 'mine']);
 });
 
+test('cursor-mcp keeps a server and a top-level key named __proto__', () => {
+    const d = fresh();
+    const file = path.join(d, '.cursor', 'mcp.json');
+    write(file, '{ "__proto__": { "x": 1 }, "mcpServers": { "__proto__": { "command": "mine" } } }');
+    const r = C.cursorWrite(step(file, [{ file: listFile(d, [srv('serena', 'local', SERENA)]), scopes: ['local', 'project'] }]), ctx);
+    assert.strictEqual(r.ok, true, r.detail);
+    const text = fs.readFileSync(file, 'utf8');
+    assert.match(text, /^\{\s+"__proto__": \{\s+"x": 1/);
+    assert.match(text, /"__proto__": \{\s+"command": "mine"/);
+});
+
 test('cursor-mcp writes through a temporary file then a rename, and makes the folder', (t) => {
     const d = fresh();
     const file = path.join(d, '.cursor', 'mcp.json');
@@ -169,6 +180,14 @@ test('fileFor: the project\'s .cursor/mcp.json, or the home\'s', () => {
     assert.strictEqual(C.fileFor('project', { project: '/work/shop', env: { HOME: '/Users/me' }, platform: 'darwin' }), '/work/shop/.cursor/mcp.json');
     assert.strictEqual(C.fileFor('global', { project: '/work/shop', env: { HOME: '/Users/me' }, platform: 'darwin' }), '/Users/me/.cursor/mcp.json');
     assert.strictEqual(C.fileFor('global', { project: '/work/shop', home: '/Users/plan', env: {}, platform: 'darwin' }), '/Users/plan/.cursor/mcp.json', 'the plan\'s home wins');
+});
+
+test('fileFor refuses a project file with no project folder in one line, not a TypeError from path.join', () => {
+    assert.throws(() => C.fileFor('project', { env: { HOME: '/Users/me' }, platform: 'darwin' }), /^Error: Cursor's project file needs the project folder, and none was given$/);
+});
+
+test('bridgeFormOf gives no bridge copy for a helper entry with no URL, never one whose URL is undefined', () => {
+    assert.strictEqual(C.bridgeFormOf({ type: 'http', headersHelper: 'node /Users/me/.alfred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' }, catalog), null);
 });
 
 test('matchesRow matches context7\'s bridge copy to the context7 row and an unrelated bridge to none', () => {

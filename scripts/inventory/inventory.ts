@@ -14,7 +14,7 @@ import * as kept from '../core/kept.ts';
 import { ALL_SCOPES, MCP_JSON } from '../core/constants.ts';
 import * as roots from '../roots/roots.ts';
 import { pathFor } from '../entries/platform.ts';
-import { ALFRED_CODE_PLUGIN, INVENTORY_VERSION, WINDOWS_MCP_MARKETPLACE } from './constants.ts';
+import { ALFRED_CODE_PLUGIN, INVENTORY_VERSION, MARKETPLACE_LIST_UNREAD, WINDOWS_MCP_MARKETPLACE } from './constants.ts';
 import { catalogMatch } from './fingerprint.ts';
 import * as existing from './existing.ts';
 import { workspaceOf } from '../roots/workspace.ts';
@@ -223,8 +223,12 @@ export function buildInventory({ project, env = process.env, platform = process.
         }
 
     const marketplaceResult = run(['plugin', 'marketplace', 'list', '--json'], { cwd: proj, env });
-    try { out.marketplaces = (JSON.parse(marketplaceResult.stdout || '[]') as MarketplaceListRow[]).map((marketplace) => ({ name: marketplace.name, source: marketplace.repo || marketplace.url || marketplace.path || '', installLocation: marketplace.installLocation || '' })); }
-    catch { out.marketplaces = []; }
+    let marketplaceRows: unknown = null;
+    try { marketplaceRows = marketplaceResult.status === 0 ? JSON.parse(marketplaceResult.stdout || '[]') : null; }
+    catch { /* not JSON: named below */ }
+    out.marketplaces = Array.isArray(marketplaceRows) ? (marketplaceRows as MarketplaceListRow[]).map((marketplace) => ({ name: marketplace.name, source: marketplace.repo || marketplace.url || marketplace.path || '', installLocation: marketplace.installLocation || '' })) : [];
+    // a list that failed or is not JSON is named, never read as 'no marketplace registered'
+    if (!Array.isArray(marketplaceRows)) out.unreadable.push({ ...MARKETPLACE_LIST_UNREAD, state: marketplaceResult.status === 0 ? 'malformed' : 'unreadable', error: marketplaceResult.status === 0 ? 'not JSON' : 'the command failed' });
     return out;
 }
 

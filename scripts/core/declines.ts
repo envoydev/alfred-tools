@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { replaceFile } from './replace-file.ts';
+import { parseJson } from './json-file.ts';
 import type { Declined, DeclinedFile, Outcome } from './types.ts';
 
 const FILE = 'retired-declined.json';
@@ -15,17 +16,19 @@ export const same = (first: Declined, second: Declined): boolean => first.id ===
 function load(dataDir: string): { declined: Declined[]; bad?: undefined } | { bad: true; declined?: undefined } | null
 {
     let text: string;
-    try { text = fs.readFileSync(fileOf(dataDir), 'utf8'); } catch { return null; }
+    try { text = fs.readFileSync(fileOf(dataDir), 'utf8'); }
+    // only a file that is not there is no file: one that cannot be read is never replaced by a fresh one
+    catch (caught) { return caught instanceof Error && 'code' in caught && caught.code === 'ENOENT' ? null : { bad: true }; }
     try
     {
-        const doc = JSON.parse(text) as Partial<DeclinedFile> | null;
+        const doc = parseJson(text) as Partial<DeclinedFile> | null;
         if (!doc || !Array.isArray(doc.declined)) return { bad: true };
         return { declined: doc.declined.filter((entry) => entry && typeof entry.id === 'string' && typeof entry.scope === 'string').map(({ id, scope }) => ({ id, scope })) };
     }
     catch { return { bad: true }; }
 }
 
-// -> [{ id, scope }]; none with no data folder or a file that is not JSON
+// -> [{ id, scope }]; none with no data folder, or a file that cannot be read or is not JSON
 export function read(dataDir: string | null | undefined): Declined[]
 {
     if (!dataDir) return [];
@@ -38,7 +41,7 @@ export function add(dataDir: string | null | undefined, items: Declined[]): Outc
 {
     if (!dataDir) return { ok: false, detail: 'no plugin data folder given - the decline is not recorded, so the offer comes back next time' };
     const doc = load(dataDir);
-    if (doc && doc.bad) return { ok: false, detail: `${fileOf(dataDir)} is not JSON - nothing recorded; fix or delete it` };
+    if (doc && doc.bad) return { ok: false, detail: `${fileOf(dataDir)} cannot be read or is not JSON - nothing recorded; fix or delete it` };
     const declined = doc ? doc.declined : [];
     for (const it of items) if (!declined.some((entry) => same(entry, it))) declined.push({ id: it.id, scope: it.scope });
     fs.mkdirSync(dataDir, { recursive: true });

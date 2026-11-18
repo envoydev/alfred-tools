@@ -27,7 +27,7 @@ function sitInOneTempFolder(files: string[]): string[] | null
 }
 
 // A file that holds one JSON object. A missing file is `{}` when `optional`, else a refusal.
-function readObject(file: string, optional = false): FileRead
+export function readObject(file: string, optional = false): FileRead
 {
     let text: string;
     try { text = fs.readFileSync(file, 'utf8'); }

@@ -12,7 +12,7 @@ import { makeCtx } from '../scripts/plan/context.ts';
 import { fileSteps } from '../scripts/plan/root-files.ts';
 import { scopeOfLabel, SCOPE_LABEL, PARENT_HELPER_IN_CHILD, keyNameQuestion, settingsQuestion, SCOPE_TEXT } from '../scripts/plan/asks-keys.ts';
 import { pickQuestions, packed, alsoProvided } from '../scripts/plan/asks-picks.ts';
-import { scopeQuestion, routeQuestion, changeQuestions, scopesFor } from '../scripts/plan/asks-tool.ts';
+import { scopeQuestion, routeQuestion, changeQuestions, scopesFor, nameQuestion } from '../scripts/plan/asks-tool.ts';
 import { locationQuestion } from '../scripts/plan/asks-location.ts';
 import { toolAsk, STATIC, toolQuestions, removeQuestions } from '../scripts/plan/asks-other.ts';
 import * as asks from '../scripts/plan/asks-all.ts';
@@ -23,7 +23,7 @@ import { world, writeJson, helperCmd } from './helpers.ts';
 import { parseAskBlocks } from './ask-blocks.ts';
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { ALFRED_ENTRIES, alfredNameProblem, formatRoot } from '../scripts/entries/locations.ts';
+import { ALFRED_ENTRIES, alfredNameProblem, alfredRoot, formatRoot } from '../scripts/entries/locations.ts';
 import * as roots from '../scripts/roots/roots.ts';
 import * as rootsLib from '../scripts/roots/roots.ts';
 import { FILES } from '../scripts/roots/roots.ts';
@@ -188,6 +188,12 @@ test('npx rows: pinned, with the cut-off in npm_config_before; native Windows ge
     assert.strictEqual((ap.env as EntryEnv).SCREENSHOTS_DIR, '/work/shop/.alfred-tools/appium-mcp/screenshots');
     assert.strictEqual((ap.env as EntryEnv).PAGE_SOURCES_DIR, '/work/shop/.alfred-tools/appium-mcp/page-sources');
     assert.strictEqual((ap.env as EntryEnv).ALLOW_REMOTE_APP_URLS, 'false');
+});
+
+test('buildEntry refuses a local route whose runtime it has no form for, naming the row and the runtime', () => {
+    const context7 = catalog.byId.get('context7')!;
+    const row = { ...context7, routes: { ...context7.routes, local: { ...context7.routes['local']!, runtime: 'pip' } } };
+    assert.throws(() => buildEntry(row, 'local', { scope: 'local' }, { platform: 'darwin', home: '/Users/me', project: '/work/shop' }, catalog.rules), /^Error: context7: no registration form for the 'pip' runtime$/);
 });
 
 test('routes: context7, github and sentry each build both ways; the others have one', () => {
@@ -432,6 +438,14 @@ test('names: the 64-character limit, characters, the reserved set, a collision, 
     const pre = addStep(plan(inv(MAC), pickOne('serena', { name: 'prefixed' }), opts('/h')));
     assert.strictEqual(pre.name, 'shop-serena');
     for (const row of catalog.tools.filter((r) => r.kind === 'mcp')) assert.ok(!catalog.reserved.has(row.name));
+});
+
+test('the name question offers the per-project name a prefixed answer writes, for a folder whose name ends outside [A-Za-z0-9_-]', () => {
+    const here = inv(MAC, { project: '/work/my app (old)' });
+    const offered = nameQuestion(catalog.byId.get('serena')!, here, { context: { project: here.project, platform: 'darwin', home: '/Users/me', env: {} } }).options[1]!.label;
+    const written = addStep(plan(here, pickOne('serena', { name: 'prefixed' }), opts('/Users/me'))).name;
+    assert.strictEqual(written, 'my-app-old-serena');
+    assert.strictEqual(offered, `Use \`${written}\``);
 });
 
 test('an unreadable scope gets nothing written', () => {
@@ -873,6 +887,14 @@ test('location: alfred-code data on disk is a second answer, not the recommended
     const old = withData!.options.find((o) => o.label === 'Carry over alfred-code 2.x data');
     assert.match(old!.description, /^\/work\/shop\/\.alfred\/chrome-control - carries over the data alfred-code 2\.x left there; the folder is alfred-code's, so deleting it erases this tool's data$/);
     assert.strictEqual(loc(() => false), undefined, 'no alfred-code folder: one place, no question');
+});
+
+test('alfredRoot takes an absolute alfred-code folder as it is, where it threw on the relative path it does not have', () => {
+    const memory = catalog.byId.get('memory')!;
+    const row = { ...memory, locations: { ...memory.locations!, alfred: '/opt/alfred/memory' } };
+    const context = { platform: 'darwin', home: '/Users/me', project: '/work/shop', exists: (file: string) => file === '/opt/alfred/memory' };
+    assert.deepStrictEqual(alfredRoot(row, context), { kind: 'abs', path: '/opt/alfred/memory' });
+    assert.strictEqual(alfredRoot(row, { ...context, exists: () => false }), null);
 });
 
 test('plan.js from a kept inventory file leaves location keys as they are', () => {
@@ -1340,6 +1362,28 @@ test('plan.js --questions takes --data after its files and refuses an unknown fl
     finally
     {
         console.log = log;
+        console.error = err;
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('plan.ts refuses an inventory or answers file that is gone or cut short, with exit 2 and one line', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-plan-unreadable-'));
+    const err = console.error;
+    const lines: string[] = [];
+    try
+    {
+        console.error = (line: string) => { lines.push(line); };
+        assert.strictEqual(runPlanCommand(['--questions', path.join(dir, 'absent.json')]), 2);
+        fs.writeFileSync(path.join(dir, 'inv.json'), JSON.stringify(inv(MAC)));
+        fs.writeFileSync(path.join(dir, 'cut.json'), '{"picks": ');
+        assert.strictEqual(runPlanCommand([path.join(dir, 'inv.json'), path.join(dir, 'cut.json')]), 2);
+        assert.strictEqual(lines.length, 2, lines.join('\n'));
+        assert.match(lines[0]!, /^plan\.ts: .*absent\.json: is not a JSON file this run wrote$/);
+        assert.match(lines[1]!, /^plan\.ts: .*cut\.json: is not a JSON file this run wrote$/);
+    }
+    finally
+    {
         console.error = err;
         fs.rmSync(dir, { recursive: true, force: true });
     }

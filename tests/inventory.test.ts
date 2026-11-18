@@ -287,6 +287,21 @@ test('the inventory reads only: no write call reaches the CLI and no server star
     finally { w.clean(); }
 });
 
+test('a marketplace list that fails or is not JSON is named as unreadable, never read as no marketplace registered', () => {
+    const answer = (status: number, stdout: string) => ({ status, stdout, stderr: '', error: null, signal: null });
+    for (const [listed, state] of [[answer(0, 'Error: unknown option --json'), 'malformed'], [answer(1, ''), 'unreadable']] as const)
+    {
+        const w = world();
+        try
+        {
+            const i = build(w, { run: (args: string[]) => (args[1] === 'marketplace' ? listed : answer(0, '[]')) });
+            assert.deepStrictEqual(i.marketplaces, []);
+            assert.deepStrictEqual(i.unreadable.map((u) => [u.scope, u.file, u.state]), [['marketplaces', 'claude plugin marketplace list --json', state]]);
+        }
+        finally { w.clean(); }
+    }
+});
+
 test('the CLI form writes the JSON file and prints one line; a missing claude stops with one line', () => {
     const w = world();
     const tmp = makeTempDir();

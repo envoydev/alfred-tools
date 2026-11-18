@@ -171,6 +171,18 @@ test('a 0.4.x record file: missing is null, malformed or another version reads e
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('a 0.4.x record saved with a BOM reads its servers, as the list does', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-record-'));
+    try
+    {
+        const file = path.join(dir, roots.FILES.record);
+        const servers = [{ name: 'gh', scope: 'project', fingerprint: 'url:api.githubcopilot.com/mcp', choice: 'own' }];
+        fs.writeFileSync(file, `\uFEFF${JSON.stringify({ version: 1, servers })}`);
+        assert.deepStrictEqual(lists.readOldRecord(file), { version: 1, servers });
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('no option text mentions Other', () => {
     const on = [ALFRED_SET_UP, '/Users/me/.alfred', '/work/shop/tools/keys'];
     const map = { version: 1, global: null, projects: { '/work/shop': '/work/shop/tools/keys' } };

@@ -45,3 +45,28 @@ test('declines: parse reads <id>~<scope>,... and refuses an item with no scope',
     assert.deepStrictEqual(declines.parse(''), []);
     assert.throws(() => declines.parse('claude-hud@claude-hud'), /retired-declined needs <id>~<scope>/);
 });
+
+test('declines: a file saved with a byte order mark reads as its declines, and an add keeps them', () =>
+{
+    const d = dataDir();
+    fs.writeFileSync(path.join(d, 'retired-declined.json'), `\uFEFF${JSON.stringify({ version: 1, declined: [{ id: 'claude-hud@claude-hud', scope: 'user' }] })}`);
+    assert.deepStrictEqual(declines.read(d), [{ id: 'claude-hud@claude-hud', scope: 'user' }]);
+    assert.strictEqual(declines.add(d, [{ id: 'csharp-lsp@claude-plugins-official', scope: 'local' }]).ok, true);
+    assert.deepStrictEqual(declines.read(d), [{ id: 'claude-hud@claude-hud', scope: 'user' }, { id: 'csharp-lsp@claude-plugins-official', scope: 'local' }]);
+});
+
+test('declines: an unreadable file is not taken for no file - an add refuses and leaves it', { skip: (process.platform === 'win32' || process.getuid?.() === 0) && 'NOT RUN: POSIX modes, and root reads any file' }, () =>
+{
+    const d = dataDir();
+    const file = path.join(d, 'retired-declined.json');
+    fs.writeFileSync(file, JSON.stringify({ version: 1, declined: [{ id: 'claude-hud@claude-hud', scope: 'user' }] }));
+    fs.chmodSync(file, 0o000);
+    try
+    {
+        const refused = declines.add(d, [{ id: 'csharp-lsp@claude-plugins-official', scope: 'local' }]);
+        assert.strictEqual(refused.ok, false);
+        assert.match(refused.detail, /cannot be read or is not JSON - nothing recorded/);
+    }
+    finally { fs.chmodSync(file, 0o600); }
+    assert.deepStrictEqual(declines.read(d), [{ id: 'claude-hud@claude-hud', scope: 'user' }]);
+});

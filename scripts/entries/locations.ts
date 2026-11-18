@@ -115,7 +115,7 @@ export function alfredRoot(row: CatalogRow, context: Machine): Root | null
     if (!row.locations || !row.locations.alfred) return null;
     const exists = context.exists || ((filePath: string) => fs.existsSync(filePath));
     const old = parseRoot(row.locations.alfred, context);
-    const absolutePath = old.kind === 'home' ? pathFor(context.platform).join(context.home, ...old.rel.split('/')) : pathFor(context.platform).resolve(context.project, ...(old as { rel: string }).rel.split('/'));
+    const absolutePath = old.kind === 'abs' ? old.path : old.kind === 'home' ? pathFor(context.platform).join(context.home, ...old.rel.split('/')) : pathFor(context.platform).resolve(context.project, ...old.rel.split('/'));
     return exists(absolutePath) ? old : null;
 }
 
