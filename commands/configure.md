@@ -102,85 +102,53 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --questions <tmp>/inventory.json <t
 
 Its `targets.<key>` holds each pick's `row` and what it has now (`current`: name, scope, route); a target with an
 `error` is not changed - say why. Its `next` is the one step to ask now: `next.id`, `next.call` (the questions, as one
-`AskUserQuestion`), `next.answers` (what a label picked stands for) and, sometimes, `next.set`. Every question
-recommends what the pick has now. Until `next.id` is `done`:
+`AskUserQuestion`) and, sometimes, `next.set` (the one folder left at the new scope; the record call writes it). Every
+question recommends what the pick has now. Until `next.id` is `done`:
 
 1. Ask `next.call` as printed. When `next.call` is empty, make no call.
-2. Record each answer as below, in `<tmp>/picks.json` and in `<tmp>/answers.json`.
-3. Write `next.set` when it is there: `{"location": ...}` is the one folder left at the new scope, written as the
-   target's `"location"`, since the folder it uses now cannot stay there.
-4. Append `next.id` to `"done"` in `picks.json` and run the command again.
+2. When a label is answered by something typed next (listed below), ask it in chat.
+3. Write `<tmp>/step.json` - `{"id": <next.id>, "answers": {<question id>: <label>}}`, an answer with a typed value as
+   `{"label": ..., "typed": ...}`, an 'Other' answer as `{"other": ...}` - and run:
 
-What each step is, and where its answer goes:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --record <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <tmp>/step.json --data "${CLAUDE_PLUGIN_DATA}"
+   ```
+
+   It records the answers - leaving out each one that keeps what the tool has now - marks the step done and prints the
+   next step; exit 2 names what to fix.
+
+What each step is:
 
 - **On its own** (a server left on its own, a plugin's server or a connector): the question is the one the record
-  asked. Its answer is `next.answers.<question id>.<label>`, a `{key, choice}`: write `"existing": {<key>: <choice>}`
-  into `answers.json`. 'Let alfred-tools manage it' hands it to configure, update and fix from now on; for a plugin's
-  server or a connector, the other option lets install offer alfred-tools' own beside it.
-- **A root folder** (`root:project`, `root:global`): the root in use first. Its answer is
-  `next.answers.<question id>.<label>`, a `{family, id, root}`; 'A folder you name' is asked next. A root other than
-  the one in use writes `"roots": {<family>: {"id": <id>}}` (or `{"id": "named", "path": "<typed>"}`) and
-  `"rootChange": [<family>]` into `answers.json`. The plan re-adds each registration of that family with its helper,
-  and its data folder when it sits in the old root, pointing into the new root; it moves no data and no key value, and
-  names both.
-- **A registration**: its first question is 'Who looks after <name>?', a `{key, choice}` in `next.answers`. Write
-  `"existing": {<key>: <choice>}` into both files.
-  - 'Leave it on its own' ends this pick: it gets no `change` entry, and the plan saves it in the record named in the
-    option, so configure, update and fix skip it from now on.
-  - 'alfred-tools' goes on to its route, its scope and name, its location and extras, then its key name and
-    settings. Record a route under `"routes": {<key>: ...}`, a scope under `"scopes"`, a name under `"names"` ('Keep
-    ...' is `"keep"`) and the API key under `"tokens": {<key>: true | false}` in `picks.json`, and each answer that
-    changes something in the target's `change` entry, mapped by the table below.
-  - Last, 'Set up <name> for which apps?' - what its list entry has now first. Its answer is
-    `next.answers.<question id>.<label>`: `["claude", "cursor"]` or `["claude"]`, written as `"clients"` in the
-    target's `change` entry when it is not `current.clients`. A change of the apps alone makes no `claude` call: the
-    plan writes the list and Cursor's file only.
+  asked. 'Let alfred-tools manage it' hands it to configure, update and fix from now on; for a plugin's server or a
+  connector, the other option lets install offer alfred-tools' own beside it.
+- **A root folder** (`root:project`, `root:global`): the root in use first. The plan re-adds each registration of the
+  other root's family with its helper, and its data folder when it sits in the old root, pointing into the new root; it
+  moves no data and no key value, and names both.
+- **A registration**: its first question is 'Who looks after <name>?'.
+  - 'Leave it on its own' ends this pick: it gets no change, and the plan saves it in the record named in the option,
+    so configure, update and fix skip it from now on.
+  - 'alfred-tools' goes on to its route, its scope and name, its location and extras, then its key name and settings.
+  - Last, 'Set up <name> for which apps?' - what its list entry has now first. A change of the apps alone makes no
+    `claude` call: the plan writes the list and Cursor's file only.
 
-The key name is `next.answers.<question id>.<label>` - the name it uses now first, 'A name you choose' asked next - and
-another name goes to `"keyNames": {<key>: "<NAME>"}` at the top of `answers.json`. The walk leaves the key name out when
-the API key answer is now 'No key - lower rate limits' or 'Sign in with OAuth'. 'Change or add a setting' asks next for
-`NAME=value` pairs, written to `"settings": {<key>: {"<NAME>": "<value>"}}`; 'Keep these settings' writes nothing.
+These labels are answered by a value typed next, one plain line each (see the Rules), written as `typed`:
 
-A hosted route that lists settings (sonarqube) asks 'Tools' instead - what the registration sends now first. Its answer is
-an object in `next.answers.<question id>.<label>`, written whole to `"settings": {<key>: {...}}` without its
-`"toolsets": true` (`{}` is 'Read and write'); the first option, when it is not changing anything, may be left out.
-Where it has `"toolsets": true`, ask next, as one typed list, which toolsets to send (`analysis`, `coverage`,
-`dependency-risks`, `duplications`, `issues`, `measures`, `projects`, `quality-gates`, `rules`, `security-hotspots`) and
-add `"SONARQUBE_TOOLSETS": "<key>,<key>"` to that object. With no `settings` entry the plan keeps the pairs the
-registration has.
+- a root's 'A folder you name', a location's 'Another ...folder' and a browser's 'A browser binary I name': a path;
+- a host's 'A self-managed host': the host;
+- a key name's or URL name's 'A name you choose': a name matching `^[A-Za-z_][A-Za-z0-9_]*$`;
+- settings 'Change or add a setting': `NAME=value` pairs, written as an object `{"<NAME>": "<value>"}`. The plan refuses
+  a name that looks like a credential: a key goes in `.mcps-secrets` and is picked as the key's name, never typed here;
+- a hosted route's 'Tools' answer that chooses toolsets (sonarqube): which toolsets to send, as one list written
+  `<key>,<key>` - `analysis`, `coverage`, `dependency-risks`, `duplications`, `issues`, `measures`, `projects`,
+  `quality-gates`, `rules`, `security-hotspots`. With no settings answer the plan keeps the pairs the registration has.
+
+The walk leaves the key name out when the API key answer is now 'No key - lower rate limits' or 'Sign in with OAuth'.
 
 A bridge route (sentry's 'Bridge') adds one 'URL name' question per value its URL takes from `.mcps-secrets` - the name
-it uses now first. Another name goes to `"urlNames": {<key>: {"<VAR>": "<NAME>"}}` at the top of `answers.json`, where
-`<VAR>` ends the question id (`urlname-<id>-<VAR>`); 'A name you choose' is asked next, checked against
-`^[A-Za-z_][A-Za-z0-9_]*$`. The plan rewrites only the URL template and the key argument of the registration as read,
-keeping its pin, and refuses a URL name that is the key's name or reads as a credential, and a name two parts of the URL
-share. A change takes effect when the server starts again: say to restart Claude Code or reconnect it in `/mcp`.
-
-Write the answers into `<tmp>/answers.json` as `{"change": {<key>: {"row": <targets.<key>.row>, ...}}}`, mapped as
-below, and leave out every answer that keeps what the tool has now - the plan reads a missing key as 'keep':
-
-| Answer | Entry |
-|---|---|
-| route 'Hosted' / 'Local' / 'Bridge', when it is not `current.route` | `"route": "remote"` / `"local"` / `"bridge"` |
-| scope 'Global' / 'Project' / 'Local', when it is not `current.scope` | `"scope": "user"` / `"project"` / `"local"` |
-| name 'Keep ...' | nothing |
-| name 'Use `x`', or a name typed | `"name": "x"` |
-| location 'The folder it uses now' | nothing |
-| location, another label | `"location":` the entry `next.answers` gives for the label picked |
-| location 'Another ...folder', asked next | `"location": {"side": "path", "path": "<typed>"}` |
-| browser 'A browser binary I name', asked next | `"executablePath": "<typed>"` |
-| browser 'Default for this engine', when it is not first | `"executablePath": ""` (drops `--executable-path`) |
-| API key 'Use a key from .mcps-secrets' / 'No key - lower rate limits' or 'Sign in with OAuth', when it is not first | `"token": true` / `"token": false` |
-| host 'A self-managed host' asked next, or the hosted host when it is not first | `"params": {"host": "<that host>"}` |
-| host, a region option other than the first (a row with choices) | `"params": {"host": "<its description>"}` |
-| key name, when it is not first | top-level `"keyNames": {<key>: "<NAME>"}` |
-| URL name, when it is not first | top-level `"urlNames": {<key>: {"<VAR>": "<NAME>"}}` |
-| settings, pairs asked next | top-level `"settings": {<key>: {"<NAME>": "<value>"}}` |
-| tools (sonarqube), when it is not first | top-level `"settings": {<key>: {...}}`, the answer's object, toolsets typed in |
-| apps, when it is not `current.clients` | `"clients": ["claude", "cursor"]` / `["claude"]` |
-
-A name must match `^[A-Za-z_][A-Za-z0-9_]*$`, and a setting whose name looks like a credential is refused by the plan - a
-key goes in `.mcps-secrets` and is picked as the key's name, never typed here.
+it uses now first. The plan rewrites only the URL template and the key argument of the registration as read, keeping
+its pin, and refuses a URL name that is the key's name or reads as a credential, and a name two parts of the URL share.
+A change takes effect when the server starts again: say to restart Claude Code or reconnect it in `/mcp`.
 
 A scope change on an MCP server is a move too: the registration picked leaves its old scope, so a copy for every project
 moved to Local is gone from the other projects. To keep it there and add this project's own copy, use
@@ -206,9 +174,23 @@ with a missing prerequisite, ask once (up to four per call):
 - 'Register anyway' - register it; it will not start until the prerequisite is there
 ```
 
-'Skip': delete that key from `change`. 'Install it now': when the output gave an `install:` command, run it; when it gave
-only a page, give the user that page, wait for them to say it is done, and run `prereq.ts` again. 'Register anyway': keep
-it, and say in the confirmation that it will not start yet.
+'Skip': run this, which leaves that target out and keeps it out:
+
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --skip <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <key> --data "${CLAUDE_PLUGIN_DATA}"
+```
+
+'Install it now': when the output gave an `install:` command, run it; when it gave only a page, give the user that page
+and ask:
+
+```ask prereqInstalled
+Is <prerequisite> installed for <tool> now?
+- 'Check again (Recommended)' - run the prerequisite check again
+- 'Skip this tool' - leave it out of the plan
+```
+
+'Check again' runs `prereq.ts` again; 'Skip this tool' runs `--skip`, as 'Skip' does. 'Register anyway': keep it, and say
+in the confirmation that it will not start yet.
 
 ## 7. Plan, then one confirmation
 
@@ -228,8 +210,7 @@ in `.mcp.json`; one whose entry holds a credential anywhere else - a header of i
 naming the field, never written. A rename or a scope move adds the new registration first, reads it back, then removes
 the old one; a route, location, key name, settings or root change rewrites it in place and keeps the old entry to put
 back if the add fails. A root change notes that the user copies the values from the old `.mcps-secrets` to the new one
-themselves - say it again after the apply. Exit 1 means the plan has errors; show them and go back to the ask that
-causes them, never around them.
+themselves - say it again after the apply. Exit 1 means the plan has errors; show them and rewind the pick each names (below), never go around them.
 
 A `cursor: <file> already has <name> - answer cursor-name-<name>@<file>` error is not a wrong answer: Cursor's file
 already holds a server under a name this plan writes for Cursor, one alfred-tools did not write. `<tmp>/plan.json`
@@ -253,6 +234,18 @@ Apply this plan?
 - 'Change something' - go back to the answers
 - 'Cancel' - nothing is applied
 ```
+
+'Change something', or a plan error, runs this, where `<pick>` is a target key - for a plan error, the one it names:
+
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --rewind <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <pick> --data "${CLAUDE_PLUGIN_DATA}"
+```
+
+For 'Change something', run it first without `<pick>`: it prints one question to ask as printed, and `answers.rewind`
+maps each label to its pick. `''` is 'Change nothing' - put the apply ask again with the plan as it was. `'another'` -
+ask for the pick in one plain line. Then run it with the pick chosen: it drops that pick's recorded steps and prints the
+walk's next step. Run step 5's loop again to `done` from that `next`, then steps 6 and 7's plan again, before the apply
+ask is put again.
 
 A plan that says 'Nothing to do' means every answer kept what is installed; show that and stop without asking.
 

@@ -75,14 +75,6 @@ test('the walks write what the step sets (`next.set`, the one location left) and
     }
 });
 
-test("install maps both API key answers: 'No key' is written, since 'Use a key from .mcps-secrets' is the default when a key is found", () => {
-    const text = fs.readFileSync(path.join(import.meta.dirname, '..', 'commands', 'install.md'), 'utf8');
-    const row = text.split('\n').find((l) => l.startsWith('| API key'));
-    // the labels toolAsk prints (scripts/plan/asks-other.ts), each mapped
-    for (const label of ['Use a key from .mcps-secrets', 'No key - lower rate limits', 'Sign in with OAuth']) assert.ok(row && row.includes(`'${label}'`), `${label}: ${row}`);
-    assert.ok(row!.includes('"token": true') && row!.includes('"token": false'), row);
-});
-
 test('install has no step for servers already set up', () => {
     const text = fs.readFileSync(path.join(import.meta.dirname, '..', 'commands', 'install.md'), 'utf8');
     assert.deepStrictEqual(text.split('\n').filter((l) => /^## /.test(l) && /already set up/.test(l)), []);
