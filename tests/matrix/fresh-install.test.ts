@@ -17,6 +17,7 @@ import * as keys from '../../scripts/keys/keys.ts';
 import type { McpAddStep } from '../../scripts/plan/types.ts';
 import { Harness } from '../harness.ts';
 import { keepWritten } from '../proof/matrix-keep.ts';
+import { localPathsOutside } from './local-paths.ts';
 const catalog = load();
 const spec = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'fresh-answers.json'), 'utf8'));
 
@@ -79,11 +80,15 @@ for (const c of spec.cases)
             if (c.expect.scope === 'project')
             {
                 // 'Absolute, always' (AGENTS.md, 2026-11-11): a data folder is named by an absolute path, which must lie under
-                // the project's root folder; a route with no data folder holds no absolute local path at all
-                const dataRoot = path.join(fs.realpathSync(project), '.alfred-tools');
-                const entry = stored[step.name] as { args?: string[]; env?: Record<string, string> };
+                // the project's root folder, written as the project path or as its real path (a /var or /tmp symlink); a route
+                // with no data folder holds no absolute local path at all. The command, the url and the headersHelper are
+                // checked either way: none may name a local path outside the data folder.
+                const dataRoots = [...new Set([path.join(project, '.alfred-tools'), path.join(fs.realpathSync(project), '.alfred-tools')])];
+                const entry = stored[step.name] as { command?: string; url?: string; headersHelper?: string; args?: string[]; env?: Record<string, string> };
+                const underDataRoot = (value: string) => dataRoots.some((dataRoot) => path.relative(dataRoot, path.resolve(value)).split(path.sep)[0] !== '..' && !path.isAbsolute(path.relative(dataRoot, path.resolve(value))));
                 const absolutes = [...(entry.args || []), ...Object.values(entry.env || {})].filter((value) => path.isAbsolute(value) && !/^\/[a-z]$/i.test(value));
-                for (const value of absolutes) assert.ok(path.relative(dataRoot, path.resolve(value)).split(path.sep)[0] !== '..' && !path.isAbsolute(path.relative(dataRoot, path.resolve(value))), `${value} lies outside ${dataRoot}`);
+                for (const value of absolutes) assert.ok(underDataRoot(value), `${value} lies outside ${dataRoots.join(' and ')}`);
+                for (const field of ['command', 'url', 'headersHelper'] as const) assert.deepStrictEqual(localPathsOutside(entry[field] || '', dataRoots), [], `${c.row}: ${field} names a local path outside the data folder`);
                 if (c.expect.files) assert.ok(absolutes.length > 0, `${c.row}: its data folder is named by an absolute path`);
                 else if (!absolutes.length) assert.ok(!/(?:^|[^$])\/(?:Users|home)\//.test(JSON.stringify(stored)), 'the committed file holds no absolute local path');
             }
