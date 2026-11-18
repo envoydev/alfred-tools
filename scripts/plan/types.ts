@@ -49,6 +49,67 @@ export interface Picks
     tokens?: Record<string, unknown>; // stored - do not rename
     done?: string[]; // stored - do not rename
     walk?: string; // stored - do not rename
+    clients?: string[]; // stored - do not rename
+    skipped?: string[]; // stored - do not rename
+    recorded?: Record<string, RecordedStep>; // stored - do not rename
+}
+// What --record wrote for one step: its pick, and the key paths in picks.json and answers.json, e.g.
+// ['routes', 'gitlab'] and ['picks', 'gitlab', 'route'].
+export interface RecordedStep
+{
+    tool: string | null; // stored - do not rename
+    picks: string[][]; // stored - do not rename
+    answers: string[][]; // stored - do not rename
+}
+// One answer in step.json: a label as shown (its ' (Recommended)' optional), a label with the value typed next, or the
+// text the user typed as 'Other'.
+export type StepAnswer = string | { label: string; typed: string | string[] | Record<string, string> } | { other: string };
+export interface StepFile
+{
+    id: string; // stored - do not rename
+    answers: Record<string, StepAnswer>; // stored - do not rename
+}
+export interface Refusal
+{
+    refused: string;
+}
+export type RecordResult = { picks: Picks; answers: Answers } | Refusal;
+// What recordStep reads: the step to answer (as --questions builds it), what built it, the files, and step.json.
+export interface RecordInput
+{
+    step: WalkStep;
+    built: Questions;
+    picks: Picks;
+    answers: Answers;
+    chosen: StepFile;
+}
+// A typed value after its shape is checked: a string, or an object of NAME: value strings.
+export type Typed = string | Record<string, string>;
+export type TypedKind = 'text' | 'pairs' | 'toolsets';
+// An answer of step.json resolved to its option: the label, its place among the options, what `step.answers` holds for
+// it, and the typed value or the 'Other' text.
+export interface Resolved
+{
+    label: string;
+    index: number;
+    value: unknown;
+    hasValue: boolean;
+    typed: Typed | undefined;
+    other: string | undefined;
+}
+// The state of one recordStep call: the cloned files, who the step is for, and the key paths written so far.
+export interface Run
+{
+    step: WalkStep;
+    built: Questions;
+    key: string | null;
+    configure: boolean;
+    skipped: boolean;
+    target: ToolBlock | undefined;
+    picks: Picks;
+    answers: Answers;
+    wrotePicks: string[][];
+    wroteAnswers: string[][];
 }
 
 // ---- the answers file -------------------------------------------------------------------------------------------------

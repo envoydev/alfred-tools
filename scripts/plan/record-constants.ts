@@ -1,0 +1,41 @@
+// The words record.ts reads from the questions the builders in asks-*.ts make: question id prefixes, the labels that
+// take a typed value, and the values the answer maps use.
+
+// A question id is `<prefix><row id>` (the walk's `settings` and `clients` have none).
+export const PREFIX = {
+    route: 'route-',
+    scope: 'scope-',
+    name: 'name-',
+    location: 'location-',
+    browser: 'browser-',
+    host: 'host-',
+    token: 'token-',
+    keyName: 'keyname-',
+    urlName: 'urlname-',
+    settings: 'settings-',
+    root: 'root-',
+    own: 'own-',
+    clients: 'clients-',
+} as const;
+
+export const WALK_QUESTION = { settings: 'settings', clients: 'clients' } as const;
+
+export const LABEL = {
+    keep: 'Keep ',
+    useKey: 'Use a key',
+    browserNamed: 'A browser binary I name',
+    browserDefault: 'Default for this engine',
+    hostSelfManaged: 'A self-managed host',
+    folderAnother: 'Another ',
+} as const;
+
+// The description of a host question's default host (asks-other.ts): the label is the host. A region choice carries its
+// host in its description instead.
+export const DEFAULT_HOST_DESCRIPTION = 'the hosted service';
+
+// What an answer map holds for the options that take a typed value (a root's id is `named` too).
+export const VALUE = { named: 'named', change: 'change', keep: 'keep' } as const;
+export const SIDE = { keep: 'keep', path: 'path' } as const;
+
+export const BACKTICKED_NAME = /`([^`]+)`/;
+export const TOOLSET_SEPARATOR = ',';
