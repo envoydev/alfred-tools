@@ -3,15 +3,12 @@
 import { AUTHORIZE_MARKER, LINK_PROTOCOL, MAX_LINE_LENGTH, NO_BROWSER_MARKER, PID_PREFIX_PATTERN } from './constants.ts';
 import type { AuthorizeWatch } from './types.ts';
 
-// -> the URL when the text is one https URL and nothing else, else null
+// -> the text itself, as the client wrote it, when it is one https URL and nothing else - no white space, no control
+// character a terminal would act on - else null
 export function httpsLinkOf(text: string): string | null
 {
-    if (/\s/.test(text)) return null;
-    try
-    {
-        const parsed = new URL(text);
-        return parsed.protocol === LINK_PROTOCOL ? parsed.href : null;
-    }
+    if (/[\s\u0000-\u001f\u007f-\u009f]/.test(text)) return null;
+    try { return new URL(text).protocol === LINK_PROTOCOL ? text : null; }
     catch { return null; }
 }
 

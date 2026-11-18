@@ -22,7 +22,12 @@ export const AUTHORIZE_MARKER = 'Please authorize this client by visiting:';
 export const NO_BROWSER_MARKER = 'Could not open a browser automatically';
 export const PID_PREFIX_PATTERN = /^\[\d+\]\s*/;
 export const LINK_PROTOCOL = 'https:';
-// a stderr line longer than this is no marker and no URL of the client's; it is skipped unread
-export const MAX_LINE_LENGTH = 4096;
+// a stderr line longer than this is no marker and no URL of the client's; it is skipped unread (an authorize URL with its
+// state and challenge runs to a few hundred characters, a long scope list to a few thousand)
+export const MAX_LINE_LENGTH = 65536;
 // how long a stopped client gets to exit on SIGTERM before it is killed
 export const KILL_GRACE_MS = 5000;
+// after the client exits, a grandchild that kept its stderr pipe open is given this long before the pipe is closed on it
+export const STDERR_GRACE_MS = 2000;
+// 128 plus the signal number: what a shell reports for a process the signal stopped
+export const SIGNAL_EXIT_CODE = { SIGINT: 130, SIGTERM: 143 };

@@ -7,7 +7,8 @@ import { world, writeJson } from './helpers.ts';
 import { oauthStub, MCP_PATH } from './fake-oauth-http.ts';
 import { signIn, signInCommand } from '../scripts/sign-in/sign-in.ts';
 import { runSignInCommand } from '../scripts/sign-in/command.ts';
-import { realRun, signInSpawnArgs } from '../scripts/sign-in/effects.ts';
+import { EventEmitter } from 'node:events';
+import { realRun, signInSpawnArgs, stopClientOnSignal, stopRunningClients } from '../scripts/sign-in/effects.ts';
 import { RUN_TIMEOUT_MS } from '../scripts/sign-in/constants.ts';
 import { cmdArg } from '../scripts/core/claude-cli.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
@@ -290,7 +291,7 @@ test('a timeout after a link was seen adds the link to the failure line; without
         const timedOut: RunResult = { status: null, error, signal: 'SIGTERM' };
         const printed: string[] = [];
         const withLink = await signIn('atlassian', 'project', { env: w.env, project: w.project, print: (line) => printed.push(line), run: feeding([PLEASE, AUTHORIZE_URL, COULD_NOT_OPEN], { result: timedOut }) });
-        assert.deepStrictEqual(withLink, { ok: false, line: `sign-in failed: gave up after 300 s waiting for the browser sign-in - open ${AUTHORIZE_URL} and run it again` });
+        assert.deepStrictEqual(withLink, { ok: false, line: `sign-in failed: gave up after 300 s waiting for the browser sign-in - the link was ${AUTHORIZE_URL}; run it again and open the link it prints` });
         const noLink = await signIn('atlassian', 'project', { env: w.env, project: w.project, print: (line) => printed.push(line), run: feeding(['[4242] Using config dir: x'], { result: timedOut }) });
         assert.deepStrictEqual(noLink, { ok: false, line: 'sign-in failed: gave up after 300 s waiting for the browser sign-in' });
         assert.deepStrictEqual(printed.length, 1, 'only the could-not-open run printed a line');
@@ -320,4 +321,77 @@ test('realRun reports a client that cannot start', { skip: POSIX_ONLY }, async (
 {
     const result = await realRun('alfred-tools-no-such-client', [], { cwd: process.cwd(), env: process.env, timeoutMs: 30000 }, () => {});
     assert.ok(result.error, 'a spawn error');
+});
+
+test('sign-in reads the stderr as mcp-remote writes it: one log call with embedded newlines, then the could-not-open line', async () =>
+{
+    await withServer(async ({ w, root }) =>
+    {
+        const printed: string[] = [];
+        const lines = [...`[4242] \nPlease authorize this client by visiting:\n${AUTHORIZE_URL}\n`.split('\n'), COULD_NOT_OPEN];
+        await signIn('atlassian', 'project', { env: w.env, project: w.project, print: (line) => printed.push(line), run: feeding(lines, { root }) });
+        assert.deepStrictEqual(printed, [`atlassian: no browser opened - open this link to sign in: ${AUTHORIZE_URL}`]);
+    });
+});
+
+test('sign-in prints a long authorize link as the client wrote it, never a re-encoded one, and never one with a control character', async () =>
+{
+    const long = `https://auth.example.com/authorize?state=${'a'.repeat(6000)}&scope=a b`.replace(' ', '%20');
+    const raw = 'https://auth.example.com/a b/\u00e9?x=\u00fc';
+    for (const [link, expected] of [[long, long], ['https://auth.example.com/\u00e9?q=1', 'https://auth.example.com/\u00e9?q=1'], ['https://auth.example.com/x\u001b[31m', null], [raw, null]] as const)
+    {
+        await withServer(async ({ w, root }) =>
+        {
+            const printed: string[] = [];
+            await signIn('atlassian', 'project', { env: w.env, project: w.project, print: (line) => printed.push(line), run: feeding([PLEASE, link, COULD_NOT_OPEN], { root }) });
+            assert.deepStrictEqual(printed, expected === null ? [] : [`atlassian: no browser opened - open this link to sign in: ${expected}`]);
+        });
+    }
+});
+
+const POSIX = process.platform === 'win32' && 'NOT RUN: process groups are POSIX';
+const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const until = async (condition: () => boolean, ms: number) => { const end = Date.now() + ms; while (!condition() && Date.now() < end) await new Promise((resolve) => setTimeout(resolve, 50)); };
+const GRANDCHILD = 'const g = require("child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 8000)"], { stdio: ["ignore", "ignore", "inherit"] });';
+
+test('realRun does not wait for a grandchild that keeps stderr open after the client exited', { skip: POSIX }, async () =>
+{
+    const startedAt = Date.now();
+    const result = await realRun(process.execPath, ['-e', `${GRANDCHILD} console.error("done"); process.exit(0);`], { cwd: process.cwd(), env: process.env, timeoutMs: 30000 }, () => {});
+    assert.strictEqual(result.status, 0);
+    assert.ok(Date.now() - startedAt < 6000, `the run ended ${Date.now() - startedAt} ms after the client, not at the grandchild's end`);
+});
+
+test('realRun stops the whole client, a grandchild too, when the timeout is reached', { skip: POSIX }, async () =>
+{
+    const lines: string[] = [];
+    const result = await realRun(process.execPath, ['-e', `${GRANDCHILD} console.error(g.pid); setInterval(() => {}, 1000);`], { cwd: process.cwd(), env: process.env, timeoutMs: 1500 }, (line) => lines.push(line));
+    assert.strictEqual((result.error as NodeJS.ErrnoException).code, 'ETIMEDOUT');
+    const grandchild = Number(lines[0]);
+    assert.ok(grandchild > 0);
+    await until(() => !alive(grandchild), 3000);
+    assert.ok(!alive(grandchild), 'the grandchild was stopped with the client');
+});
+
+test('stopRunningClients stops a client that is running', { skip: POSIX }, async () =>
+{
+    const running = realRun(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { cwd: process.cwd(), env: process.env, timeoutMs: 30000 }, () => {});
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    stopRunningClients();
+    const result = await running;
+    assert.strictEqual(result.signal, 'SIGTERM');
+});
+
+test('an interrupt or a terminate stops the client and exits non-zero', async () =>
+{
+    for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]] as const)
+    {
+        const target = new EventEmitter();
+        const exits: number[] = [];
+        let stopped = 0;
+        stopClientOnSignal(target, (exitCode) => exits.push(exitCode), () => { stopped++; });
+        target.emit(signal);
+        assert.strictEqual(stopped, 1, `${signal} stops the client`);
+        assert.deepStrictEqual(exits, [code], `${signal} exits ${code}`);
+    }
 });

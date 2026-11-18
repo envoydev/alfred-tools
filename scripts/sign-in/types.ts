@@ -50,3 +50,9 @@ export interface CommandOptions
     project?: string | undefined;
     log?: ((...lines: string[]) => void) | undefined;
 }
+
+// What the interrupt handlers are put on: the process, or a test's emitter.
+export interface SignalTarget
+{
+    once(signal: NodeJS.Signals, listener: () => void): unknown;
+}

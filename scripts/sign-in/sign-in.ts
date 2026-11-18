@@ -28,14 +28,14 @@ export function signInCommand(entry: ServerEntry, platform: string): SignInComma
 // The file the client stores the sign-in in, by name only: <dir>/mcp-remote-v1/<md5 of the URL>_tokens.json
 const tokensFileOf = (dir: string, url: string): string => path.join(dir, roots.FILES.signIns, `${crypto.createHash('md5').update(url).digest('hex')}${TOKENS_SUFFIX}`);
 
-// Why a run that did not exit 0 failed, in words that hold nothing the client printed but the sign-in link it named, which
-// a run that gave up after a browser did not open points the user back to.
+// Why a run that did not exit 0 failed, in words that hold nothing the client printed but the sign-in link it named,
+// which a run that gave up reports only as a past link: the client and its callback are gone, a new run prints a new one.
 function failureOf(result: RunResult, link: string | null): string
 {
     // the run's own timeout sets this code and a signal: say what it means, not 'ETIMEDOUT'
     if (result.error && (result.error as NodeJS.ErrnoException).code === TIMEOUT_ERROR_CODE)
     {
-        return `sign-in failed: gave up after ${AUTH_TIMEOUT_SECONDS} s waiting for the browser sign-in${link ? ` - open ${link} and run it again` : ''}`;
+        return `sign-in failed: gave up after ${AUTH_TIMEOUT_SECONDS} s waiting for the browser sign-in${link ? ` - the link was ${link}; run it again and open the link it prints` : ''}`;
     }
     if (result.error) return `sign-in failed: ${result.error.message}`;
     if (result.signal) return `sign-in failed: the client was stopped by ${result.signal} (it waits ${AUTH_TIMEOUT_SECONDS} s for the browser)`;
