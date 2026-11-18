@@ -1437,7 +1437,8 @@ mcp-remote@0.16.0` into an empty folder, extracted and read, nothing in it run).
   another machine (an SSH session) cannot reach it, so the commands tell the user to forward the port first
   (`ssh -L <port>:localhost:<port>`, the port from the link's `redirect_uri` parameter) or to open the link in a browser on
   the machine running the client. The commands run `sign-in.ts` through the Monitor tool so the link line reaches the user
-  while the client waits: a foreground Bash call's output is read when the command ends
-  (https://code.claude.com/docs/en/tools-reference.md, 'Output limits', cited by the review of 2026-11-18, not re-read here).
+  while the client waits: a foreground Bash call's output is read back 'When the command finishes', while Monitor 'feeds
+  each output line back to Claude' and uses 'the same permission rules as Bash'
+  (https://code.claude.com/docs/en/tools-reference.md, 'Output limits' and 'Monitor tool', read 2026-11-18).
 - Matrix case `sign-in` (by hand, a real Atlassian account, the first start of a keyless OAuth server inside the 30 s
   limit after the sign-in): NOT RUN. The unit tests use a stub runner, no browser and no network.
