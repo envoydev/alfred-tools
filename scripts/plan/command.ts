@@ -6,7 +6,7 @@ import { plan } from './plan.ts';
 import { renderPlan } from './render.ts';
 import * as existing from '../inventory/existing.ts';
 import { runRecordMode } from './record-modes.ts';
-import { walkOutput } from './walk-output.ts';
+import { walkOutput, withRootsMap } from './walk-output.ts';
 import type { Inventory } from '../inventory/types.ts';
 import type { Answers, Picks, PlanArgs, PlanMode } from './types.ts';
 
@@ -62,6 +62,7 @@ export function runPlanCommand(argv: string[]): number
     const [invFile, second] = args.files;
     if (!invFile || (args.mode === 'plan' && !second)) { console.error(USAGE); return 2; }
     const inventory = read(invFile) as Inventory;
+    withRootsMap(inventory, args.data);
     if (args.mode === 'questions')
     {
         const output = walkOutput(inventory, second ? read(second) as Picks : null, args);

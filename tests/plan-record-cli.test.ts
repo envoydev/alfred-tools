@@ -9,6 +9,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { makeTempDir } from '../scripts/core/tmpdir.ts';
 import { plan } from '../scripts/plan/plan.ts';
+import { mapKey } from '../scripts/roots/roots.ts';
 import { inv, installed, MAC } from './record-helpers.ts';
 import type { Inventory } from '../scripts/inventory/types.ts';
 import type { Answers, Picks, Question } from '../scripts/plan/types.ts';
@@ -19,6 +20,7 @@ const HOME = '/Users/me';
 interface Work
 {
     dir: string;
+    home: string;
     inventory: string;
     picks: string;
     answers: string;
@@ -38,7 +40,7 @@ function work(t: TestContext, inventory: Inventory, picks: Picks, answers: Answe
     if (answers) fs.writeFileSync(files.answers, JSON.stringify(answers));
     const env = { ...process.env, HOME: home, USERPROFILE: home };
     const run = (...args: string[]) => spawnSync(process.execPath, [PLAN_ENTRY, ...args], { encoding: 'utf8', env });
-    return { dir, ...files, run, read: (file) => JSON.parse(fs.readFileSync(file, 'utf8')) };
+    return { dir, home, ...files, run, read: (file) => JSON.parse(fs.readFileSync(file, 'utf8')) };
 }
 
 const I = inv(MAC);
@@ -94,17 +96,22 @@ test('a refusal exits 2 and writes nothing', (t) => {
     const stepFile = (content: string) => fs.writeFileSync(w.step, content);
     const snapshot = () => [w.inventory, w.picks, w.answers].map((file) => fs.readFileSync(file, 'utf8')).join('\n');
     const before = snapshot();
-    const cases: [string, string][] = [
-        ['a step id that is not the next one', JSON.stringify({ id: 'gitlab:questions', answers: {} })],
-        ['a label that is not an option', JSON.stringify({ id: 'gitlab:questions', answers: { 'route-gitlab': 'Nowhere' } })],
-        ['step.json that is not JSON', '{ not json'],
+    const full = JSON.parse(w.run('--questions', w.inventory, w.picks).stdout).next;
+    const labels = firstLabels(full);
+    const badLabel = { id: full.id, answers: { ...labels, [Object.keys(labels)[0]!]: 'Nowhere' } };
+    const cases: [string, string, RegExp][] = [
+        ['a step id that is not the next one', JSON.stringify({ id: 'other', answers: labels }), /step\.json is for 'other', the step to answer is 'gitlab:questions'/],
+        ['a label that is not an option', JSON.stringify(badLabel), /Nowhere/],
+        ['an answer for a question the step does not ask', JSON.stringify({ id: full.id, answers: { ...labels, 'route-gitlab': 'Hosted' } }), /route-gitlab: not a question of this step/],
+        ['step.json that is not JSON', '{ not json', /step\.json: .*not a JSON file/],
     ];
-    for (const [name, content] of cases)
+    for (const [name, content, message] of cases)
     {
         stepFile(content);
         const refused = record(w);
         assert.strictEqual(refused.status, 2, name);
         assert.strictEqual(refused.stderr.trim().split('\n').length, 1, `${name}: one line - ${refused.stderr}`);
+        assert.match(refused.stderr, message, name);
         assert.strictEqual(refused.stdout, '', name);
         assert.strictEqual(snapshot(), before, name);
     }
@@ -229,4 +236,58 @@ test('a configure walk that keeps everything through --record has no change entr
     const answers = w.read(w.answers) as Answers;
     assert.strictEqual(answers.change?.[key], undefined);
     assert.deepStrictEqual((w.read(w.picks) as Picks).existing, { [key]: 'manage' });
+});
+
+test('plan mode reads the roots map from --data, as it did before the modes', (t) => {
+    const w = work(t, I, {}, {});
+    const data = path.join(w.dir, 'data');
+    fs.mkdirSync(data);
+    const named = '/work/shop/.alfred-tools';
+    fs.writeFileSync(path.join(data, 'roots.json'), JSON.stringify({ version: 1, global: null, projects: { [mapKey(I.project)]: named } }));
+    fs.writeFileSync(w.answers, JSON.stringify({ picks: { gitlab: {} } }));
+    const recordsOf = (...extra: string[]) =>
+    {
+        const out = path.join(w.dir, 'plan.json');
+        const made = w.run(w.inventory, w.answers, '--out', out, ...extra);
+        assert.strictEqual(made.status, 0, made.stderr);
+        return (w.read(out) as { steps: { op: string; family?: string }[] }).steps.filter((step) => step.op === 'record-root' && step.family === 'project');
+    };
+    assert.strictEqual(recordsOf().length, 1, 'no map: the project root is to be recorded');
+    assert.deepStrictEqual(recordsOf('--data', data), [], 'the map names it already');
+});
+
+test('a link planted at <file>.tmp does not let a write leave the folder', (t) => {
+    const w = work(t, I, { ...EACH, rows: ['gitlab', 'sentry'] }, { picks: { gitlab: {}, sentry: {} } });
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'outside-'));
+    t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+    const victim = path.join(outside, 'victim.txt');
+    fs.writeFileSync(victim, 'untouched');
+    fs.symlinkSync(victim, `${w.picks}.tmp`);
+    fs.symlinkSync(victim, `${w.answers}.tmp`);
+    const skipped = w.run('--skip', w.inventory, w.picks, w.answers, 'gitlab');
+    assert.strictEqual(fs.readFileSync(victim, 'utf8'), 'untouched', skipped.stderr);
+    assert.strictEqual(skipped.status, 0, skipped.stderr);
+    assert.deepStrictEqual((w.read(w.picks) as Picks).skipped, ['gitlab']);
+    assert.ok(!fs.lstatSync(w.picks).isSymbolicLink());
+});
+
+test('rewind with a pick stops at the former-name folder before it writes', (t) => {
+    const w = work(t, I, EACH);
+    const next = JSON.parse(w.run('--questions', w.inventory, w.picks).stdout).next;
+    fs.writeFileSync(w.step, JSON.stringify({ id: next.id, answers: firstLabels(next) }));
+    assert.strictEqual(record(w).status, 0);
+    fs.mkdirSync(path.join(w.home, '.preferred-tools'));
+    const before = [w.picks, w.answers].map((file) => fs.readFileSync(file, 'utf8'));
+    const stopped = w.run('--rewind', w.inventory, w.picks, w.answers, 'gitlab');
+    assert.strictEqual(stopped.status, 1, stopped.stderr);
+    assert.match(stopped.stderr, /run \/alfred-tools:update first/);
+    assert.deepStrictEqual([w.picks, w.answers].map((file) => fs.readFileSync(file, 'utf8')), before);
+});
+
+test('the which-pick ask labels the walk\'s own two picks', (t) => {
+    const w = work(t, I, { rows: ['gitlab'] });
+    drive(w);
+    const asked = JSON.parse(w.run('--rewind', w.inventory, w.picks, w.answers).stdout);
+    const labels = asked.call[0].options.map((option: { label: string }) => option.label);
+    assert.deepStrictEqual(labels, ['Settings (Recommended)', 'Apps']);
 });

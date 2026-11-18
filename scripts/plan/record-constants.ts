@@ -44,3 +44,5 @@ export const REFUSAL = {
     walkDone: 'the walk is done: there is no step to record',
     nothingRecorded: 'no answer is recorded yet, so none can be changed',
 } as const;
+
+export const WALK_PICK_LABEL: Record<string, string> = { [WALK_QUESTION.clients]: 'Apps', [WALK_QUESTION.settings]: 'Settings' };

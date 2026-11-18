@@ -8,7 +8,7 @@ import { isOurTempDir } from '../core/tmpdir.ts';
 import { parseJson } from '../core/json-file.ts';
 import { rewindQuestion } from './asks-other.ts';
 import { recordStep, rewindPick, skipPick } from './record.ts';
-import { EXIT_CODE, REFUSAL } from './record-constants.ts';
+import { EXIT_CODE, REFUSAL, WALK_PICK_LABEL } from './record-constants.ts';
 import { isRecord } from './record-resolve.ts';
 import { walkOutput } from './walk-output.ts';
 import type { Inventory } from '../inventory/types.ts';
@@ -39,13 +39,17 @@ const isStepFile = (value: Record<string, unknown>): value is Record<string, unk
 function writeJson(file: string, value: unknown): void
 {
     const temporary = `${file}.tmp`;
-    fs.writeFileSync(temporary, JSON.stringify(value, null, 2));
+    // a link planted at the temporary name is removed, not followed: 'wx' fails rather than write through one
+    fs.rmSync(temporary, { force: true });
+    fs.writeFileSync(temporary, JSON.stringify(value, null, 2), { flag: 'wx' });
     fs.renameSync(temporary, file);
 }
 
-// the label of a pick in the which-pick ask: a tool's catalog label, a configure target's name, the walk's own two
+// the label of a pick in the which-pick ask: the walk's own two (as their questions' headers), a tool's catalog label, a
+// configure target's name
 function labelOfPick(pick: string, output: WalkOutput): string
 {
+    if (Object.hasOwn(WALK_PICK_LABEL, pick)) return WALK_PICK_LABEL[pick]!;
     const row = catalogLib.load().byId.get(pick);
     return row?.label ?? output.targets[pick]?.current?.name ?? pick;
 }
@@ -84,10 +88,11 @@ export function runRecordMode(args: PlanArgs): number
     const files = { picks: picksFile, answers: answersFile };
 
     if (args.mode === 'skip') return persist(skipPick(picks, answers, args.pick!), args, inventory, files);
-    if (args.mode === 'rewind' && args.pick !== null) return persist(rewindPick(picks, answers, args.pick), args, inventory, files);
 
+    // before anything is written: a folder under the former name waits to move, as for --questions
     const output = walkOutput(inventory, picks, args);
     if ('waits' in output) { console.error(output.waits); return EXIT_CODE.stopped; }
+    if (args.mode === 'rewind' && args.pick !== null) return persist(rewindPick(picks, answers, args.pick), args, inventory, files);
     if (args.mode === 'rewind')
     {
         const asked = rewindQuestion(picks, (pick) => labelOfPick(pick, output));
