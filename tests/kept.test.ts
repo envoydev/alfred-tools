@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
-import { MARKER, maskCredentials, restore } from '../scripts/core/kept.ts';
+import { MARKER, looksLikeKey, maskCredentials, restore } from '../scripts/core/kept.ts';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import type { CatalogRow } from '../scripts/catalog/types.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
@@ -110,4 +110,12 @@ test('an entry with nothing live is unchanged', () => {
         assert.deepStrictEqual(maskCredentials(entry, row), entry);
         assert.deepStrictEqual(restore(maskCredentials(entry, row), entry, row), { entry });
     }
+});
+
+test('looksLikeKey recognises a SonarQube token (squ_, sqp_, sqa_ plus 40 hex characters) and nothing shorter', () =>
+{
+    for (const prefix of ['squ', 'sqp', 'sqa']) assert.strictEqual(looksLikeKey(`${prefix}_${'ab12'.repeat(10)}`), true, prefix);
+    assert.strictEqual(looksLikeKey(`squ_${'ab12'.repeat(9)}`), false, 'too short');
+    assert.strictEqual(looksLikeKey('SONARQUBE_TOKEN'), false);
+    assert.deepStrictEqual(maskCredentials({ args: [`--note=squ_${'ab12'.repeat(10)}`] }, null).args, [`--note=${MARKER}`]);
 });

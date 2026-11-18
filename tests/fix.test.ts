@@ -2872,6 +2872,37 @@ test('helper-foreign names the row\'s key when the foreign helper\'s first argum
     finally { w.clean(); }
 });
 
+test('helper-foreign never echoes a key-shaped first argument: the row\'s key name stands in, in the finding and in the blocked note', () =>
+{
+    const w = world();
+    try
+    {
+        const shaped = `squ_${'ab12'.repeat(10)}`;
+        const { pt } = adoptRoot(w, { firstArg: shaped, secrets: 'SONARQUBE_TOKEN=\nSONARQUBE_ORG=acme\n' });
+        const [f] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-foreign') as [Finding];
+        assert.strictEqual(f.keyName, 'SONARQUBE_TOKEN');
+        assert.strictEqual(f.blocked, `fill SONARQUBE_TOKEN in ${path.join(pt, '.mcps-secrets')}, then run /alfred-tools:fix`);
+        assert.ok(!JSON.stringify(f).includes(shaped), 'no field of the finding holds the argument');
+        const lines = logged();
+        applyFixes(ctxOf(w), ['helper-foreign'], { log: lines.log });
+        assert.ok(!lines.text().includes(shaped), 'no output line holds the argument');
+    }
+    finally { w.clean(); }
+});
+
+test('helper-foreign takes a first argument as the key name only when a key file defines it', () =>
+{
+    const w = world();
+    try
+    {
+        adoptRoot(w, { firstArg: 'MY_SONAR_PAT', secrets: 'MY_SONAR_PAT=tok-123\nSONARQUBE_ORG=acme\n' });
+        assert.strictEqual((detect(ctxOf(w)).found.find((x) => x.id === 'helper-foreign') as Finding).keyName, 'MY_SONAR_PAT', 'a name the key files define');
+        put(path.join(ptRoot(w), '.mcps-secrets'), 'SONARQUBE_TOKEN=tok-123\nSONARQUBE_ORG=acme\n');
+        assert.strictEqual((detect(ctxOf(w)).found.find((x) => x.id === 'helper-foreign') as Finding).keyName, 'SONARQUBE_TOKEN', 'a name no key file defines falls back to the row\'s');
+    }
+    finally { w.clean(); }
+});
+
 test('a mixed list adopts for Claude Code only and names the configure step', () =>
 {
     const w = world();

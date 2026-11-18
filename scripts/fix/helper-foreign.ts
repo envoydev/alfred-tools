@@ -7,6 +7,7 @@ import { helperArgv, helperFor, helperParts } from '../entries/entry.ts';
 import { adoptedClients } from '../plan/lists.ts';
 import { mixedNote } from './lists.ts';
 import * as keys from '../keys/keys.ts';
+import * as kept from '../core/kept.ts';
 import * as roots from '../roots/roots.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import * as C from './common.ts';
@@ -22,6 +23,14 @@ function foreignScript(command: string): { file: string; first: string | undefin
     const argv = helperArgv(command);
     const at = argv.findIndex((argument) => SCRIPT_FILE.test(argument));
     return at < 0 ? null : { file: argv[at]!, first: argv[at + 1] };
+}
+
+// The key's name: the foreign helper's first argument when it is a name a key file of the chain defines and is not shaped
+// like a key (a token is name-shaped, and a finding or note would print it), else the row's own. Names only are read.
+function keyNameOf(first: string | undefined, chain: string[], rowName: string): string
+{
+    if (!first || !keys.NAME_RULE.test(first) || kept.looksLikeKey(first)) return rowName;
+    return chain.some((file) => keys.namesIn(file).includes(first)) ? first : rowName;
 }
 
 // The list entry a registration has, and the apps an unlisted one would take: `clients` is set only for a server a usable
@@ -48,8 +57,8 @@ export function helperForeignDetect(context: FixCtx): Finding[]
         if (registration.route !== 'remote' || !route || !route.helper || typeof command !== 'string' || helperParts(command)) continue;
         const script = foreignScript(command);
         if (!script) continue;
-        const keyName = script.first && keys.NAME_RULE.test(script.first) ? script.first : route.helper.var;
         const chain = keys.hostedChain({ scope: registration.scope, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global, globalNamed: resolvedRoots.globalNamed, home: context.home });
+        const keyName = keyNameOf(script.first, chain, route.helper.var);
         const apps = appsOf(context, registration);
         const what = `headersHelper runs ${path.basename(script.file)}, not mcp-headers.js - it moves to the plugin's helper, which reads ${keyName} from the key files`;
         const afterNote = [`${path.basename(script.file)} is no longer used - ${registration.name} runs mcp-headers.js now; the old file is left where it is`, ...(apps.mixed ? [mixedNote([registration.name])] : [])].join('\n');
