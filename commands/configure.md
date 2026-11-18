@@ -141,6 +141,14 @@ another name goes to `"keyNames": {<key>: "<NAME>"}` at the top of `answers.json
 the API key answer is now 'No key - lower rate limits' or 'Sign in with OAuth'. 'Change or add a setting' asks next for
 `NAME=value` pairs, written to `"settings": {<key>: {"<NAME>": "<value>"}}`; 'Keep these settings' writes nothing.
 
+A hosted route that lists settings (sonarqube) asks 'Tools' instead - what the registration sends now first. Its answer is
+an object in `next.answers.<question id>.<label>`, written whole to `"settings": {<key>: {...}}` without its
+`"toolsets": true` (`{}` is 'Read and write'); the first option, when it is not changing anything, may be left out.
+Where it has `"toolsets": true`, ask next, as one typed list, which toolsets to send (`analysis`, `coverage`,
+`dependency-risks`, `duplications`, `issues`, `measures`, `projects`, `quality-gates`, `rules`, `security-hotspots`) and
+add `"SONARQUBE_TOOLSETS": "<key>,<key>"` to that object. With no `settings` entry the plan keeps the pairs the
+registration has.
+
 A bridge route (sentry's 'Bridge') adds one 'URL name' question per value its URL takes from `.mcps-secrets` - the name
 it uses now first. Another name goes to `"urlNames": {<key>: {"<VAR>": "<NAME>"}}` at the top of `answers.json`, where
 `<VAR>` ends the question id (`urlname-<id>-<VAR>`); 'A name you choose' is asked next, checked against
@@ -168,6 +176,7 @@ below, and leave out every answer that keeps what the tool has now - the plan re
 | key name, when it is not first | top-level `"keyNames": {<key>: "<NAME>"}` |
 | URL name, when it is not first | top-level `"urlNames": {<key>: {"<VAR>": "<NAME>"}}` |
 | settings, pairs asked next | top-level `"settings": {<key>: {"<NAME>": "<value>"}}` |
+| tools (sonarqube), when it is not first | top-level `"settings": {<key>: {...}}`, the answer's object, toolsets typed in |
 | apps, when it is not `current.clients` | `"clients": ["claude", "cursor"]` / `["claude"]` |
 
 A name must match `^[A-Za-z_][A-Za-z0-9_]*$`, and a setting whose name looks like a credential is refused by the plan - a

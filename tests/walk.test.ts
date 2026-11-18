@@ -409,3 +409,22 @@ test('configure remove takes the entry out of both apps and the list', { skip: p
     assert.deepStrictEqual((p.steps[1] as ListWriteStep).drops.map((d) => d.key), ['mcp:c7~local']);
     assert.deepStrictEqual((p.steps[2] as CursorWritePlanStep).before, ['c7']);
 });
+
+test('recommended walk sends read-only; the set-up walk asks the tools question with the key name', () => {
+    // 'Use the recommended settings' ends the walk with no answer for sonarqube: the plan takes the recommended pair
+    const picks: Picks = { rows: ['sonarqube'] };
+    assert.deepStrictEqual(walk(inv(MAC), picks).map((s) => s.id), ['clients', 'settings']);
+    const p = plan(inv(MAC), { picks: { sonarqube: {} } }, { home: HOME.darwin, env: {}, exists: () => false });
+    assert.deepStrictEqual(p.errors, []);
+    const add = p.steps.find((s) => s.op === 'mcp-add') as { entry: { headersHelper: string } };
+    assert.match(add.entry.headersHelper, / --header SONARQUBE_READ_ONLY:true$/);
+    // 'Set sonarqube up': the tools question is in the key step, header Tools, with the object answers
+    const each = walk(inv(MAC), { rows: ['sonarqube'], walk: 'each', done: ['clients', 'settings'] });
+    const keys = each.find((s) => s.id === 'sonarqube:keys')!;
+    const tools = keys.call!.find((q) => q.id === 'settings-sonarqube')!;
+    assert.deepStrictEqual([tools.header, tools.options.length, tools.options[0]!.label], ['Tools', 4, 'Read-only (Recommended)']);
+    assert.deepStrictEqual(keys.answers!['settings-sonarqube'], settingsQuestion(catalog.byId.get('sonarqube')!, 'remote')!.answers);
+    for (const step of each) assert.ok(step.call!.length <= 4, step.id);
+    // other hosted rows ask no settings
+    assert.strictEqual(settingsQuestion(catalog.byId.get('github')!, 'remote'), null);
+});

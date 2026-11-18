@@ -218,7 +218,7 @@ export function bridgeFormOf(entry: ServerEntry | null | undefined, catalog: Cat
     if (!helper || helper.args.length < 2) return null;
     const pathApi = /^(?:[A-Za-z]:[\\/]|\\\\)/.test(helper.path) ? path.win32 : path.posix;
     const own = [pathApi.join(pathApi.dirname(helper.path), 'mcp-bridge.js'), entry.url!, helper.args[0]!, helper.args[1]!];
-    const globalRoot = helper.args[2] ? [helper.args[2]] : [];
+    const globalRoot = helper.root ? [helper.root] : [];
     const priorParts = prior ? bridgeParts(prior) : null;
     if (priorParts && priorParts.packageSpec)
     {

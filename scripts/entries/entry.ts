@@ -4,6 +4,7 @@
 import path from 'node:path';
 import * as keys from '../keys/keys.ts';
 import { templateNames } from '../copied/mcp-bridge.js';
+import { parsePairs } from '../copied/mcp-headers.js';
 import { pathFor, pythonRequest } from './platform.ts';
 import { rootOfEntry, rootOf, applyRoot } from './locations.ts';
 import { signInParts } from './sign-in.ts';
@@ -90,11 +91,13 @@ export function shellArg(text: string, style: string): string
     return style === 'posix' ? `'${normalized.replace(/'/g, "'\\''")}'` : `"${normalized}"`;
 }
 
-// The registration's `headersHelper`: `node <path> <NAME> <SCHEME> [<global root>]`, each path quoted for `style` (see
-// shellArg). The command line names the helper and a variable name, never the key file or a value.
-export function helperCommand({ helperPath, name, scheme, globalRoot = null, style = 'portable' }: { helperPath: string; name: string; scheme: string; globalRoot?: string | null | undefined; style?: string }): string
+// The registration's `headersHelper`: `node <path> <NAME> <SCHEME> [<global root>] [--header <pair>]...`, each path quoted
+// for `style` (see shellArg). A pair is `<HEADER>=<VAR>` (the header's value is VAR's, read from .mcps-secrets at each
+// connect) or `<HEADER>:<value>` (fixed). The command line names the helper, variable names and fixed settings, never the
+// key file or a key value.
+export function helperCommand({ helperPath, name, scheme, globalRoot = null, style = 'portable', pairs = [] }: { helperPath: string; name: string; scheme: string; globalRoot?: string | null | undefined; style?: string; pairs?: string[] }): string
 {
-    return ['node', shellArg(helperPath, style), name, scheme, ...(globalRoot ? [shellArg(globalRoot, style)] : [])].join(' ');
+    return ['node', shellArg(helperPath, style), name, scheme, ...(globalRoot ? [shellArg(globalRoot, style)] : []), ...pairs.flatMap((pair) => ['--header', shellArg(pair, style)])].join(' ');
 }
 
 // A `headersHelper` command split as its shell reads it: quoted text kept as it is, '\\'' joined into one argument, and a
@@ -122,13 +125,22 @@ export function helperArgv(command: unknown): string[]
     return out;
 }
 
-// The helper file a `headersHelper` command names, and the arguments after it -> { path, args } | null
+// A `--header` pair back to the text it was written as: NAME=VAR or NAME:value.
+const pairText = (pair: { header: string; var: string } | { header: string; value: string }): string => ('var' in pair ? `${pair.header}=${pair.var}` : `${pair.header}:${pair.value}`);
+
+// The helper file a `headersHelper` command names, the arguments after it, and those read as the helper reads them: the
+// global root (the third argument, only when it is not `--header`) and the `--header` pairs, each as its text.
+// -> { path, args, root, pairs } | null
 export function helperParts(command: unknown): HelperParts | null
 {
     if (typeof command !== 'string') return null;
     const argv = helperArgv(command);
     const at = argv.findIndex((argument) => /mcp-headers\.js$/.test(argument));
-    return at < 0 ? null : { path: argv[at]!, args: argv.slice(at + 1) };
+    if (at < 0) return null;
+    const args = argv.slice(at + 1);
+    const parsed = parsePairs(args.slice(2));
+    const read = 'error' in parsed ? { root: args[2] !== undefined && args[2] !== '--header' ? args[2] : null, pairs: [] } : { root: parsed.root, pairs: parsed.pairs.map(pairText) };
+    return { path: argv[at]!, args, ...read };
 }
 
 // Where a registration at `scope` finds the helper: absolute at every scope, in the root of the scope's family (F7).
@@ -148,9 +160,19 @@ export function helperNameOf(command: unknown): string | null
     return helper && helper.args.length >= 2 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(helper.args[0]!) && /^[A-Za-z][\w-]*$/.test(helper.args[1]!) ? helper.args[0]! : null;
 }
 
-// The helper command a hosted keyed route gets at `scope`: the key's name (`keyName`, else the catalog's default) and
-// the route's scheme.
-export const helperFor = (route: CatalogRoute, scope: string, context: Machine, keyName: string | null | undefined = null): string => helperCommand({ helperPath: helperPathFor(scope, context), name: keyName || route.helper!.var, scheme: route.helper!.scheme, globalRoot: helperGlobalRoot(scope, context), style: context.platform === 'win32' ? 'win32' : 'posix' });
+// The pairs a hosted route's helper command carries: each of the route's `helper.headers` as `<header>=<var>`, then each
+// setting as `<header>:<value>`, in the order the catalog lists them.
+export function helperPairs(route: CatalogRoute, settings: Record<string, string> = {}): string[]
+{
+    const order = (route.settings || []).map((setting) => setting.header);
+    const rank = (header: string) => { const i = order.indexOf(header); return i < 0 ? order.length : i; };
+    const fixed = Object.entries(settings).sort(([first], [second]) => rank(first) - rank(second));
+    return [...((route.helper && route.helper.headers) || []).map((header) => `${header.header}=${header.var}`), ...fixed.map(([header, value]) => `${header}:${value}`)];
+}
+
+// The helper command a hosted keyed route gets at `scope`: the key's name (`keyName`, else the catalog's default), the
+// route's scheme, its header pairs and the `settings` the user chose.
+export const helperFor = (route: CatalogRoute, scope: string, context: Machine, keyName: string | null | undefined = null, settings: Record<string, string> = {}): string => helperCommand({ helperPath: helperPathFor(scope, context), name: keyName || route.helper!.var, scheme: route.helper!.scheme, globalRoot: helperGlobalRoot(scope, context), style: context.platform === 'win32' ? 'win32' : 'posix', pairs: helperPairs(route, settings) });
 
 // ---- the bridge (0.4.0) --------------------------------------------------------------------------------------------
 
@@ -218,7 +240,7 @@ export function buildEntry(row: CatalogRow, routeId: string, answers: BuildAnswe
     {
         const entry: ServerEntry = { type: route.type, url: subst(route.url, answers.params || {}) };
         const useKey = route.helper && (route.authMode === 'token' || (route.authMode === 'optional-token' && answers.token));
-        if (useKey) entry.headersHelper = helperFor(route, answers.scope, context, answers.keyName);
+        if (useKey) entry.headersHelper = helperFor(route, answers.scope, context, answers.keyName, answers.settings);
         return entry;
     }
     if (route.runtime === 'bridge')

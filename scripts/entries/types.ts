@@ -64,13 +64,17 @@ export interface BuildAnswers
     keyName?: string | null | undefined;
     params?: Record<string, string> | undefined;
     urlNames?: Record<string, string> | undefined;
+    settings?: Record<string, string> | undefined;
 }
 
-// A `headersHelper` command's helper file and the arguments after it.
+// A `headersHelper` command's helper file, the arguments after it, and those read as the helper reads them: the global
+// root and the `--header` pairs (`NAME=VAR` or `NAME:value`).
 export interface HelperParts
 {
     path: string;
     args: string[];
+    root: string | null;
+    pairs: string[];
 }
 
 // A bridge launch: `node <path>/mcp-bridge.js <template> <KEY> <SCHEME> <pkg> [<root>]`.

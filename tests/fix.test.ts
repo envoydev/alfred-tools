@@ -1096,6 +1096,22 @@ test('helper-missing writes the helper; helper-stale rewrites a lower number, na
     finally { w.clean(); }
 });
 
+test('helper-stale offers helper 6 to a root whose helper is older, for a sonarqube registration with header pairs', () =>
+{
+    const w = world();
+    try
+    {
+        const file = path.join(ptRoot(w), 'mcp-headers.js');
+        seed(w, 'sonarqube', 'local', { type: 'http', url: 'https://api.sonarcloud.io/mcp', headersHelper: `node ${file} SONARQUBE_TOKEN Bearer --header SONARQUBE_ORG=SONARQUBE_ORG --header SONARQUBE_READ_ONLY:true` });
+        helperAt(ptRoot(w), HV - 1);
+        const [stale] = detect(ctxOf(w)).found.filter((x) => x.id === 'helper-stale') as [Finding];
+        assert.match(stale.found, new RegExp(`helper ${HV - 1} - this plugin's is ${HV}`));
+        assert.strictEqual(applyFixes(ctxOf(w), ['helper-stale'], { log: () => {} }).failed, null);
+        assert.strictEqual(fsx.readFileSync(file, 'utf8'), rootsLib.helperSource());
+    }
+    finally { w.clean(); }
+});
+
 test('helper-stale never rewrites a file with no alfred-tools number line: it is blocked and named', () =>
 {
     const w = world();

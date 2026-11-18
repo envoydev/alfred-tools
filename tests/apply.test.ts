@@ -1120,6 +1120,25 @@ test('a re-run after a failed add writes no file again', () => {
     finally { w.clean(); }
 });
 
+test('sonarqube: helper 6 and the key names are written before the registration that sends the header pairs', () => {
+    const w = world();
+    try
+    {
+        const inv = inventory.buildInventory({ project: w.project, env: w.env });
+        const p = plan(inv, { picks: { sonarqube: { scope: 'local' } } }, { home: w.home, env: w.env });
+        assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'write-helper', 'ensure-key-name', 'mcp-add', 'deny-read', 'list-write', 'record-root']);
+        const root = path.join(w.project, '.alfred-tools');
+        const lines: string[] = [];
+        const r = apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')), data: path.join(w.dir, 'data') });
+        assert.strictEqual(r.failed, null, lines.join('\n'));
+        assert.ok(fs.readFileSync(path.join(root, 'mcp-headers.js'), 'utf8').startsWith(`// alfred-tools mcp-headers ${HV}\n`));
+        assert.deepStrictEqual(fs.readFileSync(path.join(root, '.mcps-secrets'), 'utf8').split('\n').filter((line) => line && !line.startsWith('#')), ['SONARQUBE_TOKEN=', 'SONARQUBE_ORG='], 'names only, empty');
+        const helper = accountDoc(w).projects[accountKey(w.project)].mcpServers.sonarqube.headersHelper as string;
+        assert.ok(helper.endsWith('mcp-headers.js SONARQUBE_TOKEN Bearer --header SONARQUBE_ORG=SONARQUBE_ORG --header SONARQUBE_READ_ONLY:true'), helper);
+    }
+    finally { w.clean(); }
+});
+
 // ---- 0.3.0: 'needs authentication' explained (F3) ---------------------------------------------------------------------
 
 test('the apply repeats the reconnect lines after the read-back, and names a refused key with the row\'s hint', () => {

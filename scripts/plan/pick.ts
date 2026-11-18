@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathFor } from '../entries/platform.ts';
 import { recommendedSide, alfredNameProblem, logicalRoot, otherPlace, parseRoot, alfredRoot, defaultRoot, serenaSpaceFree, formatRoot, validWindowsSerenaHome, applyRoot } from '../entries/locations.ts';
+import { checkHostedSettings, currentHostedSettings, defaultHostedSettings, pairNames, optionalNameNotes } from './hosted-settings.ts';
 import { currentOf, buildEntry, applyContext, bridgeParts, helperGlobalRoot, bridgePathFor, renameTemplate, helperFor, subst, mergeSettings, contextArgAt } from '../entries/entry.ts';
 import { signInParts, signInFormOf } from '../entries/sign-in.ts';
 import { nameProblem, fetchStep } from '../entries/names.ts';
@@ -167,6 +168,8 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
 
     // the answers that edit an entry
     const params = { host: row.params ? (pick.params && pick.params.host) || (current && current.host) || row.params[0]!.default : undefined, ...(pick.params || {}) } as { host: string } & Record<string, string>;
+    const hostChoices = row.params && row.params.find((param) => param.id === 'host')?.choices;
+    if (hostChoices && !hostChoices.some((choice) => choice.value === params.host)) return out.errors.push(`${row.id}: '${params.host}' is not one of its hosts - ${hostChoices.map((choice) => choice.value).join(', ')}`);
     // an optional key: sent when picked; with no answer, sent at install (the recommended answer, spec F2) and kept as it is
     // at configure. A stdio route at project scope runs keyless (spec D5) - named so it is never read as the catalog's
     // `route.keyless`, the keyless way in
@@ -214,7 +217,16 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
     if (unfilledStdio) out.notes.push(`${row.id}: fill ${keyName} in ${keyState!.files[0]}, then /alfred-tools:configure -> Use a key from .mcps-secrets writes it in`);
     // the server's settings (spec D9): pairs merged into a stdio route's env - never a key, and no machine path in the
     // committed file
-    if (pick.settings)
+    // a hosted route that lists `settings` (sonarqube) takes them as fixed helper pairs, checked against its list
+    const hostedSettings = routeId === 'remote' && route.settings;
+    let chosenSettings: Record<string, string> | undefined;
+    if (pick.settings && hostedSettings)
+    {
+        const checked = checkHostedSettings(route, pick.settings);
+        if ('error' in checked) return out.errors.push(`${row.id}: ${checked.error}`);
+        chosenSettings = checked.settings;
+    }
+    else if (pick.settings)
     {
         if (routeId === 'remote') return out.errors.push(`${row.id}: a hosted route takes no settings - its options are its route and host`);
         for (const [settingName, value] of Object.entries(pick.settings))
@@ -224,6 +236,8 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
             if (kept.looksLikeKey(value)) return out.errors.push(`${row.id}: ${settingName}'s value looks like a key - keep a key in .mcps-secrets and pick its name as the key's name`);
         }
     }
+    // a fresh add with no answer takes the recommended settings; a change with no answer keeps the pairs it has
+    const toolSettings = !hostedSettings ? undefined : chosenSettings || (current && current.route === routeId ? currentHostedSettings(route, current.entry) : defaultHostedSettings(route));
     const wantExec = pick.executablePath === undefined ? (current ? current.executablePath : undefined) : (pick.executablePath || undefined);
     let rootStr: string | undefined;
     let ensure: string | null = null;
@@ -244,7 +258,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
     let entry: ServerEntry;
     let fresh = !current || current.route !== routeId;
     if (fresh)
-        entry = buildEntry(row, routeId, { rootStr, scope, executablePath: wantExec, token: sendNow, keyName, params, urlNames }, context, catalog.rules);
+        entry = buildEntry(row, routeId, { rootStr, scope, executablePath: wantExec, token: sendNow, keyName, params, urlNames, settings: toolSettings }, context, catalog.rules);
     else
     {
         entry = JSON.parse(JSON.stringify(current!.entry));
@@ -281,7 +295,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
                 if (header) { delete entry.headers!.Authorization; if (!Object.keys(entry.headers!).length) delete entry.headers; }
             }
             else if (header) out.notes.push(`${row.id}: '${current!.name}' sends its key from an Authorization header - /alfred-tools:fix moves it into .mcps-secrets, read by mcp-headers.js (key-to-helper)`);
-            else entry.headersHelper = helperFor(route, scope, context, keyName);
+            else entry.headersHelper = helperFor(route, scope, context, keyName, toolSettings);
         }
         else if (route.authMode === 'optional-token' && sendNow !== current!.token)
         {
@@ -345,7 +359,7 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
         clients = clients.filter((client) => client !== 'cursor');
     }
 
-    if (pick.settings) entry = mergeSettings(entry, route, pick.settings);
+    if (pick.settings && !hostedSettings) entry = mergeSettings(entry, route, pick.settings);
 
     // .mcp.json is committed: a move into it never carries a credential the route's own token field does not take - a
     // header of the user's own, a userinfo URL, a 0.1.x Authorization header (D7). A key never becomes a ${VAR} there: a
@@ -373,6 +387,11 @@ export function planMcp(row: CatalogRow, pick: PickAnswer, inventory: Inventory,
         out.keys.push({ row: row.id, name, scope, variable: keyName, kind: bridge ? 'bridge' : keyed.kind, files: keyed.files, filled, old: filled ? null : keys.oldHolding(context.project, context.home, keyName) });
         // a name filled nowhere in the chain is written, empty, into the chain's first file (D3)
         if (!filled) keyFile = keyed.files[0]!;
+        // a helper's `NAME=VAR` pairs (sonarqube's organization): their names are written too, and optional
+        const pairs = keyed.kind === 'helper' ? pairNames(entry) : [];
+        const empty = pairs.filter((pairName) => !keys.filledNames(keyed.files).some((filledEntry) => filledEntry.names.includes(pairName)));
+        if (pairs.length) keyNames = [keyName, ...pairs];
+        if (empty.length) { keyFile = keyed.files[0]!; out.notes.push(...optionalNameNotes(row.id, route, empty, keyed.files[0]!)); }
     }
     let bridgeFilled: boolean | null = null;
     if (bridge && keyed)

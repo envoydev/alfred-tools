@@ -133,6 +133,14 @@ The key name is `next.answers.<question id>.<label>`: a name goes to `"keyNames"
 was 'No key - lower rate limits' or 'Sign in with OAuth'. Settings 'Keep these settings' or 'No settings' write nothing;
 'Change or add a setting' asks next for `NAME=value` pairs, written to `"settings": {<id>: {"<NAME>": "<value>"}}`.
 
+A hosted route that lists settings (sonarqube) asks one 'Tools' question in the same step instead: 'Read-only
+(Recommended)', 'Read and write', 'Read-only, chosen toolsets' and 'Read and write, chosen toolsets'. The answer is an
+object in `next.answers.<question id>.<label>`, written whole to `"settings": {<id>: {...}}` - `{}` for 'Read and
+write' - but without its `"toolsets": true`. Where it has `"toolsets": true`, ask next, as one typed list, which toolsets
+to send (`analysis`, `coverage`, `dependency-risks`, `duplications`, `issues`, `measures`, `projects`, `quality-gates`,
+`rules`, `security-hotspots`) and add `"SONARQUBE_TOOLSETS": "<key>,<key>"` to that object; the plan refuses an unknown
+key and an empty list. The organization (`SONARQUBE_ORG`) is read from `.mcps-secrets` and is optional.
+
 A bridge route (sentry's 'Bridge') asks one 'URL name' question per value its URL takes from `.mcps-secrets`, beside the
 key name: which name holds the organization slug, and the project slug. The catalog's name is recommended, and a filled
 name holding the row's word (`SENTRY`) is offered beside it, never above it. The answer is
@@ -156,6 +164,7 @@ refuses a URL name that is the key's name or reads as a credential, and a name t
 | key name, a name or one asked next | top-level `"keyNames": {<id>: "<NAME>"}` |
 | URL name, a name or one asked next | top-level `"urlNames": {<id>: {"<VAR>": "<NAME>"}}` |
 | settings, pairs asked next | top-level `"settings": {<id>: {"<NAME>": "<value>"}}` |
+| tools (sonarqube) | top-level `"settings": {<id>: {...}}`, the answer's object, toolsets typed in |
 | root, an option or a folder asked next | top-level `"roots": {<family>: {"id": <id>}}`, or `{"id": "named", "path": "<typed>"}` |
 
 Skip any other answer the user left at its default; the plan reads a missing key as the recommendation. The API key is

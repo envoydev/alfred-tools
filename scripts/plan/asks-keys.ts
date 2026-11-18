@@ -2,11 +2,12 @@
 import path from 'node:path';
 import { rootOf } from '../entries/locations.ts';
 import { settingsOf } from '../entries/entry.ts';
+import { hostedSettingsQuestion } from './hosted-settings.ts';
 import * as keys from '../keys/keys.ts';
 import { readRegistration } from '../core/account.ts';
 import type { Env, ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
-import type { AskCtx, Asked, KeyState, NameAt } from './types.ts';
+import type { AskCtx, Asked, HostedSettingsAnswer, KeyState, NameAt } from './types.ts';
 
 export const RECOMMENDED_SUFFIX = ' (Recommended)';
 // The `remote` route is worded 'hosted' in every ask: alfred-code's stop guard reads a bare 'remote' in an ask as git
@@ -130,8 +131,11 @@ export function urlNameQuestions(row: CatalogRow, routeId: string, scope: string
 // D9: a stdio route's settings - 'Keep these settings' listing NAME=value, or 'No settings' for an empty env, then
 // 'Change or add a setting', after which the walk asks for NAME=value pairs. `entry`: the registration as read
 // (configure), else the catalog's env. -> { question, answers: { <label>: 'keep' | 'change' } } | null for a hosted route.
-export function settingsQuestion(row: CatalogRow, routeId: string, { entry = null }: { entry?: ServerEntry | null | undefined } = {}): Asked<string> | null
+// A hosted route that lists `settings` (sonarqube) asks its tools question instead, answered with fixed pairs.
+export function settingsQuestion(row: CatalogRow, routeId: string, { entry = null }: { entry?: ServerEntry | null | undefined } = {}): Asked<string | HostedSettingsAnswer> | null
 {
+    const hosted = row.routes[routeId];
+    if (routeId === 'remote' && hosted && hosted.settings) return hostedSettingsQuestion(row, hosted, entry);
     // a hosted route, and a bridge (0.4.0), take no settings
     if (routeId === 'remote' || !row.routes[routeId] || row.routes[routeId].runtime === 'bridge') return null;
     const pairs = settingsOf(row, routeId, entry);

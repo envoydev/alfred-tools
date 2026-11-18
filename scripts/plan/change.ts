@@ -94,8 +94,8 @@ export function planRootChange(answers: Answers, inventory: Inventory, context: 
             {
                 const parts = helperParts(registration.entry && registration.entry.headersHelper);
                 const row = catalog.byId.get(registration.rowId!);
-                if (!row || !parts || parts.args.length < 3 || context.changing.has(keyOf('mcp', registration.name, registration.scope))) continue;
-                if (pathApi.resolve(roots.absOf(parts.args[2], context)) !== pathApi.resolve(used.path)) continue;
+                if (!row || !parts || !parts.root || context.changing.has(keyOf('mcp', registration.name, registration.scope))) continue;
+                if (pathApi.resolve(roots.absOf(parts.root, context)) !== pathApi.resolve(used.path)) continue;
                 planMcp(row, { target: { name: registration.name, scope: registration.scope } }, inventory, context, catalog, out);
             }
             out.notes.push(`a local server in another project whose helper names ${used.path} keeps reading its .mcps-secrets until /alfred-tools:configure runs there`);

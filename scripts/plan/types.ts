@@ -25,6 +25,9 @@ export interface Question
     question: string; // stored - do not rename
     options: QuestionOption[]; // stored - do not rename
 }
+// What a hosted route's tools question answers for a label: the fixed settings to send, and `toolsets: true` where the
+// toolsets are typed next.
+export type HostedSettingsAnswer = Record<string, string | true>;
 // A question with what each label answers.
 export interface Asked<Value = unknown>
 {
@@ -607,7 +610,7 @@ export interface Questions
     clients?: Asked<string[]> | null; // stored - do not rename
     roots?: { questions: Question[]; answers: Record<string, Record<string, unknown>> }; // stored - do not rename
     keyNames?: Record<string, Asked<string>>; // stored - do not rename
-    settings?: Record<string, Asked<string>>; // stored - do not rename
+    settings?: Record<string, Asked<string | HostedSettingsAnswer>>; // stored - do not rename
     urlNames?: Record<string, Record<string, Asked<string>>>; // stored - do not rename
     next?: WalkStep; // stored - do not rename
 }

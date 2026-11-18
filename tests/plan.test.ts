@@ -28,7 +28,7 @@ import * as rootsLib from '../scripts/roots/roots.ts';
 import { FILES } from '../scripts/roots/roots.ts';
 import { runPlanCommand } from '../scripts/plan/command.ts';
 import { OTHER_RE } from './ask-texts.ts';
-import { helperCommand, helperNameOf, helperArgv, buildEntry, currentOf, settingsOf, bridgeParts, renameTemplate } from '../scripts/entries/entry.ts';
+import { helperCommand, helperNameOf, helperParts, helperArgv, buildEntry, currentOf, settingsOf, bridgeParts, renameTemplate } from '../scripts/entries/entry.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
 import * as X from '../scripts/inventory/existing.ts';
 import { apply } from '../scripts/apply/run.ts';
@@ -2924,4 +2924,95 @@ test('a row with host choices asks them', () => {
     const walk = asks.allQuestions(installed, { targets: ['mcp:sonar~user'] }, catalog);
     const keep = walk.targets['mcp:sonar~user']!.questions!.find((q) => q.id.startsWith('host-'))!;
     assert.deepStrictEqual(keep.options.map((o) => [o.label, o.description]), [['SonarQube Cloud US (Recommended)', 'api.sonarqube.us'], ['SonarQube Cloud', 'api.sonarcloud.io']]);
+});
+
+const SONAR_TOKEN = 'SONARQUBE_TOKEN';
+const SONAR_ORG_PAIR = '--header SONARQUBE_ORG=SONARQUBE_ORG';
+const SONAR_READ_ONLY_PAIR = '--header SONARQUBE_READ_ONLY:true';
+
+test('sonarqube installs with its helper pairs', () => {
+    const sonar = (base: { os: string; arch: string; project: string }, home: string, pick: PickAnswer = {}, settings?: Record<string, string>) =>
+        plan(inv(base), { ...pickOne('sonarqube', { scope: 'project', ...pick }), ...(settings ? { settings: { sonarqube: settings } } : {}) }, opts(home));
+    // the recommended answers: the org from .mcps-secrets, read-only
+    const mac = sonar(MAC, '/Users/me');
+    assert.deepStrictEqual(mac.errors, []);
+    assert.strictEqual(helperOf(mac, 'sonarqube'), `node /work/shop/.alfred-tools/mcp-headers.js ${SONAR_TOKEN} Bearer ${SONAR_ORG_PAIR} ${SONAR_READ_ONLY_PAIR}`);
+    assert.strictEqual(addStep(mac).entry.url, 'https://api.sonarcloud.io/mcp');
+    // Windows: forward slashes, a root with a space quoted, and the pairs still separate arguments
+    const win = sonar({ ...WIN, project: 'C:\\work\\my shop' }, 'C:\\Users\\me');
+    assert.strictEqual(helperOf(win, 'sonarqube'), `node "C:/work/my shop/.alfred-tools/mcp-headers.js" ${SONAR_TOKEN} Bearer ${SONAR_ORG_PAIR} ${SONAR_READ_ONLY_PAIR}`);
+    assert.deepStrictEqual(helperArgv(helperOf(win, 'sonarqube')).slice(-5), ['Bearer', '--header', 'SONARQUBE_ORG=SONARQUBE_ORG', '--header', 'SONARQUBE_READ_ONLY:true']);
+    // the region fills the URL
+    assert.strictEqual(addStep(sonar(MAC, '/Users/me', { params: { host: 'api.sonarqube.us' } })).entry.url, 'https://api.sonarqube.us/mcp');
+    // 'Read and write' sends nothing of its own; the chosen toolsets are one fixed pair
+    assert.strictEqual(helperOf(sonar(MAC, '/Users/me', {}, {}), 'sonarqube')!.split(' Bearer ')[1], SONAR_ORG_PAIR);
+    const toolsets = sonar(MAC, '/Users/me', {}, { SONARQUBE_READ_ONLY: 'true', SONARQUBE_TOOLSETS: 'issues,projects' });
+    assert.deepStrictEqual(toolsets.errors, []);
+    assert.strictEqual(helperOf(toolsets, 'sonarqube')!.split(' Bearer ')[1], `${SONAR_ORG_PAIR} ${SONAR_READ_ONLY_PAIR} --header SONARQUBE_TOOLSETS:issues,projects`);
+    // a named key replaces only the key's own name
+    const named = plan(inv(MAC), { ...pickOne('sonarqube', { scope: 'project' }), keyNames: { sonarqube: 'ACME_SONAR' } }, opts('/Users/me'));
+    assert.match(helperOf(named, 'sonarqube')!, new RegExp(`mcp-headers\\.js ACME_SONAR Bearer ${SONAR_ORG_PAIR} `));
+    // refusals: an unknown toolset, an empty list, a setting the row does not have, a host outside its choices
+    assert.match(sonar(MAC, '/Users/me', {}, { SONARQUBE_TOOLSETS: 'issues,bogus' }).errors.join(), /sonarqube: 'bogus' is not a toolset - one of analysis, coverage/);
+    assert.match(sonar(MAC, '/Users/me', {}, { SONARQUBE_TOOLSETS: '' }).errors.join(), /sonarqube: SONARQUBE_TOOLSETS needs at least one toolset - analysis/);
+    assert.match(sonar(MAC, '/Users/me', {}, { SONARQUBE_READ_ONLY: 'false' }).errors.join(), /sonarqube: SONARQUBE_READ_ONLY takes true - leave it out/);
+    assert.match(sonar(MAC, '/Users/me', {}, { SONARQUBE_ORG: 'acme' }).errors.join(), /sonarqube: 'SONARQUBE_ORG' is not a setting of its hosted route - SONARQUBE_READ_ONLY, SONARQUBE_TOOLSETS/);
+    assert.match(sonar(MAC, '/Users/me', { params: { host: 'sonar.example.com' } }).errors.join(), /sonarqube: 'sonar\.example\.com' is not one of its hosts - api\.sonarcloud\.io, api\.sonarqube\.us/);
+    // other hosted rows still take no settings
+    assert.match(plan(inv(MAC), { ...pickOne('github', { route: 'remote', scope: 'user' }), settings: { github: { GITHUB_TOOLSETS: 'repos' } } }, opts('/Users/me')).errors.join(), /github: a hosted route takes no settings/);
+});
+
+test('the key names are written, names only', () => {
+    const p = plan(inv(MAC), pickOne('sonarqube', { scope: 'project' }), opts('/Users/me'));
+    const step = p.steps.find((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep;
+    assert.deepStrictEqual(step.names, ['SONARQUBE_TOKEN', 'SONARQUBE_ORG']);
+    assert.ok(p.notes.some((n) => /^sonarqube: SONARQUBE_ORG \(organization key\) is optional - fill it in .*\.mcps-secrets to send that header/.test(n)), p.notes.join('\n'));
+    assert.strictEqual(p.reconnect.find((r) => r.name === 'sonarqube')!.variable, 'SONARQUBE_TOKEN');
+    assert.ok(p.steps.findIndex((s) => s.op === 'write-helper') < p.steps.findIndex((s) => s.op === 'mcp-add'), 'the helper is written before the registration that uses its pairs');
+    // the org name is written even when the token's is filled already
+    const w = world();
+    try
+    {
+        putKeys(w.home, ['.alfred-tools', '.mcps-secrets'], ['SONARQUBE_TOKEN=tok-123']);
+        const filled = plan(inv({ ...MAC, os: process.platform, project: w.project }), pickOne('sonarqube', { scope: 'user' }), { home: w.home, env: {} });
+        assert.deepStrictEqual((filled.steps.find((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep).names, ['SONARQUBE_ORG']);
+    }
+    finally { w.clean(); }
+});
+
+test('helperParts reads the root past the pairs; configure offers the registration\'s settings first', () => {
+    const cmd = helperCommand({ helperPath: '/w/.alfred-tools/mcp-headers.js', name: 'SONARQUBE_TOKEN', scheme: 'Bearer', globalRoot: '/my keys', style: 'posix', pairs: ['SONARQUBE_ORG=SONARQUBE_ORG', 'SONARQUBE_TOOLSETS:issues,projects'] });
+    assert.strictEqual(cmd, "node /w/.alfred-tools/mcp-headers.js SONARQUBE_TOKEN Bearer '/my keys' --header SONARQUBE_ORG=SONARQUBE_ORG --header SONARQUBE_TOOLSETS:issues,projects");
+    const parts = helperParts(cmd)!;
+    assert.deepStrictEqual([parts.root, parts.pairs], ['/my keys', ['SONARQUBE_ORG=SONARQUBE_ORG', 'SONARQUBE_TOOLSETS:issues,projects']]);
+    assert.strictEqual(helperNameOf(cmd), 'SONARQUBE_TOKEN');
+    const bare = helperParts('node /w/mcp-headers.js K Bearer --header SONARQUBE_ORG=O')!;
+    assert.deepStrictEqual([bare.root, bare.pairs, bare.args.length], [null, ['SONARQUBE_ORG=O'], 4]);
+    assert.deepStrictEqual([helperParts('node /w/mcp-headers.js K Bearer /r')!.root, helperParts('node /w/mcp-headers.js K Bearer /r')!.pairs], ['/r', []]);
+    // the first question of a fresh install
+    const fresh = settingsQuestion(catalog.byId.get('sonarqube')!, 'remote')!;
+    assert.deepStrictEqual([fresh.question.id, fresh.question.header, fresh.question.question], ['settings-sonarqube', 'Tools', "sonarqube's tools"]);
+    assert.deepStrictEqual(fresh.question.options.map((o) => o.label), ['Read-only (Recommended)', 'Read and write', 'Read-only, chosen toolsets', 'Read and write, chosen toolsets']);
+    assert.deepStrictEqual(fresh.answers, { 'Read-only (Recommended)': { SONARQUBE_READ_ONLY: 'true' }, 'Read and write': {}, 'Read-only, chosen toolsets': { SONARQUBE_READ_ONLY: 'true', toolsets: true }, 'Read and write, chosen toolsets': { toolsets: true } });
+    checkQuestion(fresh.question);
+    // configure: what the registration sends comes first and is recommended
+    const entry = (command: string) => ({ type: 'http', url: 'https://api.sonarcloud.io/mcp', headersHelper: command });
+    const ask = (command: string) => settingsQuestion(catalog.byId.get('sonarqube')!, 'remote', { entry: entry(command) })!;
+    const rw = ask('node /w/mcp-headers.js K Bearer --header SONARQUBE_ORG=SONARQUBE_ORG');
+    assert.deepStrictEqual(rw.question.options.map((o) => o.label), ['Read and write (Recommended)', 'Read-only', 'Read-only, chosen toolsets', 'Read and write, chosen toolsets']);
+    assert.deepStrictEqual(rw.answers['Read and write (Recommended)'], {});
+    const chosen = ask('node /w/mcp-headers.js K Bearer --header SONARQUBE_READ_ONLY:true --header SONARQUBE_TOOLSETS:issues,projects');
+    assert.strictEqual(chosen.question.options[0]!.label, 'Read-only, chosen toolsets (Recommended)');
+    assert.match(chosen.question.options[0]!.description, /issues,projects/);
+    assert.deepStrictEqual(chosen.answers['Read-only, chosen toolsets (Recommended)'], { SONARQUBE_READ_ONLY: 'true', SONARQUBE_TOOLSETS: 'issues,projects' });
+    checkQuestion(chosen.question);
+    // a configure that answers nothing about the settings keeps the pairs it has (here a key rename rewrites the helper, in the root it already uses)
+    const old = reg('sonar', 'user', entry('node /old/mcp-headers.js K Bearer --header SONARQUBE_ORG=SONARQUBE_ORG --header SONARQUBE_TOOLSETS:issues'), 'sonarqube', 'remote');
+    const kept = plan(inv(MAC, { registrations: [old] }), { ...changeOf(old, {}), keyNames: { 'mcp:sonar~user': 'ACME_SONAR' } }, opts('/Users/me'));
+    assert.deepStrictEqual(kept.errors, []);
+    const replaced = kept.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep;
+    assert.strictEqual(replaced.entry.headersHelper, 'node /old/mcp-headers.js ACME_SONAR Bearer --header SONARQUBE_ORG=SONARQUBE_ORG --header SONARQUBE_TOOLSETS:issues');
+    // an answer replaces them
+    const changed = plan(inv(MAC, { registrations: [old] }), { ...changeOf(old, {}), keyNames: { 'mcp:sonar~user': 'ACME_SONAR' }, settings: { 'mcp:sonar~user': { SONARQUBE_READ_ONLY: 'true' } } }, opts('/Users/me'));
+    assert.strictEqual((changed.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep).entry.headersHelper, 'node /old/mcp-headers.js ACME_SONAR Bearer --header SONARQUBE_ORG=SONARQUBE_ORG --header SONARQUBE_READ_ONLY:true');
 });
