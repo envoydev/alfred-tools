@@ -51,7 +51,7 @@ work in Claude Code alone), one offer per plugin and scope; one the user turned 
 Above the tables, a line per server changed since alfred-tools last wrote it: '<name> was changed outside
 alfred-tools' (an update starts from the registration as it is, and carries it into the list and Cursor), or
 '<name> is on the list but not in Claude Code - run /alfred-tools:fix' (update never adds it back). Last, under
-'Cursor (asked after the updates)', each root whose servers are set up for Claude Code only while Cursor is on this
+'Cursor (asked with the updates)', each root whose servers are set up for Claude Code only while Cursor is on this
 machine.
 
 Exit 3 with one line means the `claude` CLI is missing: say so and stop. When the last line is

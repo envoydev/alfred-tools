@@ -685,6 +685,31 @@ test('update offers the new ways to pass data that fix knows - a 0.1.x key heade
     finally { w.clean(); }
 });
 
+test('update applies read-guard for another config dir and prints its own-plugin-data note', async () =>
+{
+    const w = world();
+    try
+    {
+        const rule = 'Read(//**/.mcps-secrets)';
+        const current = w.env.CLAUDE_CONFIG_DIR!;
+        const personal = path.join(w.home, '.claude-personal');
+        const plugins = (dir: string) => writeJson(path.join(dir, 'plugins', 'installed_plugins.json'), { version: 2, plugins: { 'alfred-tools@envoydev': [{ scope: 'user', version: '0.5.0' }] } });
+        fs.mkdirSync(path.join(w.project, '.alfred-tools'), { recursive: true });
+        fs.writeFileSync(path.join(w.project, '.alfred-tools', '.mcps-secrets'), '');
+        writeJson(path.join(current, 'settings.json'), { permissions: { deny: [rule] } });
+        plugins(current);
+        writeJson(path.join(personal, 'settings.json'), { theme: 'dark' });
+        plugins(personal);
+        const check = await run(w, ['--check', '--no-refresh']);
+        assert.strictEqual(check.code, 0, check.text);
+        const a = await run(w, ['--apply', `upgrade:read-guard:${path.join(personal, 'settings.json')}`]);
+        assert.strictEqual(a.code, 0, a.text);
+        assert.deepStrictEqual(readJson(path.join(personal, 'settings.json')), { theme: 'dark', permissions: { deny: [rule] } });
+        assert.ok(a.text.split('\n').includes(`note: ${personal}: read guard added - it keeps its own plugin data, so an update there may offer a declined uninstall again`), a.text);
+    }
+    finally { w.clean(); }
+});
+
 test('an upgrade that cannot apply on its own - a key not filled - is a note naming /alfred-tools:fix, never an offer', async () =>
 {
     const w = world();

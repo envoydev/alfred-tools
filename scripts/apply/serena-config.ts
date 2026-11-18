@@ -127,6 +127,15 @@ export function folderState(file: string, home: string): 'absent' | 'same' | 'ot
     return scalarOf(FOLDER_LINE.exec(line[0])![1]!) === scalarOf(wanted.value) ? 'same' : 'other';
 }
 
+// The value the file holds for the folder key now, quotes dropped (a path, as folderValue writes one) - null when the file
+// or the key is absent. Only this one key's line is read; nothing else of the config is returned.
+export function folderCurrent(file: string): string | null
+{
+    const text = readText(file);
+    const line = text === null ? undefined : linesOf(text).find(([body]) => FOLDER_LINE.test(body));
+    return line ? scalarOf(FOLDER_LINE.exec(line[0])![1]!) : null;
+}
+
 // The key's value in place of the first one (or appended when the file has none); a missing file is not created. -> { changed, detail }
 export function setProjectFolder(file: string, home: string): { changed: boolean; detail: string }
 {

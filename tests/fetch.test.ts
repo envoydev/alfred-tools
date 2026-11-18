@@ -314,6 +314,31 @@ test('after serena\'s first start the folder key is checked', async () => {
     finally { w.clean(); }
 });
 
+test('when serena\'s first start leaves another folder value the log names the value it replaced, and no other config content', async () => {
+    const w = world();
+    try
+    {
+        const home = path.join(w.project, '.alfred-tools', 'serena');
+        const S = { command: 'uvx', args: [...UVX.args], env: { SERENA_HOME: home } };
+        writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { serena: S } });
+        const file = writeJob(path.join(w.dir, 'tmp', 'fetch.json'), fetchJob(w.project, [{ ...fetchStep('serena', S, 'serena')!, scope: 'project' }], []));
+        fs.mkdirSync(home, { recursive: true });
+        fs.writeFileSync(path.join(home, 'serena_config.yml'), `projects: []\nbase_modes: []\nproject_serena_folder_location: '${home}/projects/$projectFolderName'\n`);
+        const lines: string[] = [];
+        await runFetchJob(JSON.parse(fs.readFileSync(file, 'utf8')), {
+            env: w.env,
+            runFetch: () => ({ status: 0 }),
+            start: async (entry) => { fs.writeFileSync(path.join(entry.env!.SERENA_HOME!, 'serena_config.yml'), "projects: []\nauth_secret: s3cr3t-fixture\nproject_serena_folder_location: '/elsewhere/serena-projects'\n"); return { ok: true, ms: 1 }; },
+            log: (...a) => lines.push(a.join(' ')),
+        });
+        const text = lines.join('\n');
+        assert.ok(lines.some((l) => l.includes('project_serena_folder_location') && l.includes('/elsewhere/serena-projects') && l.includes(`serena: project folders set to ${home}/projects`)), text);
+        assert.ok(!text.includes('s3cr3t'), 'no other config content is printed');
+        assert.ok(fs.readFileSync(path.join(home, 'serena_config.yml'), 'utf8').includes(`'${home}/projects/$projectFolderName'`));
+    }
+    finally { w.clean(); }
+});
+
 test('Windows passes one quoted command line', () => {
     const argv = ['npx', '-y', 'a b@1'];
     assert.deepStrictEqual(fetchSpawnArgs(argv, 'win32'), { file: ['npx', ...argv.slice(1).map(cmdArg)].join(' '), args: [], shell: true });

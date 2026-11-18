@@ -210,9 +210,12 @@ export async function runFetchJob(job: FetchJob, { env = process.env, runFetch =
             {
                 const file = serenaConfig.configOf(home);
                 log(`${stepNumber}. ok     ${serenaConfig.emptyBaseModes(file).detail}`);
-                // serena's first save can drop a key the plugin wrote before it started: the line says so
+                // serena's first save can drop a key the plugin wrote before it started, or leave another value: the line says which, and
+                // names the value replaced (a path, the one key's own - never other config)
+                const replaced = serenaConfig.folderCurrent(file);
                 const folder = serenaConfig.setProjectFolder(file, home);
-                if (folder.changed) log(`${stepNumber}. ok     ${keyWasThere ? `serena's first start dropped ${serenaConfig.FOLDER_KEY} - ` : ''}serena: project folders set to ${home}/projects`);
+                const was = replaced !== null ? `serena's first start left ${serenaConfig.FOLDER_KEY} at ${replaced} - ` : keyWasThere ? `serena's first start dropped ${serenaConfig.FOLDER_KEY} - ` : '';
+                if (folder.changed) log(`${stepNumber}. ok     ${was}serena: project folders set to ${home}/projects`);
             }
         }
         else warn(stepNumber, `'${step.name}' did not answer its first start (${startResult.why}) - the registration stays; its first session start tries again`);

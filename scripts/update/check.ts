@@ -149,7 +149,7 @@ export function renderUpdates(out: UpdateCheck): string
     for (const [title, list] of [['Held back', out.held], ['Skipped', out.skipped], ['Could not check', out.errors], ['Notes', out.notes]] as [string, string[]][])
         if (list.length) lines.push(`${title}:`, ...list.map((line) => `  ${line}`));
     const offered = out.cursorOffers || [];
-    if (offered.length) lines.push('Cursor (asked after the updates):', ...offered.map((cursorOffer) => `  ${cursorOffer.servers.length} servers in ${cursorOffer.root} are set up for Claude Code only`));
+    if (offered.length) lines.push('Cursor (asked with the updates):', ...offered.map((cursorOffer) => `  ${cursorOffer.servers.length} servers in ${cursorOffer.root} are set up for Claude Code only`));
     // a note that waits on the user is never 'everything current' (a key to fill, a key file git would commit)
     if (!behind(out) && out.waiting) lines.push('', `alfred-tools: nothing to update - ${out.waiting} wait${out.waiting === 1 ? 's' : ''} on you first (the notes above)`);
     else if (!behind(out) && offered.length) lines.push('', 'alfred-tools: nothing to update - Cursor can be set up (asked next)');
