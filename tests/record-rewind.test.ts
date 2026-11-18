@@ -84,6 +84,22 @@ test('rewinding clients drops only that step', () => {
     assert.ok(after.picks.done!.includes('gitlab:questions'));
 });
 
+test('rewinding a pick skipped before any of its steps were recorded un-skips it', () => {
+    const state = start(I, { rows: ['gitlab', 'sentry'], walk: 'each', done: ['clients', 'settings'] });
+    const skipped = files(skipPick(state.picks, state.answers, 'gitlab'));
+    const back = files(rewindPick(skipped.picks, skipped.answers, 'gitlab'));
+    assert.deepStrictEqual(back.picks.skipped, []);
+    assert.deepStrictEqual(back.picks.done, skipped.picks.done);
+    assert.deepStrictEqual(back.answers, skipped.answers);
+    const again = walked([], {}, start(I, back.picks, back.answers));
+    assert.notStrictEqual(again.answers.picks?.['gitlab'], undefined);
+});
+
+test('rewinding a pick that is neither recorded nor skipped is still refused', () => {
+    const state = start(I, { rows: ['gitlab', 'sentry'], walk: 'each', done: ['clients', 'settings'], skipped: ['sentry'] });
+    assert.deepStrictEqual(rewindPick(state.picks, state.answers, 'memory'), { refused: "'memory' has no recorded answer to change" });
+});
+
 test('rewinding a pick with no recorded step is refused', () => {
     const state = eachWalk(['gitlab']);
     assert.deepStrictEqual(rewindPick(state.picks, state.answers, 'memory'), { refused: "'memory' has no recorded answer to change" });
@@ -155,19 +171,21 @@ test('rewinding tolerates a path whose parent is already gone', () => {
 const ids = (picks: string[]): Picks => ({ recorded: Object.fromEntries(picks.map((tool) => [`${tool}:questions`, { tool, picks: [], answers: [] }])) });
 const labelOf = (pick: string) => pick.toUpperCase();
 
-test('rewindQuestion offers the last recorded pick first and at most four', () => {
+test('rewindQuestion offers the last recorded pick first, then Change nothing, in at most four options', () => {
     const asked = rewindQuestion(ids(['a', 'b', 'c']), labelOf)!;
-    assert.deepStrictEqual(asked.question.options.map((option) => option.label), ['C (Recommended)', 'B', 'A']);
+    assert.deepStrictEqual(asked.question.options.map((option) => option.label), ['C (Recommended)', 'B', 'A', 'Change nothing']);
     assert.deepStrictEqual([asked.question.id, asked.question.header, asked.question.multiSelect, asked.question.question], ['rewind', 'Change', false, 'Which answers do you want to change?']);
-    assert.deepStrictEqual(asked.answers, { 'C (Recommended)': 'c', B: 'b', A: 'a' });
+    assert.deepStrictEqual(asked.answers, { 'C (Recommended)': 'c', B: 'b', A: 'a', 'Change nothing': '' });
     assert.strictEqual(rewindQuestion(ids(['a', 'b', 'c', 'd']), labelOf)!.question.options.length, 4);
 });
 
-test('rewindQuestion with five picks offers three and Another one, and no text sendsToOther', () => {
+test('rewindQuestion with more than three picks offers two, Another one and Change nothing, and no text sendsToOther', () => {
     const asked = rewindQuestion(ids(['a', 'b', 'c', 'd', 'e']), labelOf)!;
-    assert.deepStrictEqual(asked.question.options.map((option) => option.label), ['E (Recommended)', 'D', 'C', 'Another one']);
-    assert.strictEqual(asked.question.options[3]!.description, 'named next');
+    assert.deepStrictEqual(asked.question.options.map((option) => option.label), ['E (Recommended)', 'D', 'Another one', 'Change nothing']);
+    assert.strictEqual(asked.question.options[2]!.description, 'named next');
     assert.strictEqual(asked.answers['Another one'], 'another');
+    assert.strictEqual(asked.answers['Change nothing'], '');
+    assert.deepStrictEqual(rewindQuestion(ids(['a', 'b', 'c', 'd']), labelOf)!.question.options.map((option) => option.label), ['D (Recommended)', 'C', 'Another one', 'Change nothing']);
     const texts = [asked.question.question, asked.question.header, ...asked.question.options.flatMap((option) => [option.label, option.description])];
     assert.ok(texts.every((text) => !sendsToOther(text)));
 });
@@ -182,15 +200,18 @@ test('rewindQuestion with one pick offers Change nothing, and with none returns 
 
 test('rewindQuestion lists a pick once even when it has several steps', () => {
     const picks: Picks = { recorded: { 'a:route': { tool: 'a', picks: [], answers: [] }, 'b:questions': { tool: 'b', picks: [], answers: [] }, 'a:questions': { tool: 'a', picks: [], answers: [] }, clients: { tool: null, picks: [], answers: [] }, settings: { tool: null, picks: [], answers: [] } } };
-    assert.deepStrictEqual(rewindQuestion(picks, labelOf)!.question.options.map((option) => option.label), ['SETTINGS (Recommended)', 'CLIENTS', 'A', 'B']);
+    assert.deepStrictEqual(rewindQuestion(picks, labelOf)!.question.options.map((option) => option.label), ['SETTINGS (Recommended)', 'CLIENTS', 'Another one', 'Change nothing']);
+    const { 'b:questions': _left, ...rest } = picks.recorded!;
+    const three: Picks = { recorded: rest };
+    assert.deepStrictEqual(rewindQuestion(three, labelOf)!.question.options.map((option) => option.label), ['SETTINGS (Recommended)', 'CLIENTS', 'A', 'Change nothing']);
 });
 
 test('rewindQuestion keeps every label unique, so each pick maps to its own value', () => {
     const asked = rewindQuestion(ids(['a', 'b', 'c']), () => 'same')!;
     const labels = asked.question.options.map((option) => option.label.replace(' (Recommended)', ''));
-    assert.strictEqual(new Set(labels).size, 3);
-    assert.deepStrictEqual(Object.values(asked.answers).sort(), ['a', 'b', 'c']);
-    assert.ok(labels.slice(1).every((label) => label.startsWith('same')));
+    assert.strictEqual(new Set(labels).size, 4);
+    assert.deepStrictEqual(Object.values(asked.answers).sort(), ['', 'a', 'b', 'c']);
+    assert.ok(labels.slice(1, 3).every((label) => label.startsWith('same')));
 });
 
 test('rewinding settings also clears the skipped tools, so a skipped tool can come back', () => {

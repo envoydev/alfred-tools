@@ -160,6 +160,7 @@ test('rewind with no pick prints the which-pick ask and writes nothing', (t) => 
     assert.strictEqual(printed.call.length, 1);
     assert.strictEqual(printed.call[0].id, 'rewind');
     assert.deepStrictEqual(Object.values(printed.answers.rewind), ['gitlab', '']);
+    assert.strictEqual(printed.call[0].options.at(-1).label, 'Change nothing');
     assert.strictEqual(printed.call[0].options[0].label, 'gitlab (Recommended)');
     assert.deepStrictEqual(files(w).map((file) => fs.readFileSync(file, 'utf8')), before);
 });
@@ -289,7 +290,7 @@ test('the which-pick ask labels the walk\'s own two picks', (t) => {
     drive(w);
     const asked = JSON.parse(w.run('--rewind', w.inventory, w.picks, w.answers).stdout);
     const labels = asked.call[0].options.map((option: { label: string }) => option.label);
-    assert.deepStrictEqual(labels, ['Settings (Recommended)', 'Apps']);
+    assert.deepStrictEqual(labels, ['Settings (Recommended)', 'Apps', 'Change nothing']);
 });
 
 test('the which-pick ask tells two configure targets of one name apart by scope', (t) => {
@@ -300,8 +301,8 @@ test('the which-pick ask tells two configure targets of one name apart by scope'
     drive(w);
     const asked = JSON.parse(w.run('--rewind', w.inventory, w.picks, w.answers).stdout);
     const labels = asked.call[0].options.map((option: { label: string }) => option.label.replace(' (Recommended)', ''));
-    assert.deepStrictEqual([...labels].sort(), ['sentry (Global)', 'sentry (Local)']);
-    assert.deepStrictEqual(Object.values(asked.answers.rewind).sort(), [...keys].sort());
+    assert.deepStrictEqual([...labels].sort(), ['Change nothing', 'sentry (Global)', 'sentry (Local)']);
+    assert.deepStrictEqual(Object.values(asked.answers.rewind).sort(), ['', ...keys].sort());
 });
 
 test('--skip takes a row id when one configure target has that row, and refuses it when several do', (t) => {

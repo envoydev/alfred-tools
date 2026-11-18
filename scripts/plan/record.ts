@@ -288,12 +288,14 @@ function removePath(root: object, path: string[]): void
 }
 
 // Back to one pick (spec D1b): its recorded steps leave `done` and `recorded`, and each path they wrote is deleted from both
-// files. `settings` is every step, and brings back every tool left out with --skip, as rewinding that tool does.
+// files. `settings` is every step, and brings back every tool left out with --skip, as rewinding that tool does. A pick
+// left out with --skip before any of its steps were recorded has nothing to drop: rewinding it only brings it back.
 export function rewindPick(picks: Picks, answers: Answers, pick: string): RecordResult
 {
     const recorded = Object.entries(picks.recorded ?? {});
     const steps = recorded.filter(([id, step]) => pick === WALK_QUESTION.settings || (pick === WALK_QUESTION.clients ? id === pick : step.tool === pick));
-    if (steps.length === 0) return refuse(`'${pick}' has no recorded answer to change`);
+    const skippedOnly = steps.length === 0 && picks.skipped?.includes(pick) === true;
+    if (steps.length === 0 && !skippedOnly) return refuse(`'${pick}' has no recorded answer to change`);
     const next = { picks: structuredClone(picks), answers: structuredClone(answers) };
     for (const [id, step] of steps)
     {

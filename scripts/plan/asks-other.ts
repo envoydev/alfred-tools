@@ -186,14 +186,15 @@ export function targetClientsQuestion(key: string, name: string, current: string
     return { question: { id: `clients-${key}`, header: 'Apps', multiSelect: false, question: `Set up ${name} for which apps?`, options }, answers };
 }
 
-// rewind (spec D1b): which recorded pick to answer again, the one recorded last first. A fifth pick or more shows the three
-// last and 'Another one', whose pick is asked next in plain chat; a lone pick gets 'Change nothing' to keep two options.
+// rewind (spec D1b): which recorded pick to answer again, the one recorded last first. More than three
+// picks show the two last and 'Another one', whose pick is asked next in plain chat; 'Change nothing' always ends the list.
 export function rewindQuestion(picks: Picks, labelOf: (pick: string) => string): Asked<string> | null
 {
     const recorded = recordedPicks(picks);
     if (recorded.length === 0) return null;
-    const more = recorded.length > REWIND_MAX_OPTIONS;
-    const shown = recorded.slice(0, more ? REWIND_MAX_OPTIONS - 1 : REWIND_MAX_OPTIONS);
+    const pickSlots = REWIND_MAX_OPTIONS - 1;
+    const more = recorded.length > pickSlots;
+    const shown = recorded.slice(0, more ? pickSlots - 1 : pickSlots);
     const taken = new Set<string>();
     const options = shown.map((pick, i) =>
     {
@@ -203,7 +204,7 @@ export function rewindQuestion(picks: Picks, labelOf: (pick: string) => string):
         return { label: `${unique}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: 'answer its questions again', value: pick };
     });
     if (more) options.push({ label: 'Another one', description: 'named next', value: REWIND_ANOTHER });
-    if (recorded.length === 1) options.push({ label: 'Change nothing', description: 'go back to the plan', value: '' });
+    options.push({ label: 'Change nothing', description: 'go back to the plan', value: '' });
     return {
         question: { id: 'rewind', header: 'Change', multiSelect: false, question: 'Which answers do you want to change?', options: options.map(({ label, description }) => ({ label, description })) },
         answers: Object.fromEntries(options.map((option) => [option.label, option.value])),
