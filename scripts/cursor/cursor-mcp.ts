@@ -8,7 +8,7 @@ import path from 'node:path';
 import * as account from '../core/account.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import { stripBom, deepEqual } from '../core/json-file.ts';
-import { bridgeParts, helperParts } from '../entries/entry.ts';
+import { bridgeParts, helperParts, withoutPairs } from '../entries/entry.ts';
 import * as kept from '../core/kept.ts';
 import * as keys from '../keys/keys.ts';
 import { load } from '../catalog/catalog.ts';
@@ -207,10 +207,11 @@ export function cursorOf(file: string, marked: { name: string; row: string | nul
 export const otherHeaders = (entry: ServerEntry | null | undefined): string[] => Object.keys((entry && entry.headers) || {});
 
 // Cursor's copy of a hosted keyed entry: Cursor runs no headersHelper (F5), so it gets the bridge, which sends the key
-// (F6) - `node <root>/mcp-bridge.js <url> <NAME> <SCHEME> mcp-remote@<pin> [<global root>]`, the object buildEntry makes
-// for sentry's bridge route. The URL, the helper's arguments and the bridge path come from `entry`; a `prior` bridge
-// copy (the list's cursorEntry, or Cursor's copy as read) keeps its pin, its cut-off and every env pair and argument the
-// form does not set, so a pin update moved or an edit the user kept survives a Claude-side rewrite. -> entry | null
+// (F6) - `node <root>/mcp-bridge.js <url> <NAME> <SCHEME> mcp-remote@<pin> [<global root>] [--header <pair>]...`, the
+// object buildEntry makes for sentry's bridge route. The URL, the helper's arguments, its `--header` pairs and the
+// bridge path come from `entry`; a `prior` bridge copy (the list's cursorEntry, or Cursor's copy as read) keeps its
+// pin, its cut-off and every env pair and argument the form does not set, so a pin update moved or an edit the user
+// kept survives a Claude-side rewrite. Its own `--header` pairs are dropped: the helper's are the source. -> entry | null
 export function bridgeFormOf(entry: ServerEntry | null | undefined, catalog: Catalog, prior: ServerEntry | null = null): ServerEntry | null
 {
     if (!entry || typeof entry.headersHelper !== 'string' || otherHeaders(entry).length) return null;
@@ -219,15 +220,16 @@ export function bridgeFormOf(entry: ServerEntry | null | undefined, catalog: Cat
     const pathApi = /^(?:[A-Za-z]:[\\/]|\\\\)/.test(helper.path) ? path.win32 : path.posix;
     const own = [pathApi.join(pathApi.dirname(helper.path), 'mcp-bridge.js'), entry.url!, helper.args[0]!, helper.args[1]!];
     const globalRoot = helper.root ? [helper.root] : [];
+    const pairs = helper.pairs.flatMap((pair) => ['--header', pair]);
     const priorParts = prior ? bridgeParts(prior) : null;
     if (priorParts && priorParts.packageSpec)
     {
         const at = prior!.args!.findIndex((argument) => String(argument) === priorParts.path);
-        const rest = priorParts.globalRoot !== null ? prior!.args!.slice(at + 6) : [];
-        return { ...prior, command: 'node', args: [...prior!.args!.slice(0, at), ...own, priorParts.packageSpec, ...globalRoot, ...rest], env: { ...(prior!.env || {}) } };
+        const rest = priorParts.globalRoot !== null ? withoutPairs(prior!.args!.slice(at + 6)) : [];
+        return { ...prior, command: 'node', args: [...prior!.args!.slice(0, at), ...own, priorParts.packageSpec, ...globalRoot, ...rest, ...pairs], env: { ...(prior!.env || {}) } };
     }
     const packageSpec = catalog.byId.get('sentry')!.routes.bridge!.package!;
-    return { command: 'node', args: [...own, `${packageSpec.name}@${packageSpec.version}`, ...globalRoot], env: { npm_config_before: packageSpec.cutoff } };
+    return { command: 'node', args: [...own, `${packageSpec.name}@${packageSpec.version}`, ...globalRoot, ...pairs], env: { npm_config_before: packageSpec.cutoff } };
 }
 
 // Is Cursor on this machine (spec D3)? `~/.cursor` exists, `cursor-agent` or `cursor` is on PATH (with .exe or .cmd on

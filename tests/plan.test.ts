@@ -2385,7 +2385,7 @@ test('buildEntry for the sentry bridge at local, project and user scope', () => 
         assert.deepStrictEqual(cur.urlNames, urlNames, scope);
     }
     assert.deepStrictEqual(settingsOf(row!, 'bridge', local), [], 'the bridge passes no setting of the user\'s');
-    assert.deepStrictEqual(bridgeParts(local), { path: '/work/shop/.alfred-tools/mcp-bridge.js', template: 'https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}', keyName: 'SENTRY_ACCESS_TOKEN', scheme: 'Sentry-Bearer', packageSpec: 'mcp-remote@0.16.0', globalRoot: null });
+    assert.deepStrictEqual(bridgeParts(local), { path: '/work/shop/.alfred-tools/mcp-bridge.js', template: 'https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}', keyName: 'SENTRY_ACCESS_TOKEN', scheme: 'Sentry-Bearer', packageSpec: 'mcp-remote@0.16.0', globalRoot: null, pairs: [] });
     assert.strictEqual(bridgeParts({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0'] }), null);
     assert.strictEqual(renameTemplate('https://h/mcp/{A}/{B?}', { A: 'X', B: 'Y' }), 'https://h/mcp/{X}/{Y?}');
 });

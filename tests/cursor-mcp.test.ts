@@ -236,6 +236,43 @@ test('bridgeFormOf keeps a prior copy\'s pin, cut-off and the args and env pairs
     assert.deepStrictEqual(b.env, { npm_config_before: '2026-12-01T00:00:00Z', MINE: '1' });
 });
 
+const sonarEntry = (settings: Record<string, string>, ctx = HOSTED_CTX, scope = 'user') => buildEntry(catalog.byId.get('sonarqube')!, 'remote', { scope, token: true, params: { host: 'api.sonarcloud.io' }, settings }, ctx, catalog.rules);
+const NAMED_CTX = { ...HOSTED_CTX, roots: { ...HOSTED_CTX.roots, globalNamed: true } };
+const PAIRS = ['--header', 'SONARQUBE_ORG=SONARQUBE_ORG', '--header', 'SONARQUBE_READ_ONLY:true'];
+
+test('the bridge form keeps the helper\'s pairs', () => {
+    const e = sonarEntry({ SONARQUBE_READ_ONLY: 'true' });
+    const b = C.bridgeFormOf(e, catalog) as ServerEntry & { args: string[] };
+    assert.deepStrictEqual(b.args.slice(4), [`mcp-remote@${MR.version}`, ...PAIRS]);
+    assert.deepStrictEqual(bridgeParts(b)!.pairs, ['SONARQUBE_ORG=SONARQUBE_ORG', 'SONARQUBE_READ_ONLY:true']);
+    assert.strictEqual(bridgeParts(b)!.globalRoot, null);
+
+    const prior = { command: 'node', args: ['/old/mcp-bridge.js', 'https://old.example/mcp', 'OLD', 'Bearer', 'mcp-remote@0.17.0'], env: { npm_config_before: '2026-12-01T00:00:00Z', MINE: '1' } };
+    const kept = C.bridgeFormOf(e, catalog, prior) as ServerEntry & { args: string[] };
+    assert.deepStrictEqual(kept.args.slice(4), ['mcp-remote@0.17.0', ...PAIRS]);
+    assert.deepStrictEqual(kept.env, prior.env);
+
+    const rooted = C.bridgeFormOf(sonarEntry({ SONARQUBE_READ_ONLY: 'true' }, NAMED_CTX, 'local'), catalog) as ServerEntry & { args: string[] };
+    assert.deepStrictEqual(rooted.args.slice(5), ['/Users/me/.alfred-tools', ...PAIRS]);
+    assert.strictEqual(bridgeParts(rooted)!.globalRoot, '/Users/me/.alfred-tools');
+    assert.strictEqual(bridgeParts(rooted)!.pairs.length, 2);
+});
+
+test('a prior bridge with pairs and a root gets the new pairs once', () => {
+    const e = sonarEntry({});
+    const prior = { command: 'node', args: ['/old/mcp-bridge.js', 'https://old.example/mcp', 'OLD', 'Bearer', 'mcp-remote@0.17.0', '/old/root', '--header', 'SONARQUBE_READ_ONLY:true'], env: {} };
+    const b = C.bridgeFormOf(e, catalog, prior) as ServerEntry & { args: string[] };
+    assert.deepStrictEqual(b.args.slice(4), ['mcp-remote@0.17.0', '--header', 'SONARQUBE_ORG=SONARQUBE_ORG']);
+    assert.ok(!b.args.join(' ').includes('SONARQUBE_READ_ONLY'));
+    const withRoot = C.bridgeFormOf(sonarEntry({}, NAMED_CTX, 'local'), catalog, prior) as ServerEntry & { args: string[] };
+    assert.deepStrictEqual(withRoot.args.slice(4), ['mcp-remote@0.17.0', '/Users/me/.alfred-tools', '--header', 'SONARQUBE_ORG=SONARQUBE_ORG']);
+});
+
+test('bridgeParts does not read --header as the root', () => {
+    const b = { command: 'node', args: ['/r/mcp-bridge.js', 'https://x.example/mcp', 'K', 'Bearer', 'mcp-remote@0.16.0', '--header', 'A=B'] };
+    assert.deepStrictEqual({ root: bridgeParts(b)!.globalRoot, pairs: bridgeParts(b)!.pairs }, { root: null, pairs: ['A=B'] });
+});
+
 test('bridgeFormOf is null for an entry with no helper, or a header besides the helper\'s; otherHeaders names them', () => {
     assert.strictEqual(C.bridgeFormOf(C7, catalog), null);
     const e = { ...helperEntry('context7'), headers: { 'X-Team': 'docs' } };

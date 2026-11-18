@@ -77,7 +77,8 @@ export interface HelperParts
     pairs: string[];
 }
 
-// A bridge launch: `node <path>/mcp-bridge.js <template> <KEY> <SCHEME> <pkg> [<root>]`.
+// A bridge launch: `node <path>/mcp-bridge.js <template> <KEY> <SCHEME> <pkg> [<root>] [--header <pair>]...`; `pairs` are
+// the `--header` pairs, each as its text.
 export interface BridgeParts
 {
     path: string;
@@ -86,6 +87,7 @@ export interface BridgeParts
     scheme: string | null;
     packageSpec: string | null;
     globalRoot: string | null;
+    pairs: string[];
 }
 
 // The shared sign-in form's URL, its folder and the mcp-remote pin.

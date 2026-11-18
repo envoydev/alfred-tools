@@ -227,8 +227,8 @@ export function applyContext(entry: ServerEntry, scope: string, context: Machine
     return { ...entry, args };
 }
 
-// A bridge registration's parts, read from its launch: `node <path>/mcp-bridge.js <template> <KEY> <SCHEME> <pkg> [<root>]`.
-// -> { path, template, keyName, scheme, pkg, globalRoot } | null
+// A bridge registration's parts, read from its launch: `node <path>/mcp-bridge.js <template> <KEY> <SCHEME> <pkg> [<root>] [--header <pair>]...`, the root
+// and the pairs read as the bridge reads them. -> { path, template, keyName, scheme, packageSpec, globalRoot, pairs } | null
 export function bridgeParts(entry: ServerEntry | null | undefined): BridgeParts | null
 {
     if (!entry || typeof entry !== 'object' || typeof entry.command !== 'string' || !Array.isArray(entry.args)) return null;
@@ -236,8 +236,22 @@ export function bridgeParts(entry: ServerEntry | null | undefined): BridgeParts 
     const args = entry.args.map(String);
     const at = args.findIndex((argument) => argument.replace(/\\/g, '/').split('/').pop() === 'mcp-bridge.js');
     if (at < 0 || !args[at + 1]) return null;
-    const [template, keyName = null, scheme = null, packageSpec = null, globalRoot = null] = args.slice(at + 1);
-    return { path: args[at]!, template: template!, keyName, scheme, packageSpec: packageSpec, globalRoot };
+    const [template, keyName = null, scheme = null, packageSpec = null, ...after] = args.slice(at + 1);
+    const parsed = parsePairs(after);
+    const read = 'error' in parsed ? { root: after[0] !== undefined && after[0] !== '--header' ? after[0] : null, pairs: [] } : { root: parsed.root, pairs: parsed.pairs.map(pairText) };
+    return { path: args[at]!, template: template!, keyName, scheme, packageSpec: packageSpec, globalRoot: read.root, pairs: read.pairs };
+}
+
+// Arguments without their `--header <pair>` couples.
+export function withoutPairs(args: readonly string[]): string[]
+{
+    const out: string[] = [];
+    for (let i = 0; i < args.length; i++)
+    {
+        if (args[i] === '--header') i++;
+        else out.push(args[i]!);
+    }
+    return out;
 }
 
 // A template with each catalog name replaced by the user's: { SENTRY_ORG: 'SENTRY_SLUG' } turns {SENTRY_ORG} into
