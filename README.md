@@ -348,7 +348,7 @@ only what you pick, in one confirmation:
   uninstall. The next version adds two: serena's `serena_config.yml` gets the line that sends new project folders to its
   home (an existing `.serena/` folder is named, never moved), and a hand-added server that runs its own key helper is
   moved to the plugin's. These run before the version moves, so both changes stay.
-- **Cursor** - asked after the updates, once per root, when Cursor is on this machine and the root's servers are set
+- **Cursor** - asked with the updates, once per root, when Cursor is on this machine and the root's servers are set
   up for Claude Code only. 'Not now' is remembered in the list.
 
 Something it cannot do alone - a key whose value is not in `.mcps-secrets` yet - is listed as a note, and the last line
