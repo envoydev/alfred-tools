@@ -7,7 +7,7 @@ import path from 'node:path';
 import * as account from '../core/account.ts';
 import * as roots from '../roots/roots.ts';
 import { signInParts } from '../entries/sign-in.ts';
-import { AUTH_TIMEOUT_FLAG, AUTH_TIMEOUT_SECONDS, CLIENT_BIN, LINE, RUN_TIMEOUT_MS, TOKENS_SUFFIX } from './constants.ts';
+import { AUTH_TIMEOUT_FLAG, AUTH_TIMEOUT_SECONDS, CLIENT_BIN, LINE, RUN_TIMEOUT_MS, TIMEOUT_ERROR_CODE, TOKENS_SUFFIX } from './constants.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { RunResult, SignInCommand, SignInOptions, SignInResult } from './types.ts';
 
@@ -30,6 +30,8 @@ const tokensFileOf = (dir: string, url: string): string => path.join(dir, roots.
 // Why a run that did not exit 0 failed, in words that hold nothing the client printed.
 function failureOf(result: RunResult): string
 {
+    // spawnSync's own timeout sets this code and a signal: say what it means, not 'spawnSync npx ETIMEDOUT'
+    if (result.error && (result.error as NodeJS.ErrnoException).code === TIMEOUT_ERROR_CODE) return `sign-in failed: gave up after ${AUTH_TIMEOUT_SECONDS} s waiting for the browser sign-in`;
     if (result.error) return `sign-in failed: ${result.error.message}`;
     if (result.signal) return `sign-in failed: the client was stopped by ${result.signal} (it waits ${AUTH_TIMEOUT_SECONDS} s for the browser)`;
     return `sign-in failed: exit ${result.status}`;

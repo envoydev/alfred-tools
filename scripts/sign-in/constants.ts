@@ -1,9 +1,11 @@
 // The values sign-in/ shares: the client's bin and flag, the time it may wait, the scopes and the words it prints.
 export const CLIENT_BIN = 'mcp-remote-client';
 export const AUTH_TIMEOUT_FLAG = '--auth-timeout';
-// the browser sign-in may take five minutes; the run is allowed that and the npx start on top (Bash timeout 330000 in the commands)
+// the browser sign-in may take five minutes; the run is allowed that and the npx start on top, and ends before the Bash
+// tool's own 330000 (the commands) so the failure line is printed, never cut off with the harness's kill
 export const AUTH_TIMEOUT_SECONDS = 300;
-export const RUN_TIMEOUT_MS = 330000;
+export const RUN_TIMEOUT_MS = 320000;
+export const TIMEOUT_ERROR_CODE = 'ETIMEDOUT';
 // mcp-remote 0.16.0 keeps a sign-in as <config dir>/mcp-remote-v1/<md5 of the server URL>_tokens.json (docs/sources.md)
 export const TOKENS_SUFFIX = '_tokens.json';
 export const SCOPES = ['project', 'local', 'user'];

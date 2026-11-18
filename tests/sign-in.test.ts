@@ -7,6 +7,9 @@ import { world, writeJson } from './helpers.ts';
 import { oauthStub, MCP_PATH } from './fake-oauth-http.ts';
 import { signIn, signInCommand } from '../scripts/sign-in/sign-in.ts';
 import { runSignInCommand } from '../scripts/sign-in/command.ts';
+import { signInSpawnArgs } from '../scripts/sign-in/effects.ts';
+import { RUN_TIMEOUT_MS } from '../scripts/sign-in/constants.ts';
+import { cmdArg } from '../scripts/core/claude-cli.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
 import type { SignInRun } from '../scripts/sign-in/types.ts';
 
@@ -120,4 +123,44 @@ test('each command runs sign-in.ts with a timeout of 330000 or more', () => {
         const allowed = /^allowed-tools:.*$/m.exec(text);
         assert.ok(!allowed || !allowed[0].includes('sign-in.ts'), `${command}.md does not pre-approve sign-in.ts`);
     }
+});
+
+test('signInSpawnArgs: Windows is one command line read twice (cmdArg\'s two reads), POSIX the plain array', () => {
+    const url = 'https://mcp.example.com/v1/mcp?a=1&b=2|c%PATH%';
+    const args = ['-y', '-p', 'mcp-remote@0.16.0', 'mcp-remote-client', url, '--auth-timeout', '300'];
+    const win = signInSpawnArgs('cmd', ['/c', 'npx', ...args], 'win32');
+    assert.deepStrictEqual(win, { file: ['npx', ...args].map(cmdArg).join(' '), args: [], shell: true });
+    assert.ok(!win.file.includes('cmd /c'), 'no inner cmd /c, which would add a third read');
+    assert.ok(!/(?<!\^)&/.test(win.file), 'the & of the URL is escaped for the shell');
+    assert.deepStrictEqual(signInSpawnArgs('npx', args, 'win32'), { file: ['npx', ...args].map(cmdArg).join(' '), args: [], shell: true }, 'a bare npx entry gives the same line');
+    assert.deepStrictEqual(signInSpawnArgs('npx', args, 'darwin'), { file: 'npx', args, shell: false });
+});
+
+test('a timeout of the run itself reads as giving up on the browser, not as spawnSync ETIMEDOUT', () => {
+    const w = world();
+    try
+    {
+        const root = path.join(w.project, '.alfred-tools');
+        writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { atlassian: entryAt(root) } });
+        const error = Object.assign(new Error('spawnSync npx ETIMEDOUT'), { code: 'ETIMEDOUT' });
+        const result = signIn('atlassian', 'project', { env: w.env, project: w.project, run: () => ({ status: null, error, signal: 'SIGTERM' }) });
+        assert.strictEqual(result.ok, false);
+        assert.strictEqual(result.line, 'sign-in failed: gave up after 300 s waiting for the browser sign-in');
+        assert.ok(RUN_TIMEOUT_MS < 330000, 'the run ends before the Bash tool\'s own timeout, so its failure line is printed');
+    }
+    finally { w.clean(); }
+});
+
+test('a stale tokens file does not turn a failed run into a sign-in', () => {
+    const w = world();
+    try
+    {
+        const root = path.join(w.project, '.alfred-tools');
+        writeJson(path.join(w.project, '.mcp.json'), { mcpServers: { atlassian: entryAt(root) } });
+        fs.mkdirSync(path.dirname(tokensFileOf(root, URL_OF)), { recursive: true });
+        fs.writeFileSync(tokensFileOf(root, URL_OF), '{}');
+        const result = signIn('atlassian', 'project', { env: w.env, project: w.project, run: () => ({ status: 1, error: null, signal: null }) });
+        assert.deepStrictEqual(result, { ok: false, line: 'sign-in failed: exit 1' });
+    }
+    finally { w.clean(); }
 });
