@@ -12,7 +12,7 @@ import * as lists from '../mcps-list/mcps-list.ts';
 import { importUnlisted, adoptedClients } from '../plan/lists.ts';
 import { SCOPES, folderList, cursorSteps } from '../plan/cursor-steps.ts';
 import { helperParts } from '../entries/entry.ts';
-import { readGuardOf, denyReadStep } from '../plan/repair-tail.ts';
+import { readGuardOf, denyReadStep, configDirsWithPlugin } from '../plan/repair-tail.ts';
 import * as kept from '../core/kept.ts';
 import * as keys from '../keys/keys.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
@@ -106,7 +106,9 @@ function cursorStepsOf(write: ListWriteStep, context: FixCtx): CursorWritePlanSt
 
 // read-guard (0.5.0): a root that holds the key file or mcp-remote's sign-in folder, and Claude Code's settings that do
 // not deny an AI session's Read tool there (rulings 12 and 13). Both are checked by name only - fs.existsSync, never
-// opened. One finding per settings file, naming every rule it lacks; its plan is one deny-read.
+// opened. One finding per settings file, naming every rule it lacks; its plan is one deny-read. Part E: the current
+// config dir first, then each other config dir under the home that has this plugin installed (configDirsWithPlugin);
+// the plugin data such a dir keeps is its own, so its finding says an update there may offer a declined uninstall again.
 export function readGuardDetect(context: FixCtx): Finding[]
 {
     const pathApi = pathOf(context);
@@ -120,10 +122,18 @@ export function readGuardDetect(context: FixCtx): Finding[]
     const signIns = has(roots.FILES.signIns);
     if (signIns) { want.push(roots.READ_GUARD.signIns); why.push(`${pathApi.join(signIns, roots.FILES.signIns)}/`); }
     if (!want.length) return [];
-    const guard = readGuardOf(context, want);
-    if (guard.bad) return [{ id: 'read-guard', name: guard.file, scope: null, rules: want, found: `${guard.file}: not a settings object alfred-tools can read`, blocked: `add ${want.join(' and ')} to permissions.deny yourself` }];
-    if (!guard.rules.length) return [];
-    return [{ id: 'read-guard', name: guard.file, scope: null, rules: guard.rules, found: `${guard.file} does not deny ${guard.rules.join(' or ')} - an AI session's Read tool can open ${why.join(' and ')}` }];
+    const bad = (file: string): Finding => ({ id: 'read-guard', name: file, scope: null, rules: want, found: `${file}: not a settings object alfred-tools can read`, blocked: `add ${want.join(' and ')} to permissions.deny yourself` });
+    const out: Finding[] = [];
+    const current = readGuardOf(context, want);
+    if (current.bad) out.push(bad(current.file));
+    else if (current.rules.length) out.push({ id: 'read-guard', name: current.file, scope: null, rules: current.rules, found: `${current.file} does not deny ${current.rules.join(' or ')} - an AI session's Read tool can open ${why.join(' and ')}` });
+    for (const dir of configDirsWithPlugin(context.home, pathApi.dirname(current.file)))
+    {
+        const guard = readGuardOf(context, want, dir);
+        if (guard.bad) out.push(bad(guard.file));
+        else if (guard.rules.length) out.push({ id: 'read-guard', name: guard.file, scope: null, rules: guard.rules, found: `${dir} has alfred-tools installed and does not deny ${guard.rules.join(' or ')} - an AI session's Read tool can open ${why.join(' and ')}`, afterNote: `${dir}: read guard added - it keeps its own plugin data, so an update there may offer a declined uninstall again` });
+    }
+    return out;
 }
 
 export const readGuardSteps = (finding: Finding) => [denyReadStep(finding.name, finding.rules!)];

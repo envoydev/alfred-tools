@@ -1,5 +1,6 @@
 // A repair's tail (spec D1, D9): the list and Cursor steps after a fix or an update rewrote registrations.
 import fs from 'node:fs';
+import path from 'node:path';
 import { pathFor } from '../entries/platform.ts';
 import { signInParts } from '../entries/sign-in.ts';
 import * as catalogLib from '../catalog/catalog.ts';
@@ -8,6 +9,7 @@ import * as keys from '../keys/keys.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { deepEqual } from '../core/json-file.ts';
+import { CONFIG_DIR_NAME, INSTALLED_PLUGINS_FILE, PLUGIN_KEY_PREFIXES, SETTINGS_FILE } from './read-guard-constants.ts';
 import { REG_OPS, listSteps } from './lists.ts';
 import { cursorSteps, SCOPES, heldCopies, keepOf } from './cursor-steps.ts';
 import type { Env, ServerEntry } from '../core/types.ts';
@@ -117,12 +119,13 @@ export function changedOutside(inventory: Inventory, catalog: Catalog = catalogL
 // that is not a JSON object is a note: the rest of the plan is still written. -> [deny-read step]
 // The settings file the deny rules go in, and which of `want` it lacks: { file, rules } | { file, bad: true }. Shared by
 // install and configure (denyReadSteps) and fix's read-guard row. Claude Code's own settings: CLAUDE_CONFIG_DIR, else
-// ~/.claude - from ctx.home, so a test never reads the real one.
-export function readGuardOf(context: { platform: string; home: string; env?: Env | undefined }, want: string[]): { file: string; bad: true; rules?: undefined } | { file: string; rules: string[]; bad?: undefined }
+// ~/.claude - from ctx.home, so a test never reads the real one. `dir` is another config dir (configDirsWithPlugin): its
+// settings.json is read the same way, and one it has not got yet is created with the rules, as the current dir's is.
+export function readGuardOf(context: { platform: string; home: string; env?: Env | undefined }, want: string[], dir?: string): { file: string; bad: true; rules?: undefined } | { file: string; rules: string[]; bad?: undefined }
 {
     const pathApi = pathFor(context.platform);
     const env = context.env || {};
-    const file = env.CLAUDE_CONFIG_DIR ? pathApi.resolve(env.CLAUDE_CONFIG_DIR, 'settings.json') : pathApi.join(context.home, '.claude', 'settings.json');
+    const file = dir ? pathApi.join(dir, SETTINGS_FILE) : env.CLAUDE_CONFIG_DIR ? pathApi.resolve(env.CLAUDE_CONFIG_DIR, SETTINGS_FILE) : pathApi.join(context.home, CONFIG_DIR_NAME, SETTINGS_FILE);
     let text: string | null = null;
     try { text = fs.readFileSync(file, 'utf8'); } catch { /* absent: {} */ }
     let deny: string[] = [];
@@ -135,6 +138,31 @@ export function readGuardOf(context: { platform: string; home: string; env?: Env
         deny = (doc.permissions && doc.permissions.deny) || [];
     }
     return { file, rules: want.filter((rule) => !deny.includes(rule)) };
+}
+
+// The config dirs other than `current` that have this plugin installed (Part E): each folder directly under `home` named
+// `.claude` or `.claude-<suffix>` whose plugins/installed_plugins.json is JSON with a key of the plugin's ids. Names
+// only - the file's content is never kept, and one that is absent, not JSON or without a `plugins` object skips the dir.
+export function configDirsWithPlugin(home: string, current: string): string[]
+{
+    const same = (left: string, right: string) => (process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right);
+    let names: string[] = [];
+    try { names = fs.readdirSync(home); } catch { return []; }
+    const found: string[] = [];
+    for (const name of names.sort())
+    {
+        if (name !== CONFIG_DIR_NAME && !name.startsWith(`${CONFIG_DIR_NAME}-`)) continue;
+        const dir = path.join(home, name);
+        if (same(path.resolve(dir), path.resolve(current))) continue;
+        try
+        {
+            const doc = JSON.parse(fs.readFileSync(path.join(dir, 'plugins', INSTALLED_PLUGINS_FILE), 'utf8').replace(/^\uFEFF/, '')) as { plugins?: unknown } | null;
+            const plugins = doc && typeof doc === 'object' ? doc.plugins : null;
+            if (plugins && typeof plugins === 'object' && !Array.isArray(plugins) && Object.keys(plugins).some((key) => PLUGIN_KEY_PREFIXES.some((prefix) => key.startsWith(prefix)))) found.push(dir);
+        }
+        catch { /* no record, or not JSON: skipped */ }
+    }
+    return found;
 }
 
 // The deny-read step as one plan line - or none when the file has every rule.

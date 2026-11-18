@@ -36,6 +36,7 @@ import * as X from '../scripts/inventory/existing.ts';
 import { BRIDGE_VERSION as BV } from '../scripts/copied/mcp-bridge.js';
 import { plan } from '../scripts/plan/plan.ts';
 import { apply } from '../scripts/apply/run.ts';
+import { configDirsWithPlugin } from '../scripts/plan/repair-tail.ts';
 import * as kept5 from '../scripts/core/kept.ts';
 import type { Detected, Finding, MachineProbe, RunResult, FixCtx } from '../scripts/fix/types.ts';
 import type { CatalogRoute, FixRow } from '../scripts/catalog/types.ts';
@@ -1786,6 +1787,91 @@ test('read-guard finds a root with .mcps-secrets and no rule, applies deny-read,
         // the sign-in folder adds its own rule
         fsx.mkdirSync(path.join(proot, 'mcp-remote-v1'));
         assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard').map((f) => f.rules), [['Read(//**/mcp-remote-v1/**)']]);
+    }
+    finally { w.clean(); }
+});
+
+// Part E: every config dir under the home that has the plugin installed (a second CLAUDE_CONFIG_DIR, an old plugin id)
+const SECRETS_RULE = 'Read(//**/.mcps-secrets)';
+const installedIn = (dir: string, text: string) => put(path.join(dir, 'plugins', 'installed_plugins.json'), text);
+const installedKeys = (...keys: string[]) => JSON.stringify({ version: 2, plugins: Object.fromEntries(keys.map((key) => [key, [{ scope: 'user', version: '0.5.0' }]])) });
+
+function otherDirsWorld(w: World)
+{
+    const dirs = Object.fromEntries(['', '-personal', '-old', '-other', '-broken'].map((suffix) => [suffix, path.join(w.home, `.claude${suffix}`)])) as Record<string, string>;
+    w.env.CLAUDE_CONFIG_DIR = dirs['']!;
+    put(path.join(ptRoot(w), '.mcps-secrets'), '');
+    put(path.join(dirs['']!, 'settings.json'), JSON.stringify({ permissions: { deny: [SECRETS_RULE] } }));
+    installedIn(dirs['']!, installedKeys('alfred-tools@envoydev'));
+    installedIn(dirs['-personal']!, installedKeys('alfred-tools@envoydev', 'other@somewhere'));
+    put(path.join(dirs['-personal']!, 'settings.json'), JSON.stringify({ theme: 'dark', permissions: { deny: ['Bash(rm:*)'] } }));
+    installedIn(dirs['-old']!, installedKeys('preferred-tools@envoydev'));
+    installedIn(dirs['-other']!, installedKeys('unrelated@somewhere'));
+    installedIn(dirs['-broken']!, '{ not json');
+    put(path.join(dirs['-broken']!, 'settings.json'), '{}');
+    // a folder that is no config dir at all, and a file named like one
+    installedIn(path.join(w.home, '.claudeish'), installedKeys('alfred-tools@envoydev'));
+    return dirs;
+}
+
+test('read-guard finds every config dir with the plugin', () =>
+{
+    const w = world();
+    try
+    {
+        const dirs = otherDirsWorld(w);
+        const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard');
+        assert.deepStrictEqual(found.map((f) => f.name).sort(), [path.join(dirs['-old']!, 'settings.json'), path.join(dirs['-personal']!, 'settings.json')].sort());
+        assert.ok(found.find((f) => f.name.startsWith(dirs['-personal']!))!.found.startsWith(`${dirs['-personal']!} has alfred-tools installed and does not deny ${SECRETS_RULE}`));
+        assert.deepStrictEqual(configDirsWithPlugin(w.home, dirs['']!).sort(), [dirs['-old']!, dirs['-personal']!].sort());
+        const l = logged();
+        const res = applyFixes(ctxOf(w), ['read-guard'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.strictEqual(res.failed, null, l.text());
+        assert.deepStrictEqual(readJson(path.join(dirs['-personal']!, 'settings.json')), { theme: 'dark', permissions: { deny: ['Bash(rm:*)', SECRETS_RULE] } });
+        assert.deepStrictEqual(readJson(path.join(dirs['-old']!, 'settings.json')), { permissions: { deny: [SECRETS_RULE] } });
+        // the others are as they were: no file for the dir with no record, '{}' for the broken one, the current one unchanged
+        assert.ok(!fsx.existsSync(path.join(dirs['-other']!, 'settings.json')));
+        assert.deepStrictEqual(readJson(path.join(dirs['-broken']!, 'settings.json')), {});
+        assert.deepStrictEqual(readJson(path.join(dirs['']!, 'settings.json')), { permissions: { deny: [SECRETS_RULE] } });
+        assert.ok(!fsx.existsSync(path.join(w.home, '.claudeish', 'settings.json')));
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard'), []);
+        // update's summary says the dir and that it keeps its own plugin data
+        const note = l.lines.find((line) => line.startsWith('note: ') && line.includes(dirs['-personal']!));
+        assert.strictEqual(note, `note: ${dirs['-personal']!}: read guard added - it keeps its own plugin data, so an update there may offer a declined uninstall again`);
+    }
+    finally { w.clean(); }
+});
+
+test('read-guard in another config dir with no settings file creates it with the rules, as the current dir does', () =>
+{
+    const w = world();
+    try
+    {
+        const dirs = otherDirsWorld(w);
+        const file = path.join(dirs['-old']!, 'settings.json');
+        assert.ok(!fsx.existsSync(file));
+        assert.strictEqual(applyFixes(ctxOf(w), ['read-guard'], { tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
+        assert.deepStrictEqual(readJson(file), { permissions: { deny: [SECRETS_RULE] } });
+    }
+    finally { w.clean(); }
+});
+
+test('a settings file that is not an object is named, never written', () =>
+{
+    const w = world();
+    try
+    {
+        const dirs = otherDirsWorld(w);
+        const file = path.join(dirs['-personal']!, 'settings.json');
+        put(file, '[1, 2]');
+        const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard' && f.name === file);
+        assert.strictEqual(found.length, 1);
+        assert.match(found[0]!.found, /not a settings object alfred-tools can read/);
+        assert.strictEqual(found[0]!.blocked, `add ${SECRETS_RULE} to permissions.deny yourself`);
+        const l = logged();
+        applyFixes(ctxOf(w), ['read-guard'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.strictEqual(fsx.readFileSync(file, 'utf8'), '[1, 2]');
+        assert.ok(l.lines.some((line) => line.startsWith('skipped read-guard') && line.includes(file)), l.text());
     }
     finally { w.clean(); }
 });

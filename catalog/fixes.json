@@ -366,12 +366,12 @@
         "win32"
       ],
       "kind": "file",
-      "symptom": "a root folder holds .mcps-secrets or mcp-remote-v1/, and Claude Code's settings do not deny an AI session's Read tool there (Read(//**/.mcps-secrets), Read(//**/mcp-remote-v1/**))",
+      "symptom": "a root folder holds .mcps-secrets or mcp-remote-v1/, and Claude Code's settings do not deny an AI session's Read tool there (Read(//**/.mcps-secrets), Read(//**/mcp-remote-v1/**)) - in the current config dir and in every other one under the home that has the plugin installed",
       "detect": "readGuardDetect",
       "fix": null,
       "steps": "readGuardSteps",
-      "verifiedOn": "this build: tests/fix.test.js read-guard (2026-11-13)",
-      "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md rulings 12, 13"
+      "verifiedOn": "this build: tests/fix.test.js read-guard (2026-11-13), other config dirs (2026-11-18)",
+      "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md rulings 12, 13; docs/superpowers/specs/2026-11-18-session-issues-design.md Part E"
     },
     {
       "id": "client-drift",

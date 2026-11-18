@@ -1,0 +1,6 @@
+// Where the read guard looks (Part E): Claude Code's config dirs under the home, and the plugin ids that mark one.
+export const CONFIG_DIR_NAME = '.claude';
+export const SETTINGS_FILE = 'settings.json';
+export const INSTALLED_PLUGINS_FILE = 'installed_plugins.json';
+// the plugin's id before and since the rename, each followed by the marketplace
+export const PLUGIN_KEY_PREFIXES = ['alfred-tools@', 'preferred-tools@'];

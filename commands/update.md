@@ -121,6 +121,12 @@ there by hand, is left as it is and named ('<name>: Cursor's copy was changed by
 When Cursor's copy of a server changes, the report ends with 'Cursor asks you to approve <names> again - it re-asks
 whenever an entry changes': tell the user Cursor will ask.
 
+A `read-guard` offer covers every Claude Code config dir under the home that has this plugin installed (a second
+`CLAUDE_CONFIG_DIR` such as `~/.claude-personal` included), not only the one this session runs in. For each other dir
+the report prints `note: <dir>: read guard added - it keeps its own plugin data, so an update there may offer a declined
+uninstall again`: repeat it in the summary, naming the dir. That dir has its own `roots.json` and
+`retired-declined.json`, so an update run in it may offer an uninstall the user already declined here.
+
 When a Cursor offer was taken, the report prints each plan note as `note   <text>` and, for each server moved onto the
 shared sign-in, a line `<name>: now the shared sign-in in <root>/mcp-remote-v1/ (Cursor added) - sign-in not done yet`:
 repeat those lines in the summary to the user, say the route changed from `http` to the shared mcp-remote sign-in and
