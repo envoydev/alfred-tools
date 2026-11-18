@@ -167,17 +167,18 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
 One server at a time, it downloads what the server launches into the runtime's cache and starts the server once with no
 30-second limit, so its first-run work is done before the next session, then prints each server's status (`claude mcp
 get`). Claude Code asks permission for it - it downloads and runs a package's install and starts the server. Tell the
-user to restart only once it reports, and paste its output verbatim when it finishes; a `warn` line changes nothing.
-When background runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit stops it.
+user to restart only once it reports, and paste its output verbatim when it finishes; say that a `warn` line changes
+nothing. When background runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit
+stops it.
 
 <!-- /shared:fetch -->
 
-Without the fetch, the first session start does that download, and any first-run work of the new version, inside Claude Code's
-30-second limit, and a first download can take minutes. A session start beside it downloads the same package at the same time (an
-npx server then fails at every start with `ENOENT` until `/alfred-tools:fix` repairs it). A `warn` line leaves the
-registration updated: its first start downloads the pin and may time out once. End with the restart line when the script
-prints one (new servers load on the next session start; `/reload-plugins` for plugins): a key helper runs at each
-connect, so a run that only rewrote helpers needs no restart.
+A first download can take minutes, and the new version's first-run work would otherwise run inside Claude Code's
+30-second limit. A session start beside it downloads the same package at the same time (an npx server then fails at
+every start with `ENOENT` until `/alfred-tools:fix` repairs it). After a `warn` line the registration is updated, and
+its first start downloads the pin and may time out once. End with the restart line when the script prints one (new
+servers load on the next session start; `/reload-plugins` for plugins): a key helper runs at each connect, so a run that
+only rewrote helpers needs no restart.
 
 For each server the report named as `now the shared sign-in ... sign-in not done yet`, ask once the fetch has reported
 (sign-in.ts and the fetch both start npx, and two at once is the one case measured to break a start); the scope is the

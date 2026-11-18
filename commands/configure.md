@@ -204,8 +204,8 @@ Is <prerequisite> installed for <tool> now?
 - 'Skip this tool' - leave it out of the plan
 ```
 
-'Check again' runs `prereq.ts` again; 'Skip this tool' runs `--skip`, as 'Skip' does. 'Register anyway': keep it, and
-say in the confirmation that it will not start yet.
+'Check again' runs `prereq.ts` again; 'Skip this tool' runs the `--skip` call below, as 'Skip' does. 'Register anyway':
+keep it, and say in the confirmation that it will not start yet.
 
 <!-- /shared:prereq -->
 
@@ -322,8 +322,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
 One server at a time, it downloads what the server launches into the runtime's cache and starts the server once with no
 30-second limit, so its first-run work is done before the next session, then prints each server's status (`claude mcp
 get`). Claude Code asks permission for it - it downloads and runs a package's install and starts the server. Tell the
-user to restart only once it reports, and paste its output verbatim when it finishes; a `warn` line changes nothing.
-When background runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit stops it.
+user to restart only once it reports, and paste its output verbatim when it finishes; say that a `warn` line changes
+nothing. When background runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit
+stops it.
 
 <!-- /shared:fetch -->
 

@@ -197,8 +197,8 @@ Is <prerequisite> installed for <tool> now?
 - 'Skip this tool' - leave it out of the plan
 ```
 
-'Check again' runs `prereq.ts` again; 'Skip this tool' runs `--skip`, as 'Skip' does. 'Register anyway': keep it, and
-say in the confirmation that it will not start yet.
+'Check again' runs `prereq.ts` again; 'Skip this tool' runs the `--skip` call below, as 'Skip' does. 'Register anyway':
+keep it, and say in the confirmation that it will not start yet.
 
 <!-- /shared:prereq -->
 
@@ -325,20 +325,22 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
 One server at a time, it downloads what the server launches into the runtime's cache and starts the server once with no
 30-second limit, so its first-run work is done before the next session, then prints each server's status (`claude mcp
 get`). Claude Code asks permission for it - it downloads and runs a package's install and starts the server. Tell the
-user to restart only once it reports, and paste its output verbatim when it finishes; a `warn` line changes nothing.
-When background runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit stops it.
+user to restart only once it reports, and paste its output verbatim when it finishes; say that a `warn` line changes
+nothing. When background runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit
+stops it.
 
 <!-- /shared:fetch -->
 
-It starts the server exactly as registered and stops it when it answers, and it is not in `allowed-tools`. Claude Code gives a server 30 seconds to answer, and a first start can take minutes: memory's package came down in
-seconds, but its first start then downloaded its embedding model for about 2 minutes, while later starts took 2 seconds.
-A server whose `${VAR}` is not set is fetched but not started (a `skip` line). A foreground call past its time limit (2
-minutes by default, 10 at most) is moved to the background, or stopped where background runs are turned off, so this one
-starts in the background; the cache keeps what a stopped run finished.
+It starts the server exactly as registered and stops it when it answers. Claude Code gives a server 30 seconds to
+answer, and a first start can take minutes: memory's package came down in seconds, but its first start then downloaded
+its embedding model for about 2 minutes, while later starts took 2 seconds. A server whose `${VAR}` is not set is
+fetched but not started (a `skip` line). A foreground call past its time limit (2 minutes by default, 10 at most) is
+moved to the background, or stopped where background runs are turned off, so this one starts in the background; the
+cache keeps what a stopped run finished.
 
 A session started before it reports begins the same download beside it, and two at once is the one case measured to
 break a start: an npx server then fails at every start with `ENOENT` until `/alfred-tools:fix` (`npx-cache-entry`)
-repairs it. A `warn` line leaves the registration in place: its first session start does the download or first-run work
+repairs it. After a `warn` line the registration stays, and its first session start does the download or first-run work
 and may time out once - say so. End with the restart line: the new registrations load on the next session start, and a
 project-scope server also needs the trust prompt then.
 
