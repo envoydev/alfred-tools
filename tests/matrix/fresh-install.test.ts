@@ -76,7 +76,17 @@ for (const c of spec.cases)
                 // (absolute and in backslashes there, serena-windows-home)
                 assert.strictEqual(fs.readFileSync(path.join(project, c.expect.files, '.gitignore'), 'utf8'), '*\n', 'the data folder keeps itself out of git');
             }
-            if (c.expect.scope === 'project') assert.ok(!/(?:^|[^$])\/(?:Users|home)\//.test(JSON.stringify(stored)), 'the committed file holds no absolute local path');
+            if (c.expect.scope === 'project')
+            {
+                // 'Absolute, always' (AGENTS.md, 2026-11-11): a data folder is named by an absolute path, which must lie under
+                // the project's root folder; a route with no data folder holds no absolute local path at all
+                const dataRoot = path.join(fs.realpathSync(project), '.alfred-tools');
+                const entry = stored[step.name] as { args?: string[]; env?: Record<string, string> };
+                const absolutes = [...(entry.args || []), ...Object.values(entry.env || {})].filter((value) => path.isAbsolute(value) && !/^\/[a-z]$/i.test(value));
+                for (const value of absolutes) assert.ok(path.relative(dataRoot, path.resolve(value)).split(path.sep)[0] !== '..' && !path.isAbsolute(path.relative(dataRoot, path.resolve(value))), `${value} lies outside ${dataRoot}`);
+                if (c.expect.files) assert.ok(absolutes.length > 0, `${c.row}: its data folder is named by an absolute path`);
+                else if (!absolutes.length) assert.ok(!/(?:^|[^$])\/(?:Users|home)\//.test(JSON.stringify(stored)), 'the committed file holds no absolute local path');
+            }
         }
         else assert.fail(`${c.row}: the catalog lists only MCP servers since 0.5.0, not a ${c.expect.kind}`);
     });

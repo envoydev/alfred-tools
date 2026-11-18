@@ -132,6 +132,9 @@ function noOld(h: Harness, dir: string, label: string)
 }
 
 const firstLine = (file: string) => fs.readFileSync(file, 'utf8').split('\n')[0];
+// the first line of the copy this branch ships, so the next version bump does not break the case
+const SHIPPED = path.join(import.meta.dirname, '..', '..', 'scripts', 'copied');
+const shippedLine = (file: string) => firstLine(path.join(SHIPPED, file));
 
 test('R1 - a 0.4.0 machine: one update moves both folders, imports the record into a list, rewrites the copied files and re-points every registration', T, async () =>
 {
@@ -153,9 +156,9 @@ test('R1 - a 0.4.0 machine: one update moves both folders, imports the record in
         const root = path.join(at, NEW);
         assert.ok(listOf(root), `${root}: the record came in as a list`);
         assert.ok(!exists(path.join(root, roots.FILES.record)), `${root}: the record is gone`);
-        assert.strictEqual(firstLine(path.join(root, roots.FILES.helper)), '// alfred-tools mcp-headers 5');
+        assert.strictEqual(firstLine(path.join(root, roots.FILES.helper)), shippedLine('mcp-headers.js'));
     }
-    assert.strictEqual(firstLine(path.join(h.home, NEW, roots.FILES.bridge)), '// alfred-tools mcp-bridge 2');
+    assert.strictEqual(firstLine(path.join(h.home, NEW, roots.FILES.bridge)), shippedLine('mcp-bridge.js'));
     const project = readJson(path.join(dir, '.mcp.json')).mcpServers;
     assert.ok(project.gitlab.headersHelper.includes(path.join(dir, NEW, roots.FILES.helper)), project.gitlab.headersHelper);
     assert.ok(JSON.stringify(project.memory).includes(path.join(dir, NEW, 'memory')), JSON.stringify(project.memory));
@@ -192,9 +195,9 @@ test('R2 - a pre-rename 0.5.0 machine: lists, Cursor\'s copies, the old kept mar
     const listText = lists.map((l) => JSON.stringify(l)).join('\n');
     assert.ok(!listText.includes(kept.OLD_MARKER), 'no old marker left');
     assert.ok(listText.includes(kept.MARKER), 'the kept marker reads in its new name');
-    assert.strictEqual(firstLine(path.join(dir, NEW, 'serena', roots.FILES.serenaContext)), '# alfred-tools serena-context 2');
+    assert.strictEqual(firstLine(path.join(dir, NEW, 'serena', roots.FILES.serenaContext)), shippedLine('serena-context.yml'));
     for (const root of [path.join(dir, NEW), path.join(h.home, NEW)].filter((root) => exists(path.join(root, roots.FILES.helper))))
-        assert.strictEqual(firstLine(path.join(root, roots.FILES.helper)), '// alfred-tools mcp-headers 5');
+        assert.strictEqual(firstLine(path.join(root, roots.FILES.helper)), shippedLine('mcp-headers.js'));
     const cursorProject = readJson(path.join(dir, '.cursor', 'mcp.json')).mcpServers;
     assert.ok(JSON.stringify(cursorProject.serena).includes(path.join(dir, NEW)), JSON.stringify(cursorProject.serena));
     assert.deepStrictEqual(h.realUntouched().changed, [], 'the real home and account are untouched');

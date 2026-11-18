@@ -113,11 +113,11 @@ test('install beside a copy for every project: this project gets its own registr
     assert.deepStrictEqual(r.plan.errors, []);
     assert.strictEqual(r.report.failed, null, r.text);
     assert.ok(!r.plan.steps.some((s) => /remove|move|replace/.test(s.op)), 'nothing is removed or moved');
-    const mine = reg(p, 'copy-mem', 'local');
-    assert.ok(mine, 'this project\'s copy, at local scope');
+    const mine = reg(p, 'copy-mem', 'project');
+    assert.ok(mine, 'this project\'s copy, at project scope (the scope an unpicked memory takes)');
     assert.strictEqual(path.resolve((mine.entry.env as Record<string, string> & { MCP_MEMORY_SQLITE_PATH: string }).MCP_MEMORY_SQLITE_PATH), path.join(p, '.alfred-tools', 'copy-mem', 'memory.db'), 'its own data');
     assert.strictEqual(JSON.stringify(reg(p, 'copy-mem', 'user').entry), before, 'the copy for every project is untouched');
-    for (const scope of ['local', 'user']) h.claude(p, ['mcp', 'remove', 'copy-mem', '-s', scope]);
+    for (const scope of ['project', 'user']) h.claude(p, ['mcp', 'remove', 'copy-mem', '-s', scope]);
 });
 
 function bumped(entry: ServerEntry, pkg: string, version: string)
