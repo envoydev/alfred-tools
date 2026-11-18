@@ -615,7 +615,7 @@ CONTEXT7_API_KEY=ctx7sk-...   # a note after whitespace and # is not part of the
         <li><strong>The plugin never handles a value.</strong> It does not ask for a key, read one out or print one. It names the file and the name, and tells you whether the value is filled.</li>
         <li><strong>One key can serve every project.</strong> The key is looked up in the <code>.mcps-secrets</code> beside the helper first, then in the global root's. The first value found wins.</li>
         <li><strong>Changing a key</strong> is: edit the file, then <code>/mcp</code>, pick the server, Reconnect.</li>
-        <li><strong>Kept out of AI sessions.</strong> The plugin adds a deny rule to your Claude Code settings so a session cannot open <code>.mcps-secrets</code>. The file is still plain text, so keep it out of anything you share. The root's <code>.gitignore</code> keeps it out of git.</li>
+        <li><strong>Kept out of AI sessions.</strong> The plugin adds a deny rule to your Claude Code settings so a session's file tools and the shell's <code>cat</code>, <code>head</code>, <code>tail</code> and <code>sed</code> cannot open <code>.mcps-secrets</code>. A <code>grep -r</code> from a folder above, or a script, can still read it unless Claude Code's sandbox is on (<code>/sandbox</code>; not on native Windows), and a key written into a local server's entry (github in Docker, sentry with <code>npx</code>) sits in the account file and <code>~/.cursor/mcp.json</code>, which no rule covers. The file is still plain text, so keep it out of anything you share. The root's <code>.gitignore</code> keeps it out of git.</li>
       </ul>
 
       <h3>How a server gets its key</h3>

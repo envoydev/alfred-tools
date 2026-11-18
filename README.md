@@ -290,9 +290,13 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
   plugin never reads, prints or copies them, and the root's `.gitignore` keeps them out of git. Where git would commit
   that folder, the server is set up for Claude Code only until `/alfred-tools:fix` adds the line.
 - **Kept out of AI sessions.** Two deny rules in your Claude Code settings (`~/.claude/settings.json`, or
-  `CLAUDE_CONFIG_DIR`'s) stop a session from opening the tokens or the keys: `Read(//**/mcp-remote-v1/**)` and
-  `Read(//**/.mcps-secrets)`. The plugin adds them when it first writes a sign-in entry or a key name; a rule you
-  remove by hand comes back on the next plan that needs it. `/alfred-tools:fix` and `/alfred-tools:update` also add them
+  `CLAUDE_CONFIG_DIR`'s) stop a session's file tools and the shell's `cat`, `head`, `tail` and `sed` from opening the
+  tokens or the keys: `Read(//**/mcp-remote-v1/**)` and `Read(//**/.mcps-secrets)`. They do not stop a `grep -r` run
+  from a folder above, or a script that opens the file itself, unless Claude Code's sandbox is on (`/sandbox`; macOS,
+  Linux and WSL2, not native Windows). A key the plugin writes into a local server's registration (github in Docker,
+  sentry with `npx`) sits in Claude Code's account file and, for Cursor's copy, in `~/.cursor/mcp.json`, which no rule
+  covers. The plugin adds the two rules when it first writes a sign-in entry or a key name; a rule you remove by hand
+  comes back on the next plan that needs it. `/alfred-tools:fix` and `/alfred-tools:update` also add them
   to every other Claude Code config folder on this machine (`~/.claude`, `~/.claude-<name>`) that has this plugin
   installed, and say which. Each of those folders keeps its own plugin data, so an update run there may offer a
   retired plugin's uninstall again after a 'No' given elsewhere.
