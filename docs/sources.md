@@ -543,6 +543,13 @@ Docs: https://code.claude.com/docs/en/plugins/cli-reference.md and https://code.
 - CHANGED: `numpy>=1.24.0` and `sqlite-vec` are core dependencies in 12.1.1, so `--with numpy` is redundant. The catalog
   drops it. 12.4.0's notes change none of the above. Moved to 12.4.0 on 2026-11-04 (see 'Pins - refresh on
   2026-11-04').
+- The first start downloads the ONNX embedding model before it answers `initialize` - MEASURED 2026-11-18 on 12.5.0:
+  `mcp_memory_service/embeddings/onnx_embeddings.py` fetches
+  `https://chroma-onnx-models.s3.amazonaws.com/all-MiniLM-L6-v2/onnx.tar.gz` (83,178,821 bytes) into
+  `~/.cache/mcp_memory/onnx_models/` unless `MCP_MEMORY_ONNX_ALLOW_DOWNLOAD=0`. On a 170 KB/s link that took 490 s by
+  `curl`, so the first start in `fetch.ts` (600 s) and the matrix case `starts: memory` time out there; the
+  registration stays and the next session start tries again. The missing `torch` / `sentence-transformers` the server
+  prints at start is a warning only - the `[sqlite]` extra embeds through `onnxruntime`.
 
 ## uv and npm
 
