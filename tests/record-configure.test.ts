@@ -165,3 +165,17 @@ test('a configure walk that keeps everything writes no change entry', () => {
     assert.deepStrictEqual(next.answers, { existing: { [key]: 'manage' } });
     assert.deepStrictEqual(next.picks.done, [`${key}:own`, `${key}:questions`, `${key}:clients`]);
 });
+
+test('a configure target with no current folder writes its first location', () => {
+    const registration = installed('playwright-chrome', { scope: 'local' });
+    const args = registration.entry.args as string[];
+    registration.entry.args = args.filter((arg) => !arg.startsWith('/work/shop')).filter((arg) => arg !== '--user-data-dir' && arg !== '--output-dir');
+    const key = `mcp:${registration.name}~${registration.scope}`;
+    const state = start(inv(MAC, { registrations: [registration] }), { targets: [key], done: [`${key}:own`], existing: { [key]: 'manage' } });
+    const questions = at(state, `${key}:questions`);
+    const { step } = stepOf(questions);
+    const labels = step.call!.find((question) => question.id === 'location-playwright-chrome')?.options.map((option) => option.label);
+    assert.ok(labels === undefined || !labels.some((label) => label.startsWith('The folder it uses now')));
+    const next = record(questions);
+    assert.deepStrictEqual(next.answers.change?.[key], { row: 'playwright-chrome', location: { side: 'project' } });
+});

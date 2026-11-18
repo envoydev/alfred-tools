@@ -2,11 +2,12 @@
 import { RECOMMENDED_SUFFIX, keyStateOf } from './asks-keys.ts';
 import { installedItems, packed } from './asks-picks.ts';
 import { scopeQuestion, nameQuestion, scopeOrder, nameFor } from './asks-tool.ts';
-import { DEFAULT_HOST_DESCRIPTION } from './asks-other-constants.ts';
+import { DEFAULT_HOST_DESCRIPTION, REWIND_ANOTHER, REWIND_MAX_OPTIONS } from './asks-other-constants.ts';
+import { recordedPicks } from './record.ts';
 import { locationQuestion } from './asks-location.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
-import type { Asked, DriftAsk, LocationAnswer, Question, QuestionOption, Taken, ToolAsk, ToolOpts } from './types.ts';
+import type { Asked, DriftAsk, LocationAnswer, Picks, Question, QuestionOption, Taken, ToolAsk, ToolOpts } from './types.ts';
 
 // The questions for one tool. A row with a data folder asks scope and name `first`, in a call of their own, because its
 // folder is named after the registration and depends on the scope; then `questions` holds the location (built for
@@ -183,6 +184,23 @@ export function targetClientsQuestion(key: string, name: string, current: string
 {
     const { options, answers } = clientsOptions((current || []).includes('cursor'));
     return { question: { id: `clients-${key}`, header: 'Apps', multiSelect: false, question: `Set up ${name} for which apps?`, options }, answers };
+}
+
+// rewind (spec D1b): which recorded pick to answer again, the one recorded last first. A fifth pick or more shows the three
+// last and 'Another one', whose pick is asked next in plain chat; a lone pick gets 'Change nothing' to keep two options.
+export function rewindQuestion(picks: Picks, labelOf: (pick: string) => string): Asked<string> | null
+{
+    const recorded = recordedPicks(picks);
+    if (recorded.length === 0) return null;
+    const more = recorded.length > REWIND_MAX_OPTIONS;
+    const shown = recorded.slice(0, more ? REWIND_MAX_OPTIONS - 1 : REWIND_MAX_OPTIONS);
+    const options = shown.map((pick, i) => ({ label: `${labelOf(pick)}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: 'answer its questions again', value: pick }));
+    if (more) options.push({ label: 'Another one', description: 'named next', value: REWIND_ANOTHER });
+    if (recorded.length === 1) options.push({ label: 'Change nothing', description: 'go back to the plan', value: '' });
+    return {
+        question: { id: 'rewind', header: 'Change', multiSelect: false, question: 'Which answers do you want to change?', options: options.map(({ label, description }) => ({ label, description })) },
+        answers: Object.fromEntries(options.map((option) => [option.label, option.value])),
+    };
 }
 
 // The fixed asks of the commands, here so a test holds them to the limits.

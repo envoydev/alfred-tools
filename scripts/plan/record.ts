@@ -4,14 +4,12 @@ import { ROUTE_WORD, scopeOfLabel } from './asks-keys.ts';
 import { TOOLSETS_ASKED, TOOLSETS_HEADER } from './hosted-settings-constants.ts';
 import { DEFAULT_HOST_DESCRIPTION } from './asks-other-constants.ts';
 import { BACKTICKED_NAME, LABEL, PREFIX, SIDE, VALUE, WALK_QUESTION } from './record-constants.ts';
-import { resolveAnswer } from './record-resolve.ts';
+import { isRecord, isTextList, resolveAnswer } from './record-resolve.ts';
 import type { Family } from '../roots/types.ts';
-import type { LocationAnswer, RecordInput, RecordResult, Refusal, Resolved, Run, Question, Typed } from './types.ts';
+import type { Answers, LocationAnswer, Picks, RecordedStep, RecordInput, RecordResult, Refusal, Resolved, Run, Question, Typed } from './types.ts';
 
 const KEYED = [PREFIX.route, PREFIX.scope, PREFIX.name, PREFIX.location, PREFIX.browser, PREFIX.host, PREFIX.token, PREFIX.keyName, PREFIX.urlName, PREFIX.settings, PREFIX.clients];
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
-const isTextList = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === 'string');
 const refuse = (refused: string): Refusal => ({ refused });
 const capitalized = (word: string) => `${word[0]!.toUpperCase()}${word.slice(1)}`;
 const sameSet = (left: string[], right: string[]) => left.length === right.length && left.every((item) => right.includes(item));
@@ -55,6 +53,13 @@ function putTop(run: Run, path: string[], value: unknown, changes = true): void
 {
     if (run.configure && !changes) return;
     putAnswer(run, path, value);
+}
+
+// A top-level answer keyed by the step's tool (keyNames, urlNames, settings): nothing for a tool left out with --skip.
+function putKeyed(run: Run, path: string[], value: unknown, changes = true): void
+{
+    if (run.skipped) return;
+    putTop(run, path, value, changes);
 }
 
 const routeOfLabel = (label: string) => Object.keys(ROUTE_WORD).find((routeId) => capitalized(ROUTE_WORD[routeId]!) === label);
@@ -116,7 +121,7 @@ function mapKeyName(run: Run, key: string, resolved: Resolved): Refusal | void
 {
     const name = typeof resolved.typed === 'string' ? resolved.typed : resolved.value;
     if (typeof name !== 'string') return refuse(`'${resolved.label}' has no key name`);
-    putTop(run, ['keyNames', key], name, resolved.index !== 0);
+    putKeyed(run, ['keyNames', key], name, resolved.index !== 0);
 }
 
 function mapUrlName(run: Run, key: string, question: Question, resolved: Resolved): Refusal | void
@@ -124,7 +129,7 @@ function mapUrlName(run: Run, key: string, question: Question, resolved: Resolve
     const name = typeof resolved.typed === 'string' ? resolved.typed : resolved.value;
     const urlVar = Object.entries(run.built.urlNames?.[key] ?? {}).find(([, asked]) => asked.question.id === question.id)?.[0];
     if (typeof name !== 'string' || urlVar === undefined) return refuse(`'${resolved.label}' has no URL name`);
-    putTop(run, ['urlNames', key, urlVar], name, resolved.index !== 0);
+    putKeyed(run, ['urlNames', key, urlVar], name, resolved.index !== 0);
 }
 
 // Settings: 'keep' writes nothing and 'change' the typed pairs; a hosted route's Tools answer is its object, without
@@ -133,11 +138,11 @@ function mapSettings(run: Run, key: string, resolved: Resolved): Refusal | void
 {
     const { value } = resolved;
     if (value === VALUE.keep) return;
-    if (value === VALUE.change) { putTop(run, ['settings', key], resolved.typed as Typed); return; }
+    if (value === VALUE.change) { putKeyed(run, ['settings', key], resolved.typed as Typed); return; }
     if (!isRecord(value)) return refuse(`'${resolved.label}' has no settings entry`);
     const { [TOOLSETS_ASKED]: asked, ...fixed } = value;
     const settings: Record<string, unknown> = asked === true ? { ...fixed, [TOOLSETS_HEADER]: resolved.typed } : fixed;
-    putTop(run, ['settings', key], settings, resolved.index !== 0);
+    putKeyed(run, ['settings', key], settings, resolved.index !== 0);
 }
 
 function mapRoot(run: Run, resolved: Resolved): Refusal | void
@@ -245,4 +250,71 @@ export function recordStep({ step, built, picks, answers, chosen }: RecordInput)
     run.picks.recorded = { ...run.picks.recorded, [step.id]: { tool: key, picks: run.wrotePicks, answers: run.wroteAnswers } };
     seedRows(run);
     return { picks: run.picks, answers: run.answers };
+}
+
+// The pick a recorded step belongs to: its tool, or `clients` and `settings` for the walk's own two questions.
+const pickOfStep = (id: string, step: RecordedStep): string | null =>
+    step.tool ?? (id === WALK_QUESTION.clients || id === WALK_QUESTION.settings ? id : null);
+
+// Every pick with a recorded step, the one recorded last first.
+export function recordedPicks(picks: Picks): string[]
+{
+    const found: string[] = [];
+    for (const [id, step] of Object.entries(picks.recorded ?? {}))
+    {
+        const pick = pickOfStep(id, step);
+        if (pick === null) continue;
+        const at = found.indexOf(pick);
+        if (at >= 0) found.splice(at, 1);
+        found.push(pick);
+    }
+    return found.reverse();
+}
+
+// Deletes one recorded path, whatever of it is already gone. A path ending in an array names an element, which leaves
+// no hole, and an array left empty goes with its key.
+function removePath(root: object, path: string[]): void
+{
+    const walk = (segments: string[]): unknown => segments.reduce<unknown>((at, segment) => (isRecord(at) ? at[segment] : undefined), root);
+    const parentPath = path.slice(0, -1);
+    const last = path.at(-1)!;
+    const parent = walk(parentPath);
+    if (isRecord(parent)) { delete parent[last]; return; }
+    if (!Array.isArray(parent)) return;
+    const holder = walk(parentPath.slice(0, -1));
+    const kept = parent.filter((item) => item !== last);
+    if (kept.length === 0 && isRecord(holder)) delete holder[parentPath.at(-1)!];
+    else parent.splice(0, parent.length, ...kept);
+}
+
+// Back to one pick (spec D1b): its recorded steps leave `done` and `recorded`, and each path they wrote is deleted from both
+// files. `settings` is every step. A tool left out with --skip is brought back by it.
+export function rewindPick(picks: Picks, answers: Answers, pick: string): RecordResult
+{
+    const recorded = Object.entries(picks.recorded ?? {});
+    const steps = recorded.filter(([id, step]) => pick === WALK_QUESTION.settings || (pick === WALK_QUESTION.clients ? id === pick : step.tool === pick));
+    if (steps.length === 0) return refuse(`'${pick}' has no recorded answer to change`);
+    const next = { picks: structuredClone(picks), answers: structuredClone(answers) };
+    for (const [id, step] of steps)
+    {
+        step.picks.forEach((path) => removePath(next.picks, path));
+        step.answers.forEach((path) => removePath(next.answers, path));
+        delete next.picks.recorded![id];
+    }
+    const dropped = new Set(steps.map(([id]) => id));
+    next.picks.done = (next.picks.done ?? []).filter((id) => !dropped.has(id));
+    if (next.picks.skipped?.includes(pick)) next.picks.skipped = next.picks.skipped.filter((skipped) => skipped !== pick);
+    return next;
+}
+
+// Leave one pick out (spec D1c): its entries come out of answers.json and it is listed once under `skipped`, which every
+// later record honours.
+export function skipPick(picks: Picks, answers: Answers, pick: string): RecordResult
+{
+    if (!(picks.rows ?? []).includes(pick) && !(picks.targets ?? []).includes(pick)) return refuse(`'${pick}' is not a pick of this run`);
+    const next = { picks: structuredClone(picks), answers: structuredClone(answers) };
+    if (next.answers.picks) delete next.answers.picks[pick];
+    if (next.answers.change) delete next.answers.change[pick];
+    if (!next.picks.skipped?.includes(pick)) next.picks.skipped = [...(next.picks.skipped ?? []), pick];
+    return next;
 }
