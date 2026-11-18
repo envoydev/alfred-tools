@@ -129,10 +129,10 @@ test('signInSpawnArgs: Windows is one command line read twice (cmdArg\'s two rea
     const url = 'https://mcp.example.com/v1/mcp?a=1&b=2|c%PATH%';
     const args = ['-y', '-p', 'mcp-remote@0.16.0', 'mcp-remote-client', url, '--auth-timeout', '300'];
     const win = signInSpawnArgs('cmd', ['/c', 'npx', ...args], 'win32');
-    assert.deepStrictEqual(win, { file: ['npx', ...args].map(cmdArg).join(' '), args: [], shell: true });
+    assert.deepStrictEqual(win, { file: ['npx', ...args.map(cmdArg)].join(' '), args: [], shell: true });
     assert.ok(!win.file.includes('cmd /c'), 'no inner cmd /c, which would add a third read');
     assert.ok(!/(?<!\^)&/.test(win.file), 'the & of the URL is escaped for the shell');
-    assert.deepStrictEqual(signInSpawnArgs('npx', args, 'win32'), { file: ['npx', ...args].map(cmdArg).join(' '), args: [], shell: true }, 'a bare npx entry gives the same line');
+    assert.deepStrictEqual(signInSpawnArgs('npx', args, 'win32'), { file: ['npx', ...args.map(cmdArg)].join(' '), args: [], shell: true }, 'a bare npx entry gives the same line');
     assert.deepStrictEqual(signInSpawnArgs('npx', args, 'darwin'), { file: 'npx', args, shell: false });
 });
 

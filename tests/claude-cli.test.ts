@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as cli from '../scripts/core/claude-cli.ts';
+import { spawnArgs } from '../scripts/core/cmd-line.ts';
 
 test('argvQuote: the Windows argv rules - backslashes before a quote doubled plus one, before the end doubled, others kept', () =>
 {
@@ -22,6 +23,15 @@ test('cmdArg: the argv quoting, then each cmd.exe metacharacter caret-escaped tw
     assert.strictEqual(cli.cmdArg('a&b'), '^^^"a^^^&b^^^"');
     assert.strictEqual(cli.cmdArg('%PATH%'), '^^^"^^^%PATH^^^%^^^"');
     assert.strictEqual(cli.cmdArg('q"q'), '^^^"q\\^^^"q^^^"');
+});
+
+test('spawnArgs: Windows keeps the command name bare (cmd reads it once) and caret-escapes each argument twice; POSIX is the plain array', () =>
+{
+    const win = spawnArgs('npm', ['exec', 'a&b'], 'win32');
+    assert.ok(win.file.startsWith('npm '), win.file);
+    assert.deepStrictEqual(win, { file: 'npm ^^^"exec^^^" ^^^"a^^^&b^^^"', args: [], shell: true });
+    assert.strictEqual(spawnArgs('cmd', ['/c', 'npx', '-y'], 'win32').file, 'npx ^^^"-y^^^"', 'an inner cmd /c is dropped');
+    assert.deepStrictEqual(spawnArgs('npm', ['exec', 'a&b'], 'linux'), { file: 'npm', args: ['exec', 'a&b'], shell: false });
 });
 
 const NASTY = [JSON.stringify({ env: { K: 's%^"abc' } }), '%PATH%', 'x&y|z<>', 'caret^^', 'C:\\dir\\', 'a\\\\"b', '', 'a b', 'ünï'];

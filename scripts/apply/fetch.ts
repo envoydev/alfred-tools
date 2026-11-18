@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import * as cli from '../core/claude-cli.ts';
+import { spawnArgs } from '../core/cmd-line.ts';
 import * as account from '../core/account.ts';
 import * as kept from '../core/kept.ts';
 import { expandVars } from '../entries/locations.ts';
@@ -40,8 +41,8 @@ export const unsetVar = (entry: ServerEntry, env: Env): string | null => [...JSO
 
 // How the runtime (npm, uvx, docker) is spawned, never the claude CLI, and with no limit of Claude Code's. Windows: one
 // quoted command line through the shell so npm.cmd resolves, and no args array (Node's DEP0190); the fetch step's own
-// `cmd /c` in front is dropped. See core/claude-cli.ts spawnArgs.
-export const fetchSpawnArgs = (argv: string[], platform: string) => cli.spawnArgs(argv[0]!, argv.slice(1), platform);
+// `cmd /c` in front is dropped. See core/cmd-line.ts spawnArgs.
+export const fetchSpawnArgs = (argv: string[], platform: string) => spawnArgs(argv[0]!, argv.slice(1), platform);
 
 export function realFetch(argv: string[], { cwd, env }: { cwd: string; env: Env })
 {

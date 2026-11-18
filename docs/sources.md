@@ -851,6 +851,12 @@ linear in the argument - then caret-escapes each cmd.exe metacharacter ``()[]%!^
 2026-10-29). All 14 measured values - a JSON quote, `%VAR%`, carets, `&` and `|`, runs of backslashes before a quote and
 the end, an empty argument, Unicode - came back unchanged (`tests/claude-cli.test.js`).
 
+The command name is read once and stays bare (2026-11-18, from how Node builds the line, not a new measurement): with
+`shell: true` Node runs `cmd.exe /d /s /c "<line>"`, so cmd looks the program up from the first token and only the
+ARGUMENTS get the second read, by the shim's `%*`. A caret-escaped name (`^"npm^"`) names no program. `runClaude`'s
+fallback has always written `claude` bare; `spawnArgs` (`scripts/core/cmd-line.ts`, used by fetch and sign-in) does the
+same and drops a `cmd /c` in front. NOT RUN: a real Windows run of fetch and of sign-in through `spawnArgs`.
+
 ## Windows - 0.4.0 (measured 2026-11-12, Windows 11 on ARM64, Claude Code 2.1.309, node 22.23.3)
 
 The released 0.4.0 (`2e6e0ea`), cloned from GitHub into the Parallels VM and run through `prlctl exec` (SYSTEM):
