@@ -34,3 +34,13 @@ export const SIDE = { keep: 'keep', path: 'path' } as const;
 
 export const BACKTICKED_NAME = /`([^`]+)`/;
 export const TOOLSET_SEPARATOR = ',';
+
+export const EXIT_CODE = { ok: 0, stopped: 1, refused: 2 } as const;
+export const REFUSAL = {
+    folder: 'files must sit in one folder tmpdir.ts made',
+    notJson: 'is not a JSON file this run wrote',
+    notObject: 'is not a JSON object',
+    stepShape: 'step.json must be { "id": <string>, "answers": <object> }',
+    walkDone: 'the walk is done: there is no step to record',
+    nothingRecorded: 'no answer is recorded yet, so none can be changed',
+} as const;

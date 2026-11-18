@@ -1,24 +1,26 @@
-// The plan command: reads its files and flags, prints the plan or the questions, and writes the plan file.
+// The plan command: reads its files and flags, prints the plan or the questions, and writes the plan file. The three
+// modes that write the walk's files (--record, --rewind, --skip) are record-modes.ts.
 import fs from 'node:fs';
-import * as catalogLib from '../catalog/catalog.ts';
-import { allQuestions } from './asks-all.ts';
-import { nextQuestion } from './walk.ts';
-import * as account from '../core/account.ts';
-import * as roots from '../roots/roots.ts';
-import * as existing from '../inventory/existing.ts';
 import { blockingStdio } from '../core/json-file.ts';
-import { plan, waitsFor } from './plan.ts';
+import { plan } from './plan.ts';
 import { renderPlan } from './render.ts';
+import * as existing from '../inventory/existing.ts';
+import { runRecordMode } from './record-modes.ts';
+import { walkOutput } from './walk-output.ts';
 import type { Inventory } from '../inventory/types.ts';
-import type { Answers, Picks, PlanArgs } from './types.ts';
+import type { Answers, Picks, PlanArgs, PlanMode } from './types.ts';
 
-// The arguments, by flag: `--questions` first or not at all, then at most two files, and the flags anywhere after them.
-// An unknown flag, or a flag without its value, is an error - never read as a file.
+// The arguments, by flag: a mode flag first or not at all, then its files, and the value flags anywhere after them. An
+// unknown flag, or a flag without its value, is an error - never read as a file. --record takes four files (inventory,
+// picks, answers, step), --rewind three and an optional pick, --skip three and a pick; the others at most two files.
+const MODE_FLAGS: Record<string, PlanMode> = { '--questions': 'questions', '--record': 'record', '--rewind': 'rewind', '--skip': 'skip' };
 const VALUE_FLAGS: Record<string, 'data' | 'connectors' | 'out'> = { '--data': 'data', '--connectors': 'connectors', '--out': 'out' };
+const WALK_FILES = 3;
 export function parseArgs(argv: string[]): PlanArgs
 {
-    const out: PlanArgs = { questions: argv[0] === '--questions', files: [], data: null, connectors: null, out: null, error: null };
-    for (let i = out.questions ? 1 : 0; i < argv.length; i++)
+    const mode = Object.hasOwn(MODE_FLAGS, argv[0]!) ? MODE_FLAGS[argv[0]!]! : 'plan';
+    const out: PlanArgs = { mode, files: [], pick: null, data: null, connectors: null, out: null, error: null };
+    for (let i = mode === 'plan' ? 0 : 1; i < argv.length; i++)
     {
         const argument = argv[i]!;
         if (Object.hasOwn(VALUE_FLAGS, argument))
@@ -29,11 +31,26 @@ export function parseArgs(argv: string[]): PlanArgs
         else if (argument.startsWith('--')) return { ...out, error: `unknown flag '${argument}'` };
         else out.files.push(argument);
     }
-    if (out.files.length > 2) return { ...out, error: `one inventory file and one ${out.questions ? 'picks' : 'answers'} file, not ${out.files.length} files` };
+    if (mode === 'rewind' || mode === 'skip')
+    {
+        out.pick = out.files.splice(WALK_FILES)[0] ?? null;
+        if (out.files.length !== WALK_FILES || (mode === 'skip' && out.pick === null)) return { ...out, error: `${argv[0]} takes an inventory, picks and answers file${mode === 'skip' ? ' and a pick' : ' and an optional pick'}` };
+    }
+    else if (mode === 'record')
+    {
+        if (out.files.length !== WALK_FILES + 1) return { ...out, error: '--record takes an inventory, picks, answers and step file' };
+    }
+    else if (out.files.length > 2) return { ...out, error: `one inventory file and one ${mode === 'questions' ? 'picks' : 'answers'} file, not ${out.files.length} files` };
     return out;
 }
 
-const USAGE = 'usage: plan.ts <inventory.json> <answers.json> [--out plan.json] [--data <dir>]\n       plan.ts --questions <inventory.json> [<picks.json>] [--data <dir>] [--connectors <Name>,<Name>]';
+const USAGE = [
+    'usage: plan.ts <inventory.json> <answers.json> [--out plan.json] [--data <dir>]',
+    '       plan.ts --questions <inventory.json> [<picks.json>] [--data <dir>] [--connectors <Name>,<Name>]',
+    '       plan.ts --record <inventory.json> <picks.json> <answers.json> <step.json> [--data <dir>] [--connectors <Name>,<Name>]',
+    '       plan.ts --rewind <inventory.json> <picks.json> <answers.json> [<pick>] [--data <dir>] [--connectors <Name>,<Name>]',
+    '       plan.ts --skip <inventory.json> <picks.json> <answers.json> <pick> [--data <dir>]',
+].join('\n');
 
 export function runPlanCommand(argv: string[]): number
 {
@@ -41,23 +58,14 @@ export function runPlanCommand(argv: string[]): number
     const read = (filePath: string): unknown => JSON.parse(fs.readFileSync(filePath, 'utf8'));
     const args = parseArgs(argv);
     if (args.error) { console.error(`plan.ts: ${args.error}\n${USAGE}`); return 2; }
+    if (args.mode === 'record' || args.mode === 'rewind' || args.mode === 'skip') return runRecordMode(args);
     const [invFile, second] = args.files;
-    if (!invFile || (!args.questions && !second)) { console.error(USAGE); return 2; }
+    if (!invFile || (args.mode === 'plan' && !second)) { console.error(USAGE); return 2; }
     const inventory = read(invFile) as Inventory;
-    // the roots map is read fresh from the plugin's data folder when one is given
-    if (args.data !== null) inventory.roots = { ...(inventory.roots || {}), map: roots.readMap(args.data) };
-    // a folder under the former name waits to move: nothing is asked before update moves it (spec D3)
-    const waits = args.questions ? waitsFor({ project: inventory.project, home: account.homeDir(process.env), platform: inventory.os || process.platform }, inventory.registrations || []) : null;
-    if (waits) { console.error(waits); return 1; }
-    if (args.questions)
+    if (args.mode === 'questions')
     {
-        const picks = second ? read(second) as Picks : null;
-        const catalog = catalogLib.load();
-        // --connectors: the claude.ai connectors this session has loaded, named in the pick list (spec F4)
-        const qopts = { env: process.env, home: account.homeDir(process.env), connectors: args.connectors !== null ? existing.parseConnectors(args.connectors) : null };
-        const built = allQuestions(inventory, picks, catalog, qopts);
-        // the walk's one step: what to ask now, about one tool (spec F1)
-        const output = { ...built, next: nextQuestion(inventory, picks, catalog, qopts, built) };
+        const output = walkOutput(inventory, second ? read(second) as Picks : null, args);
+        if ('waits' in output) { console.error(output.waits); return 1; }
         console.log(JSON.stringify(output, null, 2));
         return 0;
     }
@@ -66,4 +74,3 @@ export function runPlanCommand(argv: string[]): number
     console.log(renderPlan(madePlan));
     return madePlan.errors.length ? 1 : 0;
 }
-

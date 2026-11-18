@@ -683,12 +683,25 @@ export interface AskOptions
     connectors?: string[] | null;
 }
 
+export type PlanMode = 'plan' | 'questions' | 'record' | 'rewind' | 'skip';
 export interface PlanArgs
 {
-    questions: boolean;
+    mode: PlanMode;
     files: string[];
+    pick: string | null;
     data: string | null;
     connectors: string | null;
     out: string | null;
     error: string | null;
 }
+// What --questions prints: every question the run can ask, and the walk's one step to ask now.
+export type WalkOutput = Questions & { next: WalkStep };
+// The flags --questions, --record and --rewind share: the plugin's data folder (the roots map) and the claude.ai connectors.
+export interface WalkFlags
+{
+    data: string | null;
+    connectors: string | null;
+}
+export type WalkStopped = { waits: string };
+// A JSON object a mode read from one of its files, or the refusal that file earned.
+export type FileRead = { value: Record<string, unknown> } | { refused: string };
