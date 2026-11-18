@@ -17,18 +17,23 @@ export function argvQuote(arg: string): string
     return `${out}${'\\'.repeat(slashes * 2)}"`;
 }
 
-// cmd.exe reads the line twice - once for `cmd /c`, once more for the .cmd file's `%*` - so each metacharacter is
-// caret-escaped twice (cross-spawn's escapeArgument for a shim; measured through an npm-shaped shim, docs/sources.md).
+// cmd.exe reads the line once for the program it starts. A .cmd or .bat shim (npm's `npm.cmd`, `npx.cmd`) reads it a second
+// time through its `%*`, so each metacharacter is caret-escaped twice (cmdArg); a real .exe (`uvx`, `docker`) gets only the
+// first read, so one level (cmdArgOnce) - two would reach its argv as `^--help^`. This is cross-spawn's
+// `escapeArgument(arg, doubleEscapeMetaChars)`: double only for a shim (docs/sources.md).
 const META = /([()\][%!^"`<>&|;, *?])/g;
-export const cmdArg = (arg: string): string => argvQuote(arg).replace(META, '^$1').replace(META, '^$1');
+const SHIM = /^(?:(?:npm|npx|pnpm|yarn)|.*\.(?:cmd|bat))$/i;
+export const cmdArgOnce = (arg: string): string => argvQuote(arg).replace(META, '^$1');
+export const cmdArg = (arg: string): string => cmdArgOnce(arg).replace(META, '^$1');
 
 // How a runtime or client is spawned. Windows: ONE command line run through the shell with no args array. Node runs it as
-// `cmd.exe /d /s /c "<line>"`, which reads the command name once and so keeps it bare; each ARGUMENT goes through cmdArg,
-// which escapes for the two reads it gets (that cmd.exe, then the .cmd shim's %*). A `cmd /c` in front is dropped: it
-// would add a third read that leaves a `&`, `|` or `%` live. POSIX: the plain array, no shell.
+// `cmd.exe /d /s /c "<line>"`, which reads the command name once and so keeps it bare; each ARGUMENT is escaped for the
+// reads it gets - cmdArg for a known shim (the name is npm, npx, pnpm or yarn, or ends in .cmd or .bat), cmdArgOnce for
+// anything else. A `cmd /c` in front is dropped: it would add another read that leaves a `&`, `|` or `%` live. POSIX: the
+// plain array, no shell.
 export function spawnArgs(command: string, args: string[], platform: string): { file: string; args: string[]; shell: boolean }
 {
     if (platform !== 'win32') return { file: command, args, shell: false };
     const [name = command, ...rest] = /^cmd(\.exe)?$/i.test(command) && /^\/c$/i.test(args[0] || '') ? args.slice(1) : [command, ...args];
-    return { file: [name, ...rest.map(cmdArg)].join(' '), args: [], shell: true };
+    return { file: [name, ...rest.map(SHIM.test(name) ? cmdArg : cmdArgOnce)].join(' '), args: [], shell: true };
 }

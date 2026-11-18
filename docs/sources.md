@@ -857,6 +857,16 @@ ARGUMENTS get the second read, by the shim's `%*`. A caret-escaped name (`^"npm^
 fallback has always written `claude` bare; `spawnArgs` (`scripts/core/cmd-line.ts`, used by fetch and sign-in) does the
 same and drops a `cmd /c` in front. NOT RUN: a real Windows run of fetch and of sign-in through `spawnArgs`.
 
+One read or two (2026-11-18): the second caret level is right only for a `.cmd` or `.bat` shim, which reads the line again
+through `%*`. A real `.exe` such as `uvx` or `docker` gets the one cmd.exe read, so two levels would reach its argv as
+`^--help^` and every Windows `uvx` or `docker` fetch would fail. `spawnArgs` therefore uses `cmdArg` (two levels) when
+the command name is `npm`, `npx`, `pnpm` or `yarn` or ends in `.cmd` or `.bat`, and `cmdArgOnce` (one level) otherwise.
+Source: cross-spawn's `escapeArgument(arg, doubleEscapeMetaChars)` escapes the metacharacters once and again only when the
+flag is set, and `parse.js` sets it only for a cmd-shim, never for a `.com` or `.exe`
+(https://github.com/moxystudio/node-cross-spawn/blob/master/lib/util/escape.js and `lib/parse.js`, read 2026-11-18).
+cross-spawn finds a shim by its path (`node_modules/.bin/<name>.cmd`), where `spawnArgs` has only a bare name, so it goes
+by the name. NOT RUN: a real Windows run of a `uvx` or `docker` fetch through `cmdArgOnce`.
+
 ## Windows - 0.4.0 (measured 2026-11-12, Windows 11 on ARM64, Claude Code 2.1.309, node 22.23.3)
 
 The released 0.4.0 (`2e6e0ea`), cloned from GitHub into the Parallels VM and run through `prlctl exec` (SYSTEM):

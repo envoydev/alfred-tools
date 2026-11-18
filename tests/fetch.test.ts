@@ -321,6 +321,11 @@ test('Windows passes one quoted command line', () => {
     assert.deepStrictEqual(fetchSpawnArgs(['npm', 'exec', '--package', 'a&b|c%d@1'], 'win32'), { file: 'npm ^^^"exec^^^" ^^^"--package^^^" ^^^"a^^^&b^^^|c^^^%d@1^^^"', args: [], shell: true });
     // the `cmd /c` fetchStep puts in front on Windows would add a third read: dropped
     assert.deepStrictEqual(fetchSpawnArgs(['cmd', '/c', 'npm', 'exec', '--yes'], 'win32'), { file: 'npm ^^^"exec^^^" ^^^"--yes^^^"', args: [], shell: true });
+    // fetchStep's uvx and docker argvs are real .exe programs, which get one cmd read: one caret level, never the shim's two
+    const uvxArgv = fetchStep('serena', { command: 'uvx', args: ['--from', 'git+https://example.com/acme/serena@v1', 'serena', 'start-mcp-server'] }, 'serena')!.argv;
+    assert.deepStrictEqual(fetchSpawnArgs(uvxArgv, 'win32'), { file: 'uvx ^"--from^" ^"git+https://example.com/acme/serena@v1^" ^"serena^" ^"--help^"', args: [], shell: true });
+    assert.deepStrictEqual(fetchSpawnArgs(['docker', 'pull', 'ghcr.io/acme/tool:v1'], 'win32'), { file: 'docker ^"pull^" ^"ghcr.io/acme/tool:v1^"', args: [], shell: true });
+    assert.deepStrictEqual(fetchSpawnArgs(['cmd', '/c', 'uvx', '--help'], 'win32'), { file: 'uvx ^"--help^"', args: [], shell: true });
     assert.deepStrictEqual(fetchSpawnArgs(argv, 'darwin'), { file: 'npx', args: ['-y', 'a b@1'], shell: false });
     assert.deepStrictEqual(fetchSpawnArgs(['uvx', '--help'], 'linux'), { file: 'uvx', args: ['--help'], shell: false });
 });

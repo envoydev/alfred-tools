@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as cli from '../scripts/core/claude-cli.ts';
-import { spawnArgs } from '../scripts/core/cmd-line.ts';
+import { cmdArgOnce, spawnArgs } from '../scripts/core/cmd-line.ts';
 
 test('argvQuote: the Windows argv rules - backslashes before a quote doubled plus one, before the end doubled, others kept', () =>
 {
@@ -32,6 +32,33 @@ test('spawnArgs: Windows keeps the command name bare (cmd reads it once) and car
     assert.deepStrictEqual(win, { file: 'npm ^^^"exec^^^" ^^^"a^^^&b^^^"', args: [], shell: true });
     assert.strictEqual(spawnArgs('cmd', ['/c', 'npx', '-y'], 'win32').file, 'npx ^^^"-y^^^"', 'an inner cmd /c is dropped');
     assert.deepStrictEqual(spawnArgs('npm', ['exec', 'a&b'], 'linux'), { file: 'npm', args: ['exec', 'a&b'], shell: false });
+});
+
+test('cmdArgOnce: the argv quoting, then each cmd.exe metacharacter caret-escaped once (a real .exe gets one cmd read)', () =>
+{
+    assert.strictEqual(cmdArgOnce('a&b'), '^"a^&b^"');
+    assert.strictEqual(cmdArgOnce('%PATH%'), '^"^%PATH^%^"');
+    assert.strictEqual(cmdArgOnce('q"q'), '^"q\\^"q^"');
+});
+
+test('spawnArgs: a real .exe (uvx, docker) gets ONE caret level, so its argv reads --help and not ^--help^', () =>
+{
+    assert.deepStrictEqual(spawnArgs('uvx', ['--from', 'a&b'], 'win32'), { file: 'uvx ^"--from^" ^"a^&b^"', args: [], shell: true });
+    assert.deepStrictEqual(spawnArgs('docker', ['pull', 'x'], 'win32'), { file: 'docker ^"pull^" ^"x^"', args: [], shell: true });
+    assert.strictEqual(spawnArgs('cmd', ['/c', 'uvx', '--help'], 'win32').file, 'uvx ^"--help^"', 'an inner cmd /c is dropped here too');
+});
+
+test('spawnArgs: a .cmd shim keeps the double level - npx, npm, pnpm, yarn by name, anything ending in .cmd or .bat, any case', () =>
+{
+    assert.strictEqual(spawnArgs('npx', ['-y', 'a&b'], 'win32').file, 'npx ^^^"-y^^^" ^^^"a^^^&b^^^"');
+    for (const shim of ['npm.cmd', 'NPM.CMD', 'pnpm', 'Yarn', 'tool.bat', 'C:\\bin\\x.cmd'])
+    {
+        assert.strictEqual(spawnArgs(shim, ['a&b'], 'win32').file, `${shim} ^^^"a^^^&b^^^"`, shim);
+    }
+    for (const exe of ['uvx.exe', 'docker.exe', 'npmx', 'cmdx'])
+    {
+        assert.strictEqual(spawnArgs(exe, ['a&b'], 'win32').file, `${exe} ^"a^&b^"`, exe);
+    }
 });
 
 const NASTY = [JSON.stringify({ env: { K: 's%^"abc' } }), '%PATH%', 'x&y|z<>', 'caret^^', 'C:\\dir\\', 'a\\\\"b', '', 'a b', 'ünï'];
