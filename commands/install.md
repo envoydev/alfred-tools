@@ -152,6 +152,7 @@ refuses a URL name that is the key's name or reads as a credential, and a name t
 | browser 'A browser binary I name', asked next | `"executablePath": "<typed>"` |
 | API key 'Use a key from .mcps-secrets' / 'No key - lower rate limits' or 'Sign in with OAuth' | `"token": true` / `"token": false`, for every answer |
 | host 'A self-managed host', asked next | `"params": {"host": "<typed>"}` |
+| host, a region option (a row with choices) | `"params": {"host": "<its description>"}` |
 | key name, a name or one asked next | top-level `"keyNames": {<id>: "<NAME>"}` |
 | URL name, a name or one asked next | top-level `"urlNames": {<id>: {"<VAR>": "<NAME>"}}` |
 | settings, pairs asked next | top-level `"settings": {<id>: {"<NAME>": "<value>"}}` |

@@ -48,7 +48,18 @@ export function toolAsk(row: CatalogRow, inventory: Inventory, { route, scope = 
                 : first([engine, named]),
         });
     }
-    if (row.params)
+    if (row.params && row.params[0]!.choices)
+    {
+        // a closed set (SonarQube Cloud's regions): the choices are the options, the one in use or else the default first
+        const choices = row.params[0]!.choices;
+        const inUse = choices.findIndex((choice) => current && choice.value === current.host);
+        const ordered = inUse > 0 ? [choices[inUse]!, ...choices.filter((_choice, i) => i !== inUse)] : choices;
+        questions.push({
+            id: `host-${row.id}`, header: 'Host', multiSelect: false, question: `${row.label}: which ${row.params[0]!.label}?`,
+            options: first(ordered.map((choice) => ({ label: choice.label, description: choice.value }))),
+        });
+    }
+    else if (row.params)
     {
         const host = current && current.host && current.host !== row.params[0]!.default ? current.host : null;
         questions.push({

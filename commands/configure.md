@@ -164,6 +164,7 @@ below, and leave out every answer that keeps what the tool has now - the plan re
 | browser 'Default for this engine', when it is not first | `"executablePath": ""` (drops `--executable-path`) |
 | API key 'Use a key from .mcps-secrets' / 'No key - lower rate limits' or 'Sign in with OAuth', when it is not first | `"token": true` / `"token": false` |
 | host 'A self-managed host' asked next, or the hosted host when it is not first | `"params": {"host": "<that host>"}` |
+| host, a region option other than the first (a row with choices) | `"params": {"host": "<its description>"}` |
 | key name, when it is not first | top-level `"keyNames": {<key>: "<NAME>"}` |
 | URL name, when it is not first | top-level `"urlNames": {<key>: {"<VAR>": "<NAME>"}}` |
 | settings, pairs asked next | top-level `"settings": {<key>: {"<NAME>": "<value>"}}` |

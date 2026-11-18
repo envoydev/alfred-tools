@@ -27,6 +27,24 @@ export interface RouteHelper
     var: string; // stored - do not rename
     scheme: string; // stored - do not rename
     hint?: string; // stored - do not rename
+    headers?: HelperHeader[]; // stored - do not rename
+}
+
+// A header the helper sends from a name in .mcps-secrets, beside the key's own: the value is read at each connect.
+export interface HelperHeader
+{
+    header: string; // stored - do not rename
+    var: string; // stored - do not rename
+    label: string; // stored - do not rename
+}
+
+// A header the user may set at install, sent with a fixed value (`values` closes the set; `default` is the recommended one).
+export interface RouteSetting
+{
+    header: string; // stored - do not rename
+    label: string; // stored - do not rename
+    values?: string[]; // stored - do not rename
+    default?: string; // stored - do not rename
 }
 
 export interface UrlVar
@@ -65,6 +83,7 @@ export interface CatalogRoute
     keyless?: string; // stored - do not rename
     audit?: boolean; // stored - do not rename
     urlVars?: UrlVar[]; // stored - do not rename
+    settings?: RouteSetting[]; // stored - do not rename
 }
 
 // A path the row's data folder sets: an env value or the value after an arg flag, below the data folder.
@@ -84,11 +103,18 @@ export interface RowLocations
     derived: DerivedLocation[]; // stored - do not rename
 }
 
+export interface ParamChoice
+{
+    value: string; // stored - do not rename
+    label: string; // stored - do not rename
+}
+
 export interface RowParam
 {
     id: string; // stored - do not rename
     label: string; // stored - do not rename
     default: string; // stored - do not rename
+    choices?: ParamChoice[]; // stored - do not rename
 }
 
 export interface DangerousTool

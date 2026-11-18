@@ -630,8 +630,8 @@ test('no ask names git or remote state: alfred-code\'s stop guard reads such a w
 
 test('the grouping: Code, Docs and forges, Browsers, Machine and monitoring; two machine rows on Linux, windows-control only on Windows', () => {
     const calls = (b: { os: string; arch: string; project: string }) => pickQuestions(inv(b), catalog)[0];
-    assert.deepStrictEqual(calls(MAC)!.map((q) => q.options.length), [2, 4, 4, 3]);
-    assert.deepStrictEqual(calls(LINUX)!.map((q) => q.options.length), [2, 4, 4, 2]);
+    assert.deepStrictEqual(calls(MAC)!.map((q) => q.options.length), [3, 4, 4, 3]);
+    assert.deepStrictEqual(calls(LINUX)!.map((q) => q.options.length), [3, 4, 4, 2]);
     assert.match(calls(WIN)![3]!.options.map((o) => o.label).join(), /windows-control/);
     assert.doesNotMatch(calls(MAC)![3]!.options.map((o) => o.label).join(), /windows-control/);
     assert.match(calls(MAC)![3]!.options.map((o) => o.label).join(), /macos-control/);
@@ -2906,4 +2906,22 @@ test('the questions call stops before any ask while a move waits', () => {
         assert.deepStrictEqual(lines, [MOVE_FIRST]);
     }
     finally { console.log = log; console.error = err; f.clean(); }
+});
+
+test('a row with host choices asks them', () => {
+    const context = { project: '/work/shop', platform: 'darwin', arch: 'arm64', home: '/Users/me', env: {}, exists: () => false };
+    const hostQ = (id: string) => toolAsk(catalog.byId.get(id)!, inv(MAC), { route: 'remote', scope: 'user', context, catalog }).questions.find((q) => q.id === `host-${id}`)!;
+    const sonar = hostQ('sonarqube');
+    assert.deepStrictEqual(sonar.options.map((o) => [o.label, o.description]), [['SonarQube Cloud (Recommended)', 'api.sonarcloud.io'], ['SonarQube Cloud US', 'api.sonarqube.us']]);
+    assert.ok(!sonar.options.some((o) => /self-managed/i.test(o.label)));
+    checkQuestion(sonar);
+    assert.deepStrictEqual(hostQ('gitlab').options.map((o) => o.label), ['gitlab.com (Recommended)', 'A self-managed host']);
+    // the region picked fills the URL
+    assert.strictEqual(addStep(plan(inv(MAC), pickOne('sonarqube', { params: { host: 'api.sonarqube.us' } }), opts('/h'))).entry.url, 'https://api.sonarqube.us/mcp');
+    assert.strictEqual(addStep(plan(inv(MAC), pickOne('sonarqube'), opts('/h'))).entry.url, 'https://api.sonarcloud.io/mcp');
+    // a configure walk recommends the region the registration has
+    const installed = inv(MAC, { registrations: [reg('sonar', 'user', { type: 'http', url: 'https://api.sonarqube.us/mcp' }, 'sonarqube', 'remote')] });
+    const walk = asks.allQuestions(installed, { targets: ['mcp:sonar~user'] }, catalog);
+    const keep = walk.targets['mcp:sonar~user']!.questions!.find((q) => q.id.startsWith('host-'))!;
+    assert.deepStrictEqual(keep.options.map((o) => [o.label, o.description]), [['SonarQube Cloud US (Recommended)', 'api.sonarqube.us'], ['SonarQube Cloud', 'api.sonarcloud.io']]);
 });

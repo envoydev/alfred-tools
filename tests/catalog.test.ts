@@ -15,13 +15,13 @@ const OSES = ['darwin', 'linux', 'win32'];
 const GROUPS = ['code', 'docs', 'browsers', 'machine'];
 const PLACEHOLDER = /\{(root|name|host|value|version|minor|contextFile)\}/g;
 
-test('the catalog has 14 rows and no plugin kind', () => {
+test('the catalog has 15 rows and no plugin kind', () => {
     const ids = cat.tools.map((r) => r.id);
-    assert.strictEqual(ids.length, 14);
-    assert.strictEqual(new Set(ids).size, 14);
+    assert.strictEqual(ids.length, 15);
+    assert.strictEqual(new Set(ids).size, 15);
     assert.ok(cat.tools.every((t) => t.kind === 'mcp'));
     assert.deepStrictEqual([...ids].sort(), ['appium', 'atlassian', 'context7', 'github', 'gitlab', 'macos-control',
-        'memory', 'playwright-chrome', 'playwright-firefox', 'playwright-msedge', 'playwright-webkit', 'sentry', 'serena', 'windows-control']);
+        'memory', 'playwright-chrome', 'playwright-firefox', 'playwright-msedge', 'playwright-webkit', 'sentry', 'serena', 'sonarqube', 'windows-control']);
     // the rule for a later row (spec D8)
     assert.match(JSON.parse(fs.readFileSync(path.join(ROOT, 'catalog', 'tools.json'), 'utf8')).note, /A plugin row is added only when it works in Claude Code and Cursor/);
 });
@@ -40,7 +40,7 @@ test('every row has the fields its kind needs', () => {
 test('the four groups are the brief\'s and hold the rows the brief lists', () => {
     assert.deepStrictEqual(cat.groups.map((g) => g.id), GROUPS);
     const of = (g: string) => cat.tools.filter((r) => r.group === g).map((r) => r.id).sort();
-    assert.deepStrictEqual(of('code'), ['memory', 'serena']);
+    assert.deepStrictEqual(of('code'), ['memory', 'serena', 'sonarqube']);
     assert.deepStrictEqual(of('docs'), ['atlassian', 'context7', 'github', 'gitlab']);
     assert.deepStrictEqual(of('browsers'), ['playwright-chrome', 'playwright-firefox', 'playwright-msedge', 'playwright-webkit']);
     assert.deepStrictEqual(of('machine'), ['appium', 'macos-control', 'sentry', 'windows-control']);
@@ -230,7 +230,7 @@ test('no catalog field named like a credential holds a plain string', () => {
 
 test('hosted keyed routes carry a helper block and no Authorization header', () => {
     const want: Record<string, string[]> = { context7: ['CONTEXT7_API_KEY', 'Bearer', 'optional-token'], github: ['GITHUB_PERSONAL_ACCESS_TOKEN', 'Bearer', 'token'], sentry: ['SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'optional-token'],
-        gitlab: ['GITLAB_TOKEN', 'Bearer', 'optional-token'], atlassian: ['ATLASSIAN_API_TOKEN', 'Basic', 'optional-token'] };
+        gitlab: ['GITLAB_TOKEN', 'Bearer', 'optional-token'], atlassian: ['ATLASSIAN_API_TOKEN', 'Basic', 'optional-token'], sonarqube: ['SONARQUBE_TOKEN', 'Bearer', 'token'] };
     for (const row of cat.tools.filter((r) => r.kind === 'mcp' && r.routes.remote))
     {
         const r = row.routes.remote as CatalogRoute & { headers?: Record<string, string> };
@@ -250,7 +250,7 @@ test('hosted keyed routes carry a helper block and no Authorization header', () 
 test('the order lists every MCP row once and nothing else', () => {
     const mcp = cat.tools.filter((r) => r.kind === 'mcp').map((r) => r.id).sort();
     assert.deepStrictEqual([...cat.order].sort(), mcp);
-    assert.deepStrictEqual(cat.order, ['atlassian', 'github', 'gitlab', 'context7', 'sentry', 'memory', 'serena',
+    assert.deepStrictEqual(cat.order, ['atlassian', 'github', 'gitlab', 'context7', 'sentry', 'sonarqube', 'memory', 'serena',
         'windows-control', 'macos-control', 'appium', 'playwright-chrome', 'playwright-msedge', 'playwright-firefox', 'playwright-webkit']);
 });
 
@@ -288,4 +288,52 @@ test('a bridge route: template names equal urlVars, a key helper, a pinned mcp-r
     }
     const sentry = cat.tools.find((r) => r.id === 'sentry')!;
     assert.strictEqual(sentry.recommendedRoute, 'remote', 'the bridge is a third choice, never the recommended one');
+});
+
+test('sonarqube is a hosted token row with two region fingerprints', () => {
+    const row = cat.byId.get('sonarqube')!;
+    assert.deepStrictEqual([row.group, row.os, row.recommendedRoute, Object.keys(row.routes), row.dangerous], ['code', OSES, 'remote', ['remote'], []]);
+    assert.deepStrictEqual(row.params, [{ id: 'host', label: 'SonarQube Cloud region', default: 'api.sonarcloud.io',
+        choices: [{ value: 'api.sonarcloud.io', label: 'SonarQube Cloud' }, { value: 'api.sonarqube.us', label: 'SonarQube Cloud US' }] }]);
+    const route = row.routes.remote!;
+    assert.deepStrictEqual([route.type, route.url, route.authMode, route.prereqs], ['http', 'https://{host}/mcp', 'token', []]);
+    assert.deepStrictEqual(route.fingerprints, [{ host: 'api.sonarcloud.io', pathPrefix: '/mcp' }, { host: 'api.sonarqube.us', pathPrefix: '/mcp' }]);
+    assert.deepStrictEqual(route.helper, { var: 'SONARQUBE_TOKEN', scheme: 'Bearer', hint: 'a SonarQube Cloud user token (My Account, Security)',
+        headers: [{ header: 'SONARQUBE_ORG', var: 'SONARQUBE_ORG', label: 'organization key' }] });
+    assert.deepStrictEqual(route.settings, [{ header: 'SONARQUBE_READ_ONLY', label: 'read-only tools', values: ['true'], default: 'true' },
+        { header: 'SONARQUBE_TOOLSETS', label: 'toolsets', values: ['analysis', 'coverage', 'dependency-risks', 'duplications', 'issues', 'measures', 'projects', 'quality-gates', 'rules', 'security-hotspots'] }]);
+    const NOT_FOR_IT = ['windows-npx-cmd', 'npx-cache-entry', 'token-sync'];
+    for (const f of cat.fixes) assert.strictEqual(f.tool.includes('sonarqube'), f.tool.includes('sentry') && !NOT_FOR_IT.includes(f.id), f.id);
+});
+
+test('the optional catalog fields keep their shapes: choices, helper headers and route settings', () => {
+    const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+    for (const row of cat.tools)
+    {
+        for (const param of row.params || [])
+        {
+            if (!param.choices) continue;
+            assert.ok(param.choices.length >= 2 && param.choices.length <= 4, `${row.id}: 2-4 choices`);
+            for (const choice of param.choices) assert.ok(choice.value && choice.label, `${row.id}: a choice has a value and a label`);
+            assert.strictEqual(param.choices[0]!.value, param.default, `${row.id}: the default choice is first`);
+        }
+        for (const [routeId, route] of Object.entries(row.routes))
+        {
+            const at = `${row.id}/${routeId}`;
+            for (const header of route.helper?.headers || [])
+            {
+                assert.match(header.header, /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/, `${at}: a header name`);
+                assert.match(header.var, NAME, `${at}: a name .mcps-secrets can hold`);
+                assert.ok(header.label, `${at}: a label`);
+            }
+            for (const setting of route.settings || [])
+            {
+                assert.ok(route.type === 'http' && route.helper, `${at}: settings belong to a hosted route with a helper`);
+                assert.match(setting.header, NAME, `${at}: a setting header`);
+                assert.ok(setting.label, `${at}: a label`);
+                if (setting.values) assert.ok(setting.values.length && new Set(setting.values).size === setting.values.length, `${at}: distinct values`);
+                if (setting.default !== undefined) assert.ok(!setting.values || setting.values.includes(setting.default), `${at}: the default is one of the values`);
+            }
+        }
+    }
 });

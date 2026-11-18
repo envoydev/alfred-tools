@@ -1360,3 +1360,26 @@ unless a URL is given. 'The former plugin' and 'the former folder' are the plugi
   settings file's `extraKnownMarketplaces` entry names the old source, the add is refused ('its source doesn't match its
   extraKnownMarketplaces entry ... change the entry'); with the entry's `repo` changed, the same add re-points. So
   `marketplace remove` (which uninstalls every plugin from it) is never needed to move a catalog.
+
+## SonarQube Cloud - the hosted MCP server (read 2026-11-18)
+
+Page: https://docs.sonarsource.com/sonarqube-mcp-server/setup/sonarqube-cloud-hosted.md (read 2026-11-18). The
+`sonarqube` row rests on it.
+
+- Endpoints: `https://api.sonarcloud.io/mcp` by default, and for a US-region organization
+  `https://api.sonarqube.us/mcp`. The page does not label the default as EU; the row's choice label is 'SonarQube Cloud'.
+- Token: a SonarQube user token goes in `Authorization: Bearer <token>`. OAuth is the other way in (a client on Sonar's
+  approved list, with Client ID Metadata Documents); the row offers the token only, since the helper sends the Bearer
+  header.
+- `SONARQUBE_ORG`: optional with a token - 'set the header to fix the organization for that request, or omit it and pass
+  `organization` on organization-aware tools'. On OAuth it is refused: 'SONARQUBE_ORG is not supported for OAuth
+  requests. Use the tool organization argument.' So it is sent only when `.mcps-secrets` holds it.
+- `SONARQUBE_READ_ONLY`: `true` enables read-only mode, `false` allows write operations (the default).
+- `SONARQUBE_TOOLSETS`: a comma-separated list of toolsets that limits the tools. The ten keys: `analysis`, `coverage`,
+  `dependency-risks`, `duplications`, `issues`, `measures`, `projects`, `quality-gates`, `rules`, `security-hotspots`.
+  The page says the server has a default list of toolsets and does not enumerate it.
+- Not on the page: whether `SONARQUBE_READ_ONLY` or `SONARQUBE_TOOLSETS` are accepted on OAuth requests; the tools in each
+  toolset (the page points to the Tools reference).
+- From the user's notes, 2026-11-17, not confirmed on the vendor page: the token's place in the account ('My Account,
+  Security', the row's hint), and that the write tools change issue and hotspot status (the reason read-only is the
+  recommended setting).
