@@ -78,12 +78,13 @@ function age(h: Harness, dir: string, { record }: { record: boolean })
             const doc = readJson(list) as McpsList;
             fs.writeFileSync(path.join(root, roots.FILES.record), back(JSON.stringify({ version: 1, servers: doc.servers.map((s) => ({ name: s.name, scope: s.scope, fingerprint: existing.fingerprintOf(s.entry, catalog), choice: 'manage' })) }, null, 2)));
             fs.rmSync(list);
-            fs.rmSync(path.join(root, roots.FILES.serenaContext), { force: true });
+            for (const folder of [root, path.join(root, 'serena')]) fs.rmSync(path.join(folder, roots.FILES.serenaContext), { force: true });
         }
         else
         {
             rewrite(list);
-            if (exists(path.join(root, roots.FILES.serenaContext))) fs.copyFileSync(path.join(FIXTURES, '0.5.0', 'serena-context.yml'), path.join(root, roots.FILES.serenaContext));
+            // 0.5.0 kept the context in the root; today's install keeps it in serena's home: either is aged to the 0.5.0 copy
+            for (const folder of [root, path.join(root, 'serena')]) if (exists(path.join(folder, roots.FILES.serenaContext))) fs.copyFileSync(path.join(FIXTURES, '0.5.0', 'serena-context.yml'), path.join(folder, roots.FILES.serenaContext));
         }
         for (const file of [roots.FILES.helper, roots.FILES.bridge]) if (exists(path.join(root, file))) fs.copyFileSync(path.join(FIXTURES, '0.4.0', file), path.join(root, file));
         fs.renameSync(root, path.join(path.dirname(root), OLD));
@@ -191,7 +192,7 @@ test('R2 - a pre-rename 0.5.0 machine: lists, Cursor\'s copies, the old kept mar
     const listText = lists.map((l) => JSON.stringify(l)).join('\n');
     assert.ok(!listText.includes(kept.OLD_MARKER), 'no old marker left');
     assert.ok(listText.includes(kept.MARKER), 'the kept marker reads in its new name');
-    assert.strictEqual(firstLine(path.join(dir, NEW, roots.FILES.serenaContext)), '# alfred-tools serena-context 2');
+    assert.strictEqual(firstLine(path.join(dir, NEW, 'serena', roots.FILES.serenaContext)), '# alfred-tools serena-context 2');
     for (const root of [path.join(dir, NEW), path.join(h.home, NEW)].filter((root) => exists(path.join(root, roots.FILES.helper))))
         assert.strictEqual(firstLine(path.join(root, roots.FILES.helper)), '// alfred-tools mcp-headers 5');
     const cursorProject = readJson(path.join(dir, '.cursor', 'mcp.json')).mcpServers;

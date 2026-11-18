@@ -2,7 +2,8 @@
 import fs from 'node:fs';
 import { pathFor } from '../entries/platform.ts';
 import { logicalRoot, formatRoot } from '../entries/locations.ts';
-import { currentOf, helperParts } from '../entries/entry.ts';
+import { currentOf, helperParts, contextArgAt } from '../entries/entry.ts';
+import * as serenaConfig from '../apply/serena-config.ts';
 import { heldKey } from './asks-keys.ts';
 import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
@@ -47,13 +48,18 @@ export function planRootChange(answers: Answers, inventory: Inventory, context: 
         // there, renamed whole, before any registration names the new root
         const exists = context.exists || ((filePath: string) => fs.existsSync(filePath));
         const list = inventory.lists && inventory.lists[family];
+        const scopes = family === 'global' ? ['user'] : ['project', 'local'];
+        // serena's context moves only for a serena that keeps it in the root (an alfred-code home); one on an editable home gets
+        // a fresh copy in its new home, and the root's old copy is retired by the plan (plan/retire-context.ts)
+        const keepsRootContext = inventory.registrations.some((registration) => registration.rowId && !registration.own && !registration.alfredRetired && registration.choice !== 'own' && scopes.includes(registration.scope)
+            && contextArgAt(registration.entry) >= 0 && !(registration.entry.env && registration.entry.env.SERENA_HOME && serenaConfig.editableHome(registration.entry.env.SERENA_HOME, { platform: context.platform }).ok));
         for (const fileName of [roots.FILES.list, roots.FILES.serenaContext, roots.FILES.signIns])
         {
             const from = pathApi.join(used.path, fileName);
             if (fileName === roots.FILES.list && (!list || list.note || list.old || list.file !== from)) continue;
+            if (fileName === roots.FILES.serenaContext && !keepsRootContext) continue;
             if (exists(from)) context.rootMoves.push({ family, name: fileName, from, to: pathApi.join(next, fileName) });
         }
-        const scopes = family === 'global' ? ['user'] : ['project', 'local'];
         const secretsOld = pathApi.join(used.path, roots.FILES.secrets);
         const secretsNew = pathApi.join(next, roots.FILES.secrets);
         let keyed = false;

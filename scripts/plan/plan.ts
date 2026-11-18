@@ -30,6 +30,7 @@ import { deepEqual } from '../core/json-file.ts';
 import { makeCtx } from './context.ts';
 import { planMcp } from './pick.ts';
 import { fileSteps } from './root-files.ts';
+import { retireContextSteps, rewritesOf } from './retire-context.ts';
 import { planChange, planRemove, planExisting, planRootChange, movedLists } from './change.ts';
 export { deepEqual };
 import { repointWaits } from '../fix/rename.ts';
@@ -103,7 +104,9 @@ export function plan(inventory: Inventory, answers: Answers, options: PlanOption
     const files = fileSteps(listInv, context, out, out.steps);
     const moves = context.rootMoves.map((move): PlanStep => ({ op: 'move-root-file', from: move.from, to: move.to, why: `the ${move.family} root moves: ${move.name} goes with it` }));
     const ignores = files.before.filter((step) => step.op === 'root-ignore');
-    out.steps = [...ignores, ...moves, ...files.before.filter((step) => step.op !== 'root-ignore'), ...out.steps, ...files.after];
+    // a serena rewritten from the root's context copy to its home's leaves the root's copy to be retired, after the rewrite
+    const retire = retireContextSteps({ inventory, platform: context.platform, home: context.home, catalog }, rewritesOf(out.steps));
+    out.steps = [...ignores, ...moves, ...files.before.filter((step) => step.op !== 'root-ignore'), ...out.steps, ...retire, ...files.after];
     // Cursor's files from the lists, after the list-write steps they read (spec D2)
     const cursor = cursorSteps(listInv, { ...context, catalog }, out, answers);
     // the read guard (ruling 13): one deny-read, last before the list-write steps

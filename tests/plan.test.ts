@@ -41,7 +41,7 @@ import type { MachineProbe } from '../scripts/fix/types.ts';
 import type { ServerEntry, ServerMap } from '../scripts/core/types.ts';
 import type { Root, Machine, Roots } from '../scripts/entries/types.ts';
 import type { Approval, Inventory, InvRegistration } from '../scripts/inventory/types.ts';
-import type { Answers, AskCtx, CursorWritePlanStep, EnsureKeyNameStep, FileStep, ListWriteStep, McpAddStep, McpMoveStep, McpReplaceStep, MoveRootFileStep, PathStep, PickAnswer, Plan, Asked, Picks, PlanOptions, PlanStep, Question, RecordRootStep, ToolBlock } from '../scripts/plan/types.ts';
+import type { Answers, AskCtx, CursorWritePlanStep, EnsureKeyNameStep, FileStep, ListWriteStep, McpAddStep, McpMoveStep, McpReplaceStep, MoveRootFileStep, PathStep, PickAnswer, Plan, Asked, Picks, PlanOptions, PlanStep, Question, RecordRootStep, RetireShippedStep, ToolBlock } from '../scripts/plan/types.ts';
 
 // the names the tests read off a map by a dotted read, named on its type
 type EntryEnv = Record<string, string> & { ALLOW_REMOTE_APP_URLS?: string; ANDROID_HOME?: string; ANONYMIZED_TELEMETRY?: string; EXTRA_FLAG?: string; GITHUB_TOOLSETS?: string; JAVA_HOME?: string; MCP_EXTRA_DIR?: string; MCP_MEMORY_SQLITE_PATH?: string; MCP_REMOTE_CONFIG_DIR?: string; MEMORY_API_TOKEN?: string; MY_FLAG?: string; MY_TOOL?: string; MY_VAR?: string; NO_UI?: string; PAGE_SOURCES_DIR?: string; SCREENSHOTS_DIR?: string; SENTRY_ACCESS_TOKEN?: string; SERENA_LOG_LEVEL?: string; TOOL_DIR?: string };
@@ -2700,6 +2700,50 @@ test('a root change moves mcps.json, writes serena-context.yml in the new home, 
     assert.deepStrictEqual(JSON.parse(m.fs.readFileSync(path.join(m.fresh, 'mcps.json'), 'utf8')).servers.map((s: { name: string }) => s.name), JSON.parse(listBefore).servers.map((s: { name: string }) => s.name));
     assert.strictEqual(ctxOf(m.local('serena')!), path.join(m.fresh, 'serena', 'serena-context.yml'));
     assert.strictEqual(ctxOf(m.cursor().serena), path.join(m.fresh, 'serena', 'serena-context.yml'), 'Cursor follows');
+});
+
+test('a root change retires the root copy of a 0.5.x serena context instead of moving it', (t) => {
+    const m = rootMoveWorld(t, { serena: { scope: 'local' } });
+    const ctxOf = (e: ServerEntry) => e.args![e.args!.indexOf('--context') + 1];
+    // age the install to 0.5.x: the context is the root's copy
+    const rootCopy = path.join(m.old, 'serena-context.yml');
+    const aged = JSON.parse(JSON.stringify(m.local('serena')!)) as ServerEntry;
+    aged.args![aged.args!.indexOf('--context') + 1] = rootCopy;
+    m.fs.copyFileSync(path.join(m.old, 'serena', 'serena-context.yml'), rootCopy);
+    m.fs.rmSync(path.join(m.old, 'serena', 'serena-context.yml'));
+    const env = m.w.env;
+    assert.strictEqual(cli.runClaude(['mcp', 'remove', 'serena', '-s', 'local'], { cwd: m.w.project, env }).status, 0);
+    assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'serena', JSON.stringify(aged), '-s', 'local'], { cwd: m.w.project, env }).status, 0);
+    const p = m.change();
+    assert.deepStrictEqual(p.errors, []);
+    assert.deepStrictEqual((p.steps.filter((s) => s.op === 'move-root-file') as MoveRootFileStep[]).map((s) => path.basename(s.from)), ['mcps.json'], 'the root copy is not moved');
+    const retire = p.steps.filter((s) => s.op === 'retire-shipped') as RetireShippedStep[];
+    assert.deepStrictEqual(retire.map((s) => [s.file, s.namedBy]), [[rootCopy, []]]);
+    const ops = p.steps.map((s) => s.op);
+    assert.ok(ops.indexOf('retire-shipped') > ops.indexOf('mcp-replace'), ops.join());
+    const { r, text } = m.run(p, 'tmp2');
+    assert.strictEqual(r.failed, null, text);
+    assert.ok(!m.fs.existsSync(rootCopy), 'the old root copy is gone');
+    assert.ok(text.includes(`removed ${rootCopy}`), text);
+    assert.ok(m.fs.existsSync(path.join(m.fresh, 'serena', 'serena-context.yml')));
+    assert.strictEqual(ctxOf(m.local('serena')!), path.join(m.fresh, 'serena', 'serena-context.yml'));
+});
+
+test('a rename of a 0.5.x serena retires the root copy of its context', () => {
+    const r = installed('serena');
+    r.entry.args![r.entry.args!.indexOf('--context') + 1] = '/work/shop/.alfred-tools/serena-context.yml';
+    const p = plan(inv(MAC, { registrations: [r] }), changeOf(r, { name: 'shop-serena' }), opts('/Users/me'));
+    assert.deepStrictEqual(p.errors, []);
+    const ops = p.steps.map((s) => s.op);
+    assert.deepStrictEqual(ops, ['root-ignore', 'write-serena-context', 'mcp-move', 'retire-shipped', 'list-write', 'record-root']);
+    assert.deepStrictEqual((p.steps.find((s) => s.op === 'retire-shipped') as RetireShippedStep).namedBy, []);
+    assert.strictEqual((p.steps.find((s) => s.op === 'retire-shipped') as RetireShippedStep).file, '/work/shop/.alfred-tools/serena-context.yml');
+    assert.deepStrictEqual(p.steps.filter((s) => s.op === 'move-root-file'), []);
+    assert.ok(renderPlan(p).includes('removes /work/shop/.alfred-tools/serena-context.yml'), renderPlan(p));
+    // another registration naming the copy keeps it
+    const other = reg('theirs', 'local', { command: 'node', args: ['their.js', '--context', '/work/shop/.alfred-tools/serena-context.yml'] });
+    const kept = plan(inv(MAC, { registrations: [r, other] }), changeOf(r, { name: 'shop-serena' }), opts('/Users/me'));
+    assert.deepStrictEqual((kept.steps.find((s) => s.op === 'retire-shipped') as RetireShippedStep).namedBy, ['theirs']);
 });
 
 test('a root change stops before any registration when the new root holds another mcps.json', (t) => {

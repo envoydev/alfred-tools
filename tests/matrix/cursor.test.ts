@@ -453,10 +453,10 @@ test('M6 update from 0.4.x: the list with the own entry, serena\'s context and b
     assert.ok((list.own || []).some((e) => e.name === 'context7' && e.scope === 'project' && e.choice === 'own'), JSON.stringify(list.own));
     assert.ok(!fs.existsSync(path.join(projRoot, roots.FILES.record)) && fs.existsSync(path.join(projRoot, `${roots.FILES.record}.0.4.bak`)), 'the record renamed .0.4.bak');
     assert.strictEqual(list.cursorOffer, 'declined');
-    // serena on the context file
+    // serena on the context file, in its home (the home moved with the root)
     const serena = readJson(path.join(p, '.mcp.json')).mcpServers.serena;
-    assert.strictEqual(serena.args[serena.args.indexOf('--context') + 1], path.join(projRoot, 'serena-context.yml'));
-    assert.ok(fs.existsSync(path.join(projRoot, 'serena-context.yml')));
+    assert.strictEqual(serena.args[serena.args.indexOf('--context') + 1], path.join(projRoot, 'serena', 'serena-context.yml'));
+    assert.ok(fs.existsSync(path.join(projRoot, 'serena', 'serena-context.yml')));
     // the plugins: typescript-lsp uninstalled, claude-hud kept and its decline recorded
     const plugins = JSON.parse(cli.runClaude(['plugin', 'list', '--json'], { cwd: p, env: hh.env }).stdout || '[]');
     const ids: string[] = plugins.map((x: { id: string; scope: string }) => `${x.id}~${x.scope}`);

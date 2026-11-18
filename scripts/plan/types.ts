@@ -4,7 +4,7 @@
 import type { Env, ServerEntry } from '../core/types.ts';
 import type { Catalog, CatalogRow, DangerousTool } from '../catalog/types.ts';
 import type { Current, FetchStep, Machine, Root, Roots } from '../entries/types.ts';
-import type { Installed } from '../inventory/types.ts';
+import type { Installed, Inventory } from '../inventory/types.ts';
 import type { Family, RootAnswer, ShippedKind } from '../roots/types.ts';
 import type { ListServer, OrderStep, OwnEntry, Live } from '../mcps-list/types.ts';
 import type { CursorWriteStep as CursorWriteFields } from '../cursor/types.ts';
@@ -215,6 +215,22 @@ export interface RetireShippedStep
     file: string; // stored - do not rename
     namedBy: string[]; // stored - do not rename
     why: string; // stored - do not rename
+}
+// What retireContextSteps reads: the inventory (every registration and list), the machine and the catalog.
+export interface RetireCtx
+{
+    inventory: Inventory;
+    platform: string;
+    home: string;
+    catalog: Catalog;
+}
+// A registration a step rewrites: the one as read (its name and scope there) and the entry it gets.
+export interface Rewrite
+{
+    name: string;
+    scope: string;
+    old: ServerEntry;
+    entry: ServerEntry;
 }
 export interface EnsureKeyNameStep
 {

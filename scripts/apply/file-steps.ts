@@ -279,7 +279,8 @@ export function retireShipped(step: RetireShippedStep): StepResult
 {
     const { state } = roots.shippedState(step.kind, step.file);
     if (state === 'absent') return { ok: true, detail: `${step.file} is already gone` };
-    if (state !== 'same') return { ok: true, detail: `left ${step.file} - edited by hand` };
+    if (state === 'edited') return { ok: true, detail: `left ${step.file} - edited by hand` };
+    if (state !== 'same') return { ok: true, detail: `left ${step.file} - not this plugin's current copy` };
     if (step.namedBy.length) return { ok: true, detail: `left ${step.file} - still named by ${step.namedBy.join(', ')}` };
     fs.rmSync(step.file);
     return { ok: true, detail: `removed ${step.file}` };

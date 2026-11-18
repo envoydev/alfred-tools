@@ -1482,6 +1482,12 @@ test('retire-shipped removes only an unedited, unnamed copy and says why it left
         fs.writeFileSync(file, `${src}# mine\n`);
         r = runSteps(w, [step([])]);
         assert.ok(fs.existsSync(file) && r.text.includes(`left ${file} - edited by hand`), r.text);
+        fs.writeFileSync(file, src.replace(/^# alfred-tools serena-context \d+/, '# alfred-tools serena-context 0'));
+        r = runSteps(w, [step([])]);
+        assert.ok(fs.existsSync(file) && r.text.includes(`left ${file} - not this plugin's current copy`), r.text);
+        fs.writeFileSync(file, src.replace(/^# alfred-tools serena-context \d+/, '# alfred-tools serena-context 3'));
+        r = runSteps(w, [step([])]);
+        assert.ok(fs.existsSync(file) && r.text.includes(`left ${file} - not this plugin's current copy`), r.text);
         fs.writeFileSync(file, src);
         r = runSteps(w, [step([])]);
         assert.strictEqual(r.report.failed, null, r.text);
