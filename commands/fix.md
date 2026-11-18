@@ -142,12 +142,10 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
 
 <!-- shared:fetch -->
 
-One server at a time, it downloads what the server launches into the runtime's cache and starts the server once with no
-30-second limit, so its first-run work is done before the next session, then prints each server's status (`claude mcp
-get`). Claude Code asks permission for it - it downloads and runs a package's install and starts the server. Tell the
-user to restart only once it reports, and paste its output verbatim when it finishes; say that a `warn` line changes
-nothing. When background runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit
-stops it.
+One server at a time, it downloads what the server launches into the runtime's cache and starts it once with no 30-second
+limit, then prints each server's status. Tell the user to restart
+only once it reports, and paste its output verbatim when it finishes; say that a `warn` line changes nothing. When
+background runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit stops it.
 
 <!-- /shared:fetch -->
 

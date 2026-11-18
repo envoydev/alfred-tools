@@ -84,6 +84,15 @@ for (const file of textFiles)
     });
 }
 
+// After a compaction Claude Code re-attaches only the first 5,000 tokens of a command (docs/sources.md), so a longer one
+// loses its tail mid-run: 17,500 characters is 5,000 tokens at about 3.5 characters a token.
+const COMMAND_MAX_CHARS = 17500;
+for (const file of fs.readdirSync(path.join(root, 'commands')).filter((name) => name.endsWith('.md')))
+{
+    const length = fs.readFileSync(path.join(root, 'commands', file), 'utf8').length;
+    if (length > COMMAND_MAX_CHARS) problems.push(`commands/${file}: ${length} characters - over ${COMMAND_MAX_CHARS}, the share of a 5,000-token re-attach (docs/sources.md)`);
+}
+
 // The scripts are .ts and run on Node's type stripping (22.18 and newer): each command says what an older Node prints
 // and what to tell the user, before its first script call in the body (the frontmatter, allowed-tools included, is
 // skipped, as the CALL check skips it). Read with its line breaks folded, since prose wraps.

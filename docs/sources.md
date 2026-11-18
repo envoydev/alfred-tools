@@ -1442,3 +1442,20 @@ mcp-remote@0.16.0` into an empty folder, extracted and read, nothing in it run).
   (https://code.claude.com/docs/en/tools-reference.md, 'Output limits' and 'Monitor tool', read 2026-11-18).
 - Matrix case `sign-in` (by hand, a real Atlassian account, the first start of a keyless OAuth server inside the 30 s
   limit after the sign-in): NOT RUN. The unit tests use a stub runner, no browser and no network.
+
+## Claude Code - what a compaction keeps of a skill (read 2026-11-18)
+
+Page: https://code.claude.com/docs/en/skills.md, 'Skill content lifecycle' (read 2026-11-18). The 17,500-character cap on
+`commands/*.md` (`tests/lint.ts`) rests on it.
+
+- Quoted: 'Auto-compaction carries invoked skills forward within a token budget. When the conversation is summarized to
+  free context, Claude Code re-attaches the most recent invocation of each skill after the summary, keeping the first
+  5,000 tokens of each. Re-attached skills share a combined budget of 25,000 tokens. Claude Code fills this budget
+  starting from the most recently invoked skill, so older skills can be dropped entirely after compaction if you have
+  invoked many in one session.' Commands are skills there.
+- The cap: 17,500 characters is 5,000 tokens at 3.5 characters a token - an estimate below the usual 4 for English
+  prose, because the commands are dense with code spans and JSON.
+- NOT MEASURED: the token count of each command. It is owed to the fresh-session check (`claude -p
+  "/alfred-tools:<command>" --max-turns 1 --output-format json` in a scratch project, less the same with the prompt
+  `hi`, first turn's input plus cache tokens); a count over 4,750 lowers the cap by the excess at 3.5 characters a token
+  and the file is cut again. The count and its date go here.
