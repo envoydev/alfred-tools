@@ -179,8 +179,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" <tmp>/answers.json --audit
 node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" <tmp>/answers.json --json
 ```
 
-Paste the first output verbatim. It checks `uvx`, `npx`, Node 22.22.2 or newer, Docker or the github binary,
-`typescript-language-server` with TypeScript 6, `csharp-ls`, the Android SDK and a JDK, only for the picks that need them,
+Paste the first output verbatim. It checks `uvx`, `npx`, Docker or the github binary, Google Chrome or Microsoft Edge
+for the Playwright rows that drive them, the Android SDK and a JDK, only for the picks that need them,
 and runs `npm audit` on appium's package. The audit lines go into step 6's confirmation as they are; an 'audit not run'
 line is not a pass.
 
@@ -209,7 +209,7 @@ connected through claude.ai is named beside this project's own. Paste the output
 call, every file it writes (the root's `.gitignore`, `mcp-headers.js`, the key names in `.mcps-secrets`), the `Key:`
 line of each route that uses a key (the name, the files it is read from, filled or not - never a value) and the line
 under it that says how the server connects once the key is there, the sign-in a remote route will ask for, and the tools
-that can run code. Two kinds of step may read new:
+that can run code. Three kinds of step may read new:
 
 - `writes` or `removes <root>/mcps.json` - the list: each server alfred-tools manages, as written and read back, and
   the servers left on their own; the file is removed once it lists none.

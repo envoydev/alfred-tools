@@ -1,5 +1,5 @@
 ---
-description: "Change or remove installed tools from alfred-tools - an MCP server's route, scope, name, data folder, key name or settings, a root folder, the apps it is set up for - one confirmed plan"
+description: "Change or remove installed tools from alfred-tools - route, scope, name, data folder, key name, settings, apps, or a root folder - one confirmed plan"
 argument-hint: "[registration name | tool id]"
 disable-model-invocation: true
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/table.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" *)
@@ -285,7 +285,7 @@ background (...): <file>`. Run, with the Bash tool's `run_in_background`:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
 ```
 
-It is `/alfred-tools:install` step 8, word for word: one server at a time, it fills the runtime's cache and starts the
+One server at a time, it fills the runtime's cache and starts the
 server once with no 30-second limit, so its first-run work (memory's model download) is done before the next session,
 then prints each changed server's status (`claude mcp get`); Claude Code asks permission for it. Tell the user to
 restart only once it reports, paste its output when it finishes, and say a `warn` line changes nothing. An npx server
