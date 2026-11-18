@@ -864,8 +864,12 @@ the command name is `npm`, `npx`, `pnpm` or `yarn` or ends in `.cmd` or `.bat`, 
 Source: cross-spawn's `escapeArgument(arg, doubleEscapeMetaChars)` escapes the metacharacters once and again only when the
 flag is set, and `parse.js` sets it only for a cmd-shim, never for a `.com` or `.exe`
 (https://github.com/moxystudio/node-cross-spawn/blob/master/lib/util/escape.js and `lib/parse.js`, read 2026-11-18).
-cross-spawn finds a shim by its path (`node_modules/.bin/<name>.cmd`), where `spawnArgs` has only a bare name, so it goes
-by the name. NOT RUN: a real Windows run of a `uvx` or `docker` fetch through `cmdArgOnce`.
+The shim test now goes by the resolved file, as cross-spawn does (2026-11-18): a name that is `npm` but resolves to a
+Volta `npm.exe` is a real program and would break under two levels. `resolveOnPath` (`scripts/core/cmd-line.ts`) finds
+the file the way cmd.exe does - the PATH directories in order, each PATHEXT extension in turn (default
+`.COM;.EXE;.BAT;.CMD`) - and fetch and sign-in pass `spawnArgs` its answer: a `.cmd` or `.bat` is a shim, any other file
+is not. The name rule (`npm`, `npx`, `pnpm`, `yarn`, `*.cmd`, `*.bat`) stays as the fallback when the name resolves to
+no file. NOT RUN: a real Windows run of a `uvx` or `docker` fetch through `cmdArgOnce`, and of a Volta `npm.exe`.
 
 ## Windows - 0.4.0 (measured 2026-11-12, Windows 11 on ARM64, Claude Code 2.1.309, node 22.23.3)
 

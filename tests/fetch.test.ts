@@ -353,4 +353,6 @@ test('Windows passes one quoted command line', () => {
     assert.deepStrictEqual(fetchSpawnArgs(['cmd', '/c', 'uvx', '--help'], 'win32'), { file: 'uvx ^"--help^"', args: [], shell: true });
     assert.deepStrictEqual(fetchSpawnArgs(argv, 'darwin'), { file: 'npx', args: ['-y', 'a b@1'], shell: false });
     assert.deepStrictEqual(fetchSpawnArgs(['uvx', '--help'], 'linux'), { file: 'uvx', args: ['--help'], shell: false });
+    // the caller's shim value, from the file the name resolved to, wins over the name: a Volta npm.exe is one level
+    assert.deepStrictEqual(fetchSpawnArgs(['npm', 'exec', 'a&b'], 'win32', false), { file: 'npm ^"exec^" ^"a^&b^"', args: [], shell: true });
 });
