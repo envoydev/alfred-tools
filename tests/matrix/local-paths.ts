@@ -16,3 +16,23 @@ export function localPathsOutside(field: string, dataRoots: string[]): string[]
     const rest = dataRoots.reduce((text, root) => text.split(root).join(''), field);
     return HOME_PATH.test(rest) ? [rest] : [];
 }
+
+// One registration as the CLI stores it; a field a route has not is absent.
+export interface StoredEntry
+{
+    command?: string;
+    url?: string;
+    headersHelper?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    headers?: Record<string, string>;
+    type?: string;
+}
+
+// -> every string a registration holds that can carry a path: the command, the url, the headersHelper, each arg, each env
+// value and each header value
+export function entryStrings(entry: StoredEntry): string[]
+{
+    const all = [entry.command, entry.url, entry.headersHelper, ...(entry.args || []), ...Object.values(entry.env || {}), ...Object.values(entry.headers || {})];
+    return all.filter((value): value is string => typeof value === 'string');
+}
