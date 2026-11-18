@@ -26,6 +26,7 @@ import type { ServerEntry } from '../../scripts/core/types.ts';
 import { Harness } from '../harness.ts';
 import { TOKEN_VARS as TOKENS } from '../helpers.ts';
 import { keepWritten } from '../proof/matrix-keep.ts';
+import * as serenaConfig from '../../scripts/apply/serena-config.ts';
 
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-start-'));
@@ -149,6 +150,52 @@ for (const c of LOCAL)
         h.claude(p, ['mcp', 'remove', name, '-s', 'local']);
     });
 }
+
+// The Part B gate (spec S1, S2): the plugin writes a minimal serena_config.yml - projects, base_modes and
+// project_serena_folder_location - before serena's first start. Serena must accept it, fill what is missing, keep the key
+// and keep the project's data under its home, never in <project>/.serena. The config's text is never printed (auth_secret).
+test('starts: serena-project-folder - serena keeps a project\'s data in its home from a minimal config', { skip: skipAll, timeout: START_MS + 240000 }, async (t) =>
+{
+    const row = catalog.byId.get('serena')!;
+    if (!row.os.includes(process.platform)) return t.skip(`NOT RUN: serena is offered on ${row.os.join(', ')}, this is ${process.platform}`);
+    if (!which('uvx')) return t.skip('NOT RUN: uvx not on PATH');
+    const p = h.project('start-serena-project-folder');
+    const name = 'start-serena-project-folder';
+    const r = h.run(p, { picks: { serena: { scope: 'project', name } } });
+    assert.deepStrictEqual(r.plan.errors, []);
+    assert.strictEqual(r.report.failed, null, r.text);
+    const reg = h.inventory(p).registrations.find((x) => x.name === name && x.scope === 'project');
+    assert.ok(reg, 'read back from .mcp.json');
+    const a = reg.entry.args!;
+    if (a[a.indexOf('--enable-web-dashboard') + 1] !== 'false') return t.skip('NOT RUN: the registration does not turn the web dashboard off, so starting it would open a browser');
+    const home = reg.entry.env && reg.entry.env.SERENA_HOME;
+    assert.ok(home, 'the registration names SERENA_HOME');
+    const file = serenaConfig.configOf(home);
+    // the minimal file is there before serena has started once
+    assert.strictEqual(serenaConfig.folderState(file, home), 'same', 'the plugin wrote the key before the first start');
+    assert.ok(!fs.existsSync(path.join(p, '.serena')), 'nothing in the project before the first start');
+
+    assert.ok(r.report.fetchFile, `apply wrote no fetch file:\n${r.text}`);
+    const f = await h.fetch(r.report.fetchFile);
+    if (f.warnings.some((w) => NETWORK.test(w))) return t.skip(`NOT RUN: no network (${f.warnings[0]!.slice(0, 160)})`);
+    assert.deepStrictEqual(f.warnings, [], f.text);
+    t.diagnostic(`fetch: ${f.text.split('\n').filter((l) => /ok |skip /.test(l) && !/auth_secret/.test(l)).map((l) => l.trim()).join('; ')}`);
+    // a start as the next session makes it: the project is found from the working folder
+    const got = await initialize(reg.entry, p);
+    if (!got.ok && NETWORK.test(got.why!)) return t.skip(`NOT RUN: no network (${got.why!.slice(0, 160)})`);
+    assert.ok(got.ok, `serena did not start from the minimal config: ${got.why}`);
+
+    const projectYml = path.join(home, 'projects', path.basename(p), 'project.yml');
+    t.diagnostic(`serena home projects: ${fs.existsSync(path.join(home, 'projects')) ? fs.readdirSync(path.join(home, 'projects')).join(', ') : '(none)'}; in-project .serena: ${fs.existsSync(path.join(p, '.serena'))}; key: ${serenaConfig.folderState(file, home)}`);
+    // S1: serena filled the keys the minimal file lacked (booleans only - the text holds auth_secret)
+    const saved = fs.readFileSync(file, 'utf8');
+    t.diagnostic(`serena saved the config with ${saved.split('\n').length} lines; auth_secret key: ${/^auth_secret\s*:/m.test(saved)}; projects key: ${/^projects\s*:/m.test(saved)}`);
+    assert.ok(/^auth_secret\s*:/m.test(saved) && saved.split('\n').length > 3, 'serena did not fill the keys the minimal file lacked');
+    assert.ok(fs.existsSync(projectYml), `serena wrote no ${projectYml}`);
+    assert.ok(!fs.existsSync(path.join(p, '.serena')), 'serena wrote <project>/.serena');
+    assert.strictEqual(serenaConfig.folderState(file, home), 'same', 'serena dropped or changed project_serena_folder_location');
+    h.claude(p, ['mcp', 'remove', name, '-s', 'project']);
+});
 
 // The remote routes: the endpoint as the plan builds it, sent initialize with no credentials.
 for (const id of catalog.tools.filter((r) => r.kind === 'mcp' && r.routes.remote).map((r) => r.id))

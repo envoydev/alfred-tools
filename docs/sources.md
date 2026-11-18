@@ -472,6 +472,26 @@ Docs: https://code.claude.com/docs/en/plugins/cli-reference.md and https://code.
   .serena/project.yml or .git'; cannot combine with `--project`), `--enable-web-dashboard <bool>`, `--agent-interface
   tools|REPL` - CONFIRMED. `serena/config/client_setup.py` itself emits `--context=claude-code --project-from-cwd`.
 - PyPI 2.1.0 `requires_python` `>=3.11,<3.15`, uploaded 2026-10-19 - CONFIRMED (so 3.13 is inside the range).
+- `project_serena_folder_location` in serena 2.1.0 - CONFIRMED, read 2026-11-18 at the tag:
+  https://github.com/oraios/serena/blob/v2.1.0/docs/02-usage/050_configuration.md ('Per-Project Serena Folder Location':
+  the setting takes `$projectDir` and `$projectFolderName`; the default is `$projectDir/.serena`; the value is the
+  project's serena folder itself, the one that holds `project.yml`, so `<home>/projects/$projectFolderName` puts
+  `project.yml` at `<home>/projects/<folder>/project.yml`).
+  - S2, `src/serena/config/serena_config.py` `get_project_serena_folder`: the configured path is used when it is a
+    folder, else an in-project `.serena` when that exists, else the configured path is created. An unknown `$name`
+    raises `SerenaConfigError` (so a home holding `$` is refused by the plugin).
+  - S1, same file, `SerenaConfig.from_config_file`: a missing key takes its dataclass default (and counts a migration);
+    an unset `auth_secret` is generated; `projects` is the one key whose absence raises ('`projects` key not found in
+    Serena configuration'). So a file of `projects: []`, `base_modes: []` and the key loads, and serena saves it
+    again when any migration was counted.
+  - `src/serena/cli.py` `find_project_root`: walks up from the working folder to the nearest ancestor holding
+    `.serena/project.yml` or `.git` (a folder or a worktree pointer file). A folder with neither has no serena project,
+    so the matrix case runs `git init` first, and a non-git workspace root has none.
+  - Matrix `starts: serena-project-folder` (tests/matrix/starts.test.ts; Project scope, a git-initialised throwaway
+    folder, a throwaway `HOME`): MEASURED 2026-11-18 on darwin: passes. The minimal file is written before the first
+    start; fetch.ts's first start and one `initialize` start then answered; `<home>/projects/<folder>/project.yml`
+    exists, `<folder>/.serena` does not, the key reads 'same' after serena saved the file, and serena had filled the
+    other keys (`auth_secret` among them, the file 246 lines). Linux and Windows: NOT RUN.
 
 ## Playwright MCP - microsoft/playwright-mcp 0.0.83 (pin 0.0.84 since 2026-11-10)
 
