@@ -46,7 +46,7 @@ export function stopClientOnSignal(target: SignalTarget = process, exit: (code: 
 // grandchild holding the stderr pipe open does not keep it alive: the pipe is closed a grace after the client exits.
 export const realRun: SignInRun = (command, args, { cwd, env, timeoutMs }, onStderrLine) => new Promise<RunResult>((resolve) =>
 {
-    const shim = process.platform === 'win32' ? shimOfLaunch(command, args, env, fs.existsSync) : undefined;
+    const shim = process.platform === 'win32' ? shimOfLaunch(command, args, env, fs.existsSync, cwd) : undefined;
     const launch = signInSpawnArgs(command, args, process.platform, shim);
     let child: ChildProcess;
     try { child = spawn(launch.file, launch.args, { cwd, env, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'], shell: launch.shell, detached: process.platform !== 'win32' }); }

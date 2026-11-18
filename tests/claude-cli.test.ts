@@ -160,3 +160,55 @@ test('spawnArgs: a shim value given by the caller decides - a Volta-style npm.ex
     assert.deepStrictEqual(spawnArgs('npm', ['exec', 'a&b'], 'win32', undefined), spawnArgs('npm', ['exec', 'a&b'], 'win32'), 'undefined falls back to the name rule');
     assert.deepStrictEqual(spawnArgs('npm', ['a&b'], 'linux', true), { file: 'npm', args: ['a&b'], shell: false }, 'POSIX is the plain array whatever the shim');
 });
+
+test('resolveOnPath: PATH and PATHEXT are found whatever their case, and the last matching key wins as in a Windows environment block', () =>
+{
+    withBins([['tool.CMD', 'tool.EXE'], ['tool.CMD']], ([both, cmdOnly]) =>
+    {
+        assert.strictEqual(resolveOnPath('tool', { path: both! }, fs.existsSync), path.join(both!, 'tool.EXE'), 'path');
+        assert.strictEqual(resolveOnPath('tool', { PATH: both!, pathext: '.CMD' }, fs.existsSync), path.join(both!, 'tool.CMD'), 'pathext');
+        assert.strictEqual(resolveOnPath('tool', { PATH: both!, Path: cmdOnly! }, fs.existsSync), path.join(cmdOnly!, 'tool.CMD'), 'the later of PATH and Path wins');
+        assert.strictEqual(resolveOnPath('tool', { Path: cmdOnly!, PATH: both! }, fs.existsSync), path.join(both!, 'tool.EXE'), 'and the later one again when the order is the other');
+        assert.strictEqual(resolveOnPath('tool', { PATH: both!, PATHEXT: '.CMD', Pathext: '.EXE' }, fs.existsSync), path.join(both!, 'tool.EXE'), 'PATHEXT too');
+    });
+});
+
+test('resolveOnPath: a bare name is looked for in the cwd first, as cmd.exe does, before any PATH directory', () =>
+{
+    withBins([['npm.EXE'], ['npm.CMD']], ([onPath, here]) =>
+    {
+        assert.strictEqual(resolveOnPath('npm', { PATH: onPath! }, fs.existsSync, here), path.join(here!, 'npm.CMD'));
+        assert.strictEqual(resolveOnPath('npm', { PATH: onPath! }, fs.existsSync, path.dirname(here!)), path.join(onPath!, 'npm.EXE'), 'a cwd without it falls through to PATH');
+        assert.strictEqual(resolveOnPath('npm', { PATH: onPath! }, fs.existsSync), path.join(onPath!, 'npm.EXE'), 'no cwd given: PATH alone');
+    });
+});
+
+test('resolveOnPath: a relative name with an extension or a path is resolved against the given cwd, not the process cwd', () =>
+{
+    withBins([['run.cmd', 'sub.CMD']], ([here]) =>
+    {
+        assert.strictEqual(resolveOnPath('run.cmd', { PATH: '' }, fs.existsSync, here), path.join(here!, 'run.cmd'));
+        assert.strictEqual(resolveOnPath('run.cmd', { PATH: '' }, fs.existsSync), null, 'the process cwd has no run.cmd');
+        const parent = path.dirname(here!);
+        assert.strictEqual(resolveOnPath(path.join(path.basename(here!), 'run.cmd'), { PATH: '' }, fs.existsSync, parent), path.join(parent, path.basename(here!), 'run.cmd'), 'a relative path with a folder');
+        assert.strictEqual(resolveOnPath(path.join(path.basename(here!), 'run.cmd'), { PATH: '' }, fs.existsSync, here), null, 'and not from another cwd');
+    });
+});
+
+test('resolveOnPath: surrounding quotes on a PATH entry are stripped', () =>
+{
+    withBins([['npm.EXE']], ([dir]) =>
+    {
+        assert.strictEqual(resolveOnPath('npm', { PATH: `"${dir!}"` }, fs.existsSync), path.join(dir!, 'npm.EXE'));
+        assert.strictEqual(resolveOnPath('npm', { PATH: `;"${dir!}";` }, fs.existsSync), path.join(dir!, 'npm.EXE'), 'empty entries are skipped');
+    });
+});
+
+test('shimOfLaunch passes the spawn cwd to the lookup', () =>
+{
+    withBins([['mine.CMD']], ([here]) =>
+    {
+        assert.strictEqual(shimOfLaunch('mine', [], { PATH: '' }, fs.existsSync, here), true);
+        assert.strictEqual(shimOfLaunch('mine', [], { PATH: '' }, fs.existsSync), undefined);
+    });
+});

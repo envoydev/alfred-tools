@@ -867,7 +867,8 @@ flag is set, and `parse.js` sets it only for a cmd-shim, never for a `.com` or `
 The shim test now goes by the resolved file, as cross-spawn does (2026-11-18): a name that is `npm` but resolves to a
 Volta `npm.exe` is a real program and would break under two levels. `resolveOnPath` (`scripts/core/cmd-line.ts`) finds
 the file the way cmd.exe does - the PATH directories in order, each PATHEXT extension in turn (default
-`.COM;.EXE;.BAT;.CMD`) - and fetch and sign-in pass `spawnArgs` its answer: a `.cmd` or `.bat` is a shim, any other file
+`.COM;.EXE;.BAT;.CMD`), `PATH` and `PATHEXT` found in any case with the last matching key winning, the spawn cwd tried first for a
+bare name, a relative name taken from that cwd, quotes on a PATH entry stripped - and fetch and sign-in pass `spawnArgs` its answer: a `.cmd` or `.bat` is a shim, any other file
 is not. The name rule (`npm`, `npx`, `pnpm`, `yarn`, `*.cmd`, `*.bat`) stays as the fallback when the name resolves to
 no file. NOT RUN: a real Windows run of a `uvx` or `docker` fetch through `cmdArgOnce`, and of a Volta `npm.exe`.
 

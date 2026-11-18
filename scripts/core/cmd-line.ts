@@ -27,16 +27,26 @@ const META = /([()\][%!^"`<>&|;, *?])/g;
 export const cmdArgOnce = (arg: string): string => argvQuote(arg).replace(META, '^$1');
 export const cmdArg = (arg: string): string => cmdArgOnce(arg).replace(META, '^$1');
 
+// An environment variable as a Windows environment block has it: the name in any case, and the last of the keys that match.
+function envValue(env: Record<string, string | undefined>, name: string): string | undefined
+{
+    const matching = Object.keys(env).filter((key) => key.toUpperCase() === name);
+    return matching.length ? env[matching[matching.length - 1]!] : undefined;
+}
+
 // The file a command name runs on Windows, as cmd.exe finds it: a name with a path or an extension is looked up as written
-// (and, with no path, in each PATH directory), a bare name in each PATH directory with each PATHEXT extension in turn.
-// `exists` is the file system, so the lookup itself holds none. -> the first file that exists, or null
-export function resolveOnPath(name: string, env: Record<string, string | undefined>, exists: (file: string) => boolean): string | null
+// (and, with no path, in each PATH directory), a bare name in `cwd` first and then in each PATH directory, with each PATHEXT
+// extension in turn. A relative name is taken from `cwd` - the directory the program will be started in - not from this
+// process's. `exists` is the file system, so the lookup itself holds none. -> the first file that exists, or null
+export function resolveOnPath(name: string, env: Record<string, string | undefined>, exists: (file: string) => boolean, cwd?: string): string | null
 {
     const hasPath = PATH_SEPARATOR_PATTERN.test(name);
-    if ((hasPath || path.extname(name)) && exists(name)) return name;
+    const hasExtension = path.extname(name) !== '';
+    const asWritten = cwd === undefined || path.isAbsolute(name) ? name : path.resolve(cwd, name);
+    if ((hasPath || hasExtension) && exists(asWritten)) return asWritten;
     if (hasPath) return null;
-    const extensions = [...(path.extname(name) ? [''] : []), ...(env['PATHEXT'] || DEFAULT_PATHEXT).split(PATH_LIST_SEPARATOR).filter(Boolean)];
-    const directories = (env['PATH'] ?? env['Path'] ?? '').split(PATH_LIST_SEPARATOR).map((directory) => directory.replace(/^"(.*)"$/, '$1')).filter(Boolean);
+    const extensions = [...(hasExtension ? [''] : []), ...(envValue(env, 'PATHEXT') || DEFAULT_PATHEXT).split(PATH_LIST_SEPARATOR).filter(Boolean)];
+    const directories = [...(cwd === undefined ? [] : [cwd]), ...(envValue(env, 'PATH') ?? '').split(PATH_LIST_SEPARATOR).map((directory) => directory.replace(/^"(.*)"$/, '$1')).filter(Boolean)];
     for (const directory of directories)
     {
         for (const extension of extensions)
@@ -57,9 +67,9 @@ function launchOf(command: string, args: string[]): { name: string; rest: string
 
 // Whether the file a launch's program resolves to is a shim: true for a .cmd or .bat, false for any other file (a Volta
 // `npm.exe` is a real program), undefined when nothing resolves - spawnArgs then goes by the name.
-export function shimOfLaunch(command: string, args: string[], env: Record<string, string | undefined>, exists: (file: string) => boolean): boolean | undefined
+export function shimOfLaunch(command: string, args: string[], env: Record<string, string | undefined>, exists: (file: string) => boolean, cwd?: string): boolean | undefined
 {
-    const resolved = resolveOnPath(launchOf(command, args).name, env, exists);
+    const resolved = resolveOnPath(launchOf(command, args).name, env, exists, cwd);
     return resolved === null ? undefined : SHIM_FILE_PATTERN.test(resolved);
 }
 

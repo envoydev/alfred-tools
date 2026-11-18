@@ -47,7 +47,7 @@ export const fetchSpawnArgs = (argv: string[], platform: string, shim?: boolean)
 
 export function realFetch(argv: string[], { cwd, env }: { cwd: string; env: Env })
 {
-    const shim = process.platform === 'win32' ? shimOfLaunch(argv[0]!, argv.slice(1), env, fs.existsSync) : undefined;
+    const shim = process.platform === 'win32' ? shimOfLaunch(argv[0]!, argv.slice(1), env, fs.existsSync, cwd) : undefined;
     const spawnArguments = fetchSpawnArgs(argv, process.platform, shim);
     return spawnSync(spawnArguments.file, spawnArguments.args, { cwd, env, encoding: 'utf8', timeout: 1800000, windowsHide: true, shell: spawnArguments.shell, stdio: ['ignore', 'pipe', 'pipe'] });
 }
