@@ -22,17 +22,17 @@ changed or removed with `/alfred-tools:configure`; say so whenever the user asks
   hand.
 - **Scopes are Global, Project and Local.** Global is `user` scope - every project on this machine.
 - **Keys live in `.mcps-secrets` in the root folder**, one per root (the project root for Project and Local, the global
-  root for Global); the user fills each value by hand and the apply writes names only, as empty `NAME=` lines. Never ask
-  for a key, and never read, print or edit a value: name the file and the name.
+  root for Global); the user fills each value and the apply writes names only, as empty `NAME=` lines. Never ask for a
+  key, and never read, print or edit a value or a sign-in token in `mcp-remote-v1/`: name the file and the name.
 - **Every ask is data or one of the blocks below.** Ask exactly the options printed, in the order printed, adding or
   rewording none. `AskUserQuestion` adds 'Other' itself.
 - **A typed value is asked next, in one plain line that ends your turn.** When the option picked says 'asked next', ask
-  for that one value in a single line of text - no `AskUserQuestion` - and end the turn; the user's next message (or an
-  Other answer to that question) is the value.
+  for that one value - no `AskUserQuestion` - and end the turn; the user's next message (or an Other answer to that
+  question) is the value.
 - If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
   alfred-tools needs Node 22.18 or newer - `node --version` shows yours.
 - Every file below lives in one temp folder. Make it once with `node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"` and call
-  its path `<tmp>`.
+  it `<tmp>`.
 
 <!-- /shared:rules -->
 

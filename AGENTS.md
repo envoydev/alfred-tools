@@ -126,16 +126,22 @@ The first five plus `kit:check` are what CI runs, in that order.
   `<root>/mcp-remote-v1/` serves Claude Code and Cursor. The plugin never reads, prints or copies those files; the
   root's `.gitignore` covers the folder, and where git would commit it the server is set up for Claude Code only.
   Two `permissions.deny` rules in the user's Claude Code settings keep sessions out: `Read(//**/mcp-remote-v1/**)` and
-  `Read(//**/.mcps-secrets)`.
+  `Read(//**/.mcps-secrets)`. They reach Claude Code's file tools and the Bash file commands it recognizes (`cat`,
+  `head`, `tail`, `sed`), not a `grep -r` run from a folder above or a script that opens the file itself, unless Claude
+  Code's sandbox is on (macOS, Linux, WSL2); and a stdio key written into a registration sits in the account file and,
+  for Cursor's copy, in `~/.cursor/mcp.json`, which no rule covers (`docs/sources.md`, F15). Both are open gaps until a
+  guard covers them.
 - **Paths absolute at every scope** (the user's ruling, 2026-11-11, 'Absolute, always'), `project` included, with `~`
   expanded by the script: one data folder whatever folder Claude starts in, at the cost that the committed `.mcp.json`
   names this machine's path. Never a key in `.mcp.json`. Every file the plugin writes for a scope family sits in that
   family's root folder (project root: project and local scope; global root: global scope), memory's data included.
 - **`allowed-tools` pre-approves read-only calls only.** `apply.ts`, `fetch.ts`, `fix.ts --apply`, `update.ts --apply` and the
   `hud-statusline.ts` writes are never listed, so Claude Code's own prompt guards a change beside the command's written ask. `tests/lint.ts`
-  enforces it. The one exception is a write into the run's temp folder: `inventory.ts --json` and `plan.ts --out`,
-  `--record`, `--rewind` and `--skip`, each refusing (exit 2) a file outside a folder `tmpdir.ts` made, and writing through
-  that folder's real path with a temporary file and a rename. `tmpdir.ts` makes the folder and removes its own old ones.
+  enforces it. Two exceptions write into a temp folder. `inventory.ts --json` and `plan.ts --out`, `--record`,
+  `--rewind` and `--skip` each refuse (exit 2) a file outside a folder `tmpdir.ts` made, and write through that folder's
+  real path with a temporary file and a rename; `tmpdir.ts` makes the folder and removes its own old ones. And
+  `prereq.ts --audit` makes a `pt-audit-*` folder of its own, runs `npm install --package-lock-only --ignore-scripts`
+  and `npm audit` there for one npm package at its pin, and removes it (`auditPrereqs` in `scripts/prereq/prereq.ts`).
 - **Script paths go through the plugin root.** A command's shell runs in the user's project, so every call is
   `node "${CLAUDE_PLUGIN_ROOT}/scripts/<file>"`.
 - **Asks stay within the AskUserQuestion limits** (1-4 questions per call, 2-4 options each). Exactly one option is

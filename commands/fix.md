@@ -6,8 +6,9 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --detect), Bash(
 ---
 
 Find the known problems in what is installed and apply the recorded fix for each one the user picks. Every fix row is
-in `catalog/fixes.json`; the detectors are in `scripts/fix/`. A row whose detector finds nothing is not shown. The
-argument, when given, narrows everything below to one fix id, tool or registration name: `$ARGUMENTS`.
+in `${CLAUDE_PLUGIN_ROOT}/catalog/fixes.json`; the detectors are in `${CLAUDE_PLUGIN_ROOT}/scripts/fix/`. A row whose
+detector finds nothing is not shown. The argument, when given, narrows everything below to one fix id, tool or
+registration name: `$ARGUMENTS`.
 
 If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
 alfred-tools needs Node 22.18 or newer - `node --version` shows yours.
@@ -161,5 +162,6 @@ connect; one that wrote a bridge (`mcp-bridge.js`) or the helper beside it print
 - A registration that matches no catalog row is the user's and is never touched.
 - Keys live in `.mcps-secrets` in the root folder, filled by the user. A key is written into a registration only by
   `token-sync`, for a local route; `key-to-helper` moves a hosted key out of a registration once its name is filled
-  there. This command never asks for, prints or edits a key or a value; a finding names the key and the file.
+  there. This command never asks for, prints or edits a key, a value or a sign-in token in `mcp-remote-v1/`; a finding
+  names the key and the file.
 - Do not repeat a fix 'STILL FOUND' in a loop. Show it and stop; the finding's note says what is left to do.

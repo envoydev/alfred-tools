@@ -1283,6 +1283,12 @@ Windows 11 ARM64.
     recognizes in Bash, such as `cat`, `head`, `tail`, `sed`, and `tee`, and to the targets of Bash redirections'; not
     to 'a command that reads files without naming them, such as `grep -r pattern .`', nor to 'a Python or Node script
     that opens files itself'. `Read(//**/.env)` blocks 'any `.env` anywhere on the filesystem'.
+  - Claude Code's sandbox (https://code.claude.com/docs/en/sandboxing.md, read 2026-11-18): 'Paths and domains from both
+    sandbox settings and permission rules are merged into the final sandbox configuration', `Read` deny rules among
+    them, and 'The limits apply to Bash, PowerShell, and Monitor commands and the processes they start'. It is 'off by
+    default' (`/sandbox`, or `sandbox.enabled`) and runs on 'macOS, Linux, and WSL2'; 'On native Windows, Claude Code
+    runs commands unsandboxed'. So `Read(//**/.mcps-secrets)` reaches a `grep -r` or a script only where the sandbox
+    is on.
   - Cursor: 'Cursor automatically ignores files in `.gitignore`' for the Agent and `@` mentions, but 'The terminal and
     MCP server tools used by Agent cannot block access', and 'complete protection isn't guaranteed'. The page does not
     name the CLI.

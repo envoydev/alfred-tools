@@ -13,6 +13,8 @@ the work; you paste what it prints and ask.
 - **Nothing changes before one confirmation** (step 3). `--check` and `--questions` read; only `--apply` writes, and Claude
   Code asks permission for that call itself - `--apply` is deliberately not in `allowed-tools`.
 - **The `claude` CLI is the only writer** of `.mcp.json` and the account file; the script calls it. Never edit those files.
+- **Keys live in `.mcps-secrets` in the root folder**, filled by the user. Never ask for a key, and never read, print or
+  edit a value or a sign-in token in `mcp-remote-v1/`: name the file and the name.
 - **A pin moves only to a release at least 7 days old.** A newer, younger release is listed as held back, never offered.
   The rewrite keeps the registration's name, scope, args and env; only the pin and the cut-off beside it move. A rewrite
   at Project scope keeps `.mcp.json` in order: the catalog servers in the user's order, the user's own after them, no
@@ -20,14 +22,15 @@ the work; you paste what it prints and ask.
 - **A registration that matches no catalog row is the user's.** The script never looks at it. A server left on its own
   at install is listed as 'on its own - not checked' and never offered.
 - **Every ask is data.** Ask exactly the options printed, in the order printed; `AskUserQuestion` adds 'Other' itself.
-- This command never changes `catalog/tools.json`. Its pins move only through the repo script `npm run refresh-pins`.
+- This command never changes the plugin's own catalog (`${CLAUDE_PLUGIN_ROOT}/catalog/tools.json`): its pins move only
+  with a plugin release.
 - A rename, a move or a route change is not an update; that is `/alfred-tools:configure`. A change in how this plugin
-  passes data to a server it set up is one (the user's ruling, 2026-11-12): the check runs `/alfred-tools:fix`'s rows
-  marked `upgrade` in `catalog/fixes.json` - `key-to-helper` (a key in an Authorization header, read through
-  `mcp-headers.js` once the user has put it in `.mcps-secrets`), `root-ignore`, `project-relative-path` (absolute
-  project paths; on Windows serena's home under the root) and `mcp-order` - offers what they find, and applies it with
-  fix's own code. A finding that needs the user - a key not filled yet, a folder to name - is a note naming
-  `/alfred-tools:fix`, never an offer.
+  passes data to a server it set up is one (the user's ruling, 2026-11-12): the check runs every `/alfred-tools:fix`
+  row marked `upgrade` in `${CLAUDE_PLUGIN_ROOT}/catalog/fixes.json` - among them a key moved from an Authorization
+  header to `mcp-headers.js` once the user has put it in `.mcps-secrets`, absolute project paths, the root's
+  `.gitignore`, the `.mcp.json` order, the deny rules and the retired plugins - offers what they find under 'New ways
+  to pass data', and applies it with fix's own code. A finding that needs the user - a key not filled yet, a folder to
+  name - is a note naming `/alfred-tools:fix`, never an offer.
 
 If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
 alfred-tools needs Node 22.18 or newer - `node --version` shows yours.
