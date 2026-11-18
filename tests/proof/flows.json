@@ -68,6 +68,53 @@
           ]
         },
         {
+          "entry": "plan",
+          "argv": [
+            "--record",
+            "<w>/inventory.json",
+            "<fixture:record-picks.json>",
+            "<w>/record-answers.json",
+            "<fixture:record-step.json>",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "--rewind",
+            "<w>/inventory.json",
+            "<w>/record-picks.json",
+            "<w>/record-answers.json",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "--rewind",
+            "<w>/inventory.json",
+            "<w>/record-picks.json",
+            "<w>/record-answers.json",
+            "clients",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
+          "entry": "plan",
+          "argv": [
+            "--skip",
+            "<w>/inventory.json",
+            "<w>/record-picks.json",
+            "<w>/record-answers.json",
+            "sentry",
+            "--data",
+            "<data>"
+          ]
+        },
+        {
           "entry": "prereq",
           "argv": [
             "<fixture:f1-answers.json>",
