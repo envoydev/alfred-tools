@@ -28,7 +28,11 @@ export function questions(out: UpdateCheck)
     }
     const offer = { ...STATIC.updateOffer };
     // 'All of them' runs the offers, never the unchecked plugins: say which are left for 'Pick which'
-    if (out.offers.length && out.unchecked.length) offer.options = offer.options.map((option, i) => (i === 0 ? { ...option, description: `${option.description}; ${leftOutNote(out.unchecked.map((item) => item.label))}` } : option));
+    if (out.offers.length && out.unchecked.length)
+    {
+        const note = leftOutNote(out.unchecked.map((item) => item.label));
+        offer.options = offer.options.map((option, i) => (i === 0 ? { ...option, description: `${option.description}; ${note}` } : option));
+    }
     if (!out.offers.length) offer.options = offer.options.filter((option) => option.label !== `All of them${RECOMMENDED_SUFFIX}`).map((option, i) => (i === 0 ? { ...option, label: `${option.label}${RECOMMENDED_SUFFIX}` } : option));
     return { offer, pick: chunk(pickQuestions, 4), ...cursor };
 }

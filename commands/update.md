@@ -66,9 +66,9 @@ A line under 'Could not check' is a registry that did not answer; it is never re
 node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --questions --no-refresh --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
-It prints `{ "offer": <ask>, "pick": [<calls>], "cursorOffers": [...], "cursorNameQuestions": [...] }`. Ask the `offer` as
-printed, in one call with each question in `cursorOffers` whose `needs` is null when that is four questions or fewer (the
-Cursor offer text is below).
+It prints `{ "offer": <ask>, "pick": [<calls>], "cursorOffers": [...], "cursorNameQuestions": [...] }` (the name
+questions are handled in step 3). Ask the `offer` as printed; the order of the calls is the procedure after the Cursor
+offer below:
 
 ```ask updateOffer
 Update what is behind?
@@ -87,10 +87,15 @@ so is one 'All of them' leaves out because alfred-code is set up (its label ends
 removes it for both'): pass each as `--input retired-declined=<id>~<scope>,...` in step 3, and it is not offered again.
 When nothing else was picked, step 3 runs with `none`. 'Skip' declines nothing.
 
-Ask each question in `cursorOffers` as printed, one per root. One whose `needs` is null goes in the update offer's call
-(four questions or fewer in all; else in the next call); one whose `needs` names a list-import waits until 'Pick which'
-is answered. On 'Skip', drop the Cursor answers from the batched call and pass none of them. When the update offer is
-not asked (only the Cursor offer remains), ask the Cursor offers alone:
+Each question in `cursorOffers` is asked as printed, one per root, by this procedure:
+
+1. Call 1: the update offer plus the first three Cursor offers whose `needs` is null, in printed order. With no update
+   offer (`offer` is null), call 1 is the first four such Cursor offers.
+2. The other Cursor offers whose `needs` is null: further calls of four or fewer, right after call 1, in printed order.
+3. 'Skip' on the update offer: ask no further Cursor calls and pass none of the Cursor answers, those of call 1 included.
+4. A Cursor offer whose `needs` names a list-import: ask it only after the updates are chosen, and only when that import
+   is in what will be applied - 'All of them' includes it, and under 'Pick which' it must be picked. Otherwise do not ask
+   it ('apply' refuses it).
 
 ```ask cursor-offer
 Cursor is on this machine, and the <n> servers in <root> are set up for Claude Code only. Set them up for Cursor too?
