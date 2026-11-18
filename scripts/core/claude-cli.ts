@@ -24,6 +24,16 @@ export function argvQuote(arg: string): string
 const META = /([()\][%!^"`<>&|;, *?])/g;
 export const cmdArg = (arg: string): string => argvQuote(arg).replace(META, '^$1').replace(META, '^$1');
 
+// How a runtime or client is spawned. Windows: ONE command line, each part quoted with cmdArg, run through the shell with
+// no args array - cmdArg escapes for exactly two reads (Node's cmd.exe, then the .cmd shim's %*), so a `cmd /c` in front is
+// dropped: it would add a third read that leaves a `&`, `|` or `%` live. POSIX: the plain array, no shell.
+export function spawnArgs(command: string, args: string[], platform: string): { file: string; args: string[]; shell: boolean }
+{
+    if (platform !== 'win32') return { file: command, args, shell: false };
+    const line = /^cmd(\.exe)?$/i.test(command) && /^\/c$/i.test(args[0] || '') ? args.slice(1) : [command, ...args];
+    return { file: line.map(cmdArg).join(' '), args: [], shell: true };
+}
+
 export function runClaude(args: string[], { cwd, env, input, timeout = 120000 }: CliOptions = {}): CliResult
 {
     const options = { encoding: 'utf8' as const, cwd, env: env || process.env, input, timeout, windowsHide: true, maxBuffer: 64 * 1024 * 1024 };

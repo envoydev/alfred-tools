@@ -5,7 +5,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { world, writeJson, tempOf } from './helpers.ts';
 import { fetchStep } from '../scripts/entries/names.ts';
-import { writeJob, fetchJob, runFetchJob, realStart } from '../scripts/apply/fetch.ts';
+import { writeJob, fetchJob, runFetchJob, realStart, fetchSpawnArgs } from '../scripts/apply/fetch.ts';
+import { cmdArg } from '../scripts/core/claude-cli.ts';
 import type { CliResult } from '../scripts/core/types.ts';
 
 const SCRIPT = path.join(import.meta.dirname, '..', 'scripts', 'fetch.ts');
@@ -311,4 +312,15 @@ test('after serena\'s first start the folder key is checked', async () => {
         assert.ok(!kept.some((l) => l.includes('project folders set')), kept.join('\n'));
     }
     finally { w.clean(); }
+});
+
+test('Windows passes one quoted command line', () => {
+    const argv = ['npx', '-y', 'a b@1'];
+    assert.deepStrictEqual(fetchSpawnArgs(argv, 'win32'), { file: argv.map(cmdArg).join(' '), args: [], shell: true });
+    // a `&`, `|` or `%` stays inert through both cmd reads: caret-escaped twice
+    assert.deepStrictEqual(fetchSpawnArgs(['npm', 'exec', '--package', 'a&b|c%d@1'], 'win32'), { file: '^^^"npm^^^" ^^^"exec^^^" ^^^"--package^^^" ^^^"a^^^&b^^^|c^^^%d@1^^^"', args: [], shell: true });
+    // the `cmd /c` fetchStep puts in front on Windows would add a third read: dropped
+    assert.deepStrictEqual(fetchSpawnArgs(['cmd', '/c', 'npm', 'exec', '--yes'], 'win32'), { file: '^^^"npm^^^" ^^^"exec^^^" ^^^"--yes^^^"', args: [], shell: true });
+    assert.deepStrictEqual(fetchSpawnArgs(argv, 'darwin'), { file: 'npx', args: ['-y', 'a b@1'], shell: false });
+    assert.deepStrictEqual(fetchSpawnArgs(['uvx', '--help'], 'linux'), { file: 'uvx', args: ['--help'], shell: false });
 });

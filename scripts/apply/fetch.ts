@@ -38,9 +38,16 @@ export const expandedText = (text: unknown, env: Env): string => expandVars(text
 // the first ${VAR} with no default that is not set: a start without it only fails
 export const unsetVar = (entry: ServerEntry, env: Env): string | null => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((match) => match[1]!).find((variableName) => env[variableName] === undefined) || null;
 
-// The runtime itself (npm, uvx, docker), never the claude CLI, and with no limit of Claude Code's. On Windows it goes
-// through the shell so npm.cmd resolves.
-export const realFetch = (argv: string[], { cwd, env }: { cwd: string; env: Env }) => spawnSync(argv[0]!, argv.slice(1), { cwd, env, encoding: 'utf8', timeout: 1800000, windowsHide: true, shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
+// How the runtime (npm, uvx, docker) is spawned, never the claude CLI, and with no limit of Claude Code's. Windows: one
+// quoted command line through the shell so npm.cmd resolves, and no args array (Node's DEP0190); the fetch step's own
+// `cmd /c` in front is dropped. See core/claude-cli.ts spawnArgs.
+export const fetchSpawnArgs = (argv: string[], platform: string) => cli.spawnArgs(argv[0]!, argv.slice(1), platform);
+
+export function realFetch(argv: string[], { cwd, env }: { cwd: string; env: Env })
+{
+    const spawnArguments = fetchSpawnArgs(argv, process.platform);
+    return spawnSync(spawnArguments.file, spawnArguments.args, { cwd, env, encoding: 'utf8', timeout: 1800000, windowsHide: true, shell: spawnArguments.shell, stdio: ['ignore', 'pipe', 'pipe'] });
+}
 
 // A server and everything it started: TERM, then KILL after 5 s (Windows: taskkill /T /F). -> Promise, once it is gone
 function stopTree(child: ChildProcessByStdio<Writable, Readable, Readable>): Promise<void>
