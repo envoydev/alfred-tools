@@ -162,20 +162,28 @@ with the Bash tool's `run_in_background`:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
 ```
 
-One server at a time, it downloads each new pin and starts the server once with no 30-second limit, then prints each
-server's status (`claude mcp get`): without it the first session start does that download, and any first-run work of
-the new version, inside Claude Code's 30-second limit, and a first download can take minutes. Claude Code asks
-permission for it - it downloads and runs a package's install and starts the server. Tell the user to restart only once
-it reports, so a session start does not download the same package beside it (an npx server then fails at every start
-with `ENOENT` until `/alfred-tools:fix` repairs it); paste its output when it finishes. A
-`warn` line changes nothing: the registration is updated, and its first start downloads the pin and may time out once. When background runs
-are turned off, run it in the foreground with `timeout: 600000`, and again if the limit stops it. End with the restart line when the script prints one (new
-servers load on the next session start; `/reload-plugins` for plugins): a key helper runs at each connect, so a run
-that only rewrote helpers needs no restart.
+<!-- shared:fetch -->
+
+One server at a time, it downloads what the server launches into the runtime's cache and starts the server once with no
+30-second limit, so its first-run work is done before the next session, then prints each server's status (`claude mcp
+get`). Claude Code asks permission for it - it downloads and runs a package's install and starts the server. Tell the
+user to restart only once it reports, and paste its output verbatim when it finishes; a `warn` line changes nothing.
+When background runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit stops it.
+
+<!-- /shared:fetch -->
+
+Without the fetch, the first session start does that download, and any first-run work of the new version, inside Claude Code's
+30-second limit, and a first download can take minutes. A session start beside it downloads the same package at the same time (an
+npx server then fails at every start with `ENOENT` until `/alfred-tools:fix` repairs it). A `warn` line leaves the
+registration updated: its first start downloads the pin and may time out once. End with the restart line when the script
+prints one (new servers load on the next session start; `/reload-plugins` for plugins): a key helper runs at each
+connect, so a run that only rewrote helpers needs no restart.
 
 For each server the report named as `now the shared sign-in ... sign-in not done yet`, ask once the fetch has reported
 (sign-in.ts and the fetch both start npx, and two at once is the one case measured to break a start); the scope is the
 one the offer's `servers` entry gives for that name, and fetch's `skip` line names it too:
+
+<!-- shared:sign-in -->
 
 ```ask signInNow
 Sign in to <name> now?
@@ -200,10 +208,14 @@ would arrive too late; where Monitor is not available, run it with the Bash tool
 `timeout: 330000`, and Read its output file for the link line. The sign-in returns to `http://localhost:<port>/oauth/callback`
 on the machine running the client: on a remote machine (SSH), forward that port first with
 `ssh -L <port>:localhost:<port> <host>`, taking the port from the link's `redirect_uri` parameter, or open the link in a
-browser on that machine. It is not in `allowed-tools` - it opens a browser and writes tokens - so Claude Code asks permission for it. After a `signed in`, the summary reports that server's sign-in as 'sign-in done' (the report said 'not done yet'); any other answer or a failure keeps 'not done yet'.
+browser on that machine. It is not in `allowed-tools` - it opens a browser and writes tokens - so Claude Code asks permission for it.
 On a failure say why, that the user can run it again, and that otherwise the first session start opens the browser
 inside its 30-second limit. 'At the next session start': say exactly that, and that `/mcp` reconnects the server
 after the browser sign-in.
+
+<!-- /shared:sign-in -->
+
+After a `signed in`, the summary reports that server's sign-in as 'sign-in done' (the report said 'not done yet'); any other answer or a failure keeps 'not done yet'.
 
 A key helper that was edited by hand, or is newer than this plugin, is never rewritten here: the check names it, and
 `/alfred-tools:fix` (`helper-stale`) handles it.

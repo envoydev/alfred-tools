@@ -15,11 +15,14 @@ updated pin is never downgraded. Adding a tool that is not installed is `/alfred
 ## Rules
 
 - **Nothing is applied before one confirmation** (step 7). Every earlier step reads and asks.
-- **The `claude` CLI is the only writer** of `.mcp.json` and the account file; `apply.ts` calls it. Never edit those
-  files by hand.
 - **A registration that matches no catalog row is the user's.** It is listed, never offered, never touched.
 - **A server inherited from a parent folder's `.mcp.json` is that folder's.** It is noted under the table, never
   offered; to change it, run `/alfred-tools:configure` in that folder.
+
+<!-- shared:rules -->
+
+- **The `claude` CLI is the only writer** of `.mcp.json` and the account file; `apply.ts` calls it. Never edit those
+  files by hand.
 - **Scopes are Global, Project and Local.** Global is `user` scope - every project on this machine.
 - **Keys live in `.mcps-secrets` in the root folder**, one per root (the project root for Project and Local, the global
   root for Global), and the user fills each value by hand. The apply writes names only, as empty `NAME=` lines. A hosted
@@ -36,6 +39,10 @@ updated pin is never downgraded. Adding a tool that is not installed is `/alfred
   alfred-tools needs Node 22.18 or newer - `node --version` shows yours.
 - Every file below lives in one temp folder. Make it once with `node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"` and call
   its path `<tmp>`.
+
+<!-- /shared:rules -->
+
+<!-- shared:inventory-table -->
 
 ## 1. Inventory
 
@@ -56,6 +63,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/table.ts" <tmp>/inventory.json
 
 Paste the output verbatim in a fenced block. It is the whole catalog for this OS, numbered, with what is installed at
 each scope as `name [route, pin]`.
+
+<!-- /shared:inventory-table -->
 
 ## 3. What to change
 
@@ -105,6 +114,8 @@ Its `targets.<key>` holds each pick's `row` and what it has now (`current`: name
 `AskUserQuestion`) and, sometimes, `next.set` (the one folder left at the new scope; the record call writes it). Every
 question recommends what the pick has now. Until `next.id` is `done`:
 
+<!-- shared:walk-steps -->
+
 1. Ask `next.call` as printed. When `next.call` is empty, make no call.
 2. When a label is answered by something typed next (listed below), ask it in chat.
 3. Write `<tmp>/step.json` - `{"id": <next.id>, "answers": {<question id>: <label>}}`, an answer with a typed value as
@@ -115,8 +126,10 @@ question recommends what the pick has now. Until `next.id` is `done`:
    node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --record <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <tmp>/step.json --data "${CLAUDE_PLUGIN_DATA}"
    ```
 
-   It records the answers - leaving out each one that keeps what the tool has now - marks the step done and prints the
-   next step; exit 2 names what to fix.
+<!-- /shared:walk-steps -->
+
+It records the answers - leaving out each one that keeps what the tool has now - marks the step done and prints the
+next step; exit 2 names what to fix.
 
 What each step is:
 
@@ -133,6 +146,8 @@ What each step is:
   - Last, 'Set up <name> for which apps?' - what its list entry has now first. A change of the apps alone makes no
     `claude` call: the plan writes the list and Cursor's file only.
 
+<!-- shared:typed-values -->
+
 These labels are answered by a value typed next, one plain line each (see the Rules), written as `typed`:
 
 - a root's 'A folder you name', a location's 'Another ...folder' and a browser's 'A browser binary I name': a path;
@@ -140,6 +155,9 @@ These labels are answered by a value typed next, one plain line each (see the Ru
 - a key name's or URL name's 'A name you choose': a name matching `^[A-Za-z_][A-Za-z0-9_]*$`;
 - settings 'Change or add a setting': `NAME=value` pairs, written as an object `{"<NAME>": "<value>"}`. The plan refuses
   a name that looks like a credential: a key goes in `.mcps-secrets` and is picked as the key's name, never typed here;
+
+<!-- /shared:typed-values -->
+
 - a hosted route's 'Tools' answer that chooses toolsets (sonarqube): which toolsets to send, as one list written
   `<key>,<key>` - `analysis`, `coverage`, `dependency-risks`, `duplications`, `issues`, `measures`, `projects`,
   `quality-gates`, `rules`, `security-hotspots`. With no settings answer the plan keeps the pairs the registration has.
@@ -168,17 +186,13 @@ Paste the first output verbatim; its audit lines go into step 7's confirmation a
 is not a pass. From the second (JSON) output, copy `machine` into `<tmp>/answers.json` under `"machine"`. For each change
 with a missing prerequisite, ask once (up to four per call):
 
+<!-- shared:prereq -->
+
 ```ask prereqMissing
 <tool> needs <prerequisite>, which is missing. What now?
 - 'Skip this tool (Recommended)' - leave it out of the plan
 - 'Install it now' - run the install line shown, or install it yourself and re-check
 - 'Register anyway' - register it; it will not start until the prerequisite is there
-```
-
-'Skip': run this, which leaves that target out and keeps it out:
-
-```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --skip <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <key> --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 'Install it now': when the output gave an `install:` command, run it; when it gave only a page, give the user that page
@@ -190,8 +204,16 @@ Is <prerequisite> installed for <tool> now?
 - 'Skip this tool' - leave it out of the plan
 ```
 
-'Check again' runs `prereq.ts` again; 'Skip this tool' runs `--skip`, as 'Skip' does. 'Register anyway': keep it, and say
-in the confirmation that it will not start yet.
+'Check again' runs `prereq.ts` again; 'Skip this tool' runs `--skip`, as 'Skip' does. 'Register anyway': keep it, and
+say in the confirmation that it will not start yet.
+
+<!-- /shared:prereq -->
+
+'Skip': run this, which leaves that target out and keeps it out:
+
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --skip <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <key> --data "${CLAUDE_PLUGIN_DATA}"
+```
 
 ## 7. Plan, then one confirmation
 
@@ -214,6 +236,8 @@ back if the add fails. A root change notes that the user copies the values from 
 themselves - say it again after the apply. Exit 1 means the plan has errors; show them and rewind the pick each names
 (below), never go around them.
 
+<!-- shared:cursor-name -->
+
 A `cursor: <file> already has <name> - answer cursor-name-<name>@<file>` error is not a wrong answer: Cursor's file
 already holds a server under a name this plan writes for Cursor, one alfred-tools did not write. `<tmp>/plan.json`
 `cursorNames` holds one question per such name, id `cursor-name-<name>@<file>`; ask them, four per call, as written -
@@ -228,6 +252,10 @@ Cursor's <file> already has a server named <name> that alfred-tools did not writ
 Record each answer's value (`replace` or `keep`) in `<tmp>/answers.json` under `"cursorNames"`, keyed `<name>@<file>`
 (the question id after `cursor-name-`), then run the plan again. Never edit Cursor's file by hand to get past it.
 
+<!-- /shared:cursor-name -->
+
+<!-- shared:apply-ask -->
+
 Once the plan has no errors:
 
 ```ask apply
@@ -236,6 +264,8 @@ Apply this plan?
 - 'Change something' - go back to the answers
 - 'Cancel' - nothing is applied
 ```
+
+<!-- /shared:apply-ask -->
 
 'Change something', or a plan error, runs this, where `<pick>` is a target key - for a plan error, the target whose
 `targets.<key>.row` the error names. When `--rewind <pick>` exits 2, or the error names no pick, run it without a pick
@@ -268,12 +298,17 @@ the line that puts a registration back (`RESTORE BY HAND`): give it to the user 
 `${ALFRED_TOOLS_KEPT}`, never its value: the user puts their key back there.
 
 Then report each changed tool as the read-back printed it (name, scope, route). A moved data folder or root moves no
-data: the plan named the old folder, so name it again. Keys: relay each `key:` line as printed (the name and its file,
-never a value). After the read-back the apply prints one line per hosted server that takes a key - relay each as
-printed: 'connects with its key at the next session start' with the `/mcp -> <name> -> Reconnect` path for a session
-already running; 'fill <NAME> in <file>, then Reconnect it in /mcp' when the key is not there yet; or 'the server
-refused the key in <NAME>' with what that server takes, when it answered 401 or 403 to the key it was sent - the user
-fixes the value in the file and reconnects.
+data: the plan named the old folder, so name it again.
+
+<!-- shared:key-lines -->
+
+Keys: relay each `key:` line as printed (the name and its file, never a value). After the read-back the apply prints one
+line per hosted server that takes a key - relay each as printed: 'connects with its key at the next session start' with
+the `/mcp -> <name> -> Reconnect` path for a session already running; 'fill <NAME> in <file>, then Reconnect it in /mcp'
+when the key is not there yet; or 'the server refused the key in <NAME>' with what that server takes, when it answered
+401 or 403 to the key it was sent - the user fixes the value in the file and reconnects.
+
+<!-- /shared:key-lines -->
 
 **Fetch.** A change that launches a different package - a hosted route made local, say - prints `Fetch next, in the
 background (...): <file>`. Run, with the Bash tool's `run_in_background`:
@@ -282,20 +317,27 @@ background (...): <file>`. Run, with the Bash tool's `run_in_background`:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
 ```
 
-One server at a time, it fills the runtime's cache and starts the
-server once with no 30-second limit, so its first-run work (memory's model download) is done before the next session,
-then prints each changed server's status (`claude mcp get`); Claude Code asks permission for it. Tell the user to
-restart only once it reports, paste its output when it finishes, and say a `warn` line changes nothing. An npx server
-that fails at every start with `ENOENT` afterwards was started beside the download: `/alfred-tools:fix` repairs it.
-A rename, a scope move or a location change keeps the package: it prints no fetch line, and the apply printed each status
-itself. End with the restart line: a changed registration loads on the next session start, and a project-scope server
-also needs the trust prompt then. When background runs are turned off, run fetch.ts in the foreground with
-`timeout: 600000`, and again if the limit stops it.
+<!-- shared:fetch -->
+
+One server at a time, it downloads what the server launches into the runtime's cache and starts the server once with no
+30-second limit, so its first-run work is done before the next session, then prints each server's status (`claude mcp
+get`). Claude Code asks permission for it - it downloads and runs a package's install and starts the server. Tell the
+user to restart only once it reports, and paste its output verbatim when it finishes; a `warn` line changes nothing.
+When background runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit stops it.
+
+<!-- /shared:fetch -->
+
+An npx server that fails at every start with `ENOENT` afterwards was started beside the download: `/alfred-tools:fix`
+repairs it. A rename, a scope move or a location change keeps the package: it prints no fetch line, and the apply
+printed each status itself. End with the restart line: a changed registration loads on the next session start, and a
+project-scope server also needs the trust prompt then.
 
 **Sign-in.** For each server the plan named in an `OAuth:` line that says its browser opens to sign in the first time it
 starts (the shared sign-in - a route or app change can bring one), ask once the fetch has reported (sign-in.ts and the
 fetch both start npx, and two at once is the one case measured to break a start); the scope is the one the registration
 has now, and fetch's `skip` line names it too:
+
+<!-- shared:sign-in -->
 
 ```ask signInNow
 Sign in to <name> now?
@@ -324,6 +366,8 @@ browser on that machine. It is not in `allowed-tools` - it opens a browser and w
 On a failure say why, that the user can run it again, and that otherwise the first session start opens the browser
 inside its 30-second limit. 'At the next session start': say exactly that, and that `/mcp` reconnects the server
 after the browser sign-in.
+
+<!-- /shared:sign-in -->
 
 ## 9. Remove
 

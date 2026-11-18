@@ -133,13 +133,24 @@ A key in it shows as `${ALFRED_TOOLS_KEPT}`, never its value: the user puts thei
 If the output has a `RECHECK` line, go back to step 1 in this same command (once): the rest was not offered before the move.
 
 A fix that changes what a server launches (a python request, a cut-off), or removes a broken npx cache folder
-(`npx-cache-entry`), prints `Fetch next, in the background (...):
-<file>`. Run, with the Bash tool's `run_in_background`, `node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"`: it
-downloads the new launch into the runtime's cache and starts the server once with no 30-second limit, one at a time, so
-the next session's start answers inside Claude Code's 30 seconds, then prints each repaired server's status (`claude mcp
-get`). Claude Code asks permission for it. Tell the user
-to restart only once it reports, and paste its output when it finishes; a `warn` line changes nothing. When background
-runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit stops it.
+(`npx-cache-entry`), prints `Fetch next, in the background (...): <file>`. Run, with the Bash tool's
+`run_in_background`:
+
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
+```
+
+<!-- shared:fetch -->
+
+One server at a time, it downloads what the server launches into the runtime's cache and starts the server once with no
+30-second limit, so its first-run work is done before the next session, then prints each server's status (`claude mcp
+get`). Claude Code asks permission for it - it downloads and runs a package's install and starts the server. Tell the
+user to restart only once it reports, and paste its output verbatim when it finishes; a `warn` line changes nothing.
+When background runs are turned off, run it in the foreground with `timeout: 600000`, and again if the limit stops it.
+
+<!-- /shared:fetch -->
+
+The next session's start then answers inside Claude Code's 30 seconds.
 
 End with the restart line when the script prints one: the repaired registrations load on the next session start. A run
 whose only fixes wrote a `.gitignore` or a hosted server's key helper prints none, since that helper runs at each
