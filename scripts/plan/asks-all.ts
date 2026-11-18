@@ -29,7 +29,7 @@ import type { AskCtx, AskOptions, Asked, Picks, Questions } from './types.ts';
 export function allQuestions(inventory: Inventory, picks: Picks | null | undefined, catalog: Catalog, { env = {}, home = null, connectors = null }: AskOptions = {}): Questions
 {
     const out: Questions = {
-        static: { ...STATIC, prereqMissing: STATIC.prereqMissing('<tool>', '<prerequisite>'), settingsOne: STATIC.settingsOne('<tool>'), 'cursor-name-taken': STATIC['cursor-name-taken']('<file>', '<name>') },
+        static: { ...STATIC, prereqMissing: STATIC.prereqMissing('<tool>', '<prerequisite>'), prereqInstalled: STATIC.prereqInstalled('<tool>', '<prerequisite>'), settingsOne: STATIC.settingsOne('<tool>'), 'cursor-name-taken': STATIC['cursor-name-taken']('<file>', '<name>') },
         pick: pickQuestions(inventory, catalog, picks && picks.existing, connectors), change: null, remove: removeQuestions(inventory, catalog), tools: {}, targets: {},
     };
     // `exists` reads the disk: alfred-code's .alfred/.gitignore and its 2.x data decide which folders are offered

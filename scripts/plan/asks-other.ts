@@ -219,6 +219,9 @@ export const STATIC = {
         { label: `Skip this tool${RECOMMENDED_SUFFIX}`, description: 'leave it out of the plan' },
         { label: 'Install it now', description: 'run the install line shown, or install it yourself and re-check' },
         { label: 'Register anyway', description: 'register it; it will not start until the prerequisite is there' } ] }),
+    prereqInstalled: (tool: string, need: string): Question => ({ id: `prereq-installed-${tool}`, header: 'Installed?', multiSelect: false, question: `Is ${need} installed for ${tool} now?`, options: [
+        { label: `Check again${RECOMMENDED_SUFFIX}`, description: 'run the prerequisite check again' },
+        { label: 'Skip this tool', description: 'leave it out of the plan' } ] }),
     clients: clientsQuestion(true).question,
     // a STATIC function whose labels hold placeholders names them, so tests/ask-blocks.ts fills the block's own
     'cursor-name-taken': Object.assign((file: string, name: string) => cursorNameQuestion({ file, name, sameRow: true }).question, { placeholders: ['<file>', '<name>'] }),

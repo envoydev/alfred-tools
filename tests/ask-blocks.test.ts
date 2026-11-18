@@ -115,3 +115,12 @@ test('staticAsk fills a STATIC function\'s own placeholders', () => {
         assert.deepStrictEqual(problemsOf(blocks[0] as AskBlock), [], cmd);
     }
 });
+
+test('STATIC.prereqInstalled asks whether a prerequisite installed by hand is there now', () => {
+    assert.deepStrictEqual(STATIC.prereqInstalled('playwright-chrome', 'Google Chrome'), {
+        id: 'prereq-installed-playwright-chrome', header: 'Installed?', multiSelect: false, question: 'Is Google Chrome installed for playwright-chrome now?',
+        options: [
+            { label: 'Check again (Recommended)', description: 'run the prerequisite check again' },
+            { label: 'Skip this tool', description: 'leave it out of the plan' } ] });
+    assert.match((staticAsk('prereqInstalled') as Question).question, /^Is <m> installed for <n> now\?$/);
+});
