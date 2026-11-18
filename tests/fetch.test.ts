@@ -252,7 +252,9 @@ test('fetch fetches mcp-remote for a shared sign-in entry and does not start it'
         });
         assert.deepStrictEqual(res.fetched, ['mcp-remote@0.16.0']);
         assert.deepStrictEqual(started, []);
-        assert.deepStrictEqual(res.skipped, ["'atlassian' not started: its first start opens the sign-in, which belongs to Claude Code or Cursor"]);
+        assert.strictEqual(res.skipped.length, 1);
+        assert.match(res.skipped[0]!, /^'atlassian' not started: its first start opens the sign-in/);
+        assert.ok(res.skipped[0]!.includes('scripts/sign-in.ts atlassian project'), 'the skip line names the sign-in command with the server and its scope');
     }
     finally { w.clean(); }
 });

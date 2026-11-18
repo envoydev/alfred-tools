@@ -157,6 +157,30 @@ are turned off, run it in the foreground with `timeout: 600000`, and again if th
 servers load on the next session start; `/reload-plugins` for plugins): a key helper runs at each connect, so a run
 that only rewrote helpers needs no restart.
 
+For each server the report named as `now the shared sign-in ... sign-in not done yet`, ask once the fetch has reported
+(sign-in.ts and the fetch both start npx, and two at once is the one case measured to break a start); the scope is the
+one the offer's `servers` entry gives for that name, and fetch's `skip` line names it too:
+
+```ask signInNow
+Sign in to <name> now?
+- 'Sign in now (Recommended)' - opens your browser and waits up to five minutes; the sign-in is kept in the root and serves Claude Code and Cursor
+- 'At the next session start' - its first start then opens the browser inside Claude Code's 30-second limit, and /mcp reconnects it after
+```
+
+Then, for 'Sign in now', run:
+
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/sign-in.ts" "<name>" "<scope>"
+```
+
+Run it in the foreground with the Bash tool's `timeout: 330000` (its `--auth-timeout 300` plus the npx
+start; the default 120000 would stop it) and tell the user the browser opens and the sign-in has five minutes. It
+prints `<name>: signed in`, or `<name>: sign-in failed: <why>` and exits 1; it never prints a token or the tool list.
+It is not in `allowed-tools` - it opens a browser and writes tokens - so Claude Code asks permission for it. After a `signed in`, the summary reports that server's sign-in as 'sign-in done' (the report said 'not done yet'); any other answer or a failure keeps 'not done yet'.
+On a failure say why, that the user can run it again, and that otherwise the first session start opens the browser
+inside its 30-second limit. 'At the next session start': say exactly that, and that `/mcp` reconnects the server
+after the browser sign-in.
+
 A key helper that was edited by hand, or is newer than this plugin, is never rewritten here: the check names it, and
 `/alfred-tools:fix` (`helper-stale`) handles it.
 

@@ -1383,3 +1383,26 @@ Page: https://docs.sonarsource.com/sonarqube-mcp-server/setup/sonarqube-cloud-ho
 - From the user's notes, 2026-11-17, not confirmed on the vendor page: the token's place in the account ('My Account,
   Security', the row's hint), and that the write tools change issue and hotspot status (the reason read-only is the
   recommended setting).
+
+## mcp-remote 0.16.0 - the `mcp-remote-client` sign-in (read 2026-11-18, never run)
+
+Page: https://www.npmjs.com/package/mcp-remote (read 2026-11-18); the published tarball of 0.16.0 (`npm pack
+mcp-remote@0.16.0` into an empty folder, extracted and read, nothing in it run). `/alfred-tools`'s `scripts/sign-in.ts`
+(spec Part D) rests on it.
+
+- Bins (`npm view mcp-remote@0.16.0 bin`): `mcp-remote: dist/proxy.js` and `mcp-remote-client: dist/client.js`. Usage
+  line in `client.js`: `mcp-remote-client <https://server-url> [callback-port] [--debug]`. It discovers the OAuth
+  server, signs in through the browser when it has no usable tokens, connects, requests the tools and resources lists,
+  and exits 0 ('Exiting OK...'); a failure exits 1.
+- `--auth-timeout <seconds>`: the README ('the timeout for the OAuth callback (by default `30` seconds)') and
+  `parseCommandLineArgs` (`authTimeoutMs = 3e4`, replaced by a positive integer after the flag) - the same parser serves
+  both bins. So the proxy's first start gives the browser 30 s, inside Claude Code's own 30 s start limit, and
+  `sign-in.ts` passes `--auth-timeout 300`.
+- The store is shared with the proxy: `client.js` calls the same `getServerUrlHash(serverUrl, ...)` and
+  `getConfigDir()` (`MCP_REMOTE_CONFIG_DIR` then `mcp-remote-v1`), so with the URL alone (no headers, no extra flags)
+  the client's file is `<MCP_REMOTE_CONFIG_DIR>/mcp-remote-v1/<md5 of the URL>_tokens.json`, the one the proxy reads
+  (S4). `sign-in.ts` checks that file by name only and never opens it.
+- `client.js` installs its stdin and SIGINT handlers only after it has connected, so a closed stdin cannot cut the
+  browser wait short; `sign-in.ts` closes stdin and drops the client's output.
+- Matrix case `sign-in` (by hand, a real Atlassian account, the first start of a keyless OAuth server inside the 30 s
+  limit after the sign-in): NOT RUN. The unit tests use a stub runner, no browser and no network.

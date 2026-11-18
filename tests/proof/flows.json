@@ -7,6 +7,7 @@
     "inventory",
     "plan",
     "prereq",
+    "sign-in",
     "table",
     "tmpdir",
     "update",
@@ -515,6 +516,16 @@
         },
         {
           "entry": "prereq",
+          "argv": [
+            "--bogus"
+          ]
+        },
+        {
+          "entry": "sign-in",
+          "argv": []
+        },
+        {
+          "entry": "sign-in",
           "argv": [
             "--bogus"
           ]

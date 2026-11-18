@@ -52,8 +52,8 @@ for (const file of textFiles)
 
 // allowed-tools is a pre-approval, so it never covers a call that changes an install: the CLI's own prompt is the guard
 // beside the command's written ask. A script that writes is listed only with a read-only flag.
-// fetch.ts downloads and runs a package's own install, so it counts as a write; cursor-mcp.ts writes Cursor's files
-const WRITES = /scripts\/(?:apply|fetch)\.ts|cursor-mcp\.ts|scripts\/(?:fix|update)\.ts"\s*(?:\*|--apply|\))/;
+// fetch.ts downloads and runs a package's own install, and sign-in.ts opens a browser and writes tokens, so both count as a write; cursor-mcp.ts writes Cursor's files
+const WRITES = /scripts\/(?:apply|fetch|sign-in)\.ts|cursor-mcp\.ts|scripts\/(?:fix|update)\.ts"\s*(?:\*|--apply|\))/;
 for (const file of textFiles)
 {
     const m = /^allowed-tools:\s*(.+)$/m.exec(fs.readFileSync(file, 'utf8'));

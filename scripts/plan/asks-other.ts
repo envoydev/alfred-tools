@@ -204,6 +204,9 @@ export const STATIC = {
     removeFirst: { id: 'remove-first', header: 'Remove', multiSelect: false, question: 'Remove what?', options: [
         { label: `Pick which${RECOMMENDED_SUFFIX}`, description: 'choose the servers to remove' },
         { label: 'Cancel', description: 'nothing is removed' } ] },
+    signInNow: { id: 'sign-in-now', header: 'Sign in', multiSelect: false, question: 'Sign in to the new server now?', options: [
+        { label: `Sign in now${RECOMMENDED_SUFFIX}`, description: 'opens your browser and waits up to five minutes; the sign-in is kept in the root and serves Claude Code and Cursor' },
+        { label: 'At the next session start', description: 'its first start then opens the browser inside Claude Code\'s 30-second limit, and /mcp reconnects it after' } ] },
     fixOffer: { id: 'fix-offer', header: 'Fix', multiSelect: false, question: 'Apply the fixes found?', options: [
         { label: `Apply all found${RECOMMENDED_SUFFIX}`, description: 'apply every fix listed that can be applied' },
         { label: 'Pick which', description: 'choose among them' },

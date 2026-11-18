@@ -295,6 +295,31 @@ itself. End with the restart line: a changed registration loads on the next sess
 also needs the trust prompt then. When background runs are turned off, run fetch.ts in the foreground with
 `timeout: 600000`, and again if the limit stops it.
 
+**Sign-in.** For each server the plan named in an `OAuth:` line that says its browser opens to sign in the first time it
+starts (the shared sign-in - a route or app change can bring one), ask once the fetch has reported (sign-in.ts and the
+fetch both start npx, and two at once is the one case measured to break a start); the scope is the one the registration
+has now, and fetch's `skip` line names it too:
+
+```ask signInNow
+Sign in to <name> now?
+- 'Sign in now (Recommended)' - opens your browser and waits up to five minutes; the sign-in is kept in the root and serves Claude Code and Cursor
+- 'At the next session start' - its first start then opens the browser inside Claude Code's 30-second limit, and /mcp reconnects it after
+```
+
+Then, for 'Sign in now', run:
+
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/sign-in.ts" "<name>" "<scope>"
+```
+
+Run it in the foreground with the Bash tool's `timeout: 330000` (its `--auth-timeout 300` plus the npx
+start; the default 120000 would stop it) and tell the user the browser opens and the sign-in has five minutes. It
+prints `<name>: signed in`, or `<name>: sign-in failed: <why>` and exits 1; it never prints a token or the tool list.
+It is not in `allowed-tools` - it opens a browser and writes tokens - so Claude Code asks permission for it.
+On a failure say why, that the user can run it again, and that otherwise the first session start opens the browser
+inside its 30-second limit. 'At the next session start': say exactly that, and that `/mcp` reconnects the server
+after the browser sign-in.
+
 ## 9. Remove
 
 ```ask removeFirst
