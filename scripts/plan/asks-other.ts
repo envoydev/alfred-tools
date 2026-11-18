@@ -149,10 +149,10 @@ export function driftQuestion(driftAsk: DriftAsk): Asked<string>
 
 // cursor-offer (spec D9): update's offer, once per root, to set up for Cursor the servers its list has for Claude Code
 // only. The id names the root, so the answer goes back as --input cursor-offer:<root>=set|declined.
-export function cursorOfferQuestion(root: string, serverCount: number | string): Asked<string>
+export function cursorOfferQuestion(root: string, serverCount: number | string, signIns: string[] = []): Asked<string>
 {
     const options = [
-        { label: `Set them up for Cursor too${RECOMMENDED_SUFFIX}`, description: "each server is written to Cursor's mcp.json, as configure's app change would do", value: 'set' },
+        { label: `Set them up for Cursor too${RECOMMENDED_SUFFIX}`, description: `each server is written to Cursor's mcp.json, as configure's app change would do${signIns.length ? `; ${signIns.join(', ')} move to one browser sign-in shared with Cursor - sign in once before your next session` : ''}`, value: 'set' },
         { label: 'Not now', description: 'nothing changes, and update does not ask again for this root', value: 'declined' },
     ];
     return {

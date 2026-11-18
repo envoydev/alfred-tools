@@ -14,6 +14,7 @@ import * as account from '../core/account.ts';
 import { bumpEntry } from './offers-plugins.ts';
 import { upgradeCatalog } from './offers-files.ts';
 import { ordered } from './check.ts';
+import { signInLine, signInMoves } from './sign-in-moves.ts';
 import { readCursor } from '../cursor/cursor-mcp.ts';
 import * as roots from '../roots/roots.ts';
 import { ensureCommonjs } from '../apply/file-steps.ts';
@@ -149,7 +150,11 @@ function applyCursorOffer(context: UpdateCtx, cursorOffer: CursorOffer, answer: 
     const builtPlan = plan(projectInventory, { change, cursorNames }, { home: account.homeDir(context.env), env: context.env, catalog: context.catalog });
     if (builtPlan.errors.length) { log(`FAILED ${cursorOffer.id}: ${builtPlan.errors.join('; ')}`); return false; }
     const result = apply(builtPlan, { env: context.env, tmp: dir, runCli: context.runCli, fetchFile: false, log: say });
+    // the plan's notes and its fetch are the built plan's to hand on: a server moved onto the shared sign-in needs both
+    for (const note of builtPlan.notes) log(`note   ${note}`);
+    if (result.fetch && result.fetch.fetch.length) context.fetches!.push(result.fetch);
     log(`${result.failed ? 'FAILED' : 'ok    '} ${cursorOffer.id}: set up for Cursor too`);
+    if (!result.failed) for (const move of signInMoves(builtPlan.oauth, cursorOffer.signIns, builtPlan.os)) log(signInLine(move));
     return !result.failed;
 }
 

@@ -131,6 +131,16 @@ export interface CursorOffer
     servers: { name: string; scope: string }[]; // stored - do not rename
     taken: Taken[]; // stored - do not rename
     needs: string | null; // stored - do not rename
+    signIns: string[]; // stored - do not rename
+}
+
+// A server a Cursor offer moved onto the shared sign-in: its folder, and whether its sign-in is done.
+export interface SignInMove
+{
+    name: string;
+    scope: string;
+    folder: string;
+    signedIn: boolean;
 }
 
 // check's result.

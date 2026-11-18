@@ -1138,6 +1138,47 @@ test('update\'s Cursor offer asks for a taken name, and an unanswered one is lef
     finally { w.clean(); }
 });
 
+test('the Cursor offer names the servers that move to the shared sign-in', async () =>
+{
+    const w = world();
+    try
+    {
+        install(w, { clients: ['claude'], picks: { atlassian: { route: 'remote', scope: 'local', token: false }, serena: { scope: 'local' } } });
+        fs.mkdirSync(path.join(w.home, '.cursor'), { recursive: true });
+        const q = JSON.parse((await run(w, ['--questions', '--no-refresh'])).text);
+        assert.strictEqual(q.cursorOffers.length, 1);
+        const recommended = q.cursorOffers[0].options[0];
+        assert.match(recommended.label, /\(Recommended\)$/);
+        assert.ok(recommended.description.includes('atlassian move to one browser sign-in shared with Cursor - sign in once before your next session'), recommended.description);
+        assert.ok(!recommended.description.includes('serena move'), 'a server that does not move is not named');
+        const check = JSON.parse((await run(w, ['--check', '--no-refresh', '--json'])).text);
+        assert.deepStrictEqual(check.cursorOffers[0].signIns, ['atlassian']);
+    }
+    finally { w.clean(); }
+});
+
+test('accepting it prints the plan notes, hands its fetch on and states each moved server', async () =>
+{
+    const w = world();
+    try
+    {
+        install(w, { clients: ['claude'], picks: { atlassian: { route: 'remote', scope: 'local', token: false }, serena: { scope: 'local' } } });
+        fs.mkdirSync(path.join(w.home, '.cursor'), { recursive: true });
+        const root = path.join(w.project, '.alfred-tools');
+        const tmp = fs.mkdtempSync(path.join(w.dir, 'alfred-tools-'));
+        const a = await run(w, ['--apply', 'none', '--tmp', tmp, '--input', `cursor-offer:${root}=set`]);
+        assert.strictEqual(a.code, 0, a.text);
+        assert.match(a.text, /note {3}atlassian: sign in once more/);
+        assert.ok(a.text.includes(`atlassian: now the shared sign-in in ${path.join(root, 'mcp-remote-v1')}/ (Cursor added) - sign-in not done yet`), a.text);
+        assert.ok(!a.text.includes('serena: now the shared sign-in'), 'a server that does not move is not stated');
+        const job = readJson(path.join(tmp, 'fetch.json'));
+        const launch = (name: string) => job.fetch.find((s: { name: string }) => s.name === name).argv.join(' ');
+        assert.ok(launch('atlassian').includes('mcp-remote@0.16.0'), launch('atlassian'));
+        assert.deepStrictEqual(job.fetch.map((s: { name: string }) => s.name), ['atlassian'], 'serena\'s launch is unchanged, so the cache already holds it');
+    }
+    finally { w.clean(); }
+});
+
 test('the upgrade rows run in order: list-import, serena-context, serena-base-modes, retired-plugin, read-guard', () =>
 {
     const catalog = load();

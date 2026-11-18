@@ -30,6 +30,7 @@ import { pluginOffers } from './offers-plugins.ts';
 import { mcpOffers, cursorPinOffers } from './offers-pins.ts';
 import { helperOffers, upgradeOffers } from './offers-files.ts';
 import * as rename from '../fix/rename.ts';
+import { signInNames } from './sign-in-moves.ts';
 import type { Env } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
@@ -98,7 +99,7 @@ function cursorOffers(context: UpdateCtx, out: UpdateCheck): void
         const root = path.dirname(file);
         const upserts = servers.map((server) => ({ server: { ...server, clients: ['claude', 'cursor'] }, cursorFile: null }));
         const taken = takenNames(context.inventory, { ...cctx, catalog: context.catalog }, upserts);
-        out.cursorOffers.push({ id: `cursor-offer:${root}`, family, root, list: file, servers: servers.map((server) => ({ name: server.name, scope: server.scope })), taken, needs: brought.length ? pending!.id : null });
+        out.cursorOffers.push({ id: `cursor-offer:${root}`, family, root, list: file, servers: servers.map((server) => ({ name: server.name, scope: server.scope })), taken, needs: brought.length ? pending!.id : null, signIns: signInNames(servers, context.catalog) });
     }
 }
 

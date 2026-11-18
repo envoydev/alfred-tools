@@ -93,6 +93,10 @@ Cursor is on this machine, and the <n> servers in <root> are set up for Claude C
 - 'Not now' - nothing changes, and update does not ask again for this root
 ```
 
+When a question's `Set them up` description names servers that move to one browser sign-in, say so with it: those
+servers leave the plain `http` route for mcp-remote with its sign-in kept in the root's `mcp-remote-v1/`, shared with
+Cursor, and the user signs in once more before the next session starts.
+
 Pass the answer as `--input <the question's id>=<value>`: the id is `cursor-offer:<root>`, the value is the question's
 `answers` entry for the label picked (`set` or `declined`). 'Not now' is kept in that root's list and the offer is not
 put again; configure's per-server question still adds Cursor at any time. Right after 'Set them up for Cursor too', ask
@@ -116,6 +120,12 @@ list takes the registration as read back, and Cursor's `mcp.json` takes the list
 there by hand, is left as it is and named ('<name>: Cursor's copy was changed by hand - left; run /alfred-tools:fix').
 When Cursor's copy of a server changes, the report ends with 'Cursor asks you to approve <names> again - it re-asks
 whenever an entry changes': tell the user Cursor will ask.
+
+When a Cursor offer was taken, the report prints each plan note as `note   <text>` and, for each server moved onto the
+shared sign-in, a line `<name>: now the shared sign-in in <root>/mcp-remote-v1/ (Cursor added) - sign-in not done yet`:
+repeat those lines in the summary to the user, say the route changed from `http` to the shared mcp-remote sign-in and
+why (Cursor was added), and say the sign-in is still to do while the line says 'not done yet'. The offer's servers are
+fetched in the same run's fetch file, like a pin move.
 
 Run it with the Bash tool's `timeout: 600000` (10 minutes, the most it allows by default): a plugin update clones its marketplace, and the new MCP pins are downloaded after it, not inside it. `all` is every
 offer with a known newer version; an unchecked plugin runs only when its own id is given. Each update is read back: a

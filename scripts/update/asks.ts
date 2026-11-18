@@ -34,7 +34,7 @@ export function questions(out: UpdateCheck)
 // The ask cursor-offer (spec D9), plan/asks-other.ts's text; `answers` maps each label to the value passed back.
 function cursorOfferAsk(cursorOffer: CursorOffer)
 {
-    const offerQuestion = cursorOfferQuestion(cursorOffer.root, cursorOffer.servers.length);
+    const offerQuestion = cursorOfferQuestion(cursorOffer.root, cursorOffer.servers.length, cursorOffer.signIns);
     return { ...offerQuestion.question, answers: offerQuestion.answers };
 }
 
