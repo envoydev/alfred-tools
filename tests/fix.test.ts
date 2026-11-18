@@ -6,7 +6,7 @@ import path from 'node:path';
 import { world, readJson, helperCmd, writeJson, files, serenaFolderLine, slashed } from './helpers.ts';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import * as inventory from '../scripts/inventory/inventory.ts';
-import { pythonRequest } from '../scripts/entries/platform.ts';
+import { pythonRequest, pathFor } from '../scripts/entries/platform.ts';
 import { expandVars } from '../scripts/entries/locations.ts';
 import { buildEntry } from '../scripts/entries/entry.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
@@ -127,7 +127,8 @@ test('a fresh entry from the catalog is clean on every OS - no detector fires on
             {
                 const serenaHome = fsx.mkdtempSync(path.join(os.tmpdir(), 'pt-fresh-serena-'));
                 entry.env!.SERENA_HOME = serenaHome;
-                entry.args![entry.args!.indexOf('--context') + 1] = path.join(serenaHome, 'serena-context.yml');
+                // the path as the product joins it for the simulated platform, so a posix platform on a Windows host keeps its `/`
+                entry.args![entry.args!.indexOf('--context') + 1] = pathFor(platform).join(serenaHome, 'serena-context.yml');
                 put(path.join(serenaHome, 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
                 leaveConfig(serenaHome);
             }
