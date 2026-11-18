@@ -1258,6 +1258,8 @@ test('update adopts my-sonarqube once, for both apps', async () =>
         assert.strictEqual(listedEntries.length, 1, 'one list entry');
         assert.deepStrictEqual(listedEntries[0].clients, ['claude', 'cursor']);
         const copy = readJson(path.join(w.project, '.cursor', 'mcp.json')).mcpServers['my-sonarqube'];
+        const sonarCopies = Object.values(readJson(path.join(w.project, '.cursor', 'mcp.json')).mcpServers).filter((e) => JSON.stringify(e).includes('api.sonarcloud.io'));
+        assert.strictEqual(sonarCopies.length, 1, 'Cursor holds one entry with the sonarqube URL');
         assert.ok(copy.args.includes(path.join(pt, 'mcp-bridge.js')) && copy.args.includes('SONARQUBE_ORG=SONARQUBE_ORG'), JSON.stringify(copy));
         assert.ok(fs.existsSync(path.join(pt, 'mcp-bridge.js')), 'the bridge the copy runs is written');
         assert.match(a.text, /mcp-headers-sonarqube\.js is no longer used/);
@@ -1266,6 +1268,26 @@ test('update adopts my-sonarqube once, for both apps', async () =>
 
         const after = JSON.parse((await run(w, ['--check', '--no-refresh', '--json'])).text);
         assert.deepStrictEqual(after.offers.filter((o: { id: string }) => /list-import|helper-foreign/.test(o.id)), [], 'a second check offers nothing more');
+    }
+    finally { w.clean(); }
+});
+
+test('an unrelated repair leaves a listed Cursor server with no cursorEntry in its own form; helper-foreign alone asks for the bridge', () =>
+{
+    const w = world();
+    try
+    {
+        const pt = path.join(w.project, '.alfred-tools');
+        const entry = { type: 'http', url: 'https://api.sonarcloud.io/mcp', headersHelper: `${helperCmd(path.join(pt, 'mcp-headers.js'), 'SONARQUBE_TOKEN', 'Bearer')} --header SONARQUBE_ORG=SONARQUBE_ORG` };
+        assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'my-sonarqube', JSON.stringify(entry), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
+        writeJson(path.join(pt, 'mcps.json'), { version: 1, servers: [{ name: 'my-sonarqube', scope: 'project', row: 'sonarqube', route: 'remote', clients: ['claude', 'cursor'], entry, key: 'SONARQUBE_TOKEN' }], own: [] });
+        writeJson(path.join(w.project, '.cursor', 'mcp.json'), { mcpServers: { 'my-sonarqube': entry } });
+        const inv = inventory.buildInventory({ project: w.project, env: w.env });
+        const step = { op: 'mcp-replace', name: 'my-sonarqube', scope: 'project', old: entry, entry: { ...entry }, row: 'sonarqube', route: 'remote' } as PlanStep;
+        const forms = (bridgeFor?: Set<string>) => repairTail(inv, { platform: process.platform, project: w.project, home: w.home, env: w.env, notes: [] }, [step], { bridgeFor })
+            .flatMap((s) => (s.op === 'list-write' ? s.upserts : [])).map((u) => u.server.form);
+        assert.deepStrictEqual(forms(), [undefined], 'a rename, a re-point or helper-stale keeps the copy as it is');
+        assert.deepStrictEqual(forms(new Set(['mcp:my-sonarqube~project'])), ['two']);
     }
     finally { w.clean(); }
 });

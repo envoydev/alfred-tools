@@ -328,7 +328,8 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     const tailNotes: string[] = [];
     // a server helper-foreign brings into a list that does not name it yet is listed for the apps its other servers share
     const clientsFor = new Map(todo.filter((finding) => finding.id === 'helper-foreign' && finding.clients).map((finding): [string, string[]] => [`mcp:${finding.name}~${finding.scope}`, finding.clients!]));
-    const tail = steps.length || refresh.length || repoint.length ? repairTail(context.inventory, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, notes: tailNotes }, steps, { refresh, repoint, normalize, clientsFor }) : [];
+    const bridgeFor = new Set(todo.filter((finding) => finding.id === 'helper-foreign' && finding.cursor).map((finding) => `mcp:${finding.name}~${finding.scope}`));
+    const tail = steps.length || refresh.length || repoint.length ? repairTail(context.inventory, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, notes: tailNotes }, steps, { refresh, repoint, normalize, clientsFor, bridgeFor }) : [];
     if (steps.length || tail.length)
     {
         // a fix that changes what is fetched (a python request, a cut-off, cmd /c) is fetched once it is written
@@ -397,12 +398,13 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
 
     // read back: the same detectors, run again on what is installed now
     const after = detectAll({ ...context, inventory: inventory.buildInventory({ project: context.inventory.project, env: context.env, data: context.data }) }, { only });
+    const told = new Set<string>();
     for (const finding of todo)
     {
         const left = after.found.some((candidate) => candidate.id === finding.id && candidate.name === finding.name && candidate.scope === finding.scope && candidate.app === finding.app);
         (left ? result.remaining : result.applied).push(finding);
         log(`${left ? 'STILL FOUND' : 'fixed      '} ${finding.id} on ${where(finding)}`);
-        if (!left && finding.afterNote) log(...finding.afterNote.split('\n').map((line) => `note: ${line}`));
+        if (!left && finding.afterNote) for (const line of finding.afterNote.split('\n')) if (!told.has(line)) { told.add(line); log(`note: ${line}`); }
     }
     if (!quietRecheck && (moves.length || result.applied.some((finding) => finding.id === 'root-repoint'))) log('', 'RECHECK - the folders moved; checking again');
     if (result.applied.some((finding) => !noRestart.has(finding))) log('', `Restart Claude Code so the repaired registrations and the language server start fresh${result.fetchFile ? ' - after the fetch reports, so a session start does not download the same package beside it' : ''}.`);

@@ -2801,7 +2801,31 @@ test('a mixed list adopts for Claude Code only and names the configure step', ()
         assert.strictEqual(listed[0].cursorEntry, undefined);
         assert.ok(!fsx.existsSync(path.join(w.project, '.cursor', 'mcp.json')), 'Cursor gets nothing');
         assert.match(lines.text(), /my-sonarqube.*Claude Code only.*\/alfred-tools:configure.*Cursor/);
+        assert.strictEqual(lines.lines.filter((line) => /Claude Code only/.test(line)).length, 1, 'the note is told once, though two findings carry it');
         assert.match(readJson(path.join(w.project, '.mcp.json')).mcpServers['my-sonarqube'].headersHelper, /mcp-headers\.js SONARQUBE_TOKEN Bearer --header SONARQUBE_ORG=SONARQUBE_ORG$/);
+    }
+    finally { w.clean(); }
+});
+
+test('a blocked helper-foreign leaves Cursor\'s foreign-form copy; once the key is filled, fix replaces it with the bridge copy', () =>
+{
+    const w = world();
+    try
+    {
+        const { pt } = adoptRoot(w, { secrets: 'SONARQUBE_ORG=acme\n' });
+        const cursorFile = path.join(w.project, '.cursor', 'mcp.json');
+        const first = applyFixes(ctxOf(w), ['list-import'], { tmp: path.join(w.dir, 'tmp'), log: () => {} });
+        assert.strictEqual(first.failed, null);
+        assert.match(JSON.stringify(readJson(cursorFile).mcpServers['my-sonarqube']), /mcp-headers-sonarqube\.js/, 'listed for both apps, Cursor holds the entry as it is');
+        assert.ok((detect(ctxOf(w)).found.find((x) => x.id === 'helper-foreign') as Finding).blocked, 'no key: blocked');
+        secretsAt(pt, { SONARQUBE_TOKEN: 'tok-123', SONARQUBE_ORG: 'acme' });
+        const lines = logged();
+        const second = applyFixes(ctxOf(w), ['helper-foreign'], { tmp: path.join(w.dir, 'tmp2'), log: lines.log });
+        assert.strictEqual(second.failed, null, lines.text());
+        const copy = readJson(cursorFile).mcpServers['my-sonarqube'];
+        assert.ok(copy.args.includes(path.join(pt, 'mcp-bridge.js')) && copy.args.includes('SONARQUBE_ORG=SONARQUBE_ORG'), JSON.stringify(copy));
+        assert.strictEqual(copy.headersHelper, undefined);
+        assert.ok(fsx.existsSync(path.join(pt, 'mcp-bridge.js')));
     }
     finally { w.clean(); }
 });
