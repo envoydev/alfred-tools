@@ -1,5 +1,5 @@
 // The key questions: which key a hosted route reads, and the name it is kept under.
-import path from 'node:path';
+import { pathFor } from '../entries/platform.ts';
 import { rootOf } from '../entries/locations.ts';
 import { settingsOf } from '../entries/entry.ts';
 import { hostedSettingsQuestion } from './hosted-settings.ts';
@@ -49,10 +49,11 @@ export function keyStateOf(row: CatalogRow, routeId: string, context: AskCtx | n
     const projectRoot = rootOf('project', context);
     const globalRoot = rootOf('global', context);
     const files = kind === 'helper'
-        ? keys.hostedChain({ scope, projectRoot, globalRoot, globalNamed: Boolean(context.roots && context.roots.globalNamed), home: context.home })
-        : keys.stdioChain({ scope, projectRoot, globalRoot });
+        ? keys.hostedChain({ scope, projectRoot, globalRoot, globalNamed: Boolean(context.roots && context.roots.globalNamed), home: context.home, platform: context.platform })
+        : keys.stdioChain({ scope, projectRoot, globalRoot, platform: context.platform });
     const readHome = Object.hasOwn(context, 'keyHome') ? Boolean(context.keyHome) : true;
-    const inProject = (filePath: string) => { const rel = path.relative(context.project, filePath); return Boolean(rel) && !rel.startsWith('..') && !path.isAbsolute(rel); };
+    const pathApi = pathFor(context.platform);
+    const inProject = (filePath: string) => { const rel = pathApi.relative(context.project, filePath); return Boolean(rel) && !rel.startsWith('..') && !pathApi.isAbsolute(rel); };
     const word = row.id.toUpperCase().replace(/-/g, '_');
     const offered = (list: string[]) =>
     {

@@ -46,7 +46,7 @@ export function keyToHelperDetect(context: FixCtx): Finding[]
         const auth = authOf(registration.entry);
         if (registration.route !== 'remote' || !route || !route.helper || !auth || registration.entry.headersHelper) continue;
         const resolvedRoots = rootsOf(context);
-        const chain = keys.hostedChain({ scope: registration.scope, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global, globalNamed: resolvedRoots.globalNamed, home: context.home });
+        const chain = keys.hostedChain({ scope: registration.scope, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global, globalNamed: resolvedRoots.globalNamed, home: context.home, platform: context.platform });
         const extra = { route: registration.route, roots: resolvedRoots };
         // the scheme word goes: the helper sends the route's own
         const token = auth.value.trim().replace(/^[A-Za-z][\w-]*\s+/, '');

@@ -268,7 +268,7 @@ function keyIn(value: unknown, template: string, tokenVar: string): string
 function stdioChainOf(context: FixCtx, scope: string): string[]
 {
     const resolvedRoots = roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
-    return keys.stdioChain({ scope, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global });
+    return keys.stdioChain({ scope, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global, platform: context.platform });
 }
 
 export function tokenSyncDetect(context: FixCtx): Finding[]

@@ -57,7 +57,7 @@ export function helperForeignDetect(context: FixCtx): Finding[]
         if (registration.route !== 'remote' || !route || !route.helper || typeof command !== 'string' || helperParts(command)) continue;
         const script = foreignScript(command);
         if (!script) continue;
-        const chain = keys.hostedChain({ scope: registration.scope, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global, globalNamed: resolvedRoots.globalNamed, home: context.home });
+        const chain = keys.hostedChain({ scope: registration.scope, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global, globalNamed: resolvedRoots.globalNamed, home: context.home, platform: context.platform });
         const keyName = keyNameOf(script.first, chain, route.helper.var);
         const apps = appsOf(context, registration);
         const what = `headersHelper runs ${path.basename(script.file)}, not mcp-headers.js - it moves to the plugin's helper, which reads ${keyName} from the key files`;

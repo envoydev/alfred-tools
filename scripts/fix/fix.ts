@@ -65,7 +65,7 @@ function reconnectOf(context: FixCtx, steps: McpReplaceStep[]): Pick<Reconnect, 
     {
         const variable = helperNameOf(step.entry.headersHelper)!;
         const route = context.catalog.byId.get(step.row!)!.routes[step.route!] || {} as Partial<CatalogRoute>;
-        const files = keys.hostedChain({ scope: step.scope, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global, globalNamed: resolvedRoots.globalNamed, home: context.home });
+        const files = keys.hostedChain({ scope: step.scope, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global, globalNamed: resolvedRoots.globalNamed, home: context.home, platform: context.platform });
         return { name: step.name, variable, file: files[0]!, filled: keys.filledNames(files).some((filledFile) => filledFile.names.includes(variable)), anonymous: route.authMode === 'optional-token' && !route.keyless };
     });
 }

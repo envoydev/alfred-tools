@@ -8,6 +8,7 @@ export interface KeyChain
     globalRoot?: string | null | undefined;
     globalNamed?: boolean | undefined;
     home: string;
+    platform?: string | undefined; // the path form to build the files in; the host's when absent
 }
 
 // A token field a catalog route defines and an entry holds: where it is, and the route's form for it.

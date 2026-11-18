@@ -51,7 +51,7 @@ export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: P
         for (const upsert of (listStep as ListWriteStep).upserts || [])
             if (!upsert.keyFiles)
             {
-                const files = keys.stdioChain({ scope: upsert.server.scope, projectRoot: rootPaths.project, globalRoot: rootPaths.global });
+                const files = keys.stdioChain({ scope: upsert.server.scope, projectRoot: rootPaths.project, globalRoot: rootPaths.global, platform: context.platform });
                 if (files.length) upsert.keyFiles = files;
             }
     // a re-pointed server the registration steps did not reach: its list entry as listed, re-pointed (root-repoint)

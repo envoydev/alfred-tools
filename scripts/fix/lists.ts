@@ -45,7 +45,7 @@ export function listImportDetect(context: FixCtx): Finding[]
         const list = context.inventory.lists && context.inventory.lists[family];
         // a list or record this plugin cannot read, or one a newer plugin wrote, is left as it is
         if (list && list.note) continue;
-        const servers = importUnlisted(context.inventory, family, context.catalog, { roots: resolvedRoots });
+        const servers = importUnlisted(context.inventory, family, context.catalog, { roots: resolvedRoots, platform: context.platform });
         const file = list ? list.file : resolvedRoots[family] ? pathApi.join(resolvedRoots[family]!, roots.FILES.list) : null;
         if (!file) continue;
         const beside = pathApi.join(pathApi.dirname(file), roots.FILES.record);
@@ -333,7 +333,7 @@ export function clientDriftSteps(finding: Finding, context: FixCtx, input: Recor
         if (kept.holdsKept(entry) && listServer.key && row && row.routes[listServer.route!] && row.routes[listServer.route!]!.tokenVar)
         {
             const resolvedRoots = roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog }).roots;
-            const at = keys.valueIn(keys.stdioChain({ scope: finding.scope!, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global }), listServer.key);
+            const at = keys.valueIn(keys.stdioChain({ scope: finding.scope!, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global, platform: context.platform }), listServer.key);
             if (at) entry = keys.fillKeys(entry, row, listServer.route!, finding.scope!, { [row.routes[listServer.route!]!.tokenVar!]: at.value });
         }
         if (kept.holdsKept(entry)) throw new Error(`${finding.name} (${finding.scope}): the list's entry holds a key ${listServer.key ? `named ${listServer.key} ` : ''}that is filled nowhere - fill it, then run fix again`);

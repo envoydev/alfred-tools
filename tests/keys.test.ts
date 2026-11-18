@@ -66,6 +66,16 @@ test('hosted chain per scope: the root beside the helper, the named global root 
     assert.deepStrictEqual(keys.hostedChain({ scope: 'user', projectRoot: p, globalRoot: k, globalNamed: true, home: h }), [sec(k), ...homeFiles]);
 });
 
+test('a chain is built in the path form of the platform it is for, whatever the host', () => {
+    const mac = { project: '/work/shop/.alfred-tools', global: '/Users/me/.alfred-tools', home: '/Users/me' };
+    assert.deepStrictEqual(keys.hostedChain({ scope: 'local', projectRoot: mac.project, globalRoot: mac.global, globalNamed: true, home: mac.home, platform: 'darwin' }), [
+        '/work/shop/.alfred-tools/.mcps-secrets', '/Users/me/.alfred-tools/.mcps-secrets', '/Users/me/.alfred/.mcps-secrets']);
+    assert.deepStrictEqual(keys.stdioChain({ scope: 'local', projectRoot: mac.project, globalRoot: mac.global, platform: 'linux' }), ['/work/shop/.alfred-tools/.mcps-secrets', '/Users/me/.alfred-tools/.mcps-secrets']);
+    assert.deepStrictEqual(keys.hostedChain({ scope: 'project', projectRoot: 'C:\\work\\shop\\.alfred-tools', globalRoot: 'C:\\Users\\me\\.alfred-tools', home: 'C:\\Users\\me', platform: 'win32' }), [
+        'C:\\work\\shop\\.alfred-tools\\.mcps-secrets', 'C:\\Users\\me\\.alfred-tools\\.mcps-secrets', 'C:\\Users\\me\\.alfred\\.mcps-secrets']);
+    assert.deepStrictEqual(keys.stdioChain({ scope: 'user', projectRoot: null, globalRoot: 'C:\\Users\\me\\.alfred-tools', platform: 'win32' }), ['C:\\Users\\me\\.alfred-tools\\.mcps-secrets']);
+});
+
 test('stdio chain: local reads the project root then the global root; global reads the global root alone', () => {
     const p = path.join(path.sep, 'w', 'p', '.alfred-tools');
     const g = path.join(path.sep, 'h', '.alfred-tools');

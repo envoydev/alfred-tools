@@ -52,7 +52,7 @@ export function adoptedClients(inventory: Inventory, family: Family): { clients:
 // as read, kept (every key value the marker), with the apps the family's listed servers share (adoptedClients). A
 // registration on its own is not one, unless this run's `answers` (mcp key -> 'own' | 'manage') hand it back. opts:
 // { answers, roots: { project, global } }
-export function importUnlisted(inventory: Inventory, family: Family, catalog: Catalog, { answers = {}, roots: rootFolders = {} }: { answers?: Record<string, string | undefined>; roots?: { project?: string | null | undefined; global?: string | null | undefined } } = {}): ListServer[]
+export function importUnlisted(inventory: Inventory, family: Family, catalog: Catalog, { answers = {}, roots: rootFolders = {}, platform }: { answers?: Record<string, string | undefined>; roots?: { project?: string | null | undefined; global?: string | null | undefined }; platform?: string } = {}): ListServer[]
 {
     const familyList = inventory.lists && inventory.lists[family];
     const listed = new Set(familyList && !familyList.old && !familyList.note ? (familyList.servers || []).map(lists.serverKey) : []);
@@ -65,7 +65,7 @@ export function importUnlisted(inventory: Inventory, family: Family, catalog: Ca
             const answer = answers[key];
             return !listed.has(key) && (answer ? answer !== 'own' : registration.choice !== 'own');
         })
-        .map((registration) => lists.fromRegistration(registration, catalog.byId.get(registration.rowId!), clients, keys.stdioChain({ scope: registration.scope, projectRoot: rootFolders.project, globalRoot: rootFolders.global })));
+        .map((registration) => lists.fromRegistration(registration, catalog.byId.get(registration.rowId!), clients, keys.stdioChain({ scope: registration.scope, projectRoot: rootFolders.project, globalRoot: rootFolders.global, platform })));
 }
 
 const ownChanged = (foundEntry: FoundList | null, next: OwnEntry[]): boolean => (!foundEntry || foundEntry.state ? next.length > 0 : JSON.stringify(next) !== JSON.stringify(foundEntry.own));
@@ -127,7 +127,7 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
         const clients = (context.clientsFor && context.clientsFor.get(after)) || was.clients || ['claude'];
         const form = context.formFor ? context.formFor.get(after) : undefined;
         const server: PlannedServer = { ...was, name: to.name, scope: to.scope, row: step.row || was.row || null, route: step.route || was.route || null, clients, entry: null, key: was.key === undefined ? null : was.key, ...(form !== undefined ? { form } : {}) };
-        const keyFiles = keys.stdioChain({ scope: to.scope, projectRoot: context.roots && context.roots.project, globalRoot: context.roots && context.roots.global });
+        const keyFiles = keys.stdioChain({ scope: to.scope, projectRoot: context.roots && context.roots.project, globalRoot: context.roots && context.roots.global, platform: context.platform });
         at(file, family).upserts.push({ server, after, cursorFile: null, ...(keyFiles.length ? { keyFiles } : {}) });
         if (!found.has(file)) found.set(file, { list: foundList(inventory, file, pathApi), family: family });
     }
@@ -151,7 +151,7 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
             const registration = (inventory.registrations || []).find((candidate) => candidate.name === name && candidate.scope === scope && candidate.rowId && !candidate.own);
             const catalog = context.catalog || catalogLib.load();
             if (!registration) continue;
-            server = lists.fromRegistration(registration, catalog.byId.get(registration.rowId!), clients, keys.stdioChain({ scope, projectRoot: context.roots && context.roots.project, globalRoot: context.roots && context.roots.global }));
+            server = lists.fromRegistration(registration, catalog.byId.get(registration.rowId!), clients, keys.stdioChain({ scope, projectRoot: context.roots && context.roots.project, globalRoot: context.roots && context.roots.global, platform: context.platform }));
         }
         if (form !== undefined) server.form = form;
         at(file, family).upserts.push({ server, after: null, cursorFile: null });
@@ -214,7 +214,7 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
         const familyList = inventory.lists && inventory.lists[family];
         if (!targets[family] || !plans.has(targets[family]!) || (familyList && (!familyList.old || familyList.note))) continue;
         const listPlan = plans.get(targets[family]!)!;
-        for (const server of importUnlisted(inventory, family as Family, context.catalog || catalogLib.load(), { answers, roots: context.roots || {} }))
+        for (const server of importUnlisted(inventory, family as Family, context.catalog || catalogLib.load(), { answers, roots: context.roots || {}, platform: context.platform }))
             if (!taken.has(lists.serverKey(server))) listPlan.upserts.push({ server, after: null, cursorFile: null });
         if (familyList && familyList.old) retire.push({ op: 'retire-record', file: familyList.old, why: `${familyList.old}: the 0.4.x record - its entries are in ${targets[family]} now, so it is moved aside as ${roots.FILES.record}.0.4.bak` });
     }

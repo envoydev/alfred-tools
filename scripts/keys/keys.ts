@@ -10,6 +10,7 @@
 //                      so a blocked fix can say where a key still sits.
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathFor } from '../entries/platform.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
 import type { FileNames, KeyChain, KeyHit, TokenField } from './types.ts';
@@ -97,25 +98,29 @@ export function fillKeys(entry: ServerEntry, row: CatalogRow | null | undefined,
 // only through valueIn, in the process that asked.
 export const SECRETS = '.mcps-secrets';
 export const NAME_RULE = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const secretsIn = (dir: string): string => path.join(dir, SECRETS);
+// A chain is built in the path form of the platform it is for (the plan's or the fix's context), not the host's: a plan for
+// a posix machine run on Windows names `/`-separated files, which the root-matching code reads with the context's own path.
+const pathApiOf = (platform?: string): path.PlatformPath => (platform ? pathFor(platform) : path);
+const secretsIn = (dir: string, platform?: string): string => pathApiOf(platform).join(dir, SECRETS);
 const uniq = <Item>(list: Item[]): Item[] => [...new Set(list)];
 
-// hostedChain({ scope, projectRoot, globalRoot, globalNamed, home }) -> the files the helper reads, in order: the root
+// hostedChain({ scope, projectRoot, globalRoot, globalNamed, home, platform }) -> the files the helper reads, in order: the root
 // beside it (the project root at project and local scope, the global root at user scope); at local scope the global root
 // when it is a named folder (the helper's third argument); then ~/.alfred-tools, then ~/.alfred.
-export function hostedChain({ scope, projectRoot, globalRoot, globalNamed = false, home }: KeyChain): string[]
+export function hostedChain({ scope, projectRoot, globalRoot, globalNamed = false, home, platform }: KeyChain): string[]
 {
+    const pathApi = pathApiOf(platform);
     const beside = scope === 'user' ? globalRoot : projectRoot;
     const named = scope === 'local' && globalNamed ? globalRoot : null;
-    return uniq(([beside, named, path.join(home, '.alfred-tools'), path.join(home, '.alfred')].filter(Boolean) as string[]).map(secretsIn));
+    return uniq(([beside, named, pathApi.join(home, '.alfred-tools'), pathApi.join(home, '.alfred')].filter(Boolean) as string[]).map((dir) => secretsIn(dir, platform)));
 }
 
-// stdioChain({ scope, projectRoot, globalRoot }) -> the files the apply reads a stdio key from: local scope the project
+// stdioChain({ scope, projectRoot, globalRoot, platform }) -> the files the apply reads a stdio key from: local scope the project
 // root's, then the global root's; user scope the global root's. Project scope takes no stdio key (spec D5).
-export function stdioChain({ scope, projectRoot, globalRoot }: Omit<KeyChain, 'home'> & { home?: string | undefined }): string[]
+export function stdioChain({ scope, projectRoot, globalRoot, platform }: Omit<KeyChain, 'home'> & { home?: string | undefined }): string[]
 {
-    if (scope === 'local') return uniq(([projectRoot, globalRoot].filter(Boolean) as string[]).map(secretsIn));
-    if (scope === 'user') return globalRoot ? [secretsIn(globalRoot)] : [];
+    if (scope === 'local') return uniq(([projectRoot, globalRoot].filter(Boolean) as string[]).map((dir) => secretsIn(dir, platform)));
+    if (scope === 'user') return globalRoot ? [secretsIn(globalRoot, platform)] : [];
     return [];
 }
 

@@ -2983,6 +2983,17 @@ test('the key names are written, names only', () => {
     finally { w.clean(); }
 });
 
+test('the key names of a plan are written on any host: the key files are named in the plan platform\'s path form', () => {
+    for (const [base, home, platformPath] of [[MAC, '/Users/me', path.posix], [WIN, 'C:\\Users\\me', path.win32]] as const)
+    {
+        const p = plan(inv(base), pickOne('sonarqube', { scope: 'project' }), opts(home));
+        const step = p.steps.find((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep | undefined;
+        assert.ok(step, `${base.os}: a key-name step is planned`);
+        assert.strictEqual(step.file, platformPath.join(base.project, '.alfred-tools', '.mcps-secrets'));
+        assert.deepStrictEqual(step.names, ['SONARQUBE_TOKEN', 'SONARQUBE_ORG']);
+    }
+});
+
 test('helperParts reads the root past the pairs; configure offers the registration\'s settings first', () => {
     const cmd = helperCommand({ helperPath: '/w/.alfred-tools/mcp-headers.js', name: 'SONARQUBE_TOKEN', scheme: 'Bearer', globalRoot: '/my keys', style: 'posix', pairs: ['SONARQUBE_ORG=SONARQUBE_ORG', 'SONARQUBE_TOOLSETS:issues,projects'] });
     assert.strictEqual(cmd, "node /w/.alfred-tools/mcp-headers.js SONARQUBE_TOKEN Bearer '/my keys' --header SONARQUBE_ORG=SONARQUBE_ORG --header SONARQUBE_TOOLSETS:issues,projects");
