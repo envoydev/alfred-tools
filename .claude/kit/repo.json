@@ -110,6 +110,28 @@
         "The plugin's commands are manual, so its use shows in a transcript as a user-typed `/alfred-tools:<command>` expansion and the `node .../scripts/<file>` Bash calls it makes; there are no skills, agents or hooks to score.",
         "`docs/sessions-investigation/` already holds hand-written evidence folders (for example `preferred-tools-issues-2026-11-10/`), not collector bundles: read them as already-known claims to verify, never as bundles."
       ]
+    },
+    "code": {
+      "roots": [
+        "scripts",
+        "tests"
+      ],
+      "scope_with": [
+        "tsconfig.json"
+      ],
+      "checks": [
+        "npm run typecheck",
+        "npm test",
+        "npm run lint"
+      ],
+      "notes": [
+        "ES modules in TypeScript, run by Node's type stripping (engines ^22.18.0 || >=23.6.0): erasable syntax only, and an import names its file with its .ts extension.",
+        "scripts/copied/ is CommonJS that a root runs outside the plugin, byte for byte, and tests/matrix/fixtures holds copies a test reads as data: both are left as they are, never scored and never converted.",
+        "npm test reads only the top level of tests/ (node --test tests/*.test.ts); tests/matrix and tests/proof run by their own scripts (npm run matrix, npm run proof).",
+        "npm run lint is tests/lint.ts, the repo's own lint script; there is no lint or format config file.",
+        "typescript and @types/node are exact-pinned dev dependencies; npm run typecheck is tsc -p . over scripts and tests.",
+        "The repo is public: no private project names or absolute local paths in a tracked file."
+      ]
     }
   }
 }
