@@ -705,7 +705,10 @@ test('--json outside a folder tmpdir.ts made is refused with exit 2 and writes n
         fs.mkdirSync(path.join(w.dir, 'sub'));
         fs.symlinkSync(path.join(w.dir, 'sub'), path.join(tmp, 'to-outside'));
         const through = spawnSync(process.execPath, [script, '--project', w.project, '--json', `${path.join(tmp, 'to-outside')}${path.sep}..${path.sep}x.json`], { encoding: 'utf8', env: w.env });
-        assert.strictEqual(through.status, 2, through.stderr);
+        // Windows removes `<link>\..` from the path text before the file system sees it (docs/sources.md, 'Windows - `..`
+        // in a path'): the path names <tmp>\x.json, inside the checked folder, and it is written there
+        assert.strictEqual(through.status, process.platform === 'win32' ? 0 : 2, through.stderr);
+        assert.strictEqual(fs.existsSync(path.join(tmp, 'x.json')), process.platform === 'win32');
         assert.ok(!fs.existsSync(path.join(w.dir, 'x.json')));
     }
     finally { w.clean(); fs.rmSync(tmp, { recursive: true, force: true }); }

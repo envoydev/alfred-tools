@@ -1312,6 +1312,16 @@ Windows 11 ARM64.
   only; M2 and M7 (no Cursor CLI). The first run's failures were the tests' own: expected paths joined with `/`, a
   local entry looked up under the `\` key, and `sh` for unpacking 0.4.0 (29f48ec).
 
+## Windows - `..` in a path (read 2026-11-18)
+
+https://learn.microsoft.com/en-us/dotnet/standard/io/file-path-formats, 'Path normalization': 'Almost all paths passed
+to Windows APIs are normalized', and normalization 'Evaluates relative directory components' - for a double period
+'the current segment and the parent segment are removed'. It works on the text, before the file system: on Windows
+`<dir>\<link>\..\x` names `<dir>\x` whatever `<link>` points to, where POSIX follows the link and takes its target's
+parent. So the temp-folder write fence (`scripts/core/temp-write.ts`) refuses `<tmp>/<link to outside>/../x` on
+macOS and Linux and writes `<tmp>\x` on Windows - inside the checked folder both ways. The first CI run of the fence
+(run 44351035493, 2026-11-18) failed two tests that expected the POSIX refusal on Windows.
+
 ## Node - running `.ts` and the TypeScript tools (read and measured 2026-11-14, macOS arm64)
 
 The facts the TypeScript restructure rests on (`docs/superpowers/specs/2026-11-14-typescript-restructure-design.md`,

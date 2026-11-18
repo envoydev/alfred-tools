@@ -361,6 +361,17 @@ test('--out and the record files resolve through the checked folder, so <dir>/<l
     fs.mkdirSync(path.join(elsewhere, 'sub'));
     fs.symlinkSync(path.join(outside, 'sub'), path.join(w.dir, 'to-outside'));
     fs.symlinkSync(path.join(elsewhere, 'sub'), path.join(w.dir, 'to-ours'));
+    if (process.platform === 'win32')
+    {
+        // Windows removes `<link>\..` from the path text before the file system sees it (docs/sources.md, 'Windows - `..`
+        // in a path'): every such path names w.dir itself, one of ours, and the write lands there and nowhere else
+        const written = w.run(w.inventory, w.answers, '--out', through('to-outside', 'victim.json'));
+        assert.strictEqual(written.status, 0, written.stderr);
+        assert.ok(fs.existsSync(path.join(w.dir, 'victim.json')));
+        assert.deepStrictEqual(fs.readdirSync(outside), ['sub']);
+        assert.deepStrictEqual(fs.readdirSync(elsewhere), ['sub']);
+        return;
+    }
     // the folder the text names is outside every tmpdir.ts folder: refused, nothing written
     const refused = w.run(w.inventory, w.answers, '--out', through('to-outside', 'victim.json'));
     assert.strictEqual(refused.status, 2, refused.stderr);
