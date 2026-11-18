@@ -104,7 +104,8 @@ its location and extras, then its key name and settings. Until `next.id` is `don
 1. Ask `next.call` as printed. When `next.call` is empty, make no call.
 2. When a label is answered by something typed next (listed below), ask it in chat.
 3. Write `<tmp>/step.json` - `{"id": <next.id>, "answers": {<question id>: <label>}}`, an answer with a typed value as
-   `{"label": ..., "typed": ...}`, an 'Other' answer as `{"other": ...}` - and run:
+   `{"label": ..., "typed": ...}`, an 'Other' answer as `{"other": ...}`, and `{}` for
+   `answers` when no call was made - and run:
 
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --record <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <tmp>/step.json --data "${CLAUDE_PLUGIN_DATA}"
@@ -232,7 +233,8 @@ Apply this plan?
 ```
 
 'Change something', or a plan error, runs this, where `<pick>` is a tool id, `clients` or `settings` - for a plan error,
-the one it names:
+the one it names. When `--rewind <pick>` exits 2, or the error names no pick, run it without a pick and ask the
+printed call:
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --rewind <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <pick> --data "${CLAUDE_PLUGIN_DATA}"
@@ -240,9 +242,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --rewind <tmp>/inventory.json <tmp>
 
 For 'Change something', run it first without `<pick>`: it prints one question to ask as printed, and `answers.rewind`
 maps each label to its pick. `''` is 'Change nothing' - put the apply ask again with the plan as it was. `'another'` -
-ask for the pick in one plain line. Then run it with the pick chosen: it drops that pick's recorded steps and prints the
-walk's next step. Run step 4's loop again to `done` from that `next`, then steps 5 and 6's plan again, before the apply
-ask is put again.
+ask for the pick in one plain line and take the tool id from what is typed. Then run it with the pick chosen: it drops
+that pick's recorded steps and prints the walk's next step. Run step 4's loop again to `done` from that `next`, then
+steps 5 and 6's plan again, before the apply ask is put again.
 
 An empty plan says 'Nothing to apply'; show that and stop without asking.
 

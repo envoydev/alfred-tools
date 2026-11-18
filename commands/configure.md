@@ -108,7 +108,8 @@ question recommends what the pick has now. Until `next.id` is `done`:
 1. Ask `next.call` as printed. When `next.call` is empty, make no call.
 2. When a label is answered by something typed next (listed below), ask it in chat.
 3. Write `<tmp>/step.json` - `{"id": <next.id>, "answers": {<question id>: <label>}}`, an answer with a typed value as
-   `{"label": ..., "typed": ...}`, an 'Other' answer as `{"other": ...}` - and run:
+   `{"label": ..., "typed": ...}`, an 'Other' answer as `{"other": ...}`, and `{}` for
+   `answers` when no call was made - and run:
 
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --record <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <tmp>/step.json --data "${CLAUDE_PLUGIN_DATA}"
@@ -122,8 +123,8 @@ What each step is:
 - **On its own** (a server left on its own, a plugin's server or a connector): the question is the one the record
   asked. 'Let alfred-tools manage it' hands it to configure, update and fix from now on; for a plugin's server or a
   connector, the other option lets install offer alfred-tools' own beside it.
-- **A root folder** (`root:project`, `root:global`): the root in use first. The plan re-adds each registration of the
-  other root's family with its helper, and its data folder when it sits in the old root, pointing into the new root; it
+- **A root folder** (`root:project`, `root:global`): the root in use first. Another root re-adds each registration of
+  that family with its helper, and its data folder when it sits in the old root, pointing into the new root; it
   moves no data and no key value, and names both.
 - **A registration**: its first question is 'Who looks after <name>?'.
   - 'Leave it on its own' ends this pick: it gets no change, and the plan saves it in the record named in the option,
@@ -210,7 +211,8 @@ in `.mcp.json`; one whose entry holds a credential anywhere else - a header of i
 naming the field, never written. A rename or a scope move adds the new registration first, reads it back, then removes
 the old one; a route, location, key name, settings or root change rewrites it in place and keeps the old entry to put
 back if the add fails. A root change notes that the user copies the values from the old `.mcps-secrets` to the new one
-themselves - say it again after the apply. Exit 1 means the plan has errors; show them and rewind the pick each names (below), never go around them.
+themselves - say it again after the apply. Exit 1 means the plan has errors; show them and rewind the pick each names
+(below), never go around them.
 
 A `cursor: <file> already has <name> - answer cursor-name-<name>@<file>` error is not a wrong answer: Cursor's file
 already holds a server under a name this plan writes for Cursor, one alfred-tools did not write. `<tmp>/plan.json`
@@ -235,7 +237,9 @@ Apply this plan?
 - 'Cancel' - nothing is applied
 ```
 
-'Change something', or a plan error, runs this, where `<pick>` is a target key - for a plan error, the one it names:
+'Change something', or a plan error, runs this, where `<pick>` is a target key - for a plan error, the target whose
+`targets.<key>.row` the error names. When `--rewind <pick>` exits 2, or the error names no pick, run it without a pick
+and ask the printed call:
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --rewind <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <pick> --data "${CLAUDE_PLUGIN_DATA}"
@@ -243,9 +247,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --rewind <tmp>/inventory.json <tmp>
 
 For 'Change something', run it first without `<pick>`: it prints one question to ask as printed, and `answers.rewind`
 maps each label to its pick. `''` is 'Change nothing' - put the apply ask again with the plan as it was. `'another'` -
-ask for the pick in one plain line. Then run it with the pick chosen: it drops that pick's recorded steps and prints the
-walk's next step. Run step 5's loop again to `done` from that `next`, then steps 6 and 7's plan again, before the apply
-ask is put again.
+ask for the pick in one plain line and take the target key from what is typed (`change.keys`). Then run it with the
+pick chosen: it drops that pick's recorded steps and prints the walk's next step. Run step 5's loop again to `done`
+from that `next`, then steps 6 and 7's plan again, before the apply ask is put again.
 
 A plan that says 'Nothing to do' means every answer kept what is installed; show that and stop without asking.
 
