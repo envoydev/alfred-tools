@@ -189,10 +189,18 @@ Then, for 'Sign in now', run:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/sign-in.ts" "<name>" "<scope>"
 ```
 
-Run it in the foreground with the Bash tool's `timeout: 330000` (its `--auth-timeout 300` plus the npx
-start; the default 120000 would stop it) and tell the user the browser opens and the sign-in has five minutes. It
-prints `<name>: signed in`, or `<name>: sign-in failed: <why>` and exits 1; it never prints a token or the tool list.
-It is not in `allowed-tools` - it opens a browser and writes tokens - so Claude Code asks permission for it. After a `signed in`, the summary reports that server's sign-in as 'sign-in done' (the report said 'not done yet'); any other answer or a failure keeps 'not done yet'.
+Run it with the Monitor tool - `command: node "${CLAUDE_PLUGIN_ROOT}/scripts/sign-in.ts" "<name>" "<scope>"`, a
+`description` naming the server, and `timeout_ms: 330000` (its `--auth-timeout 300` plus the npx start) - and tell the
+user the browser opens and the sign-in has five minutes. Each stdout line it prints is an event, and it prints at most
+two: `<name>: no browser opened - open this link to sign in: <link>` when the client could not open a browser (relay the
+link to the user at once and send a PushNotification where the session has one; the client keeps waiting), and the
+result, `<name>: signed in`, or `<name>: sign-in failed: <why>` with exit 1. It never prints a token or the tool list.
+A foreground Bash call shows its output only when it ends, after the client and its callback are gone, so the link
+would arrive too late; where Monitor is not available, run it with the Bash tool's `run_in_background: true` and
+`timeout: 330000`, and Read its output file for the link line. The sign-in returns to `http://localhost:<port>/oauth/callback`
+on the machine running the client: on a remote machine (SSH), forward that port first with
+`ssh -L <port>:localhost:<port> <host>`, taking the port from the link's `redirect_uri` parameter, or open the link in a
+browser on that machine. It is not in `allowed-tools` - it opens a browser and writes tokens - so Claude Code asks permission for it. After a `signed in`, the summary reports that server's sign-in as 'sign-in done' (the report said 'not done yet'); any other answer or a failure keeps 'not done yet'.
 On a failure say why, that the user can run it again, and that otherwise the first session start opens the browser
 inside its 30-second limit. 'At the next session start': say exactly that, and that `/mcp` reconnects the server
 after the browser sign-in.

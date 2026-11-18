@@ -1430,5 +1430,13 @@ mcp-remote@0.16.0` into an empty folder, extracted and read, nothing in it run).
   opening the browser failed, else `Browser opened automatically.`. `sign-in.ts` reads stderr line by line in memory,
   remembers the first `https:` URL after the first marker, and on the could-not-open line prints one line with that link;
   no other stderr text is kept or shown. The unit tests feed these lines through a stub runner; a real run is NOT RUN.
+- The sign-in returns to the machine that runs the client: the redirect URI is `http://<host>:<port>/oauth/callback` with the
+  host `localhost` (`127.0.0.1` on Windows) and a local server bound to `127.0.0.1` (`dist/chunk-K6DREQAS.js`,
+  `DEFAULT_CALLBACK_PATH` and `buildRedirectUrl` at 33568-33576, the `--host` default at 33765, read 2026-11-18). A browser on
+  another machine (an SSH session) cannot reach it, so the commands tell the user to forward the port first
+  (`ssh -L <port>:localhost:<port>`, the port from the link's `redirect_uri` parameter) or to open the link in a browser on
+  the machine running the client. The commands run `sign-in.ts` through the Monitor tool so the link line reaches the user
+  while the client waits: a foreground Bash call's output is read when the command ends
+  (https://code.claude.com/docs/en/tools-reference.md, 'Output limits', cited by the review of 2026-11-18, not re-read here).
 - Matrix case `sign-in` (by hand, a real Atlassian account, the first start of a keyless OAuth server inside the 30 s
   limit after the sign-in): NOT RUN. The unit tests use a stub runner, no browser and no network.
