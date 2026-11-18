@@ -13,6 +13,8 @@ It installs nothing on its own. You drive it with four commands, run from the pr
 - [The tools](#the-tools)
 - [The four commands](#the-four-commands)
 - [Which settings to pick](#which-settings-to-pick)
+- [serena's folders](#serenas-folders)
+- [SonarQube Cloud](#sonarqube-cloud)
 - [Keys: `.mcps-secrets`](#keys-mcps-secrets)
 - [Sentry for one organization and project](#sentry-for-one-organization-and-project)
 - [Cursor](#cursor)
@@ -63,6 +65,7 @@ the .preferred-tools folders and offers to uninstall the old plugin.
 | gitlab | GitLab issues, merge requests and code (gitlab.com or your own host) | hosted | recommended, `GITLAB_TOKEN`; OAuth without one |
 | atlassian | Jira and Confluence | hosted | recommended, `ATLASSIAN_API_TOKEN`; OAuth without one |
 | sentry | Sentry issues and events | hosted, local (`npx`), or bridge (`npx`, see [below](#sentry-for-one-organization-and-project)) | recommended, `SENTRY_ACCESS_TOKEN`; OAuth without one |
+| sonarqube | SonarQube Cloud's code quality, issues and quality gates (see [SonarQube Cloud](#sonarqube-cloud)) | hosted | required, `SONARQUBE_TOKEN`; `SONARQUBE_ORG` optional |
 | playwright-chrome, -msedge, -firefox, -webkit | a browser Claude can drive, one per engine, each with its own profile | local (`npx`) | - |
 | appium | Android and iOS app automation | local (`npx`) | - |
 | macos-control | macOS desktop control (macOS only) | local (`uvx`) | - |
@@ -77,8 +80,9 @@ claude-hud, typescript-lsp and csharp-lsp for that reason (serena covers the cod
 working: `/alfred-tools:update` offers once to uninstall each, and remembers a 'No'. claude-hud's status line goes
 with it only when it is claude-hud's own.
 
-serena runs with a context file of the plugin's, `<root>/serena-context.yml`, that gives it six navigation tools only;
-reading, editing and searching stay with the app's own tools.
+serena runs with a context file of the plugin's, `serena-context.yml`, that gives it six navigation tools only;
+reading, editing and searching stay with the app's own tools. See [serena's folders](#serenas-folders) for where its
+files live.
 
 ## The four commands
 
@@ -157,6 +161,49 @@ scope: installed Global it is shared by every project, installed Local or Projec
 [atlassian-token]: https://support.atlassian.com/atlassian-rovo-mcp-server/docs/configuring-authentication-via-api-token
 
 Atlassian with a token misses some tools that OAuth has; leave the key out to sign in with OAuth instead.
+
+## serena's folders
+
+Everything serena keeps for you sits in its home, `<root>/serena` by default (the registration's `SERENA_HOME`), and
+never in your project:
+
+- **The context file** is `<home>/serena-context.yml`, beside serena's own `serena_config.yml`. Where serena's home is
+  one the plugin cannot edit (alfred-code 2.x's own), the file stays in the root, as before.
+- **The project folders** go to `<home>/projects/<project folder name>`. The plugin sets serena's
+  `project_serena_folder_location` in `<home>/serena_config.yml` to that before serena first starts, writing a small
+  file when there is none, so serena makes no `.serena/` folder in a project. The file holds serena's own secret: the
+  plugin edits the one line and never prints the file. The root's `.gitignore` keeps the home out of git, so none of
+  this is committed.
+- **A `.serena/` folder that is already in a project** keeps being used: `/alfred-tools:update` and
+  `/alfred-tools:fix` name each one and never move it. To move one, copy it to `<home>/projects/<project folder name>`
+  yourself.
+- **Two projects with the same folder name share one folder** under a Global home, or any home two projects use, and so
+  share one `project.yml`. Give such projects different folder names, or each its own copy of serena.
+- **No git folder, no project.** serena takes the nearest folder at or above where the session starts that holds
+  `.git` or a `.serena/project.yml`. A workspace folder with no `.git` of its own has none, so serena idles there:
+  start the session in a member repository.
+
+## SonarQube Cloud
+
+sonarqube is SonarQube Cloud's own hosted MCP server, reached with a user token (My Account, Security). It does not
+cover a self-hosted SonarQube Server.
+
+- **Region.** Install asks for it: 'SonarQube Cloud' (`api.sonarcloud.io`, recommended) or 'SonarQube Cloud US'
+  (`api.sonarqube.us`).
+- **Names in `.mcps-secrets`.** Install writes `SONARQUBE_TOKEN=` for you to fill, and `SONARQUBE_ORG=`, optional:
+  fill it with your organization key to fix the organization for every request, or leave it empty and the tools take
+  an `organization` argument. An empty line sends nothing.
+- **Tools.** One question picks 'Read-only' (recommended), 'Read and write', or either with a list of toolsets
+  (`analysis`, `coverage`, `dependency-risks`, `duplications`, `issues`, `measures`, `projects`, `quality-gates`,
+  `rules`, `security-hotspots`). Read-only is recommended because the write tools change the status of issues and
+  security hotspots. The choice is stored in the registration, and `/alfred-tools:configure sonarqube` shows it again.
+  The vendor's page does not say whether these two settings apply when you sign in with OAuth, so the plugin offers the
+  token route only.
+- **Cursor** gets the URL bridge, like every other keyed hosted server (see [Cursor](#cursor)).
+- **A sonarqube you added by hand** is recognised by its URL and managed once `/alfred-tools:fix` or
+  `/alfred-tools:update` offers to move it to the plugin's key helper. It reads the key name your own helper used; the
+  offer waits until that name holds a value in `.mcps-secrets`, so a working server never turns keyless. Your old
+  helper file is named as no longer used and is left where it is.
 
 ## Keys: `.mcps-secrets`
 
@@ -245,7 +292,14 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
 - **Kept out of AI sessions.** Two deny rules in your Claude Code settings (`~/.claude/settings.json`, or
   `CLAUDE_CONFIG_DIR`'s) stop a session from opening the tokens or the keys: `Read(//**/mcp-remote-v1/**)` and
   `Read(//**/.mcps-secrets)`. The plugin adds them when it first writes a sign-in entry or a key name; a rule you
-  remove by hand comes back on the next plan that needs it.
+  remove by hand comes back on the next plan that needs it. `/alfred-tools:fix` and `/alfred-tools:update` also add them
+  to every other Claude Code config folder on this machine (`~/.claude`, `~/.claude-<name>`) that has this plugin
+  installed, and say which. Each of those folders keeps its own plugin data, so an update run there may offer a
+  retired plugin's uninstall again after a 'No' given elsewhere.
+- **Signing in.** After an install, configure or update that sets up a new sign-in, a question offers 'Sign in now'
+  (recommended): the browser opens and waits up to five minutes. Otherwise the first session start opens it, which has
+  only 30 seconds, and `/mcp` -> the server -> Reconnect finishes it. The update output says for each such server why
+  its route changed (Cursor was added), where the sign-in is kept, and whether it is done.
 - **Signing out.** Delete that server's `<hash>_*` files in `<root>/mcp-remote-v1/`, or the folder for every server.
   The next start opens the browser again.
 - **When the sign-in fails in both apps.** A vendor can turn off the self-registration mcp-remote relies on (a GitLab
@@ -261,11 +315,11 @@ Two root folders hold everything the plugin writes:
 - **The global root**, for Global scope: `~/.alfred-tools`, `~/.alfred` when it exists, or a folder you name.
 
 Each holds the tools' data folders (`<root>/<name>`), `.mcps-secrets`, `mcp-headers.js` (with `mcp-bridge.js` beside it
-for a bridge route, and a `package.json` saying CommonJS, so both load in a project whose own `package.json` says
-`"type": "module"`), serena's `serena-context.yml`, a `.gitignore` that keeps everything but itself and the helper out
-of git, `mcps.json` - the list of the servers the plugin manages and the ones you left on their own - and, after a
-sign-in, `mcp-remote-v1/`. Install asks for each root
-once; `/alfred-tools:configure` moves one (the data stays where it is, and the plan says so).
+for a bridge route, and a `package.json` saying CommonJS: both files use `require`, which a `package.json` with
+`"type": "module"` in the root or any folder above it would turn off), a `.gitignore` that keeps everything but itself
+and the helper out of git, `mcps.json` - the list of the servers the plugin manages and the ones you left on their own -
+and, after a sign-in, `mcp-remote-v1/`. Install asks for each root once; `/alfred-tools:configure` moves one (the data
+stays where it is, and the plan says so).
 
 Every path the plugin writes is absolute, at Project scope too, so a session started in a subfolder uses the same
 profile, index and database.
@@ -291,7 +345,9 @@ only what you pick, in one confirmation:
   order. 0.5.0 adds its own: every server the plugin manages goes into the root's `mcps.json` (the 0.4.x
   record is moved in and renamed with `.0.4.bak` added), serena gets the navigation context
   and `base_modes: []` in its `serena_config.yml`, the two deny rules are added, and each retired plugin is offered for
-  uninstall. These run before the version moves, so both changes stay.
+  uninstall. The next version adds two: serena's `serena_config.yml` gets the line that sends new project folders to its
+  home (an existing `.serena/` folder is named, never moved), and a hand-added server that runs its own key helper is
+  moved to the plugin's. These run before the version moves, so both changes stay.
 - **Cursor** - asked after the updates, once per root, when Cursor is on this machine and the root's servers are set
   up for Claude Code only. 'Not now' is remembered in the list.
 
@@ -319,7 +375,8 @@ Run `/alfred-tools:fix` first; it knows these:
 - appium cannot find the Android SDK or a JDK;
 - a data folder git would commit, or a key file or sign-in folder git would commit;
 - one app's copy of a server was changed by hand, or a Cursor `mcp.json` is not JSON;
-- a deny rule for the sign-ins or the keys is missing.
+- a deny rule for the sign-ins or the keys is missing, in this config folder or another that has the plugin;
+- serena's `serena_config.yml` does not send its project folders to its home, or its context file is not in its home.
 
 A first start can take a while: install downloads each new package right after the plan and starts it once in the
 background, so the first session answers inside Claude Code's 30-second limit (memory's first start downloads an
