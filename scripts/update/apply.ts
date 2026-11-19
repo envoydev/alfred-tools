@@ -8,7 +8,7 @@ import { apply } from '../apply/run.ts';
 import { pinnedVersion } from '../inventory/fingerprint.ts';
 import * as mcpOrder from '../mcps-list/mcp-order.ts';
 import { reapproveLine } from '../plan/cursor-steps.ts';
-import { repairTail } from '../plan/repair-tail.ts';
+import { renderLine, repairTail } from '../plan/repair-tail.ts';
 import * as account from '../core/account.ts';
 import * as keys from '../keys/keys.ts';
 import { bumpEntry } from './offers-plugins.ts';
@@ -154,6 +154,8 @@ function applyCursorOffer(context: ApplyCtx, cursorOffer: CursorOffer, answer: s
     }
     const builtPlan = plan(projectInventory, { change, cursorNames }, { home: account.homeDir(context.env), env: context.env, catalog: context.catalog });
     if (builtPlan.errors.length) { log(`FAILED ${cursorOffer.id}: ${builtPlan.errors.join('; ')}`); return false; }
+    // the settings guards the plan adds say so before they are written, as install's plan does
+    for (const step of builtPlan.steps) if (step.op === 'settings-env' || step.op === 'deny-read') log(renderLine(step).trim());
     const result = apply(builtPlan, { env: context.env, tmp: dir, runCli: context.runCli, fetchFile: false, log: say });
     // the plan's notes and its fetch are the built plan's to hand on: a server moved onto the shared sign-in needs both
     for (const note of builtPlan.notes) log(`note   ${note}`);

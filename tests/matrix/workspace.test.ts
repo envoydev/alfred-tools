@@ -6,8 +6,9 @@
 //   W2  alfred-code solo, root and child: the same steps, a pasted key moved by configure, a server of the user's own,
 //       and every file alfred-code wrote left as it was
 //   W3  a subfolder session: the project file and the local key land where Claude Code puts them (M4)
-//   W4  keys: the project root and its ignores, a stdio key written in from .mcps-secrets, github's helper at local and
-//       project scope against a stub, token-sync, a 0.1.x header moved by key-to-helper; with alfred-code, the .alfred
+//   W4  keys: the project root and its ignores, a stdio key read by the launcher from .mcps-secrets, github's helper at
+//       local and project scope against a stub, token-sync and key-to-launcher on a plain 0.6.0 sentry, a 0.1.x header
+//       moved by key-to-helper; with alfred-code, the .alfred
 //       root, and a key left in a 0.1.x store named by the plan and never read
 //   W5  a root's project-scope tool in alfred-code's folder, absolute: inherited by the child, a 0.2.0 copy found in
 //       a child (data-folder-ignore), and the environment a server starts with
@@ -29,6 +30,7 @@ import { allQuestions } from '../../scripts/plan/asks-all.ts';
 import * as catalogLib from '../../scripts/catalog/catalog.ts';
 import { makeCtx, detectAll, applyFixes } from '../../scripts/fix/fix.ts';
 import * as roots from '../../scripts/roots/roots.ts';
+import { launcherParts } from '../../scripts/entries/launcher.ts';
 import * as fake from '../fake-mcp-http.ts';
 import type { Answers, Asked } from '../../scripts/plan/types.ts';
 import type { ServerEntry, ServerMap } from '../../scripts/core/types.ts';
@@ -210,7 +212,7 @@ function helperOnly(entry: ServerEntry | undefined, key: string)
     assert.ok(!text.includes(key.split('-').pop()!), 'no key');
 }
 
-test('W4 - keys without alfred-code: the root and its ignores, a stdio key written in, the helper at local and project scope, token-sync, a 0.1.x header moved to the helper', T, async () =>
+test('W4 - keys without alfred-code: the root and its ignores, a stdio key behind the launcher, the helper at local and project scope, token-sync and key-to-launcher, a 0.1.x header moved to the helper', T, async () =>
 {
     const h = new Harness({ root: path.join(root, 'w4') });
     fs.writeFileSync(path.join(h.account, 'settings.json'), JSON.stringify({ enableAllProjectMcpServers: true }));
@@ -238,9 +240,13 @@ test('W4 - keys without alfred-code: the root and its ignores, a stdio key writt
         fake.fill(secrets, G, g);
         assert.strictEqual((await fake.authOnGet(s, api, 'github', h.env)).auth, 'expected', 'local scope: the helper sends the key');
 
-        // a stdio key is written in at local scope, from the project root's .mcps-secrets
+        // a stdio key at local scope starts through the launcher: the registration holds no value, the bridge reads
+        // the project root's .mcps-secrets at each start
         run({ picks: { sentry: { route: 'local', scope: 'local' } } });
-        assert.strictEqual(localOf(h, api).sentry!.env!['SENTRY_AUTH_TOKEN'], s1, 'the value from .alfred-tools/.mcps-secrets');
+        const sentryLauncher = launcherParts(localOf(h, api).sentry);
+        assert.notStrictEqual(sentryLauncher, null, `sentry is a launcher: ${JSON.stringify(localOf(h, api).sentry)}`);
+        assert.ok(!Object.hasOwn(localOf(h, api).sentry!.env || {}, 'SENTRY_AUTH_TOKEN'), 'SENTRY_AUTH_TOKEN is not in the registration');
+        assert.ok(!fs.readFileSync(account.accountFile(h.env), 'utf8').includes(s1), 'the account file holds no value');
 
         // the move to project scope keeps the helper: the committed file holds no key and no ${VAR}
         run({ change: { 'mcp:github~local': { scope: 'project' } } });
@@ -248,7 +254,11 @@ test('W4 - keys without alfred-code: the root and its ignores, a stdio key writt
         assert.ok(!fs.readFileSync(path.join(api, '.mcp.json'), 'utf8').includes(g.split('-').pop()!));
         assert.strictEqual((await fake.authOnGet(s, api, 'github', h.env)).auth, 'expected', 'project scope: the helper sends the key');
 
-        // token-sync: a changed stdio value is written in
+        // a plain 0.6.0 sentry, seeded by hand: its key sits in the registration's env. token-sync writes the changed
+        // value in, then key-to-launcher moves it out to the launcher
+        const seeded = { ...sentryLauncher!.inner, env: { ...(sentryLauncher!.inner.env || {}), SENTRY_AUTH_TOKEN: s1 } };
+        assert.strictEqual(h.claude(api, ['mcp', 'remove', 'sentry', '-s', 'local']).status, 0);
+        assert.strictEqual(h.claude(api, ['mcp', 'add-json', 'sentry', JSON.stringify(seeded), '-s', 'local']).status, 0);
         fake.fill(secrets, S, s2);
         const ctx = () => makeCtx({ inventory: h.inventory(api, { catalog }), catalog, env: h.env, data: h.data });
         assert.ok(detectAll(ctx()).found.some((f) => f.id === 'token-sync' && f.name === 'sentry' && !f.blocked), 'token-sync names it');
@@ -257,6 +267,12 @@ test('W4 - keys without alfred-code: the root and its ignores, a stdio key writt
         let res = applyFixes(ctx(), ['token-sync'], { tmp: path.join(h.root, 'tmp', 'fix'), log });
         assert.strictEqual(res.failed, null, lines.join('\n'));
         assert.strictEqual(localOf(h, api).sentry!.env!['SENTRY_AUTH_TOKEN'], s2, 'the new value written');
+        assert.ok(detectAll(ctx()).found.some((f) => f.id === 'key-to-launcher' && f.name === 'sentry' && !f.blocked), 'key-to-launcher names it');
+        res = applyFixes(ctx(), ['key-to-launcher'], { tmp: path.join(h.root, 'tmp', 'fix'), log });
+        assert.strictEqual(res.failed, null, lines.join('\n'));
+        assert.notStrictEqual(launcherParts(localOf(h, api).sentry), null, 'key-to-launcher made it a launcher');
+        assert.ok(!Object.hasOwn(localOf(h, api).sentry!.env || {}, 'SENTRY_AUTH_TOKEN'), 'no key left in the registration');
+        assert.ok(!fs.readFileSync(account.accountFile(h.env), 'utf8').includes(s2), 'the account file holds no value');
 
         // a 0.1.x registration - a ${VAR} in its Authorization header - moved to the helper by key-to-helper
         run({ remove: [{ kind: 'mcp', name: 'github', scope: 'project' }] });
@@ -285,12 +301,17 @@ test('W4 - keys with alfred-code: the root is .alfred, a key left in a 0.1.x sto
     const ignores = [ignore(b.root!), ignore(b.child!)];
     const [sv, tg, near] = [keyValue('ws'), keyValue('tg'), keyValue('near')];
 
-    // the child's root is its .alfred: a stdio key written in from .alfred/.mcps-secrets
+    // the child's root is its .alfred: a launcher reads the stdio key from .alfred/.mcps-secrets at each start
     fake.fill(path.join(b.child!, '.alfred', roots.FILES.secrets), S, sv);
     const r = h.run(b.child!, { picks: { sentry: { route: 'local', scope: 'local', name: 'sentry-keys' } } });
     noErrors(r);
     ok(r);
-    assert.strictEqual(localOf(h, b.child!)['sentry-keys']!.env!['SENTRY_AUTH_TOKEN'], sv, "the child's .alfred/.mcps-secrets");
+    const childEntry = localOf(h, b.child!)['sentry-keys']!;
+    const childLauncher = launcherParts(childEntry);
+    assert.notStrictEqual(childLauncher, null, `the child's sentry is a launcher: ${JSON.stringify(childEntry)}`);
+    assert.strictEqual(childLauncher!.keyName, S, "the launcher names the key in the child's .alfred/.mcps-secrets");
+    assert.ok(!Object.hasOwn(childEntry.env || {}, 'SENTRY_AUTH_TOKEN'), 'SENTRY_AUTH_TOKEN is not in the registration');
+    assert.ok(!fs.readFileSync(account.accountFile(h.env), 'utf8').includes(sv), 'the account file holds no value');
     assert.ok(!fs.existsSync(path.join(b.child!, '.alfred-tools')), 'no .alfred-tools root made');
     noValueInTmp(h, [sv]);
 

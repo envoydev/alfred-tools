@@ -15,6 +15,7 @@ import * as account from '../../scripts/core/account.ts';
 import { load } from '../../scripts/catalog/catalog.ts';
 import * as keys from '../../scripts/keys/keys.ts';
 import { fetchStep } from '../../scripts/entries/names.ts';
+import { launcherParts, launcherRoute } from '../../scripts/entries/launcher.ts';
 import { START_TIMEOUT } from '../../scripts/plan/start-timeout-constants.ts';
 import type { McpAddStep } from '../../scripts/plan/types.ts';
 import { Harness } from '../harness.ts';
@@ -30,8 +31,8 @@ test.after(() => { keepWritten(root, 'fresh-install'); fs.rmSync(root, { recursi
 
 const h = new Harness({ root });
 // fake key values, built at run time, in the throwaway global root's .mcps-secrets - the one file 0.2.0 reads a key from
-// (spec D3): it serves Global scope and comes second in the Local chain. A local route's key is written into its
-// registration at Local and Global scope (D5); the last test searches every other config file for the values.
+// (spec D3): it serves Global scope and comes second in the Local chain. A local route's registration at Local and Global
+// scope is a launcher that reads the key from it at each start; the last test searches every config file for the values.
 const FAKE: Record<string, string> = {
     GITHUB_PERSONAL_ACCESS_TOKEN: ['fake', 'github', 'value', 'a1b2c3d4e5f6'].join('-'),
     SENTRY_ACCESS_TOKEN: ['fake', 'sentry', 'value', 'a1b2c3d4e5f6'].join('-'),
@@ -40,7 +41,8 @@ const FAKE: Record<string, string> = {
 const globalRoot = path.join(h.home, '.alfred-tools');
 fs.mkdirSync(globalRoot, { recursive: true });
 fs.writeFileSync(path.join(globalRoot, keys.SECRETS), Object.entries(FAKE).map(([k, v]) => `${k}=${v}\n`).join(''));
-// the registrations a key was written into: { scope, name, project }
+// the registrations a key was written into: { scope, name, project } - none since 0.7.0, where every keyed stdio route
+// starts through the launcher; the last test asserts the list stays empty
 const writtenIn: { scope: string; name: string; project: string }[] = [];
 
 const NETWORK = /could not resolve|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|network|clone|fetch|timed out|ECONNREFUSED/i;
@@ -50,6 +52,17 @@ for (const c of spec.cases)
     test(`fresh: ${c.name}`, { skip: skipAll, timeout: 300000 }, (t) =>
     {
         if (!c.os.includes(process.platform)) return t.skip(`NOT RUN: ${c.row} is offered on ${c.os.join(', ')}, this is ${process.platform}`);
+        // a case that expects the start limit proves its own write: an earlier case's MCP_TIMEOUT is taken out first
+        const settingsFile = path.join(h.account, 'settings.json');
+        if (fs.existsSync(settingsFile))
+        {
+            const settingsDoc = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+            if (settingsDoc.env && Object.hasOwn(settingsDoc.env, START_TIMEOUT.name))
+            {
+                delete settingsDoc.env[START_TIMEOUT.name];
+                fs.writeFileSync(settingsFile, `${JSON.stringify(settingsDoc, null, 2)}\n`);
+            }
+        }
         const project = h.project(c.name.replace(/[^A-Za-z0-9]+/g, '-'));
         const answers = { ...c.answers, machine: spec.machine };
         const r = h.run(project, answers);
@@ -64,7 +77,8 @@ for (const c of spec.cases)
             const got = inv.registrations.find((x) => x.rowId === c.row && x.scope === c.expect.scope && x.route === c.expect.route);
             assert.ok(got, `${c.row}: no ${c.expect.route}-route registration at ${c.expect.scope} scope read back\n${r.text}`);
             assert.strictEqual(got.name, step.name);
-            // a local route's key, written in by the apply from .mcps-secrets (D5); a hosted route's entry holds none
+            // a keyed stdio route at Local or Global scope is planned as a launcher, with no key in it; a plain entry that
+            // still holds a key is filled by the apply from .mcps-secrets (D5); a hosted route's entry holds none
             const route = catalog.byId.get(c.row)!.routes[step.route!]!;
             const want = step.key ? keys.fillKeys(step.entry, catalog.byId.get(c.row), step.route!, step.scope, { [route.tokenVar!]: FAKE[step.key.name]! }) : step.entry;
             if (step.key) writtenIn.push({ scope: step.scope, name: step.name, project });
@@ -74,6 +88,14 @@ for (const c of spec.cases)
                 ? JSON.parse(fs.readFileSync(path.join(project, '.mcp.json'), 'utf8')).mcpServers
                 : (c.expect.scope === 'user' ? account.readAccount(h.env, project).user : account.readAccount(h.env, project).local);
             assert.deepStrictEqual(stored[step.name], want);
+            const wantsLauncher = launcherRoute(route, step.route!, step.scope) && (route.authMode === 'token' || c.answers.picks[c.row]?.token === true);
+            assert.strictEqual(launcherParts(stored[step.name]) !== null, wantsLauncher, `${c.row}: the stored registration ${wantsLauncher ? 'is' : 'is not'} a launcher`);
+            if (c.expect.cursor)
+            {
+                // the entry Cursor's global file holds is the one Claude Code stored (the launcher runs the same in both apps)
+                const cursorDoc = JSON.parse(fs.readFileSync(path.join(h.home, '.cursor', 'mcp.json'), 'utf8'));
+                assert.deepStrictEqual(cursorDoc.mcpServers[step.name], stored[step.name], `${c.row}: Cursor's copy is the stored entry`);
+            }
             // a launch through npx, uvx, docker or the bridge (npx asks the npm registry at every start): the throwaway config dir's settings give it 90 s
             if (fetchStep(step.name, step.entry) !== null)
             {
@@ -117,29 +139,17 @@ for (const c of spec.cases)
     });
 }
 
-test('no config file holds a key value outside a local route written in at Local or Global scope, and the real account is untouched', { skip: skipAll }, () =>
+test('no config file holds a key value, and the real account is untouched', { skip: skipAll }, () =>
 {
-    const accountFile = path.join(h.account, '.claude.json');
-    const files = [accountFile, path.join(h.account, 'settings.json')];
-    for (const f of h.files()) if (/(^|[\\/])\.mcp\.json$|[\\/]\.claude[\\/]settings(\.local)?\.json$/.test(f)) files.push(f);
+    assert.deepStrictEqual(writtenIn, [], 'no route writes a key into a registration any more');
+    const files = [path.join(h.account, '.claude.json'), path.join(h.account, 'settings.json')];
+    for (const f of h.files()) if (/(^|[\\/])\.mcp\.json$|[\\/]\.claude[\\/]settings(\.local)?\.json$|[\\/]\.cursor[\\/]mcp\.json$/.test(f)) files.push(f);
     let scanned = 0;
     for (const f of files)
     {
         if (!fs.existsSync(f)) continue;
         scanned++;
-        let text = fs.readFileSync(f, 'utf8');
-        if (f === accountFile)
-        {
-            // the registrations a key was written into, as D5 says, are taken out; nothing else may hold a value
-            const doc = JSON.parse(text);
-            for (const w of writtenIn)
-            {
-                const servers = w.scope === 'user' ? doc.mcpServers : account.projectEntry(doc.projects, w.project)!.mcpServers;
-                assert.ok(Object.values(FAKE).some((v) => JSON.stringify(servers[w.name]).includes(v)), `${w.name} (${w.scope}) holds its key`);
-                delete servers[w.name];
-            }
-            text = JSON.stringify(doc);
-        }
+        const text = fs.readFileSync(f, 'utf8');
         for (const [name, value] of Object.entries(FAKE)) assert.ok(!text.includes(value), `${name}'s value is in ${f}`);
     }
     assert.ok(scanned >= 3, `${scanned} files scanned`);

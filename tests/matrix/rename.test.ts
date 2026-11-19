@@ -100,6 +100,23 @@ function age(h: Harness, dir: string, { record }: { record: boolean })
     return servers;
 }
 
+// context7's local route as 0.5.0 wrote it at Local scope: npx, the pinned package and the key in the env - in the account,
+// in Cursor's project file and, as the kept marker, in the project root's list
+function seedPlainContext7(h: Harness, dir: string, value: string)
+{
+    const { package: pinned } = catalog.byId.get('context7')!.routes.local!;
+    const plain = { command: 'npx', args: ['-y', `${pinned!.name}@${pinned!.version}`], env: { npm_config_before: pinned!.cutoff, CONTEXT7_API_KEY: value } };
+    assert.strictEqual(h.claude(dir, ['mcp', 'add-json', 'context7', JSON.stringify(plain), '-s', 'local']).status, 0, 'context7 seeded in the account');
+    const cursorFile = path.join(dir, '.cursor', 'mcp.json');
+    const cursorDoc = readJson(cursorFile);
+    cursorDoc.mcpServers.context7 = plain;
+    fs.writeFileSync(cursorFile, `${JSON.stringify(cursorDoc, null, 2)}\n`);
+    const listFile = path.join(dir, NEW, roots.FILES.list);
+    const list = readJson(listFile) as McpsList;
+    list.servers.push({ name: 'context7', scope: 'local', row: 'context7', route: 'local', clients: ['claude', 'cursor'], entry: { ...plain, env: { ...plain.env, CONTEXT7_API_KEY: kept.MARKER } }, key: 'CONTEXT7_API_KEY' });
+    fs.writeFileSync(listFile, `${JSON.stringify(list, null, 2)}\n`);
+}
+
 // update as the command runs it: check, apply all; on RECHECK, check and apply all once more
 async function updateAll(h: Harness, dir: string)
 {
@@ -181,12 +198,16 @@ test('R2 - a pre-rename 0.5.0 machine: lists, Cursor\'s copies, the old kept mar
 {
     const h = world('r2');
     const dir = h.project('p');
-    // the stdio keyed route holds its key in the registration, and its list entry the kept marker in its place
+    // the stdio keyed route: since 0.7.0 an install writes a launcher, so context7's plain 0.5.0 form is seeded by hand -
+    // the key in the registration's env, the kept marker in its list entry and in Cursor's copy - to keep the old marker
+    // this case moves
     fs.mkdirSync(path.join(dir, NEW), { recursive: true });
-    fake.fill(path.join(dir, NEW, roots.FILES.secrets), 'CONTEXT7_API_KEY', key());
-    const r = h.run(dir, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'project' }, memory: { scope: 'project' }, context7: { route: 'local', scope: 'local', token: true }, gitlab: { scope: 'user', token: true } } });
+    const c7Key = key();
+    fake.fill(path.join(dir, NEW, roots.FILES.secrets), 'CONTEXT7_API_KEY', c7Key);
+    const r = h.run(dir, { clients: ['claude', 'cursor'], picks: { serena: { scope: 'project' }, memory: { scope: 'project' }, gitlab: { scope: 'user', token: true } } });
     assert.deepStrictEqual(r.plan.errors, [], r.rendered);
     assert.strictEqual(r.report.failed, null, `${r.rendered}\n${r.text}`);
+    seedPlainContext7(h, dir, c7Key);
     const servers = age(h, dir, { record: false });
     const oldList = fs.readFileSync(path.join(dir, OLD, roots.FILES.list), 'utf8') + (exists(path.join(h.home, OLD, roots.FILES.list)) ? fs.readFileSync(path.join(h.home, OLD, roots.FILES.list), 'utf8') : '');
     assert.ok(oldList.includes(kept.OLD_MARKER), 'the pre-rename list holds the old kept marker');

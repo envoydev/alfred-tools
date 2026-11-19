@@ -19,6 +19,8 @@ import * as cli from '../../scripts/core/claude-cli.ts';
 import * as catalogLib from '../../scripts/catalog/catalog.ts';
 import { plan } from '../../scripts/plan/plan.ts';
 import * as roots from '../../scripts/roots/roots.ts';
+import * as account from '../../scripts/core/account.ts';
+import { launcherParts } from '../../scripts/entries/launcher.ts';
 import { fill } from '../fake-mcp-http.ts';
 import type { McpAddStep } from '../../scripts/plan/types.ts';
 import type { Inventory } from '../../scripts/inventory/types.ts';
@@ -104,7 +106,7 @@ function initialize(entry: ServerEntry, cwd: string)
 const LOCAL = [
     { row: 'serena', needs: ['uvx'] },
     { row: 'memory', needs: ['uvx'] },
-    { row: 'context7', route: 'local', needs: ['npx'] },
+    { row: 'context7', route: 'local', needs: ['npx'], fakeKey: 'CONTEXT7_API_KEY' },
     { row: 'playwright-chrome', needs: ['npx'] },
     { row: 'appium', needs: ['npx'] },
     { row: 'macos-control', needs: ['uvx'] },
@@ -124,14 +126,24 @@ for (const c of LOCAL)
         if (c.token && !process.env[c.token]) return t.skip(`NOT RUN: the route needs ${c.token}, which this shell does not set (a real token; the plugin writes none)`);
         // the shell's token goes where 0.2.0 reads a stdio key: the throwaway global root's .mcps-secrets, removed with the world
         if (c.token) fill(path.join(h.home, '.alfred-tools', roots.FILES.secrets), c.token, process.env[c.token]!);
+        // a fake value, built at run time: the start proves the launcher reads it, and the account file must never hold it
+        const fakeValue = c.fakeKey ? ['fake', c.row, 'value', 'a1b2c3d4e5f6'].join('-') : null;
+        if (c.fakeKey && fakeValue) fill(path.join(h.home, '.alfred-tools', roots.FILES.secrets), c.fakeKey, fakeValue);
 
         const p = h.project(`start-${c.row}`);
         const name = `start-${c.row}`;
-        const r = h.run(p, { picks: { [c.row]: { scope: 'local', name, ...(c.route ? { route: c.route } : {}) } } });
+        const r = h.run(p, { picks: { [c.row]: { scope: 'local', name, ...(c.route ? { route: c.route } : {}), ...(c.fakeKey ? { token: true } : {}) } } });
         assert.deepStrictEqual(r.plan.errors, []);
         assert.strictEqual(r.report.failed, null, r.text);
         const reg = h.inventory(p).registrations.find((x) => x.name === name && x.scope === 'local');
         assert.ok(reg, 'read back from the account file');
+        if (fakeValue)
+        {
+            // a keyed stdio route at Local scope is `node <bridge> --run <ENV>=<KEY_NAME> -- <inner launch>`, with no value in it
+            assert.notStrictEqual(launcherParts(reg.entry), null, `${c.row}: the registration is a launcher: ${JSON.stringify(reg.entry.args)}`);
+            assert.strictEqual(reg.entry.command, 'node');
+            assert.ok(!fs.readFileSync(account.accountFile(h.env), 'utf8').includes(fakeValue), 'the account file holds no key value');
+        }
         if (c.row === 'serena')
         {
             // never open a browser tab on the machine running the matrix (fetch.ts starts it too)

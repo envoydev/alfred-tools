@@ -1232,8 +1232,16 @@ test('accepting it prints the plan notes, hands its fetch on and states each mov
         fs.mkdirSync(path.join(w.home, '.cursor'), { recursive: true });
         const root = path.join(w.project, '.alfred-tools');
         const tmp = fs.mkdtempSync(path.join(w.dir, 'alfred-tools-'));
+        // the guards the plan adds print their own lines: the install's are taken out first, so the plan builds them again
+        const settingsFile = path.join(w.env.CLAUDE_CONFIG_DIR!, 'settings.json');
+        const settingsDoc = fs.existsSync(settingsFile) ? readJson(settingsFile) : {};
+        if (settingsDoc.env) delete settingsDoc.env.MCP_TIMEOUT;
+        if (settingsDoc.permissions) delete settingsDoc.permissions.deny;
+        writeJson(settingsFile, settingsDoc);
         const a = await run(w, ['--apply', 'none', '--tmp', tmp, '--input', `cursor-offer:${root}=set`]);
         assert.strictEqual(a.code, 0, a.text);
+        assert.ok(a.text.includes(`adds MCP_TIMEOUT=90000 to env in ${settingsFile}`), a.text);
+        assert.ok(a.text.includes(`to permissions.deny in ${settingsFile}`), a.text);
         assert.match(a.text, /note {3}atlassian: sign in once more/);
         assert.ok(a.text.includes(`atlassian: now the shared sign-in in ${path.join(root, 'mcp-remote-v1')}/ (Cursor added) - sign-in not done yet`), a.text);
         assert.ok(!a.text.includes('serena: now the shared sign-in'), 'a server that does not move is not stated');
