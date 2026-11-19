@@ -4,9 +4,10 @@ disable-model-invocation: true
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --check), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --check *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --questions), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --questions *)
 ---
 
-Bring what is installed up to date: every plugin on this machine, the pinned MCP servers, the key helper (`mcp-headers.js`) and URL bridge (`mcp-bridge.js`) in each root folder, and
-the way this plugin passes data to the servers an older alfred-tools set up. The script finds what is behind and does
-the work; you paste what it prints and ask.
+Bring what is installed up to date: every plugin on this machine, the pinned MCP servers, the files copied into each
+root folder (`mcp-headers.js`, `mcp-bridge.js`, `serena-context.yml`), and the way this plugin passes data to the
+servers an older alfred-tools set up. The script finds what is behind and does the work; you paste what it prints and
+ask. It takes no argument: one typed after the command changes nothing - say so.
 
 ## Rules
 
@@ -43,8 +44,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --check --data "${CLAUDE_PLUGIN_D
 
 Paste the output verbatim in a fenced block. It refreshes each marketplace the installed plugins come from
 (`claude plugin marketplace update <name>`), then lists, in tables: plugins, MCP servers as
-`current -> offered` with the release's age, key helpers (`mcp-headers.js` and `mcp-bridge.js` copies
-older than this plugin's, as `helper N -> M` and `bridge N -> M`), and 'New ways to pass data', one line per server or
+`current -> offered` with the release's age, 'Key helpers' (each copied file older than this plugin's, as
+`<file> in <root>  N -> M`), and 'New ways to pass data', one line per server or
 folder as `<fix id>: <what it found>`. Below them: plugins whose marketplace lists no version
 (`claude plugin update` is the check for those, so each is offered on its own), releases held back, what was skipped (a hosted URL has no
 pin; a Docker image tag is not checked; a server on its own), and what could not be checked. Among the new ways to pass data,
@@ -61,7 +62,9 @@ Exit 3 with one line means the `claude` CLI is missing: say so and stop. When th
 `alfred-tools: everything current`, say that and stop. When it is `alfred-tools: nothing to update - Cursor can be
 set up (asked next)`, go to step 2 and ask only the Cursor offer. When it is `alfred-tools: nothing to update - N wait(s) on
 you first`, nothing can be offered yet: tell the user each note (a key to fill, a key file git would commit) and stop.
-A line under 'Could not check' is a registry that did not answer; it is never read as current - say so.
+When it is `alfred-tools: nothing behind among what could be checked`, say that, name each 'Could not check' line, and
+stop. A line under 'Could not check' - a registry that did not answer, or a pin the rewrite cannot move - is never
+read as current: say so.
 
 ## 2. Which
 
@@ -137,8 +140,7 @@ whenever an entry changes': tell the user Cursor will ask.
 A `read-guard` offer covers every Claude Code config dir under the home that has this plugin installed (a second
 `CLAUDE_CONFIG_DIR` such as `~/.claude-personal` included), not only the one this session runs in. For each other dir
 the report prints `note: <dir>: read guard added - it keeps its own plugin data, so an update there may offer a declined
-uninstall again`: repeat it in the summary, naming the dir. That dir has its own `roots.json` and
-`retired-declined.json`, so an update run in it may offer an uninstall the user already declined here.
+uninstall again`: repeat it in the summary, naming the dir.
 
 When a Cursor offer was taken, the report prints each plan note as `note   <text>` and, for each server moved onto the
 shared sign-in, a line `<name>: now the shared sign-in in <root>/mcp-remote-v1/ (Cursor added) - sign-in not done yet`:

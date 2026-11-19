@@ -48,8 +48,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.ts" --json <tmp>/inventory.json --
 ```
 
 It reads the registrations, the plugins and the records of earlier answers, and starts no server. Exit 3 with one line
-means the `claude` CLI is missing: say so and stop. A file named as not valid JSON is unreadable: offer nothing that
-writes there.
+means the `claude` CLI is missing: say so and stop. An `alfred-tools: <file or list> is malformed` or `... is
+unreadable` line says what it means for this run: relay it, and offer nothing that writes to that file. A script that
+exits 2 printed one line naming the input it refused, and wrote nothing.
 
 ## 2. The table
 
@@ -75,8 +76,8 @@ Its `change.keys` maps each option to its key (`mcp:<name>~<scope>`, `plugin-mcp
 The argument, when given:
 
 - a registration name, or a tool id - the keys whose label starts with that name or names that tool. One: the only pick,
-  go to step 5. Several: say where each is installed and ask step 4 as printed. None: say it is not installed and point
-  to `/alfred-tools:install <id>`.
+  go to step 5. Several: say where each is installed and ask step 4 as printed. None: say it is not installed, point
+  to `/alfred-tools:install <id>`, and stop.
 
 Otherwise ask:
 
@@ -204,8 +205,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --skip <tmp>/inventory.json <tmp>/p
 node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" <tmp>/inventory.json <tmp>/answers.json --out <tmp>/plan.json --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
-Paste the output verbatim in a fenced block. Its `mcps.json` lines are the list of the servers alfred-tools manages and
-those left on their own, and `reorders` puts the catalog servers in the user's order. An entry that holds a credential
+Paste the output verbatim in a fenced block. An entry that holds a credential
 outside its key helper is a plan error, never written. A root change notes that the user copies the values from the old
 `.mcps-secrets` to the new one themselves - say it again after the apply. Exit 1 means the plan has errors; show them
 and rewind the pick each names (below), never go around them.
@@ -294,7 +294,7 @@ foreground with `timeout: 600000`, and again if the limit stops it.
 <!-- /shared:fetch -->
 
 An npx server that fails at every start with `ENOENT` afterwards was started beside the download: `/alfred-tools:fix`
-repairs it. A rename, a scope move or a location change prints no fetch line. End with the restart line: a changed
+repairs it. End with the restart line: a changed
 registration loads on the next session start, and a project-scope server also needs the trust prompt then.
 
 **Sign-in.** For each server the plan named in an `OAuth:` line that says its browser opens to sign in the first time it

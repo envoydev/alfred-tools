@@ -45,8 +45,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.ts" --json <tmp>/inventory.json --
 ```
 
 It reads the registrations, the plugins and the records of earlier answers, and starts no server. Exit 3 with one line
-means the `claude` CLI is missing: say so and stop. A file named as not valid JSON is unreadable: offer nothing that
-writes there.
+means the `claude` CLI is missing: say so and stop. An `alfred-tools: <file or list> is malformed` or `... is
+unreadable` line says what it means for this run: relay it, and offer nothing that writes to that file. A script that
+exits 2 printed one line naming the input it refused, and wrote nothing.
 
 ## 2. The table
 
@@ -72,16 +73,17 @@ none. If the call exits 1 naming the plugin's old folder, show that line and sto
 Its `pick` holds only the tools not installed here, without a server left on its own. When it is empty, say every
 catalog tool for this OS is installed or left on its own, point to `/alfred-tools:configure`, and stop.
 
-If the argument is a tool id from the table: installed, say where (from the table) and point to
-`/alfred-tools:configure <id>`, then stop; not installed, take it as the only pick and go to step 4.
+If the argument is a tool id from the table: when `pick` offers it - a copy beside one for every project included -
+take it as the only pick and go to step 4; otherwise say where it is installed or left on its own (from the table),
+point to `/alfred-tools:configure <id>`, and stop. Any other argument: say it is no tool id from the table, then ask
+the pick below.
 
 Otherwise ask each `pick` call as printed - one `AskUserQuestion` of up to four multi-select questions - and collect the
 labels picked; each label is the tool id, then what it already has:
 
 - `(installed for every project ...)` - a copy is installed at Global scope. The pick gets this project's own copy
-  beside it; the one for every project is never changed or removed. A tool whose data defaults to the global root
-  (memory) defaults to the project root for a copy, so it starts empty and the global data is not seen here; 'Keep' at
-  the location question shares that data instead. Say this when such a tool is picked.
+  beside it; the one for every project is never changed or removed. memory's copy keeps its data in the project root,
+  so it starts empty and does not see the memory for every project - say so when it is picked.
 - `(also connected through claude.ai)` or `(also provided by the <plugin> plugin)` - the same server reaches this
   session another way. The pick adds this project's own registration beside it.
 
@@ -243,7 +245,7 @@ the apply ask again with the plan as it was. `'another'` - ask for the pick in o
 what is typed. With the pick chosen it drops that pick's recorded steps and prints the walk's next step. Run step 4's
 loop again to `done` from that `next`, then steps 5 and 6's plan again, then the apply ask.
 
-An empty plan says 'Nothing to apply'; show that and stop without asking.
+A plan that says 'Nothing to do': show that and stop without asking.
 
 ## 7. Apply
 

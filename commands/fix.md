@@ -1,5 +1,5 @@
 ---
-description: "Detect known problems in the installed tools and apply the recorded fix for each"
+description: "Detect known problems in the installed tools and apply the recorded fix for each one you pick"
 argument-hint: "[tool, registration name or fix id]"
 disable-model-invocation: true
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --detect), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --detect *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --questions), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --questions *)
@@ -54,7 +54,8 @@ hand (compared with each key value masked, so a key filled in Cursor is not drif
 link, holds comments or trailing commas, or has no `mcpServers` - alfred-tools writes no such file; its line says
 what to do.
 
-If it says 'No known problem found.', say so in one line and stop.
+If it says 'No known problem found.', say so in one line - with an argument, for what it names only, since a name that
+matches nothing reads the same - relay each `note:` line under it, and stop.
 
 ## 2. Ask
 
@@ -129,7 +130,9 @@ parent folder's `.mcp.json` gives this folder, since that cache is the machine's
 
 Run it with the Bash tool's `timeout: 600000` (10 minutes, the most it allows by default).
 Paste the output verbatim. Report each fix as 'fixed' or 'STILL FOUND', each skipped one with its reason, and a failure
-with the line it printed - a failed rewrite prints a `RESTORE BY HAND` line, give it to the user as written.
+with the line it printed - a failed rewrite prints a `RESTORE BY HAND` line, give it to the user as written. A `FAILED`
+line ends the run there: what ran before it stays in place, nothing after it ran and nothing was read back - say so, and
+that `/alfred-tools:fix` again finds what is left.
 A key in it shows as `${ALFRED_TOOLS_KEPT}`, never its value: the user puts their key back there.
 If the output has a `RECHECK` line, go back to step 1 in this same command (once): the rest was not offered before the move.
 
