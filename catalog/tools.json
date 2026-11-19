@@ -209,12 +209,21 @@
             "cutoff": "2026-11-19T23:59:59Z"
           },
           "run": [],
-          "optionalArgs": {
-            "token": [
-              "--api-key",
-              "${CONTEXT7_API_KEY}"
-            ]
+          "optionalEnv": {
+            "token": {
+              "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"
+            }
           },
+          "formerly": [
+            {
+              "optionalArgs": {
+                "token": [
+                  "--api-key",
+                  "${CONTEXT7_API_KEY}"
+                ]
+              }
+            }
+          ],
           "env": {},
           "fingerprints": [
             {

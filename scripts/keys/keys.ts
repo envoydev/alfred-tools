@@ -67,6 +67,28 @@ export function tokenFields(entry: ServerEntry | null | undefined, route: Catalo
     return out;
 }
 
+// The entry with every token field tokenFields finds taken out: an args field with the flag before it, an env or header
+// name. Configure's 'no key' answer runs it, so a key goes whichever place it was in (spec D1).
+export function withoutTokenFields(entry: ServerEntry, route: CatalogRoute | null | undefined): ServerEntry
+{
+    const fields = tokenFields(entry, route);
+    if (!fields.length) return entry;
+    const out: ServerEntry = { ...entry };
+    if (entry.args) out.args = [...entry.args];
+    if (entry.env) out.env = { ...entry.env };
+    if (entry.headers) out.headers = { ...entry.headers };
+    const argsAt = fields.flatMap((field) => (field.at[0] === 'args' ? [field.at[1]] : [])).sort((left, right) => right - left);
+    for (const at of argsAt) if (out.args) out.args.splice(at - 1, 2);
+    for (const field of fields)
+    {
+        const [where, name] = field.at;
+        if (where === 'args') continue;
+        const holder = out[where];
+        if (holder) delete holder[name];
+    }
+    return out;
+}
+
 // valueAt and PLACEHOLDER are core/kept.ts's, which masks by them too; plan, apply, cursor, fix and mcps-list read them here.
 export { PLACEHOLDER, valueAt };
 

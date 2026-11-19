@@ -30,13 +30,14 @@ export function currentOf(row: CatalogRow, registration: Registration): Current
         const urlNames = Object.fromEntries(((route && route.urlVars) || []).map((urlVar, i) => [urlVar.var, held[i]?.name ?? urlVar.var]));
         return { name: registration.name, scope: registration.scope, route: registration.route, entry: entry, rootStr: null, executablePath: undefined, token: true, keyName: bridge.keyName, urlNames, host: null };
     }
+    const route = registration.route ? row.routes[registration.route] : undefined;
     // the shared sign-in form (D5) holds its URL as an argument
     const signIn = entry.url ? null : signInParts(entry);
     return {
         name: registration.name, scope: registration.scope, route: registration.route, entry: entry,
         rootStr: row.locations ? rootOfEntry(row, entry) : null,
         executablePath: flag(EXECUTABLE_PATH_FLAG),
-        token: Boolean(entry.headersHelper || (entry.headers && entry.headers['Authorization']) || args.includes(API_KEY_FLAG)),
+        token: Boolean(entry.headersHelper || (entry.headers && entry.headers['Authorization']) || args.includes(API_KEY_FLAG) || (route?.authMode === 'optional-token' && keys.tokenFields(entry, route).length > 0)),
         keyName: helperNameOf(entry.headersHelper),
         host: entry.url ? new URL(entry.url).hostname : signIn ? new URL(signIn.url).hostname : null,
     };
@@ -315,7 +316,6 @@ export function buildEntry(row: CatalogRow, routeId: string, answers: BuildAnswe
     {
         if (!spec) continue;
         if (key === 'executablePath' && executablePath) extra.push(...spec.map((argTemplate) => subst(argTemplate, { value: executablePath })));
-        if (key === 'token' && answers.token) extra.push(...spec);
     }
     if (route.runtime === 'uvx')
     {
@@ -349,6 +349,8 @@ export function buildEntry(row: CatalogRow, routeId: string, answers: BuildAnswe
         if (Object.keys(route.env || {}).length) entry.env = { ...route.env };
     }
     if (!entry) throw new Error(`${row.id}: no registration form for the '${String(route.runtime)}' runtime`);
+    // an optional key goes in the server's environment, never on its command line, where every process listing shows it (D1)
+    if (answers.token && route.optionalEnv && route.optionalEnv.token) entry.env = { ...(entry.env || {}), ...route.optionalEnv.token };
     if (row.locations && answers.rootStr !== undefined) entry = applyRoot(entry, row, answers.rootStr, answers.scope, context);
     // serena's home is set by now: its context file goes in it
     return applyContext(entry, answers.scope, context);

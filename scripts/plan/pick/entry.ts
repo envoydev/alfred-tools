@@ -3,7 +3,7 @@
 import { formatRoot, applyRoot } from '../../entries/locations.ts';
 import { checkHostedSettings, currentHostedSettings, defaultHostedSettings } from '../hosted-settings.ts';
 import { buildEntry, applyContext, bridgeParts, helperParts, helperGlobalRoot, bridgePathFor, renameTemplate, helperFor, subst, rebridgedArgs } from '../../entries/entry.ts';
-import { API_KEY_FLAG, EXECUTABLE_PATH_FLAG } from '../../entries/constants.ts';
+import { EXECUTABLE_PATH_FLAG } from '../../entries/constants.ts';
 import { routeField } from '../../catalog/rows.ts';
 import * as keys from '../../keys/keys.ts';
 import * as kept from '../../core/kept.ts';
@@ -59,11 +59,9 @@ function editedEntry(base: PickBase, answers: PickAnswers, current: Current, edi
     }
     else if (route.authMode === 'optional-token' && sendNow !== current.token)
     {
-        const args = (entry.args || []).slice();
-        const i = args.indexOf(API_KEY_FLAG);
-        if (i >= 0) args.splice(i, 2);
-        if (sendNow) args.push(...routeField(route.optionalArgs?.token, row.id, 'optionalArgs.token'));
-        entry.args = args;
+        // the key comes out of every place it is in - its env pair, or a former --api-key (D1) - and goes in the env
+        entry = keys.withoutTokenFields(entry, route);
+        if (sendNow) entry.env = { ...(entry.env || {}), ...routeField(route.optionalEnv?.token, row.id, 'optionalEnv.token') };
     }
     if (row.params && current.host && params.host !== current.host) entry.url = subst(route.url, params);
     return entry;

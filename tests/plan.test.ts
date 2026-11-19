@@ -527,6 +527,7 @@ test('changing the route rebuilds from the catalog; changing only the key adds t
     const local = plan(inv(MAC, { registrations: [user] }), changeOf(user, { route: 'local' }), opts('/h'));
     const replace = (local.steps.find((x) => x.op === 'mcp-replace') as McpReplaceStep);
     assert.deepStrictEqual([replace.entry.command, replace.entry.args!.includes('--api-key')], ['npx', false]);
+    assert.ok(!('CONTEXT7_API_KEY' in (replace.entry.env || {})));
     assert.ok(local.notes.some((n) => n.startsWith('context7: fill CONTEXT7_API_KEY in ')), local.notes.join('\n'));
     const moved = plan(inv(MAC, { registrations: [r] }), changeOf(r, { route: 'local', scope: 'local' }), opts('/h'));
     assert.deepStrictEqual(regSteps(moved).map((s) => s.op), ['mcp-move', 'fetch'], 'a hosted route had nothing in the cache');
@@ -1527,12 +1528,14 @@ test('D5: each keyed route at each scope', () => {
     }
     // context7 npm: keyless only at project scope, written in when picked at local and global scope
     assert.ok(!addStep(at('context7', { route: 'local', scope: 'project' })).entry.args!.includes('--api-key'));
+    assert.ok(!('CONTEXT7_API_KEY' in (addStep(at('context7', { route: 'local', scope: 'project' })).entry.env || {})));
     assert.match(at('context7', { route: 'local', scope: 'project', token: true }).errors.join(), /keyless at project scope/);
     // picked at local and global scope with the name filled nowhere: no key argument, and the line to fill it (spec F2)
     for (const scope of ['local', 'user'])
     {
         const p = at('context7', { route: 'local', scope, token: true });
         assert.ok(!addStep(p).entry.args!.includes('--api-key'), scope);
+        assert.ok(!('CONTEXT7_API_KEY' in (addStep(p).entry.env || {})), scope);
         assert.ok(p.notes.some((n) => n.startsWith('context7: fill CONTEXT7_API_KEY in ')), scope);
     }
 });
@@ -1946,7 +1949,7 @@ test('install with no key answer: gitlab gets the helper, an empty name line and
     assert.ok(!oauth.steps.some((s) => s.op === 'ensure-key-name'));
 });
 
-test("context7's local route: keyless at project scope; at local scope an unfilled key leaves --api-key out", { skip: POSIX_FIXTURE }, () => {
+test("context7's local route: keyless at project scope; at local scope an unfilled key leaves CONTEXT7_API_KEY out", { skip: POSIX_FIXTURE }, () => {
     const project = plan(inv(MAC), pickOne('context7', { route: 'local', scope: 'project' }), opts('/Users/me'));
     assert.deepStrictEqual(project.errors, []);
     assert.ok(!(project.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry.args!.includes('--api-key'));
@@ -1959,6 +1962,7 @@ test("context7's local route: keyless at project scope; at local scope an unfill
         assert.deepStrictEqual(local.errors, []);
         const add = (local.steps.find((s) => s.op === 'mcp-add') as McpAddStep);
         assert.ok(!add.entry.args!.includes('--api-key'), JSON.stringify(add.entry));
+        assert.ok(!('CONTEXT7_API_KEY' in (add.entry.env || {})), JSON.stringify(add.entry));
         assert.strictEqual(add.key, undefined);
         assert.deepStrictEqual((local.steps.filter((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep[]).map((s) => [s.file, s.names]), [[file, ['CONTEXT7_API_KEY']]]);
         assert.ok(local.notes.includes(`context7: fill CONTEXT7_API_KEY in ${file}, then /alfred-tools:configure -> Use a key from .mcps-secrets writes it in`), local.notes.join('\n'));
@@ -1968,7 +1972,8 @@ test("context7's local route: keyless at project scope; at local scope an unfill
         const filled = plan(inv(base), pickOne('context7', { route: 'local', scope: 'local' }), opts('/Users/me', { exists: (p) => fs.existsSync(p) }));
         assert.deepStrictEqual(filled.errors, []);
         const f = (filled.steps.find((s) => s.op === 'mcp-add') as McpAddStep);
-        assert.ok(f.entry.args!.includes('--api-key'), JSON.stringify(f.entry));
+        assert.ok(!f.entry.args!.includes('--api-key'), JSON.stringify(f.entry));
+        assert.strictEqual(f.entry.env!['CONTEXT7_API_KEY'], '${CONTEXT7_API_KEY}');
         assert.strictEqual(f.key!.name, 'CONTEXT7_API_KEY');
         assert.ok(!JSON.stringify(filled).includes('v-not-printed'));
     }

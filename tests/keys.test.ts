@@ -41,8 +41,10 @@ test('fillKeys writes each token field a stdio route defines: the ${VAR} form at
     assert.deepStrictEqual(keys.fillKeys(docker, row('github'), 'local', 'project', { [G]: v }).env, { [G]: `\${${G}}` }, 'a project registration already there keeps the reference');
     assert.deepStrictEqual(keys.fillKeys(docker, row('github'), 'local', 'local', { [G]: v }).env, { [G]: v });
     assert.deepStrictEqual(keys.fillKeys(docker, row('github'), 'local', 'user', {}), docker, 'a missing key keeps what the entry holds');
-    const c7 = { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.4.4', '--api-key', '${CONTEXT7_API_KEY}'] };
-    assert.deepStrictEqual(keys.fillKeys(c7, row('context7'), 'local', 'local', { CONTEXT7_API_KEY: v }).args!.slice(-2), ['--api-key', v]);
+    const c7 = { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.7.0'], env: { CONTEXT7_API_KEY: '${CONTEXT7_API_KEY}' } };
+    assert.deepStrictEqual(keys.fillKeys(c7, row('context7'), 'local', 'local', { CONTEXT7_API_KEY: v }).env, { CONTEXT7_API_KEY: v });
+    const c7old = { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.4.4', '--api-key', '${CONTEXT7_API_KEY}'] };
+    assert.deepStrictEqual(keys.fillKeys(c7old, row('context7'), 'local', 'local', { CONTEXT7_API_KEY: v }).args!.slice(-2), ['--api-key', v], 'a former --api-key is filled where it is');
     const noToken = { type: 'http', url: 'https://mcp.context7.com/mcp' };
     assert.deepStrictEqual(keys.fillKeys(noToken, row('context7'), 'remote', 'local', { CONTEXT7_API_KEY: v }), noToken, 'an optional token not asked for is not added');
     const sentry = { command: 'npx', args: ['-y', '@sentry/mcp-server@0.42.0'], env: { [S]: 'old', OTHER: '1' } };

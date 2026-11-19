@@ -22,7 +22,7 @@ export function pickAnswers(base: PickBase, pick: PickAnswer, inventory: Invento
     let wantToken = pick.token === undefined ? (current ? Boolean(current.token) : route.authMode === 'optional-token' && !keylessAtProject) : Boolean(pick.token);
     if (keylessAtProject && wantToken)
     {
-        out.notes.push(`${row.id}: --api-key is left out - its local route runs keyless at project scope`);
+        out.notes.push(`${row.id}: ${route.tokenVar ?? 'its key'} is left out - its local route runs keyless at project scope`);
         wantToken = false;
     }
     // the key's name (spec D9): answered, else the name the registration uses - the helper's argument, or for a stdio key
