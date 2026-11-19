@@ -1,16 +1,19 @@
 // Matching a registration to a catalog row by what it launches: the package in its args, or the URL host and path.
 import path from 'node:path';
 import { bridgeParts } from '../entries/entry.ts';
+import { launchOf } from '../entries/launcher.ts';
 import { signInParts } from '../entries/sign-in.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Catalog, Fingerprint } from '../catalog/types.ts';
 import type { CatalogMatch, InvRegistration } from './types.ts';
 
-// `cmd /c npx ...` and `cmd.exe /d /s /c npx ...` are the Windows spelling of `npx ...`: look through the wrapper.
+// `cmd /c npx ...` and `cmd.exe /d /s /c npx ...` are the Windows spelling of `npx ...`: look through the wrapper. A stdio
+// key launcher is read as what it launches (its inner command and args).
 export function launchTokens(entry: ServerEntry): { command: string; args: string[] }
 {
-    const command = String(entry.command || '');
-    let args = Array.isArray(entry.args) ? entry.args.map(String) : [];
+    const launch = launchOf(entry);
+    const command = String(launch.command || '');
+    const args = Array.isArray(launch.args) ? launch.args.map(String) : [];
     if (/^cmd(\.exe)?$/i.test(path.basename(command)))
     {
         const at = args.findIndex((argument) => /^\/c$/i.test(argument));
@@ -57,7 +60,8 @@ export function matchesFingerprint(entry: ServerEntry, fingerprint: Fingerprint)
     // it is the row's remote route; a hand-made mcp-remote entry has no parts and matches no row below
     const signIn = signInParts(entry);
     if (signIn) return byUrl(signIn.url);
-    if (entry.url || entry.type === 'http' || entry.type === 'sse') return byUrl(entry.url);
+    const launch = launchOf(entry);
+    if (launch.url || launch.type === 'http' || launch.type === 'sse') return byUrl(launch.url);
     const { command, args } = launchTokens(entry);
     if (fingerprint.command) return path.basename(command).replace(/\.(exe|cmd)$/i, '') === fingerprint.command;
     if (!fingerprint.pkg) return false;

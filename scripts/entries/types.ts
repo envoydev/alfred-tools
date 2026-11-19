@@ -97,6 +97,25 @@ export interface BridgeParts
     pairs: string[];
 }
 
+// A stdio key launcher: `node <path>/mcp-bridge.js --run <ENV>=<KEY_NAME>[?] [<global root>] -- <command> <args>...`. `inner` is
+// the launch after `--`, with the entry's env.
+export interface LauncherParts
+{
+    path: string;
+    envVar: string;
+    keyName: string;
+    optional: boolean;
+    globalRoot: string | null;
+    inner: ServerEntry;
+}
+
+// Where a launcher at one scope points: its bridge file, and the global root its run mode also reads (local scope only).
+export interface LauncherPlace
+{
+    bridgePath: string;
+    globalRoot: string | null;
+}
+
 // The shared sign-in form's URL, its folder and the mcp-remote pin.
 export interface SignInParts
 {

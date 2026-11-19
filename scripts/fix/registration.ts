@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pythonRequest, isWindowsArm, pathFor } from '../entries/platform.ts';
 import { validWindowsSerenaHome, serenaWindowsHome, serenaSpaceFree } from '../entries/locations.ts';
+import { launchOf, withLaunch } from '../entries/launcher.ts';
 import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
 import * as common from './common.ts';
@@ -124,14 +125,15 @@ export function windowsNpxCmdDetect(context: FixCtx): Finding[]
     if (context.platform !== 'win32') return [];
     return eachReg(context, 'windows-npx-cmd', (registration) =>
     {
-        if (path.basename(String(registration.entry.command || '')).replace(/\.(exe|cmd)$/i, '') !== 'npx') return null;
+        if (path.basename(String(launchOf(registration.entry).command || '')).replace(/\.(exe|cmd)$/i, '') !== 'npx') return null;
         return common.finding('windows-npx-cmd', registration, 'npx is launched directly on native Windows', { note: 'a precaution: Claude Code no longer documents the cmd /c wrapper and this build has not proved it on a Windows machine' });
     });
 }
 
 export function windowsNpxCmdFix(entry: ServerEntry): ServerEntry
 {
-    return { ...entry, command: 'cmd', args: ['/c', 'npx', ...(entry.args || [])] };
+    const launch = launchOf(entry);
+    return withLaunch(entry, { ...launch, command: 'cmd', args: ['/c', 'npx', ...(launch.args || [])] });
 }
 
 // ---- playwright-webmcp ----------------------------------------------------------------------------------------------

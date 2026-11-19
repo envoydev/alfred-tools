@@ -14,3 +14,9 @@ export const MACOS_USER_CONFIG = ['.macos-mcp', 'config.toml'] as const;
 
 // The separators that end a folder path: a root written with one still names the same folder
 export const TRAILING_SEPARATORS = /[\\/]+$/;
+
+// A stdio key launcher, `node <path>/mcp-bridge.js --run <ENV>=<KEY_NAME>[?] [<global root>] -- <command> <args>...`: the
+// bridge's own flag, the end of its own arguments and the mark of an optional key. RUN_PAIR is the bridge's pattern for
+// the `<ENV>=<KEY_NAME>[?]` argument.
+export const RUN = { flag: '--run', end: '--', optional: '?' } as const;
+export const RUN_PAIR = /^([A-Za-z_][A-Za-z0-9_]*)=([A-Za-z_][A-Za-z0-9_]*)(\?)?$/;

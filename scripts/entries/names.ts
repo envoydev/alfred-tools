@@ -2,6 +2,7 @@
 // written registration's first start.
 import { throughCmd } from '../core/cmd-line.ts';
 import { bridgeParts } from './entry.ts';
+import { launchOf } from './launcher.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { FetchStep } from './types.ts';
@@ -40,7 +41,8 @@ const UVX_VALUE = new Set(['--python', '-p', '--exclude-newer', '--from', '--wit
 function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: string | null | undefined): FetchStep | null
 {
     if (!entry || !entry.command) return null;
-    const bridge = bridgeParts(entry);
+    const launch = launchOf(entry);
+    const bridge = bridgeParts(launch);
     if (bridge)
     {
         if (!bridge.packageSpec) return null;
@@ -48,8 +50,9 @@ function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: str
         const argv = /^[A-Za-z]:/.test(bridge.path) ? ['cmd', '/c', ...npmArgv] : npmArgv;
         return { op: 'fetch', name, row: rowId, what: bridge.packageSpec, argv, env: entry.env || {}, why: `${rowId || name}: fetch ${bridge.packageSpec} so the first start answers in time` };
     }
-    let cmd: string | undefined = entry.command;
-    let args = (entry.args || []).slice();
+    if (!launch.command) return null;
+    let cmd: string | undefined = launch.command;
+    let args = (launch.args || []).slice();
     const viaCmd = throughCmd(cmd, args);
     if (viaCmd) { cmd = args[1]; args = args.slice(2); }
     let argv: string[];
@@ -87,7 +90,7 @@ function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: str
         argv = ['docker', 'pull', what];
     }
     else return null;
-    if (viaCmd) argv = [entry.command, '/c', ...argv];
+    if (viaCmd) argv = [launch.command, '/c', ...argv];
     return { op: 'fetch', name, row: rowId, what, argv, env: entry.env || {}, why: `${rowId || name}: fetch ${what} so the first start answers in time` };
 }
 

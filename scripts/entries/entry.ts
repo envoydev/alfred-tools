@@ -8,13 +8,14 @@ import { parsePairs } from '../copied/mcp-headers.js';
 import { pathFor, pythonRequest } from './platform.ts';
 import { alfredSerenaHome, applyRoot, familyOf, rootOf, rootOfEntry } from './locations.ts';
 import { FILES } from '../core/constants.ts';
-import { API_KEY_FLAG, BRIDGE_SLOT, EXECUTABLE_PATH_FLAG } from './constants.ts';
+import { API_KEY_FLAG, BRIDGE_SLOT, EXECUTABLE_PATH_FLAG, RUN } from './constants.ts';
+import { launcherParts, launchOf } from './launcher.ts';
 import { signInParts } from './sign-in.ts';
 import { withExclude } from './exclude.ts';
 import { routeField, routeNamed } from '../catalog/rows.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow, CatalogRules } from '../catalog/types.ts';
-import type { BridgeParts, BuildAnswers, Current, HelperParts, Machine, Registration } from './types.ts';
+import type { BridgeParts, BuildAnswers, Current, HelperParts, LauncherPlace, Machine, Registration } from './types.ts';
 
 // The installed registration's own answers, read back from the entry.
 export function currentOf(row: CatalogRow, registration: Registration): Current
@@ -75,7 +76,7 @@ export function mergeSettings(entry: ServerEntry, route: CatalogRoute, pairs: Re
     out.env = { ...(out.env || {}), ...pairs };
     const args = out.args;
     const image = route.image;
-    if (out.command === 'docker' && Array.isArray(args) && image)
+    if (launchOf(out).command === 'docker' && Array.isArray(args) && image)
     {
         const at = args.findIndex((argument) => typeof argument === 'string' && argument.startsWith(`${image.name}:`));
         const passed = new Set(args.filter((_argument, i) => args[i - 1] === '-e'));
@@ -209,6 +210,16 @@ export function bridgePathFor(scope: string, context: Machine): string
     return pathFor(context.platform).join(rootOf(familyOf(scope), context), FILES.bridge);
 }
 
+// Where a stdio key launcher at `scope` points: the scope's bridge file, and at local scope the global root its run mode
+// also reads (keys.stdioChain reads it there always, named or not).
+export function launcherPlace(scope: string, context: Machine): LauncherPlace
+{
+    return { bridgePath: bridgePathFor(scope, context), globalRoot: scope === 'local' ? context.roots?.global ?? null : null };
+}
+
+// The bridge file an entry runs: a URL bridge's or a launcher's. null for any other entry.
+export const bridgeFileOf = (entry: ServerEntry | null | undefined): string | null => bridgeParts(entry)?.path ?? launcherParts(entry)?.path ?? null;
+
 // serena's context file (D7): in the entry's SERENA_HOME when serena's own settings there are the plugin's to keep (an
 // editable home), else in the scope's family root; absolute at every scope. With no entry it is the root's.
 function contextPathFor(scope: string, context: Machine, entry: ServerEntry | null | undefined = null): string
@@ -249,7 +260,7 @@ export function bridgeParts(entry: ServerEntry | null | undefined): BridgeParts 
     const at = args.findIndex((argument) => argument.replace(/\\/g, '/').split('/').pop() === FILES.bridge);
     const bridgePath = args[at];
     const template = args[at + 1];
-    if (at < 0 || bridgePath === undefined || !template) return null;
+    if (at < 0 || bridgePath === undefined || !template || template === RUN.flag) return null;
     const [keyName = null, scheme = null, packageSpec = null, ...after] = args.slice(at + 2);
     const parsed = parsePairs(after);
     const read = 'error' in parsed ? { root: after[0] !== undefined && after[0] !== '--header' ? after[0] : null, pairs: [] } : { root: parsed.root, pairs: parsed.pairs.map(pairText) };
