@@ -229,6 +229,31 @@ function driftedGithub(w: World, key: string): void
 }
 const afterRestore = (w: World): string[] => detectAll(ctxOf(w)).found.filter((finding) => (finding.id === 'helper-missing' || finding.id === 'client-drift') && /github/.test(`${finding.found} ${finding.name}`)).map((finding) => finding.id);
 
+test("blocked when Cursor's copy holds a key that differs from the file's, naming Cursor's file, and nothing is written", () =>
+{
+    const w = world();
+    try
+    {
+        const [key, other] = [keyValue(), keyValue()];
+        secrets(globalRoot(w), { [GITHUB_KEY]: key });
+        installPlain(w, 'github', 'user', plainGithub(key));
+        const cursorFile = path.join(w.home, '.cursor', 'mcp.json');
+        const doc = readJson(cursorFile);
+        doc.mcpServers.github.env[GITHUB_KEY] = other;
+        writeJson(cursorFile, doc);
+        const [finding] = found(w) as [Finding];
+        assert.ok(finding && finding.blocked, 'blocked');
+        assert.match(finding.blocked, new RegExp(`^github: Cursor's copy in ${cursorFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} holds a key that differs from the one in .*\\.mcps-secrets - put the key that works`));
+        for (const value of [key, other]) assert.ok(!`${finding.blocked}${finding.found}${shownOf(detectAll(ctxOf(w)))}`.includes(value), 'no value shown');
+        const [registration, cursorText, list] = [readAccount(w.env, w.project).user['github'], fs.readFileSync(cursorFile, 'utf8'), fs.readFileSync(path.join(globalRoot(w), 'mcps.json'), 'utf8')];
+        assert.deepStrictEqual(applyFixes(ctxOf(w), ['key-to-launcher'], { tmp: tmpOf(w), log: () => {} }).skipped.map((skipped) => skipped.id), ['key-to-launcher']);
+        assert.deepStrictEqual(readAccount(w.env, w.project).user['github'], registration);
+        assert.strictEqual(fs.readFileSync(cursorFile, 'utf8'), cursorText, "Cursor's file is as it was");
+        assert.strictEqual(fs.readFileSync(path.join(globalRoot(w), 'mcps.json'), 'utf8'), list, 'the list is as it was');
+    }
+    finally { w.clean(); }
+});
+
 test('restore to the launcher writes the helper and the bridge, and the list entry follows, so detect finds neither helper-missing nor client-drift', () =>
 {
     const w = world();

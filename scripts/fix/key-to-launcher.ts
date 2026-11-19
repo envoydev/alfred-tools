@@ -5,6 +5,7 @@ import * as common from './common.ts';
 import * as keys from '../keys/keys.ts';
 import * as kept from '../core/kept.ts';
 import * as roots from '../roots/roots.ts';
+import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { pathFor } from '../entries/platform.ts';
 import { launcherPlace } from '../entries/entry.ts';
 import { launcherParts } from '../entries/launcher.ts';
@@ -18,6 +19,7 @@ import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
 import type { Roots } from '../entries/types.ts';
 import type { McpAddStep, McpReplaceStep, PlanStep } from '../plan/types.ts';
 import type { InvRegistration } from '../inventory/types.ts';
+import type { ListServer } from '../mcps-list/types.ts';
 import type { Finding, FixCtx } from './types.ts';
 
 const rootsOf = (context: FixCtx): Roots => roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
@@ -25,11 +27,11 @@ const chainOf = (context: FixCtx, scope: string, resolved: Roots): string[] => k
 const isLauncherScope = (scope: string): boolean => (LAUNCHER_SCOPES as readonly string[]).includes(scope);
 const placeOf = (context: FixCtx, scope: string, resolved: Roots | undefined) => launcherPlace(scope, { project: context.inventory.project, platform: context.platform, home: context.home, roots: resolved });
 
-// The key name the list records for a registration, if its list holds one.
-function listKeyOf(context: FixCtx, registration: InvRegistration): string | null
+// The list's entry for a registration, if its list holds one.
+function listServerOf(context: FixCtx, registration: InvRegistration): ListServer | undefined
 {
     const lists = Object.values(context.inventory.lists ?? {}).flatMap((list) => (list && !list.note && !list.old ? list.servers : []));
-    return lists.find((server) => server.name === registration.name && server.scope === registration.scope)?.key ?? null;
+    return lists.find((server) => server.name === registration.name && server.scope === registration.scope);
 }
 
 // The key a registration holds in its env, once a former --api-key is moved there - the text between the route's template.
@@ -51,6 +53,18 @@ const editedBridgeRoot = (context: FixCtx, resolved: Roots, scope: string): stri
 };
 const editedBridgeText = (root: string): string => `mcp-bridge.js in ${root} changed since alfred-tools wrote it - /alfred-tools:fix (helper-stale) rewrites it, or delete it, then run fix again`;
 
+// Cursor's file, when the registration's Cursor copy holds a real key that differs from the file's value (compared in
+// process, never printed). Cursor reads a user-scope server only, and only one the list marks for it.
+function cursorCopyWithOtherKey(context: FixCtx, registration: InvRegistration, route: CatalogRoute, fileValue: string, listed: ListServer | undefined): string | null
+{
+    if (registration.scope !== 'user' || !(listed?.clients ?? []).includes('cursor')) return null;
+    const file = cursorMcp.fileFor('global', { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env ?? {} });
+    const read = cursorMcp.readCursor(file);
+    const copy = read.state === 'ok' ? read.servers[registration.name] : undefined;
+    const held = copy ? heldKeyOf(keys.moveArgKeyToEnv(copy, route), route) : null;
+    return held !== null && isOnlyCopy(held, fileValue) ? file : null;
+}
+
 export function keyToLauncherDetect(context: FixCtx): Finding[]
 {
     const resolved = rootsOf(context);
@@ -61,7 +75,8 @@ export function keyToLauncherDetect(context: FixCtx): Finding[]
         const held = heldKeyOf(keys.moveArgKeyToEnv(registration.entry, route), route);
         if (held === null) return [];
         const chain = chainOf(context, registration.scope, resolved);
-        const listKey = listKeyOf(context, registration);
+        const listed = listServerOf(context, registration);
+        const listKey = listed?.key ?? null;
         const [, placeholder] = ONE_VAR.exec(held) ?? [];
         const name = [placeholder, keys.nameOfValue(chain, held), listKey, route.tokenVar].find((candidate) => candidate && keys.valueIn(chain, candidate));
         const hit = name ? keys.valueIn(chain, name) : null;
@@ -76,6 +91,10 @@ export function keyToLauncherDetect(context: FixCtx): Finding[]
         // a placeholder or an empty field holds no key to lose; a real key that differs from the file's is the only copy of the one that works
         if (isOnlyCopy(held, hit.value))
             return [common.finding(FIX_ID.keyToLauncher, registration, `the registration holds a key that differs from the one in ${hit.file}`, { ...extra, blocked: `${registration.name} holds a key that differs from the one in ${hit.file} - put the key that works in ${hit.file} as ${name} (or run fix, whose token-sync takes the file's), then run fix again` })];
+        // the move rewrites Cursor's user-scope copy from the list: a different real key there is the only copy of the one that works
+        const cursorFile = cursorCopyWithOtherKey(context, registration, route, hit.value, listed);
+        if (cursorFile !== null)
+            return [common.finding(FIX_ID.keyToLauncher, registration, `Cursor's copy holds a key that differs from the one in ${hit.file}`, { ...extra, blocked: `${registration.name}: Cursor's copy in ${cursorFile} holds a key that differs from the one in ${hit.file} - put the key that works in ${hit.file} as ${name} (or run fix, whose token-sync takes the file's), then run fix again` })];
         const editedIn = editedBridgeRoot(context, resolved, registration.scope);
         if (editedIn !== null)
             return [common.finding(FIX_ID.keyToLauncher, registration, 'the root\'s mcp-bridge.js is not the one alfred-tools wrote', { ...extra, blocked: editedBridgeText(editedIn) })];
