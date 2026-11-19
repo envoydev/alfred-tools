@@ -9,7 +9,7 @@ import * as inventory from '../scripts/inventory/inventory.ts';
 import { pythonRequest, pathFor } from '../scripts/entries/platform.ts';
 import { expandVars } from '../scripts/entries/locations.ts';
 import { buildEntry } from '../scripts/entries/entry.ts';
-import { launcherRoute } from '../scripts/entries/launcher.ts';
+import { launcherRoute } from '../scripts/entries/launcher-form.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
 import * as account from '../scripts/core/account.ts';
 import * as F from '../scripts/fix/fix-functions.ts';

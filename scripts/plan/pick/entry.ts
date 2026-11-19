@@ -6,7 +6,8 @@ import { checkHostedSettings, currentHostedSettings, defaultHostedSettings } fro
 import { buildEntry, applyContext, bridgeParts, helperParts, helperGlobalRoot, bridgePathFor, launcherPlace, renameTemplate, helperFor, subst, rebridgedArgs } from '../../entries/entry.ts';
 import { EXECUTABLE_PATH_FLAG } from '../../entries/constants.ts';
 import { withExclude } from '../../entries/exclude.ts';
-import { launcherForm, launcherParts, launcherRoute, relaunchedArgs, unlaunched } from '../../entries/launcher.ts';
+import { launcherParts, relaunchedArgs, unlaunched } from '../../entries/launcher.ts';
+import { launcherForm, launcherRoute } from '../../entries/launcher-form.ts';
 import { pathFor } from '../../entries/platform.ts';
 import * as roots from '../../roots/roots.ts';
 import { routeField } from '../../catalog/rows.ts';

@@ -19,4 +19,6 @@ export const TRAILING_SEPARATORS = /[\\/]+$/;
 // bridge's own flag, the end of its own arguments and the mark of an optional key. RUN_PAIR is the bridge's pattern for
 // the `<ENV>=<KEY_NAME>[?]` argument.
 export const RUN = { flag: '--run', end: '--', optional: '?' } as const;
+// the ENV names the bridge keeps for itself (its RESERVED_ENV): a launcher naming one is not a launcher.
+export const RUN_RESERVED_ENV = /^PT_BRIDGE_/;
 export const RUN_PAIR = /^([A-Za-z_][A-Za-z0-9_]*)=([A-Za-z_][A-Za-z0-9_]*)(\?)?$/;

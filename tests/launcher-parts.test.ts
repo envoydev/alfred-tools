@@ -5,7 +5,8 @@ import assert from 'node:assert';
 import path from 'node:path';
 import { load } from '../scripts/catalog/catalog.ts';
 import { bridgeFileOf, bridgeParts, buildEntry, launcherPlace, mergeSettings } from '../scripts/entries/entry.ts';
-import { launcherForm, launcherParts, launcherRoute, launchOf, relaunchedArgs, unlaunched, withLaunch } from '../scripts/entries/launcher.ts';
+import { launcherParts, launchOf, relaunchedArgs, unlaunched, withLaunch } from '../scripts/entries/launcher.ts';
+import { launcherForm, launcherRoute } from '../scripts/entries/launcher-form.ts';
 import { fetchStep } from '../scripts/entries/names.ts';
 import { catalogMatch, launcher, launchArgs, pinnedVersion } from '../scripts/inventory/fingerprint.ts';
 import { renameSinceEnv } from '../scripts/keys/keys.ts';
@@ -56,6 +57,24 @@ test('each reader over a URL bridge, a launcher and a plain entry', () =>
     assert.strictEqual(bridgeFileOf(LAUNCHER(R, G)), `${R}/mcp-bridge.js`);
     assert.strictEqual(bridgeFileOf(URL_BRIDGE), URL_BRIDGE.args![0]);
     assert.strictEqual(bridgeFileOf({ command: 'npx', args: [] }), null);
+});
+
+test("launcherParts agrees with the bridge's parseRun on a reserved ENV, an empty command and an empty root slot", () =>
+{
+    const bridge = `${R}/mcp-bridge.js`;
+    const reserved = ['--run', 'PT_BRIDGE_AUTH=KEY', '--', 'x'];
+    const emptyCommand = ['--run', 'A=B', '--', ''];
+    const emptyRoot = ['--run', 'A=B', '', '--', 'x'];
+    for (const run of [reserved, emptyCommand])
+    {
+        assert.strictEqual(launcherParts({ command: 'node', args: [bridge, ...run] }), null, run.join(' '));
+        assert.ok('error' in parseRun(run.slice(1)), `the bridge refuses ${run.join(' ')}`);
+    }
+    const parts = launcherParts({ command: 'node', args: [bridge, ...emptyRoot] });
+    assert.ok(parts, 'an empty root slot still parses');
+    assert.strictEqual(parts.globalRoot, null);
+    const parsed = parseRun(emptyRoot.slice(1));
+    assert.ok(!('error' in parsed) && parsed.globalRoot === null, 'the bridge reads an empty root slot as none');
 });
 
 test("a launcher's fingerprint is its catalog row's", () =>
@@ -110,6 +129,12 @@ test('relaunchedArgs rewrites the bridge path, the pair and the global root, and
     const kept = relaunchedArgs(['-x', ...C7(R, null).args!], { path: `${R}/mcp-bridge.js`, envVar: 'CONTEXT7_API_KEY', keyName: 'CONTEXT7_API_KEY', optional: true, globalRoot: G });
     assert.deepStrictEqual(kept.slice(0, 5), ['-x', `${R}/mcp-bridge.js`, '--run', 'CONTEXT7_API_KEY=CONTEXT7_API_KEY?', G]);
     assert.strictEqual(kept[5], '--');
+});
+
+test('relaunchedArgs returns args with no bridge path as they are', () =>
+{
+    const args = ['-y', 'some-package@1.0.0', '--flag'];
+    assert.deepStrictEqual(relaunchedArgs(args, { path: `${R}/mcp-bridge.js`, envVar: GITHUB_ENV, keyName: GITHUB_ENV, optional: false, globalRoot: G }), args);
 });
 
 test('withLaunch and unlaunched swap the inner launch of a launcher, and the whole launch of a plain entry', () =>
@@ -279,7 +304,8 @@ test('launcherForm per route, on darwin and win32 path forms', () =>
 
 test("the bridge's parser takes every form launcherForm builds", () =>
 {
-    const forms = [formOf('github', 'ACME_GITHUB_TOKEN'), formOf('sentry', 'SENTRY_ACCESS_TOKEN'), formOf('context7', 'CONTEXT7_API_KEY'), formOf('github', GITHUB_ENV, { bridgePath: DARWIN_PLACE.bridgePath, globalRoot: null })];
+    const winSentry = launcherForm(routeOf('sentry'), 'SENTRY_ACCESS_TOKEN', WIN_PLACE, plainEntry('sentry', true, { ...FORM_MACHINE, platform: 'win32', project: 'C:\\proj', home: 'C:\\Users\\First Last' }));
+    const forms = [formOf('github', 'ACME_GITHUB_TOKEN'), formOf('sentry', 'SENTRY_ACCESS_TOKEN'), formOf('context7', 'CONTEXT7_API_KEY'), formOf('github', GITHUB_ENV, { bridgePath: DARWIN_PLACE.bridgePath, globalRoot: null }), winSentry];
     for (const form of forms)
     {
         const parts = launcherParts(form);
@@ -297,4 +323,12 @@ test('launcherRoute: a stdio route with a key, not at Project, not a bridge or a
     assert.strictEqual(launcherRoute(row('github').routes.remote!, 'remote', 'local'), false);
     assert.strictEqual(launcherRoute(row('sentry').routes.bridge!, 'bridge', 'local'), false);
     assert.strictEqual(launcherRoute(routeOf('context7'), 'local', 'local'), true);
+});
+
+test('launcherForm is null while a token field is left in args after the arg key is moved', () =>
+{
+    // a route with no env name to move the --api-key value to: the value stays in args, where the launcher's argv would show it
+    const stuck = { ...routeOf('context7'), optionalEnv: { token: {} }, env: { CONTEXT7_API_KEY: '${CONTEXT7_API_KEY}' } };
+    const inner: ServerEntry = { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.7.0', '--api-key', 'a-value'], env: { CONTEXT7_API_KEY: 'a-value' } };
+    assert.strictEqual(launcherForm(stuck, 'CONTEXT7_API_KEY', DARWIN_PLACE, inner), null);
 });

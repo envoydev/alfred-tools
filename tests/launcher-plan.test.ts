@@ -7,7 +7,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { load } from '../scripts/catalog/catalog.ts';
 import { currentOf, launcherPlace } from '../scripts/entries/entry.ts';
-import { launcherForm, launcherParts } from '../scripts/entries/launcher.ts';
+import { launcherParts } from '../scripts/entries/launcher.ts';
+import { launcherForm } from '../scripts/entries/launcher-form.ts';
 import { heldKey } from '../scripts/plan/asks-keys.ts';
 import { fromRegistration } from '../scripts/mcps-list/mcps-list.ts';
 import { plan } from '../scripts/plan/plan.ts';
@@ -221,5 +222,6 @@ test('a launcher keeps no key in a second env field', () =>
     const form = launcherForm(route, 'SENTRY_ACCESS_TOKEN', place, inner);
     assert.ok(form);
     assert.deepStrictEqual(form.env, { npm_config_before: 'x' });
+    assert.strictEqual(form.args![2], 'SENTRY_AUTH_TOKEN=SENTRY_ACCESS_TOKEN');
     assert.ok(!JSON.stringify(form).includes('${'), 'no placeholder is left');
 });
