@@ -16,6 +16,14 @@ export type * from './questions/types.ts';
 export type * from './steps/types.ts';
 export type * from './pick/types.ts';
 
+// What the settings file guards (read guard, start limit guard) need to find Claude Code's settings: the platform, the home, and the env that may name CLAUDE_CONFIG_DIR.
+export interface SettingsCtx
+{
+    platform: string;
+    home: string;
+    env?: Env | undefined;
+}
+
 // ---- the context a plan is made in ------------------------------------------------------------------------------------
 
 // A root a planned step writes into: its helper, bridge, serena context, a key name, or only the root itself.

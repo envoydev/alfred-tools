@@ -8,6 +8,7 @@ export * from './rename.ts';
 export * from './key-env.ts';
 export * from './retired-server.ts';
 export * from './macos-config.ts';
+export * from './start-timeout.ts';
 import { appiumSdkEnvDetect, appiumSdkEnvFix, playwrightWebmcpDetect, playwrightWebmcpFix, serenaContextDetect, serenaContextFix, serenaTelemetryDetect, serenaTelemetryFix, serenaWindowsHomeDetect, serenaWindowsHomeFix, tokenSyncDetect, tokenSyncFix, uvxPythonDetect, uvxPythonFix, windowsArmPythonDetect, windowsArmPythonFix, windowsMcpOneDetect, windowsNpxCmdDetect, windowsNpxCmdFix } from './registration.ts';
 import { dataFolderIgnoreDetect, dataFolderIgnoreFix, npxCacheEntryDetect, npxCacheEntryFix, retiredPluginDetect, retiredPluginFix } from './machine.ts';
 import { helperMissingDetect, helperMissingFix, helperStaleDetect, helperStaleFix, keyToHelperDetect, keyToHelperFix, rootIgnoreDetect, rootIgnoreFix } from './keys.ts';
@@ -18,6 +19,7 @@ import { rootMoveDetect, rootMoveFix, rootRepointDetect, rootRepointFix } from '
 import { context7KeyEnvDetect, context7KeyEnvFix, sentryAuthEnvDetect, sentryAuthEnvFix } from './key-env.ts';
 import { retiredServerDetect } from './retired-server.ts';
 import { macosConfigDetect, macosConfigSteps } from './macos-config.ts';
+import { startTimeoutDetect, startTimeoutSteps } from './start-timeout.ts';
 import type { Detector, FileSteps, MachineFix, RegistrationFix } from './types.ts';
 
 // catalog/fixes.json names its `detect`, `fix` and `steps` functions; this is where they are found, each kind in a table of
@@ -42,6 +44,7 @@ export const DETECTORS: ReadonlyMap<string, Detector> = new Map<string, Detector
     ['retiredPluginDetect', retiredPluginDetect],
     ['retiredServerDetect', retiredServerDetect],
     ['readGuardDetect', readGuardDetect],
+    ['startTimeoutDetect', startTimeoutDetect],
     ['clientDriftDetect', clientDriftDetect],
     ['cursorFileDetect', cursorFileDetect],
     ['windowsMcpOneDetect', windowsMcpOneDetect],
@@ -89,6 +92,7 @@ export const FILE_STEPS: ReadonlyMap<string, FileSteps> = new Map<string, FileSt
     ['serenaProjectFolderSteps', serenaProjectFolderSteps],
     ['listImportSteps', listImportSteps],
     ['readGuardSteps', readGuardSteps],
+    ['startTimeoutSteps', startTimeoutSteps],
     ['clientDriftSteps', clientDriftSteps],
     ['macosConfigSteps', macosConfigSteps],
 ]);

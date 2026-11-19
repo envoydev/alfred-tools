@@ -71,7 +71,7 @@ export function renderPlan(plan: Plan): string
         else if (step.op === 'serena-config-init') lines.push(`   writes ${step.file}  (projects: [], base_modes: [] and project_serena_folder_location - only when it is not there)`);
         else if (step.op === 'serena-project-folder') lines.push(`   sets project_serena_folder_location in ${step.file}  (no other line changes; in-tree .serena folders are named, never moved)`);
         else if (step.op === 'ensure-key-name') lines.push(`   writes ${step.file}  (names only: ${step.names.join(', ')} - you fill in each value)`);
-        else if (step.op === 'list-write' || step.op === 'retire-record' || step.op === 'cursor-write' || step.op === 'deny-read') lines.push(renderLine(step));
+        else if (step.op === 'list-write' || step.op === 'retire-record' || step.op === 'cursor-write' || step.op === 'deny-read' || step.op === 'settings-env') lines.push(renderLine(step));
         else if (step.op === 'order-mcp-json') lines.push(`   reorders ${step.file}  (no value changes)`);
         else if (step.op === 'record-root') lines.push(`   writes ${roots.FILES.map} in the plugin's data folder  (the ${step.family} root: ${step.root})`);
         else if (step.op === 'fetch') lines.push(`   ${step.argv.map(shellQuote).join(' ')}`, '   (after the apply, in the background: fills the cache only; if it fails the registration stays and the first start tries again)');

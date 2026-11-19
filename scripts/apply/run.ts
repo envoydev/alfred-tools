@@ -30,7 +30,7 @@ import * as mcpOrder from '../mcps-list/mcp-order.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { addAndVerify, rowOf, removeAndVerify, restoreBy, makeRunner, restoreStep, fillStep } from './cli-steps.ts';
-import { rootIgnore, writeHelper, writeShipped, moveRootFile, ensureKeyName, listWrite, retireRecord, retireShipped, serenaConfigInit, denyRead, recordRoot, failureLists, writeExcludeFile } from './file-steps.ts';
+import { rootIgnore, writeHelper, writeShipped, moveRootFile, ensureKeyName, listWrite, retireRecord, retireShipped, serenaConfigInit, denyRead, settingsEnv, recordRoot, failureLists, writeExcludeFile } from './file-steps.ts';
 import { emptyBaseModes, setProjectFolder } from './serena-config.ts';
 import { inTreeLines } from './serena-projects.ts';
 import { GITIGNORE_ALL } from './constants.ts';
@@ -63,6 +63,7 @@ function runStep(step: PlanStep, context: ApplyCtx, call: Call): StepResult
         case 'retire-shipped': return retireShipped(step);
         case 'cursor-write': return cursorMcp.cursorWrite(step, context);
         case 'deny-read': return denyRead(step.file, step.rules || []);
+        case 'settings-env': return settingsEnv(step.file, step.env || {});
         // never fails the apply: a warning, and the file as it was (spec F8)
         case 'order-mcp-json': return mcpOrder.orderFile(step.file, context.catalog, new Set(step.own || []));
         case 'record-root': return recordRoot(step, context.data);

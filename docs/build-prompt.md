@@ -918,6 +918,14 @@ Each step ends with its check; the next step starts only when it passes.
   'Record as residual', over a launcher for stdio keys and over offering the sandbox): no further guard - the sandbox
   blocks broadly and a deny on the account file would also stop the plugin's own calls under it. The routes are named
   in AGENTS.md, README, the guide and every read-guard finding (`docs/sources.md`, 'Read guard - the residual routes').
+- The 30 s start limit (measured 2026-11-19, `docs/sources.md`, 'Claude Code - the MCP start limit'). Claude Code cuts
+  a stdio server that has not answered in 30 s and does not retry the first connection. `npm exec` / npx asks the
+  registry at every start even with the exact pin cached (past 40 s with the registry unreachable; `prefer-offline`
+  does not help), so a slow first network of the day fails an npx server, the sign-in form included (uvx and Docker
+  launches get the same guard, unmeasured).
+  Guard: `MCP_TIMEOUT=90000` in the `env` of Claude Code's settings (`settings-env` step; the `start-timeout` row for
+  what is installed). A value the user set is never replaced. The install fetch (`fetch.ts`) fills the cache but does
+  not skip that registry check.
 - Shared plugins. alfred-code also installs claude-hud and the LSP pair, and its update installs an absent pick, so it
   may add back one that alfred-tools removed. The plugins stay standalone (no hand-over), so the gap stays open.
   Mitigation: while `claude plugin list --json` shows alfred-code enabled, the walk notes on those three rows that

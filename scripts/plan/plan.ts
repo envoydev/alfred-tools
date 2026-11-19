@@ -21,7 +21,7 @@ import * as roots from '../roots/roots.ts';
 import * as existing from '../inventory/existing.ts';
 import * as mcpOrder from '../mcps-list/mcp-order.ts';
 import { cursorSteps } from './cursor-steps.ts';
-import { changedOutside, denyReadSteps } from './repair-tail.ts';
+import { changedOutside, denyReadSteps, startTimeoutSteps } from './repair-tail.ts';
 import { makeCtx } from './context.ts';
 import { planMcp } from './pick.ts';
 import { fileSteps } from './root-files.ts';
@@ -104,9 +104,10 @@ export function plan(inventory: Inventory, answers: Answers, options: PlanOption
     out.steps = [...ignores, ...moves, ...files.before.filter((step) => step.op !== 'root-ignore'), ...out.steps, ...retire, ...files.after];
     // Cursor's files from the lists, after the list-write steps they read (spec D2)
     const cursor = cursorSteps(listInv, { ...context, catalog }, out, answers);
-    // the read guard (ruling 13): one deny-read, last before the list-write steps
-    const deny = denyReadSteps(out.steps, context, out);
-    if (deny.length) { const at = out.steps.findIndex((step) => step.op === 'list-write'); out.steps.splice(at < 0 ? out.steps.length : at, 0, ...deny); }
+    // the settings guards, last before the list-write steps: the start limit's settings-env (MCP_TIMEOUT), then the read guard's
+    // deny-read (ruling 13) - one step each, both in Claude Code's settings file
+    const guards = [...startTimeoutSteps(out.steps, context, out), ...denyReadSteps(out.steps, context, out)];
+    if (guards.length) { const at = out.steps.findIndex((step) => step.op === 'list-write'); out.steps.splice(at < 0 ? out.steps.length : at, 0, ...guards); }
     // each name Cursor's file holds that no answer settles: its question, which the command asks before planning again
     if (out.taken) { out.cursorNames = out.taken.map((taken) => cursorNameQuestion(taken)); delete out.taken; }
     // .mcp.json in the catalog's order, last of all (spec F5, F8)

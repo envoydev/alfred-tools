@@ -707,7 +707,7 @@ test('apply: two fixes on one registration are ONE replace, from the entry as re
         assert.strictEqual(now!.env!.SERENA_HOME, entry.env!.SERENA_HOME);
         assert.deepStrictEqual(userEntry(w, 'my-own-server'), own, 'a registration that matches no row is never touched');
         // and the 0.4.x install moves onto the list (list-import)
-        assert.deepStrictEqual(res.applied.map((f) => f.id).sort(), ['list-import', 'serena-telemetry', 'uvx-python']);
+        assert.deepStrictEqual(res.applied.map((f) => f.id).sort(), ['list-import', 'serena-telemetry', 'start-timeout', 'uvx-python']);
         assert.deepStrictEqual(res.remaining, []);
         assert.match(lines.join('\n'), /fixed +uvx-python on serena \(user\)/);
         assert.match(lines.join('\n'), /Restart Claude Code/);
@@ -1742,7 +1742,7 @@ test('the file pass runs after the registration pass, detects on what it wrote, 
         const l = logged();
         const res = applyFixes(ctxOf(w), ['all'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
-        assert.deepStrictEqual(res.applied.map((f) => f.id).sort(), ['list-import', 'uvx-python']);
+        assert.deepStrictEqual(res.applied.map((f) => f.id).sort(), ['list-import', 'start-timeout', 'uvx-python']);
         const text = l.text();
         assert.ok(text.indexOf("'serena'") >= 0 && text.indexOf("'serena'") < text.indexOf('mcps.json'), text);
         const [s] = listAt(path.join(w.project, '.alfred-tools')).servers;

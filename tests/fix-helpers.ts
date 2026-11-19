@@ -35,7 +35,8 @@ export function ctxFor({ platform = 'darwin', arch = 'x64', registrations = [], 
 
 // a synthetic /proj and its home never hold the serena-context.yml an install writes in serena's home (tests/plan.test.ts and
 // tests/apply.test.ts prove that write): the findings about that missing file are left out here, and only here
-export const synthetic = (f: Finding) => (f.id === 'helper-missing' && f.shipped === 'serenaContext' && /^(?:\/proj|\/home\/dev|C:\\proj|C:\\Users\\dev)[\\/]/.test(f.path!)) || (f.id === 'serena-context' && /, which is not there$/.test(f.found));
+// (start-timeout likewise: the synthetic home holds no Claude Code settings.json)
+export const synthetic = (f: Finding) => (f.id === 'start-timeout' && /^(?:\/home\/dev|C:\\Users\\dev)[\\/]\.claude[\\/]settings\.json$/.test(f.name)) || (f.id === 'helper-missing' && f.shipped === 'serenaContext' && /^(?:\/proj|\/home\/dev|C:\\proj|C:\\Users\\dev)[\\/]/.test(f.path!)) || (f.id === 'serena-context' && /, which is not there$/.test(f.found));
 export const detect = (ctx: FixCtx, only?: string) => { const d = detectAll(ctx, { only }); return { ...d, found: d.found.filter((f) => !synthetic(f)) }; };
 
 export function seed(w: World, name: string, scope: string, entry: ServerEntry)

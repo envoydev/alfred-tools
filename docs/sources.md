@@ -1620,3 +1620,19 @@ Page: https://pypi.org/project/macos-mcp/ (read 2026-11-19); the published 0.4.7
 - So: with the sandbox off no setting stops a `grep -r` or a script, and a `Read` deny on the account file would, with
   the sandbox on, stop the plugin's own `claude` and `node` calls too. The user's ruling (2026-11-19, 'Record as
   residual'): no further guard; the routes are named in AGENTS.md, README, the guide and every read-guard finding.
+
+## Claude Code - the MCP start limit (read 2026-11-19)
+
+- https://code.claude.com/docs/en/mcp.md: 'Configure MCP server startup timeout using the `MCP_TIMEOUT` environment
+  variable'. A stdio server's failed first connection is not retried; the user picks Reconnect in `/mcp`.
+- Measured 2026-11-19, macOS arm64, Claude Code 2.1.328, in a throwaway `CLAUDE_CONFIG_DIR`: a stdio server that answers
+  `initialize` after 35 s fails `claude mcp get` at 30 s with no setting, and connects with
+  `{"env": {"MCP_TIMEOUT": "60000"}}` in that config dir's `settings.json` (and with the variable in the process
+  environment). So the settings `env` is a place the limit can be set once for every session.
+- Measured 2026-11-19, macOS arm64, npm 11.6.1: `npm exec` / npx contacts the registry at every start even with the exact
+  pin cached - with the registry unreachable it hangs past 40 s; `prefer-offline` does not change that; `offline`
+  fails. So a pre-fetched cache does not make the first start of the day immune to a slow network.
+- Seen in the field: a server started through `cmd /c npx -y mcp-remote@<pin> <url>` on Windows logged 'connection timed
+  out after 30000ms', printed nothing in those 30 s, and connected in 6.6 s on the retry.
+- The guard: `MCP_TIMEOUT=90000` added to `env` in Claude Code's settings by the `settings-env` step and fix's
+  `start-timeout` row; an existing `MCP_TIMEOUT` of any value is never replaced.

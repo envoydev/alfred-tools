@@ -657,7 +657,7 @@ const listed = (root: string, servers: [string, string, unknown][]) => writeJson
 test('the fix rows update applies are the ones marked upgrade, each with the version that brought its way', () =>
 {
     const catalog = load();
-    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['root-move', '0.5.0'], ['root-repoint', '0.5.0'], ['context7-key-env', '0.7.0'], ['sentry-auth-env', '0.7.0'], ['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['serena-project-folder', '0.6.0'], ['list-import', '0.5.0'], ['retired-plugin', '0.5.0'], ['retired-server', '0.7.0'], ['read-guard', '0.5.0'], ['key-to-helper', '0.2.0'], ['helper-foreign', '0.6.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
+    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['root-move', '0.5.0'], ['root-repoint', '0.5.0'], ['context7-key-env', '0.7.0'], ['sentry-auth-env', '0.7.0'], ['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['serena-project-folder', '0.6.0'], ['list-import', '0.5.0'], ['retired-plugin', '0.5.0'], ['retired-server', '0.7.0'], ['read-guard', '0.5.0'], ['start-timeout', '0.7.0'], ['key-to-helper', '0.2.0'], ['helper-foreign', '0.6.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
 });
 
 test('update offers the new ways to pass data that fix knows - a 0.1.x key header, a relative project path - and applies them after the pins, by registration', async () =>
@@ -674,6 +674,8 @@ test('update offers the new ways to pass data that fix knows - a 0.1.x key heade
         const memory = { command: 'uvx', args: ['--python', '3.13', '--from', 'mcp-memory-service[sqlite]==12.1.1', 'memory', 'server'], env: { MCP_MEMORY_SQLITE_PATH: '.alfred-tools/memory/memory.db' } };
         assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'memory', JSON.stringify(memory), '-s', 'project'], { cwd: w.project, env: w.env }).status, 0);
         const registry = fakeRegistry({ 'pypi:mcp-memory-service': [{ version: '12.1.1', time: ago(40) }, { version: '12.5.0', time: ago(20) }] });
+        // the settings already hold the start limit (start-timeout, 0.7.0), so a fifth offer does not crowd the group's four options out
+        writeJson(path.join(w.env.CLAUDE_CONFIG_DIR!, 'settings.json'), { env: { MCP_TIMEOUT: '90000' } });
         // already on the list (0.5.0), so list-import has nothing to offer here
         listed(pt, [['github', 'local', gh], ['memory', 'project', memory]]);
         listed(path.join(w.home, '.alfred-tools'), [['github', 'user', gh]]);
@@ -1395,4 +1397,15 @@ test('an unrelated repair leaves a listed Cursor server with no cursorEntry in i
         assert.deepStrictEqual(forms(new Set(['mcp:my-sonarqube~project'])), ['two']);
     }
     finally { w.clean(); }
+});
+
+test('a group of more than four offers is split into questions with ids and wording of their own, so no answer overwrites another', () =>
+{
+    const offers = ['a', 'b', 'c', 'd', 'e'].map((name) => ({ id: `upgrade:start-timeout:${name}`, group: 'upgrade', kind: 'upgrade', label: name, fix: 'start-timeout' }));
+    const q = questions({ offers, unchecked: [] } as unknown as Parameters<typeof questions>[0]);
+    const parts = q.pick.flat().filter((x) => x.id.startsWith('update-upgrade'));
+    assert.strictEqual(parts.length, 2);
+    assert.strictEqual(new Set(parts.map((x) => x.id)).size, 2, parts.map((x) => x.id).join(', '));
+    assert.strictEqual(new Set(parts.map((x) => x.question)).size, 2, parts.map((x) => x.question).join(' | '));
+    assert.deepStrictEqual(parts.flatMap((x) => x.options.map((o) => o.description)).filter((d) => d !== 'none').sort(), offers.map((o) => o.id).sort(), 'every offer is in one of the parts');
 });

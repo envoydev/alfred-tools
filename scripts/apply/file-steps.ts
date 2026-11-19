@@ -15,6 +15,7 @@ import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { readRegistration, rowOf } from './cli-steps.ts';
 import { writeMinimalConfig } from './serena-config.ts';
 import { GITIGNORE_ALL } from './constants.ts';
+import { SETTINGS_ENV_KEY } from '../plan/start-timeout-constants.ts';
 import { excludeToml } from '../entries/exclude.ts';
 import { HELPER_VERSION } from '../copied/mcp-headers.js';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
@@ -268,6 +269,26 @@ export function denyRead(file: string, rules: string[]): StepResult
     const next = { ...doc, permissions: { ...(doc.permissions || {}), deny: [...deny, ...lack] } };
     writeJson(file, next, null);
     return { ok: true, detail: `added ${lack.join(' and ')} to permissions.deny in ${file}` };
+}
+
+// The start limit guard: each name `env` holds that the `env` object of Claude Code's settings file lacks, added - a name
+// the file has, of any value, is the user's and never replaced; every other key, value and order kept, written through a
+// temporary file and a rename. An absent file reads as {} and its folder is made; one that is not a JSON object, or whose
+// env is not one, is left as it is. -> { ok, detail, unchanged? }
+export function settingsEnv(file: string, env: Record<string, string>): StepResult
+{
+    let text: string | null = null;
+    try { text = fs.readFileSync(file, 'utf8'); } catch (caught) { const code = errorCode(caught); if (code !== 'ENOENT') return { ok: false, detail: `${file} cannot be read (${code}) - left as it is` }; }
+    let doc: unknown = {};
+    if (text !== null) { try { doc = JSON.parse(stripBom(text)); } catch { doc = null; } }
+    const held = isRecord(doc) ? doc[SETTINGS_ENV_KEY] : undefined;
+    if (!isRecord(doc) || (held !== undefined && !isRecord(held)))
+        return { ok: false, detail: `${file} is not a settings object alfred-tools can read - left as it is; add ${Object.entries(env).map(([name, value]) => `${name}=${value}`).join(' and ')} to ${SETTINGS_ENV_KEY} yourself` };
+    const present = held ?? {};
+    const lack = Object.entries(env).filter(([name]) => !Object.hasOwn(present, name));
+    if (!lack.length) return { ok: true, unchanged: true, detail: `${file} has ${Object.keys(env).join(' and ')} in ${SETTINGS_ENV_KEY} already - left as it is` };
+    writeJson(file, { ...doc, [SETTINGS_ENV_KEY]: { ...present, ...Object.fromEntries(lack) } }, null);
+    return { ok: true, detail: `added ${lack.map(([name, value]) => `${name}=${value}`).join(' and ')} to ${SETTINGS_ENV_KEY} in ${file}` };
 }
 
 // A root's own file or folder to its new root (configure's root change, D1): renamed when the new one is absent; a file the

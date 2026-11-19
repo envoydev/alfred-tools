@@ -10,13 +10,15 @@ import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { deepEqual, stripBom } from '../core/json-file.ts';
 import { isRecord } from '../core/shapes.ts';
+import { fetchStep } from '../entries/names.ts';
+import { SETTINGS_ENV_KEY, START_TIMEOUT } from './start-timeout-constants.ts';
 import { CONFIG_DIR_NAME, INSTALLED_PLUGINS_FILE, PLUGINS_DIR, PLUGIN_KEY_PREFIXES, SETTINGS_FILE } from './read-guard-constants.ts';
 import { REG_OPS, listSteps } from './lists.ts';
 import { cursorSteps, SCOPES, heldCopies, keepOf } from './cursor-steps.ts';
-import type { Env, ServerEntry } from '../core/types.ts';
+import type { ServerEntry } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
-import type { CursorWritePlanStep, DenyReadStep, FileStep, ListCtx, ListWriteStep, PlanOut, PlanStep, RegistrationStep, RepairCtx } from './types.ts';
+import type { CursorWritePlanStep, DenyReadStep, FileStep, ListCtx, ListWriteStep, PlanOut, PlanStep, RegistrationStep, RepairCtx, SettingsCtx, SettingsEnvStep } from './types.ts';
 
 // ---- a repair's tail (spec D1, D9) -------------------------------------------------------------------------------------
 
@@ -115,15 +117,21 @@ export function changedOutside(inventory: Inventory, catalog: Catalog = catalogL
     return [...changed, ...missing];
 }
 
+// Claude Code's settings file: `dir`'s, else CLAUDE_CONFIG_DIR's, else <home>/.claude's - the one read guard and the start limit guard share.
+function settingsFileOf(context: SettingsCtx, dir?: string): string
+{
+    const pathApi = pathFor(context.platform);
+    const env = context.env || {};
+    return dir ? pathApi.join(dir, SETTINGS_FILE) : env.CLAUDE_CONFIG_DIR ? pathApi.resolve(env.CLAUDE_CONFIG_DIR, SETTINGS_FILE) : pathApi.join(context.home, CONFIG_DIR_NAME, SETTINGS_FILE);
+}
+
 // The settings file the deny rules go in, and which of `want` it lacks: { file, rules } | { file, bad: true }. Shared by
 // install and configure (denyReadSteps) and fix's read-guard row. Claude Code's own settings: CLAUDE_CONFIG_DIR, else
 // ~/.claude - from context.home, so a test never reads the real one. `dir` is another config dir (configDirsWithPlugin): its
 // settings.json is read the same way, and one it has not got yet is created with the rules, as the current dir's is.
-export function readGuardOf(context: { platform: string; home: string; env?: Env | undefined }, want: string[], dir?: string): { file: string; bad: true; rules?: undefined } | { file: string; rules: string[]; bad?: undefined }
+export function readGuardOf(context: SettingsCtx, want: string[], dir?: string): { file: string; bad: true; rules?: undefined } | { file: string; rules: string[]; bad?: undefined }
 {
-    const pathApi = pathFor(context.platform);
-    const env = context.env || {};
-    const file = dir ? pathApi.join(dir, SETTINGS_FILE) : env.CLAUDE_CONFIG_DIR ? pathApi.resolve(env.CLAUDE_CONFIG_DIR, SETTINGS_FILE) : pathApi.join(context.home, CONFIG_DIR_NAME, SETTINGS_FILE);
+    const file = settingsFileOf(context, dir);
     let text: string | null = null;
     try { text = fs.readFileSync(file, 'utf8'); } catch { /* absent: {} */ }
     let deny: string[] = [];
@@ -184,7 +192,7 @@ export function denyReadStep(file: string, rules: string[]): DenyReadStep
 // The read guard (ruling 13): one deny-read for the plan, with the sign-in rule when it writes the shared sign-in form
 // and the key-file rule when it writes a key name - each only when Claude Code's settings file lacks it. A settings file
 // that is not a JSON object is a note: the rest of the plan is still written. -> [deny-read step]
-export function denyReadSteps(steps: PlanStep[], context: { platform: string; home: string; env?: Env | undefined }, out: Pick<PlanOut, 'notes'>): DenyReadStep[]
+export function denyReadSteps(steps: PlanStep[], context: SettingsCtx, out: Pick<PlanOut, 'notes'>): DenyReadStep[]
 {
     const writesSignIn = steps.some((step) => (step.op === 'mcp-add' || step.op === 'mcp-replace' || step.op === 'mcp-move') && signInParts(step.entry));
     const writesKeyName = steps.some((step) => step.op === 'ensure-key-name');
@@ -199,9 +207,53 @@ export function denyReadSteps(steps: PlanStep[], context: { platform: string; ho
     return readGuard.rules.length ? [denyReadStep(readGuard.file, readGuard.rules)] : [];
 }
 
-// The plan line of a list-write, retire-record, cursor-write or deny-read step.
-export function renderLine(step: ListWriteStep | FileStep | CursorWritePlanStep | DenyReadStep): string
+// The start limit guard: the settings file MCP_TIMEOUT goes in, and whether its env lacks it - { file, missing } - or
+// { file, bad: true } for a file that is not a JSON object or whose env is not one. Shared by install and configure
+// (startTimeoutSteps) and fix's start-timeout row; `dir` is another config dir (configDirsWithPlugin). A value the file
+// holds, of any kind, counts as set.
+export function startTimeoutOf(context: SettingsCtx, dir?: string): { file: string; missing: boolean; bad?: undefined } | { file: string; bad: true; missing?: undefined }
 {
+    const file = settingsFileOf(context, dir);
+    let text: string | null = null;
+    try { text = fs.readFileSync(file, 'utf8'); } catch { /* absent: {} */ }
+    if (text === null) return { file, missing: true };
+    let doc: unknown = null;
+    try { doc = JSON.parse(stripBom(text)); } catch { /* below */ }
+    const held = isRecord(doc) ? doc[SETTINGS_ENV_KEY] : undefined;
+    if (!isRecord(doc) || (held !== undefined && !isRecord(held))) return { file, bad: true };
+    return { file, missing: !Object.hasOwn(held ?? {}, START_TIMEOUT.name) };
+}
+
+// The settings-env step as one plan line.
+export function settingsEnvStep(file: string): SettingsEnvStep
+{
+    return { op: 'settings-env', file, env: { [START_TIMEOUT.name]: START_TIMEOUT.value }, why: `${file}: gives a server 90 s to start, where npx asks the npm registry first` };
+}
+
+// Whether a launch resolves a package at every start - npx, uvx, docker or the bridge, through cmd /c too: the launches
+// fetchStep knows.
+export const launchesPackage = (name: string, entry: ServerEntry | null | undefined): boolean => fetchStep(name, entry) !== null;
+
+// The start limit guard: one settings-env for the plan when a registration it writes launches through npx, uvx or docker
+// and Claude Code's settings lack MCP_TIMEOUT. A settings file that is not a JSON object is a note: the rest of the plan
+// is still written. -> [settings-env step]
+export function startTimeoutSteps(steps: PlanStep[], context: SettingsCtx, out: Pick<PlanOut, 'notes'>): SettingsEnvStep[]
+{
+    const launches = steps.some((step) => (step.op === 'mcp-add' || step.op === 'mcp-replace' || step.op === 'mcp-move') && launchesPackage(step.op === 'mcp-move' ? step.to.name : step.name, step.entry));
+    if (!launches) return [];
+    const current = startTimeoutOf(context);
+    if (current.bad)
+    {
+        out.notes.push(`${current.file} is not a settings object alfred-tools can read - add ${START_TIMEOUT.name}=${START_TIMEOUT.value} to ${SETTINGS_ENV_KEY} yourself`);
+        return [];
+    }
+    return current.missing ? [settingsEnvStep(current.file)] : [];
+}
+
+// The plan line of a list-write, retire-record, cursor-write, deny-read or settings-env step.
+export function renderLine(step: ListWriteStep | FileStep | CursorWritePlanStep | DenyReadStep | SettingsEnvStep): string
+{
+    if (step.op === 'settings-env') return `   adds ${Object.entries(step.env).map(([name, value]) => `${name}=${value}`).join(' and ')} to ${SETTINGS_ENV_KEY} in ${step.file}  (gives a server 90 s to start - npx asks the npm registry first)`;
     if (step.op === 'deny-read') return `   adds ${step.rules.join(' and ')} to permissions.deny in ${step.file}  (keeps AI sessions out of the sign-in tokens and the key file)`;
     if (step.op === 'cursor-write') return [`   writes ${step.file}  (Cursor: the servers set up for it; your own entries kept)`, ...(step.replace || []).map((name) => `   replaces your own ${name} in ${step.file}`)].join('\n');
     if (step.op === 'retire-record') return `   moves ${step.file} aside as ${roots.FILES.record}.0.4.bak  (its entries are in mcps.json now)`;

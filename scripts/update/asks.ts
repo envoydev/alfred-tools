@@ -22,8 +22,11 @@ export function questions(out: UpdateCheck)
     for (const [groupKey, title, header] of groups)
     {
         const list = items.filter((item) => item.group === groupKey);
-        chunk(list, MAX_OPTIONS).forEach((part) => pickQuestions.push({
-            id: `update-${groupKey}`, header: header || title.slice(0, MAX_HEADER_LENGTH), multiSelect: true, question: `${title}: which do you want to update?`,
+        const parts = chunk(list, MAX_OPTIONS);
+        // a group split over several questions numbers them, so each answer is keyed apart: the first keeps the group's id
+        parts.forEach((part, partIndex) => pickQuestions.push({
+            id: partIndex ? `update-${groupKey}-${partIndex + 1}` : `update-${groupKey}`, header: header || title.slice(0, MAX_HEADER_LENGTH), multiSelect: true,
+            question: `${title}${parts.length > 1 ? ` (${partIndex + 1} of ${parts.length})` : ''}: which do you want to update?`,
             // AskUserQuestion takes 2 to 4 options: a group of one gets 'None of these' beside it
             options: [...part.map((item) => ({ label: item.kind === 'upgrade' ? `${item.label}: ${item.fix}` : `${item.label}: ${item.from || '?'} -> ${item.to || 'latest'}`, description: item.id })), ...(part.length === 1 ? [{ label: 'None of these', description: 'none' }] : [])],
         }));

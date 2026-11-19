@@ -185,6 +185,14 @@ export interface DenyReadStep
     rules: string[]; // stored - do not rename
     why: string; // stored - do not rename
 }
+// the names an env object in Claude Code's settings file lacks (MCP_TIMEOUT: the start limit of a server)
+export interface SettingsEnvStep
+{
+    op: 'settings-env'; // stored - do not rename
+    file: string; // stored - do not rename
+    env: Record<string, string>; // stored - do not rename
+    why: string; // stored - do not rename
+}
 export interface RecordRootStep
 {
     op: 'record-root'; // stored - do not rename
@@ -193,7 +201,7 @@ export interface RecordRootStep
     root: string; // stored - do not rename
     why: string; // stored - do not rename
 }
-export type PlanStep = RegistrationStep | (FetchStep & { scope?: string }) | ListWriteStep | CursorWritePlanStep | PathStep | ExcludeFileStep | MoveRootFileStep | FileStep | RetireShippedStep | EnsureKeyNameStep | SerenaBaseModesStep | SerenaConfigInitStep | SerenaProjectFolderStep | DenyReadStep | RecordRootStep | OrderStep;
+export type PlanStep = RegistrationStep | (FetchStep & { scope?: string }) | ListWriteStep | CursorWritePlanStep | PathStep | ExcludeFileStep | MoveRootFileStep | FileStep | RetireShippedStep | EnsureKeyNameStep | SerenaBaseModesStep | SerenaConfigInitStep | SerenaProjectFolderStep | DenyReadStep | SettingsEnvStep | RecordRootStep | OrderStep;
 
 // The lines a plan prints beside its steps.
 export interface KeyLine

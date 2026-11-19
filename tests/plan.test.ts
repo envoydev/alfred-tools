@@ -70,7 +70,7 @@ const LINUX = { os: 'linux', arch: 'x64', project: '/work/shop' };
 const WIN = { os: 'win32', arch: 'x64', project: 'C:\\work\\shop' };
 const WINARM = { os: 'win32', arch: 'arm64', project: 'C:\\work\\shop' };
 // the steps that change a registration, without the root's file steps and the records (spec D8)
-const FILE_OPS = ['root-ignore', 'write-helper', 'write-bridge', 'serena-config-init', 'ensure-key-name', 'deny-read', 'list-write', 'record-root'];
+const FILE_OPS = ['root-ignore', 'write-helper', 'write-bridge', 'serena-config-init', 'ensure-key-name', 'deny-read', 'settings-env', 'list-write', 'record-root'];
 const regSteps = (p: Plan) => p.steps.filter((s) => !FILE_OPS.includes(s.op));
 
 test('serena, fresh, per OS: python request, cut-off, telemetry off, home by the OS\'s rules', () => {
@@ -383,7 +383,7 @@ test('locations: the plugin\'s own folder by default, even with alfred-code data
 
 test('a data folder the plugin creates gets a .gitignore step; one that exists does not', () => {
     const p = plan(inv(MAC), pickOne('playwright-chrome'), opts('/Users/me'));
-    assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'ensure-dir', 'mcp-add', 'fetch', 'list-write', 'record-root', 'order-mcp-json']);
+    assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'ensure-dir', 'mcp-add', 'fetch', 'settings-env', 'list-write', 'record-root', 'order-mcp-json']);
     assert.strictEqual((p.steps[1] as PathStep).path, '/work/shop/.alfred-tools/playwright-chrome');
     assert.match(renderPlan(p), /\.gitignore {2}\(contents: \*\)/);
     // alfred-code's folder, picked, is the user's data as it is: no step creates or marks it
@@ -475,7 +475,7 @@ test('a rename starts from the registration as read: an updated pin and a user-a
     (r.entry.env as EntryEnv).MY_VAR = 'kept';
     const p = plan(inv(MAC, { registrations: [r] }), changeOf(r, { name: 'shop-serena' }), opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
-    assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'write-serena-context', 'serena-config-init', 'mcp-move', 'list-write', 'record-root'], 'its data folder and its context file sit in the project root');
+    assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'write-serena-context', 'serena-config-init', 'mcp-move', 'settings-env', 'list-write', 'record-root'], 'its data folder and its context file sit in the project root');
     const s = (p.steps.find((x) => x.op === 'mcp-move') as McpMoveStep);
     assert.deepStrictEqual([s.from, s.to], [{ name: 'serena', scope: 'local' }, { name: 'shop-serena', scope: 'local' }]);
     assert.ok(s.entry.args!.includes('serena-agent@2.4.0'), 'the updated pin is not downgraded to the catalog pin');
@@ -489,7 +489,7 @@ test('a location change edits only the paths and keeps the pin; the old data is 
     r.entry.args = r.entry.args!.map((a) => a.replace(/^@playwright\/mcp@.+$/, '@playwright/mcp@0.0.90'));
     const p = plan(inv(MAC, { registrations: [r] }), changeOf(r, { location: { side: 'account' } }), opts('/Users/me'));
     // the data folder goes to the global root; the server stays at local scope, so it is listed in the project root
-    assert.deepStrictEqual(p.steps.map((s) => [s.op, (s as PathStep).path || (s as RecordRootStep).root || (s as McpAddStep).name || (s as ListWriteStep).file]), [['root-ignore', '/work/shop/.alfred-tools'], ['root-ignore', '/Users/me/.alfred-tools'], ['ensure-dir', '/Users/me/.alfred-tools/playwright-chrome'], ['mcp-replace', 'playwright-chrome'], ['list-write', '/work/shop/.alfred-tools/mcps.json'], ['record-root', '/work/shop/.alfred-tools'], ['record-root', '/Users/me/.alfred-tools']]);
+    assert.deepStrictEqual(p.steps.map((s) => [s.op, (s as PathStep).path || (s as RecordRootStep).root || (s as McpAddStep).name || (s as ListWriteStep).file]), [['root-ignore', '/work/shop/.alfred-tools'], ['root-ignore', '/Users/me/.alfred-tools'], ['ensure-dir', '/Users/me/.alfred-tools/playwright-chrome'], ['mcp-replace', 'playwright-chrome'], ['settings-env', '/Users/me/.claude/settings.json'], ['list-write', '/work/shop/.alfred-tools/mcps.json'], ['record-root', '/work/shop/.alfred-tools'], ['record-root', '/Users/me/.alfred-tools']]);
     const replace = (p.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep);
     const e = replace.entry;
     assert.ok(e.args!.includes('@playwright/mcp@0.0.90'));
@@ -538,7 +538,7 @@ test('registrations that are not the catalog\'s are not touched: a user\'s own, 
     const own = reg('serena', 'user', { command: 'node' });
     const retired = reg('chrome-control', 'local', { command: 'npx', args: ['-y', '@playwright/mcp@0.0.83', '--browser', 'chrome'] }, 'playwright-chrome', 'local', { alfredRetired: true });
     const p = plan(inv(MAC, { registrations: [own, retired] }), { picks: { 'playwright-chrome': {} }, remove: [{ kind: 'mcp', name: 'serena', scope: 'user' }, { kind: 'mcp', name: 'chrome-control', scope: 'local' }] }, opts('/h'));
-    assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'ensure-dir', 'mcp-add', 'fetch', 'list-write', 'record-root', 'order-mcp-json'], 'a fresh add beside the retired one; nothing removed');
+    assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'ensure-dir', 'mcp-add', 'fetch', 'settings-env', 'list-write', 'record-root', 'order-mcp-json'], 'a fresh add beside the retired one; nothing removed');
     assert.strictEqual(p.errors.length, 2);
     assert.match(p.errors[0]!, /your own server/);
     assert.match(p.errors[1]!, /alfred-code's \(retired\)/);
@@ -898,7 +898,7 @@ test('plan.js from a kept inventory file leaves location keys as they are', () =
     assert.strictEqual((kept.registrations[0]!.entry.env as EntryEnv).MEMORY_API_TOKEN, MARKER);
     const p = plan(kept, changeOf(r, { name: 'mem' }), opts('/h'));
     assert.deepStrictEqual(p.errors, []);
-    assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'mcp-move', 'list-write', 'record-root'], 'its data folder sits in the global root');
+    assert.deepStrictEqual(p.steps.map((s) => s.op), ['root-ignore', 'mcp-move', 'settings-env', 'list-write', 'record-root'], 'its data folder sits in the global root');
     assert.strictEqual(((p.steps[1] as McpAddStep).entry.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, db);
     assert.strictEqual(((p.steps[1] as McpAddStep).entry.env as EntryEnv).MEMORY_API_TOKEN, MARKER, 'the value travels as the marker');
     assert.ok(!JSON.stringify(p).includes(live));
@@ -2084,7 +2084,7 @@ test('change the root: each managed registration of the family is re-added with 
     assert.deepStrictEqual(p.errors, []);
     assert.deepStrictEqual(p.steps.map((s) => [s.op, (s as PathStep).path || (s as ListWriteStep).file || (s as McpAddStep).name || (s as RecordRootStep).root]), [
         ['root-ignore', '/work/shop/tools'], ['write-helper', '/work/shop/tools'], ['ensure-key-name', '/work/shop/tools/.mcps-secrets'],
-        ['ensure-dir', '/work/shop/tools/playwright-chrome'], ['mcp-replace', 'playwright-chrome'], ['mcp-replace', 'github'], ['deny-read', '/Users/me/.claude/settings.json'], ['list-write', '/work/shop/tools/mcps.json'], ['record-root', '/work/shop/tools'],
+        ['ensure-dir', '/work/shop/tools/playwright-chrome'], ['mcp-replace', 'playwright-chrome'], ['mcp-replace', 'github'], ['settings-env', '/Users/me/.claude/settings.json'], ['deny-read', '/Users/me/.claude/settings.json'], ['list-write', '/work/shop/tools/mcps.json'], ['record-root', '/work/shop/tools'],
     ]);
     assert.deepStrictEqual((p.steps[2] as EnsureKeyNameStep).names, [G], 'the names in use');
     const e = (p.steps[4] as McpAddStep).entry;
@@ -2825,7 +2825,7 @@ test('a rename of a 0.5.x serena retires the root copy of its context', () => {
     const p = plan(inv(MAC, { registrations: [r] }), changeOf(r, { name: 'shop-serena' }), opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
     const ops = p.steps.map((s) => s.op);
-    assert.deepStrictEqual(ops, ['root-ignore', 'write-serena-context', 'serena-config-init', 'mcp-move', 'retire-shipped', 'list-write', 'record-root']);
+    assert.deepStrictEqual(ops, ['root-ignore', 'write-serena-context', 'serena-config-init', 'mcp-move', 'retire-shipped', 'settings-env', 'list-write', 'record-root']);
     assert.deepStrictEqual((p.steps.find((s) => s.op === 'retire-shipped') as RetireShippedStep).namedBy, []);
     assert.strictEqual((p.steps.find((s) => s.op === 'retire-shipped') as RetireShippedStep).file, '/work/shop/.alfred-tools/serena-context.yml');
     assert.deepStrictEqual(p.steps.filter((s) => s.op === 'move-root-file'), []);

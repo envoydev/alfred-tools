@@ -14,6 +14,8 @@ import * as cli from '../../scripts/core/claude-cli.ts';
 import * as account from '../../scripts/core/account.ts';
 import { load } from '../../scripts/catalog/catalog.ts';
 import * as keys from '../../scripts/keys/keys.ts';
+import { fetchStep } from '../../scripts/entries/names.ts';
+import { START_TIMEOUT } from '../../scripts/plan/start-timeout-constants.ts';
 import type { McpAddStep } from '../../scripts/plan/types.ts';
 import { Harness } from '../harness.ts';
 import { keepWritten } from '../proof/matrix-keep.ts';
@@ -72,6 +74,12 @@ for (const c of spec.cases)
                 ? JSON.parse(fs.readFileSync(path.join(project, '.mcp.json'), 'utf8')).mcpServers
                 : (c.expect.scope === 'user' ? account.readAccount(h.env, project).user : account.readAccount(h.env, project).local);
             assert.deepStrictEqual(stored[step.name], want);
+            // a launch through npx, uvx, docker or the bridge (npx asks the npm registry at every start): the throwaway config dir's settings give it 90 s
+            if (fetchStep(step.name, step.entry) !== null)
+            {
+                const settings = JSON.parse(fs.readFileSync(path.join(h.account, 'settings.json'), 'utf8'));
+                assert.strictEqual(settings.env[START_TIMEOUT.name], START_TIMEOUT.value, `${c.row}: ${START_TIMEOUT.name} in the config dir's settings.json`);
+            }
             if (c.expect.files)
             {
                 // the data folder, in the project root on every platform since 0.3.0 - serena's Windows home included

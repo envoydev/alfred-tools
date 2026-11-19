@@ -422,6 +422,38 @@
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md rulings 12, 13; docs/superpowers/specs/2026-11-18-session-issues-design.md Part E"
     },
     {
+      "id": "start-timeout",
+      "upgrade": "0.7.0",
+      "tool": [
+        "serena",
+        "memory",
+        "context7",
+        "github",
+        "gitlab",
+        "atlassian",
+        "playwright-chrome",
+        "playwright-msedge",
+        "playwright-firefox",
+        "playwright-webkit",
+        "appium",
+        "macos-control",
+        "windows-control",
+        "sentry"
+      ],
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "kind": "file",
+      "symptom": "a server launched through npx, uvx or docker (or the sign-in form, which runs npx) asks its registry at every start, and Claude Code gives a server 30 s to start, so a slow first network of the day fails it until /mcp Reconnect - MCP_TIMEOUT in the env of Claude Code's settings gives it 90 s, in the current config dir and in every other one under the home that has the plugin installed",
+      "detect": "startTimeoutDetect",
+      "fix": null,
+      "steps": "startTimeoutSteps",
+      "verifiedOn": "this build: tests/start-timeout.test.ts (2026-11-19); npm 11.6.1 and Claude Code 2.1.328 measured 2026-11-19",
+      "source": "docs/sources.md, 'Claude Code - the MCP start limit'"
+    },
+    {
       "id": "client-drift",
       "tool": [
         "atlassian",

@@ -31,7 +31,7 @@ ask. It takes no argument: one typed after the command changes nothing - say so.
   header to `mcp-headers.js` once the user has put it in `.mcps-secrets`, absolute project paths, the root's
   `.gitignore`, the `.mcp.json` order, the deny rules and the retired plugins; context7's key moved from `--api-key`
   into its environment (`context7-key-env`); sentry's variable renamed where its pin reads `SENTRY_AUTH_TOKEN`
-  (`sentry-auth-env`); and a managed server whose row was retired offered for removal (`retired-server`) - offers what
+  (`sentry-auth-env`); and a managed server whose row was retired offered for removal (`retired-server`); and `MCP_TIMEOUT` in Claude Code's settings (`start-timeout`) - offers what
   they find under 'New ways to pass data', and applies it with fix's own code. A finding that needs the user - a key
   not filled yet, a folder to name - is a note naming `/alfred-tools:fix`, never an offer.
 
@@ -146,7 +146,7 @@ whenever an entry changes': tell the user Cursor will ask.
 A `read-guard` offer covers every Claude Code config dir under the home that has this plugin installed (a second
 `CLAUDE_CONFIG_DIR` such as `~/.claude-personal` included), not only the one this session runs in. For each other dir
 the report prints `note: <dir>: read guard added - it keeps its own plugin data, so an update there may offer a declined
-uninstall again`: repeat it in the summary, naming the dir.
+uninstall again`: repeat it in the summary, naming the dir. A `start-timeout` offer covers those dirs too.
 
 When a Cursor offer was taken, the report prints each plan note as `note   <text>` and, for each server moved onto the
 shared sign-in, a line `<name>: now the shared sign-in in <root>/mcp-remote-v1/ (Cursor added) - sign-in not done yet`:

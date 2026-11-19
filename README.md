@@ -331,6 +331,11 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
   to every other Claude Code config folder on this machine (`~/.claude`, `~/.claude-<name>`) that has this plugin
   installed, and say which. Each of those folders keeps its own plugin data, so an update run there may offer a
   retired plugin's uninstall again after a 'No' given elsewhere.
+- **Start limit.** Claude Code gives a server 30 s to start, and `npx` asks the npm registry at every start
+  (measured; `uvx` and Docker were not), so a slow first network of the day fails the first start until you pick Reconnect in `/mcp`. When a plan writes
+  such a server, the plugin adds `MCP_TIMEOUT=90000` (90 s) to `env` in the same settings file; `/alfred-tools:fix` and
+  `/alfred-tools:update` add it for the servers you have, in every config folder with the plugin. A value you set
+  yourself is never changed. Measured with `npm` 11.6.1 and Claude Code 2.1.328: see `docs/sources.md`.
 - **Signing in.** After an install, configure or update that sets up a new sign-in, a question offers 'Sign in now'
   (recommended): the browser opens and waits up to five minutes. Otherwise the first session start opens it, which has
   only 30 seconds, and `/mcp` -> the server -> Reconnect finishes it. The update output says for each such server why
@@ -385,7 +390,8 @@ only what you pick, in one confirmation:
   moved to the plugin's. 0.7.0 adds three: context7's key moves from `--api-key` into its environment, sentry's
   variable is renamed to `SENTRY_AUTH_TOKEN` where its pin reads that name, and a managed server whose row the catalog
   retired is offered for removal (`/alfred-tools:fix` offers it too; not picking it is a decline, kept per project at
-  project and local scope and for every project at global scope). These run before the version moves, so all of these
+  project and local scope and for every project at global scope). It adds a fourth: `MCP_TIMEOUT=90000` in the `env` of
+  your Claude Code settings (see 'Start limit' below). These run before the version moves, so all of these
   changes stay.
 - **Cursor** - asked with the updates, once per root, when Cursor is on this machine and the root's servers are set
   up for Claude Code only. 'Not now' is remembered in the list.
@@ -415,6 +421,7 @@ Run `/alfred-tools:fix` first; it knows these:
 - a data folder git would commit, or a key file or sign-in folder git would commit;
 - one app's copy of a server was changed by hand, or a Cursor `mcp.json` is not JSON;
 - a deny rule for the sign-ins or the keys is missing, in this config folder or another that has the plugin;
+- `MCP_TIMEOUT` is missing from Claude Code's settings and a server that starts through `npx`, `uvx` or Docker times out at 30 s;
 - serena's `serena_config.yml` does not send its project folders to its home, or its context file is not in its home.
 
 A first start can take a while: install downloads each new package right after the plan and starts it once in the
