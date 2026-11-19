@@ -61,3 +61,8 @@ test('load refuses a tools.json with no retired list, or one retiring an id a ro
     assert.deepStrictEqual(load(ok).retired.map((entry) => entry.id), ['old-tool']);
     assert.deepStrictEqual(load().retired, []);
 });
+
+test('the shipped rules hold no age gate and no cut-off: the gate is AGE_DAYS in scripts/catalog/registry.ts (spec D5)', () => {
+    const rules = load().rules as unknown as Record<string, unknown>;
+    assert.ok(!('ageGateDays' in rules) && !('cutoff' in rules), Object.keys(rules).join());
+});

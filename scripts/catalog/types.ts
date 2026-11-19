@@ -165,8 +165,6 @@ export interface CatalogRow
 
 export interface CatalogRules
 {
-    ageGateDays: number; // stored - do not rename
-    cutoff: string; // stored - do not rename
     windowsArmPython: string; // stored - do not rename
     windowsNpxCmd: { documented: boolean; source: string }; // stored - do not rename
     nameRe: string; // stored - do not rename

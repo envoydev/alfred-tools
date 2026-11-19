@@ -59,7 +59,7 @@ test('every package route moves to the newer release that is old enough, and its
     assert.deepStrictEqual(back, tools);
     // a docker image tag and the global rules are not touched
     assert.strictEqual(r.next.tools.find((x) => x.id === 'github')!.routes.local!.image!.tag, tools.tools.find((x) => x.id === 'github')!.routes.local!.image!.tag);
-    assert.strictEqual(r.next.rules.cutoff, tools.rules.cutoff);
+    assert.ok(!('cutoff' in r.next.rules) && !('ageGateDays' in r.next.rules), 'refresh-pins writes no global cut-off: each moved route carries its own');
 });
 
 test('a too-new release is held back, a pin already current stays with its cut-off, and a registry failure is an error', async () =>
