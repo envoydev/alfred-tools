@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import { pathFor } from '../../entries/platform.ts';
 import { subst } from '../../entries/entry.ts';
+import { launcherParts } from '../../entries/launcher.ts';
 import { signInParts, signInFormOf } from '../../entries/sign-in.ts';
 import { ALFRED_DATA } from '../../core/constants.ts';
 import * as roots from '../../roots/roots.ts';
@@ -65,9 +66,9 @@ export function pickCursor(base: PickBase, answers: PickAnswers, built: ServerEn
     }
 
     // .cursor/mcp.json may be committed, and project scope is closed to a stdio key already
-    if (scope === 'local' && clients.includes('cursor') && cursorMcp.stdioKeyed(entry, row, routeId))
+    if (scope === 'local' && clients.includes('cursor') && (cursorMcp.stdioKeyed(entry, row, routeId) || launcherParts(entry) !== null))
     {
-        out.notes.push('Cursor: not written - this route keeps its key in the registration, and .cursor/mcp.json may be committed; pick the hosted route for Cursor');
+        out.notes.push('Cursor: not written - Cursor has no private per-project file, and .cursor/mcp.json may be committed; install at user scope for Cursor');
         clients = clients.filter((client) => client !== 'cursor');
     }
     return { entry, form, clients, signInRoot };

@@ -5,18 +5,16 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { load } from '../scripts/catalog/catalog.ts';
-import * as inventory from '../scripts/inventory/inventory.ts';
-import { plan } from '../scripts/plan/plan.ts';
-import { apply } from '../scripts/apply/run.ts';
 import { readAccount } from '../scripts/core/account.ts';
 import { pinnedVersion } from '../scripts/fix/common.ts';
 import * as F from '../scripts/fix/fix-functions.ts';
 import { world, readJson } from './helpers.ts';
 import { detectAll, applyFixes } from '../scripts/fix/fix.ts';
 import { reg, ctxFor, detect, shownOf, ctxOf, logged } from './fix-helpers.ts';
-import { run, fakeRegistry, ago, reAdd, localReg } from './update-helpers.ts';
+import { run, fakeRegistry, ago, reAdd, localReg, installPlain } from './update-helpers.ts';
 import type { Catalog, CatalogRow } from '../scripts/catalog/types.ts';
 import type { Finding } from '../scripts/fix/types.ts';
+import type { ServerEntry } from '../scripts/core/types.ts';
 
 const row = (id: string) => load().byId.get(id)!;
 
@@ -54,6 +52,9 @@ const catalog060 = (version = '0.42.0'): Catalog =>
     return { ...cat, tools, byId: new Map(tools.map((row) => [row.id, row])) };
 };
 
+// sentry's registration as 0.6.0 wrote it: the key in the env under the name its pin reads, the value from the root's file
+const plainSentry = (version: string, name: string): ServerEntry => ({ command: 'npx', args: ['-y', `@sentry/mcp-server@${version}`], env: { npm_config_before: '2026-11-19T23:59:59Z', [name]: 'test-key-not-real' } });
+
 test('update moving sentry local to 0.49.0 passes SENTRY_AUTH_TOKEN in the same rewrite, in Claude Code and Cursor; a move below 0.48.0 keeps the old name (spec D2)', async () =>
 {
     for (const [to, name] of [['0.49.0', 'SENTRY_AUTH_TOKEN'], ['0.47.0', 'SENTRY_ACCESS_TOKEN']] as const)
@@ -64,9 +65,7 @@ test('update moving sentry local to 0.49.0 passes SENTRY_AUTH_TOKEN in the same 
             const root = path.join(w.home, '.alfred-tools');
             fs.mkdirSync(root, { recursive: true });
             fs.writeFileSync(path.join(root, '.mcps-secrets'), 'SENTRY_ACCESS_TOKEN=test-key-not-real\n');
-            const p = plan(inventory.buildInventory({ project: w.project, env: w.env }), { clients: ['claude', 'cursor'], picks: { sentry: { route: 'local', scope: 'user', token: true } } }, { home: w.home, env: w.env, catalog: catalog060() });
-            assert.deepStrictEqual(p.errors, []);
-            assert.strictEqual(apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
+            installPlain(w, 'sentry', 'user', plainSentry('0.42.0', 'SENTRY_ACCESS_TOKEN'), catalog060());
             const cursorFile = path.join(w.home, '.cursor', 'mcp.json');
             assert.ok('SENTRY_ACCESS_TOKEN' in readJson(cursorFile).mcpServers.sentry.env, 'the 0.6.0 shape in Cursor before the update');
             const a = await run(w, ['--apply', 'mcp:sentry~user', '--no-refresh'], { registry: fakeRegistry({ 'npm:@sentry/mcp-server': [{ version: to, time: ago(30) }] }) });
@@ -92,9 +91,7 @@ test('sentry-auth-env renames SENTRY_ACCESS_TOKEN in the registration and in Cur
         fs.mkdirSync(root, { recursive: true });
         fs.writeFileSync(path.join(root, '.mcps-secrets'), 'SENTRY_ACCESS_TOKEN=test-key-not-real\n');
         // a 0.49.0 pin still passing the old name, in Claude Code and Cursor: what an alfred-tools before 0.7.0 left after a pin move by hand
-        const p = plan(inventory.buildInventory({ project: w.project, env: w.env }), { clients: ['claude', 'cursor'], picks: { sentry: { route: 'local', scope: 'user', token: true } } }, { home: w.home, env: w.env, catalog: catalog060('0.49.0') });
-        assert.deepStrictEqual(p.errors, []);
-        assert.strictEqual(apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
+        installPlain(w, 'sentry', 'user', plainSentry('0.49.0', 'SENTRY_ACCESS_TOKEN'), catalog060('0.49.0'));
         const cursorFile = path.join(w.home, '.cursor', 'mcp.json');
         assert.ok('SENTRY_ACCESS_TOKEN' in readJson(cursorFile).mcpServers.sentry.env, 'the old name in Cursor before the fix');
         const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'sentry-auth-env');

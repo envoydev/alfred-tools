@@ -11,6 +11,7 @@ import { apply, REFUSED, refusedLine } from '../scripts/apply/run.ts';
 import * as account from '../scripts/core/account.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
 import { MARKER } from '../scripts/core/kept.ts';
+import { launcherParts } from '../scripts/entries/launcher.ts';
 import * as roots from '../scripts/roots/roots.ts';
 import { GITIGNORE, mapKey, READ_GUARD } from '../scripts/roots/roots.ts';
 import { allQuestions } from '../scripts/plan/asks-all.ts';
@@ -24,7 +25,7 @@ import { readList } from '../scripts/mcps-list/mcps-list.ts';
 import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
 import type { World } from './types.ts';
 import { mcpJson, runSteps } from './apply-helpers.ts';
-import type { Answers, PlanOptions, McpAddStep, ListWriteStep, Reconnect } from '../scripts/plan/types.ts';
+import type { Answers, PlanOptions, ListWriteStep, Reconnect } from '../scripts/plan/types.ts';
 import type { ApplyCtx } from '../scripts/apply/types.ts';
 import type { CliOptions, CliResult } from '../scripts/core/types.ts';
 import type { Inventory } from '../scripts/inventory/types.ts';
@@ -329,7 +330,9 @@ test('no token value reaches any file the install wrote', () => {
         }
         // a hosted key is read by mcp-headers.js when Claude Code connects: the committed entry names the helper, no key
         assert.deepStrictEqual(mcpJson(w).mcpServers.github, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: helperCmd(path.join(w.project, '.alfred-tools', 'mcp-headers.js'), 'GITHUB_PERSONAL_ACCESS_TOKEN', 'Bearer') });
-        assert.strictEqual(accountDoc(w).mcpServers.sentry.env.SENTRY_AUTH_TOKEN, '', 'a key in the shell is never written in: the apply reads .mcps-secrets only');
+        const sentry = accountDoc(w).mcpServers.sentry;
+        assert.strictEqual(launcherParts(sentry)?.keyName, 'SENTRY_ACCESS_TOKEN', 'the launcher names the key and holds none');
+        assert.strictEqual(sentry.env.SENTRY_AUTH_TOKEN, undefined, 'a key in the shell is never written in: the launcher reads .mcps-secrets only');
     }
     finally { w.clean(); }
 });
@@ -591,7 +594,7 @@ const noValueIn = (w: World, r: { text: string; p: unknown }, values: string[]) 
     for (const v of values) assert.ok(!r.text.includes(v) && !JSON.stringify(r.p).includes(v), 'no key value printed or in the plan');
 };
 
-test('a stdio key at local scope is written in from the key file, a hosted route at project scope gets the helper and no ${VAR}, and no file under <tmp> holds the value', () => {
+test('a stdio key at local scope starts through the launcher and is written nowhere, a hosted route at project scope gets the helper and no ${VAR}, and no file under <tmp> holds the value', () => {
     const w = world();
     try
     {
@@ -600,9 +603,12 @@ test('a stdio key at local scope is written in from the key file, a hosted route
         const r = walk(w, { picks: { sentry: { route: 'local', scope: 'local' }, github: { route: 'remote', scope: 'project' } } });
         assert.deepStrictEqual(r.p.errors, []);
         assert.strictEqual(r.report.failed, null, r.text);
-        assert.strictEqual(accountDoc(w).projects[accountKey(w.project)].mcpServers.sentry.env[SA], s, 'the value, as the file holds it');
+        const sentry = accountDoc(w).projects[accountKey(w.project)].mcpServers.sentry;
+        assert.deepStrictEqual([launcherParts(sentry)?.envVar, launcherParts(sentry)?.keyName], [SA, S], 'the launcher names the variable and the key');
+        assert.strictEqual(sentry.env[SA], undefined, 'no key value in the registration');
+        onlyIn(w, s, [path.join(w.project, '.alfred-tools', '.mcps-secrets')]);
         assert.deepStrictEqual(mcpJson(w).mcpServers.github, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: helperCmd(path.join(w.project, '.alfred-tools', 'mcp-headers.js'), G, 'Bearer') }, 'the project file names the helper by absolute path');
-        assert.ok(r.text.includes(`${S} for 'sentry' (local) from ${path.join(w.project, '.alfred-tools', '.mcps-secrets')}`), r.text);
+        assert.ok(!r.text.includes(`${S} for 'sentry' (local) from `), 'the apply writes no key in');
         noValueIn(w, r, [s, g]);
     }
     finally { w.clean(); }
@@ -670,10 +676,12 @@ test('a failed add prints a key the apply wrote in as the marker, never the valu
     const w = world();
     try
     {
+        // a plain registration that holds its key stays plain through a rename and is filled at the apply
         const s = `s%^"\\${hex(12)}`;
         mcps(path.join(w.project, '.alfred-tools'), { [S]: s });
-        const r = walk(w, { picks: { sentry: { route: 'local', scope: 'local' } } }, { fail: 'add-json sentry' });
-        assert.strictEqual(r.report.failed!.op, 'mcp-add');
+        register(w, 'sentry', { command: 'npx', args: ['-y', '@sentry/mcp-server@0.42.0'], env: { [S]: `old-${hex(12)}` } });
+        const r = keptWalk(w, { change: { 'mcp:sentry~local': { name: 'sentry-2' } } }, { fail: 'add-json sentry-2' });
+        assert.strictEqual(r.report.failed!.op, 'mcp-move');
         assert.match(r.report.failed!.detail, /injected failure/, 'the CLI output is still shown');
         assert.ok(r.report.failed!.detail.includes(MARKER), r.report.failed!.detail);
         noValueIn(w, r, [s, JSON.stringify(s).slice(1, -1)]);
@@ -682,14 +690,18 @@ test('a failed add prints a key the apply wrote in as the marker, never the valu
     finally { w.clean(); }
 });
 
-test('a missing key writes an empty value, never a ${VAR}, and the note names the file to fill', () => {
+test('a missing key writes the launcher and the name, never a value or a ${VAR}, and the note names the file to fill', () => {
     const w = world();
     try
     {
         const r = walk(w, { picks: { sentry: { route: 'local', scope: 'local' } } });
+        const file = path.join(w.project, '.alfred-tools', '.mcps-secrets');
         assert.strictEqual(r.report.failed, null, r.text);
-        assert.strictEqual(accountDoc(w).projects[accountKey(w.project)].mcpServers.sentry.env[SA], '');
-        assert.ok(r.text.includes(`fill ${S} in ${path.join(w.project, '.alfred-tools', '.mcps-secrets')}, then run /alfred-tools:configure and keep ${S} as the key's name - it writes the key in`), r.text);
+        const sentry = accountDoc(w).projects[accountKey(w.project)].mcpServers.sentry;
+        assert.strictEqual(launcherParts(sentry)?.keyName, S);
+        assert.strictEqual(sentry.env[SA], undefined);
+        assert.ok(fs.readFileSync(file, 'utf8').includes(`${S}=`), 'the name is in the file, empty');
+        assert.ok(r.p.notes.some((n) => n.startsWith(`sentry: fill ${S} in ${file}; the launcher reads it each time the server starts`)), r.p.notes.join('\n'));
     }
     finally { w.clean(); }
 });
@@ -749,31 +761,28 @@ test('configure recommends the name the registration uses', () => {
     finally { w.clean(); }
 });
 
-test('unfilled at install, filled later, configure keeping the name writes the key in', () => {
+test('unfilled at install, filled later, the launcher reads the key with no configure and a configure keeping the name changes nothing', () => {
     const w = world();
     try
     {
         const first = walk(w, { picks: { github: { route: 'local', scope: 'local' } }, keyNames: { github: 'ACME_GITHUB_TOKEN' } });
         assert.strictEqual(first.report.failed, null, first.text);
         const file = path.join(w.project, '.alfred-tools', '.mcps-secrets');
-        assert.strictEqual(accountDoc(w).projects[accountKey(w.project)].mcpServers.github.env[G], '');
-        assert.ok(first.text.includes(`fill ACME_GITHUB_TOKEN in ${file}, then run /alfred-tools:configure and keep ACME_GITHUB_TOKEN as the key's name - it writes the key in`), first.text);
+        const added = accountDoc(w).projects[accountKey(w.project)].mcpServers.github;
+        assert.deepStrictEqual([launcherParts(added)?.envVar, launcherParts(added)?.keyName, added.env[G]], [G, 'ACME_GITHUB_TOKEN', undefined]);
+        assert.ok(first.p.notes.some((n) => n.startsWith(`github: fill ACME_GITHUB_TOKEN in ${file}; the launcher reads it each time the server starts`)), first.p.notes.join('\n'));
         const value = `acme-${hex(12)}`;
         mcps(path.dirname(file), { ACME_GITHUB_TOKEN: value });
-        const answers = { change: { 'mcp:github~local': {} }, keyNames: { 'mcp:github~local': 'ACME_GITHUB_TOKEN' } };
-        const r = keptWalk(w, answers);
-        assert.deepStrictEqual(r.p.steps.filter((s) => s.op.startsWith('mcp-')).map((s) => [s.op, (s as McpAddStep).key]), [['mcp-replace', { name: 'ACME_GITHUB_TOKEN', files: [file, path.join(w.home, '.alfred-tools', '.mcps-secrets')] }]]);
-        assert.strictEqual(r.report.failed, null, r.text);
-        assert.strictEqual(accountDoc(w).projects[accountKey(w.project)].mcpServers.github.env[G], value);
-        noValueIn(w, r, [value]);
-        const again = keptWalk(w, answers);
-        assert.deepStrictEqual(again.p.steps.filter((s) => s.op.startsWith('mcp-')), [], 'the key it holds equals the filled one');
+        const again = keptWalk(w, { change: { 'mcp:github~local': {} }, keyNames: { 'mcp:github~local': 'ACME_GITHUB_TOKEN' } });
+        assert.deepStrictEqual(again.p.steps.filter((s) => s.op.startsWith('mcp-')), [], 'the registration already reads the filled name');
         assert.strictEqual(again.p.unchanged.length, 1);
+        onlyIn(w, value, [file]);
+        noValueIn(w, again, [value]);
     }
     finally { w.clean(); }
 });
 
-test('the apply writes a stdio key from the stdio chain under the chosen name; not filled gives an empty value and a note, never a ${VAR}', () => {
+test('the launcher names the chosen key and holds no value; an unfilled name gives the launcher and a note, never a ${VAR}', () => {
     const w = world();
     try
     {
@@ -782,15 +791,16 @@ test('the apply writes a stdio key from the stdio chain under the chosen name; n
         mcps(path.dirname(file), { ACME_SENTRY_TOKEN: s });
         const r = walk(w, { picks: { sentry: { route: 'local', scope: 'local' } }, keyNames: { sentry: 'ACME_SENTRY_TOKEN' } });
         assert.strictEqual(r.report.failed, null, r.text);
-        assert.strictEqual(accountDoc(w).projects[accountKey(w.project)].mcpServers.sentry.env[SA], s);
-        assert.ok(r.text.includes(`ACME_SENTRY_TOKEN for 'sentry' (local) from ${file}`), r.text);
+        const sentry = accountDoc(w).projects[accountKey(w.project)].mcpServers.sentry;
+        assert.deepStrictEqual([launcherParts(sentry)?.envVar, launcherParts(sentry)?.keyName, sentry.env[SA]], [SA, 'ACME_SENTRY_TOKEN', undefined]);
         noValueIn(w, r, [s]);
-        onlyIn(w, s, [file, account.accountFile(w.env)]);
-        // not filled: an empty value and the note, at global scope from the global root's file
+        onlyIn(w, s, [file]);
+        // not filled: the launcher and the note, at global scope from the global root's file
         const u = walk(w, { picks: { github: { route: 'local', scope: 'user' } } });
         assert.strictEqual(u.report.failed, null, u.text);
-        assert.strictEqual(accountDoc(w).mcpServers.github.env[G], '');
-        assert.ok(u.text.includes(`fill ${G} in ${path.join(w.home, '.alfred-tools', '.mcps-secrets')}, then run /alfred-tools:configure`), u.text);
+        const github = accountDoc(w).mcpServers.github;
+        assert.deepStrictEqual([launcherParts(github)?.keyName, github.env[G]], [G, undefined]);
+        assert.ok(u.p.notes.some((n) => n.startsWith(`github: fill ${G} in ${path.join(w.home, '.alfred-tools', '.mcps-secrets')}; the launcher reads it`)), u.p.notes.join('\n'));
         assert.ok(!JSON.stringify(accountDoc(w)).includes(`\${${G}}`) && !JSON.stringify(accountDoc(w)).includes(`\${${S}}`), 'never a ${VAR}');
     }
     finally { w.clean(); }

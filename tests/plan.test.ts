@@ -30,6 +30,7 @@ import * as rootsLib from '../scripts/roots/roots.ts';
 import { FILES } from '../scripts/roots/roots.ts';
 import { runPlanCommand } from '../scripts/plan/command.ts';
 import { OTHER_RE } from './ask-texts.ts';
+import { launcherParts, launchOf } from '../scripts/entries/launcher.ts';
 import { helperCommand, helperNameOf, helperParts, helperArgv, buildEntry, currentOf, settingsOf, bridgeParts, renameTemplate } from '../scripts/entries/entry.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
 import * as X from '../scripts/inventory/existing.ts';
@@ -192,22 +193,23 @@ test('routes: context7, github and sentry each build both ways; the others have 
     // no key answer: the key is sent, from the project root, where the recommended scope puts the server
     const c7k = addStep(plan(inv(MAC), pickOne('context7', { route: 'remote' }), opts('/h'))).entry;
     assert.deepStrictEqual(c7k, { type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: 'node /work/shop/.alfred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' });
-    // a stdio key whose name is filled nowhere: no key argument, never an empty one (spec F2)
-    const c7l = addStep(plan(inv(MAC), pickOne('context7', { route: 'local', token: true, scope: 'local' }), opts('/h'))).entry;
-    assert.deepStrictEqual(c7l.args, ['-y', '@upstash/context7-mcp@4.7.0']);
-    const gh = addStep(plan(inv(MAC), pickOne('github', { route: 'local' }), opts('/h'))).entry;
-    assert.deepStrictEqual(gh.args, ['run', '-i', '--rm', '-e', 'GITHUB_PERSONAL_ACCESS_TOKEN', 'ghcr.io/github/github-mcp-server:v2.1.0', 'stdio']);
-    assert.deepStrictEqual(gh.env, { GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}' });
-    const ghb = addStep(plan(inv(MAC), pickOne('github', { route: 'local' }), opts('/h', { machine: { docker: false } }))).entry;
-    assert.deepStrictEqual([ghb.command, ghb.args], ['github-mcp-server', ['stdio']]);
+    // a stdio key whose name is filled nowhere: the optional launcher, which starts keyless until the name is filled
+    const c7l = launcherParts(addStep(plan(inv(MAC), pickOne('context7', { route: 'local', token: true, scope: 'local' }), opts('/h'))).entry);
+    assert.deepStrictEqual([c7l?.envVar, c7l?.keyName, c7l?.optional, c7l?.inner.command, c7l?.inner.args], ['CONTEXT7_API_KEY', 'CONTEXT7_API_KEY', true, 'npx', ['-y', '@upstash/context7-mcp@4.7.0']]);
+    const gh = launcherParts(addStep(plan(inv(MAC), pickOne('github', { route: 'local' }), opts('/h'))).entry);
+    assert.deepStrictEqual([gh?.envVar, gh?.keyName, gh?.optional, gh?.inner.command, gh?.inner.args], ['GITHUB_PERSONAL_ACCESS_TOKEN', 'GITHUB_PERSONAL_ACCESS_TOKEN', false, 'docker', ['run', '-i', '--rm', '-e', 'GITHUB_PERSONAL_ACCESS_TOKEN', 'ghcr.io/github/github-mcp-server:v2.1.0', 'stdio']]);
+    assert.deepStrictEqual(addStep(plan(inv(MAC), pickOne('github', { route: 'local' }), opts('/h'))).entry.env, {});
+    const ghb = launcherParts(addStep(plan(inv(MAC), pickOne('github', { route: 'local' }), opts('/h', { machine: { docker: false } }))).entry);
+    assert.deepStrictEqual([ghb?.inner.command, ghb?.inner.args], ['github-mcp-server', ['stdio']]);
     const ghr = addStep(plan(inv(MAC), pickOne('github', { route: 'remote' }), opts('/h'))).entry;
     assert.deepStrictEqual(ghr, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: 'node /work/shop/.alfred-tools/mcp-headers.js GITHUB_PERSONAL_ACCESS_TOKEN Bearer' });
     const sr = addStep(plan(inv(MAC), pickOne('sentry', { route: 'remote' }), opts('/h'))).entry;
     assert.deepStrictEqual(sr, { type: 'http', url: 'https://mcp.sentry.dev/mcp', headersHelper: 'node /work/shop/.alfred-tools/mcp-headers.js SENTRY_ACCESS_TOKEN Sentry-Bearer' });
     assert.deepStrictEqual(addStep(plan(inv(MAC), pickOne('sentry', { route: 'remote', token: false }), opts('/h'))).entry, { type: 'http', url: 'https://mcp.sentry.dev/mcp' });
     const sl = addStep(plan(inv(MAC), pickOne('sentry', { route: 'local' }), opts('/h'))).entry;
-    assert.strictEqual((sl.env as EntryEnv).SENTRY_AUTH_TOKEN, '${SENTRY_ACCESS_TOKEN}');
-    assert.ok(!('SENTRY_ACCESS_TOKEN' in sl.env!));
+    assert.strictEqual(launcherParts(sl)?.envVar, 'SENTRY_AUTH_TOKEN');
+    assert.strictEqual(launcherParts(sl)?.keyName, 'SENTRY_ACCESS_TOKEN');
+    assert.ok(!('SENTRY_AUTH_TOKEN' in (sl.env || {})) && !('SENTRY_ACCESS_TOKEN' in (sl.env || {})));
     assert.match(plan(inv(MAC), pickOne('gitlab', { route: 'local' }), opts('/h')).errors[0]!, /no local route/);
     assert.match(plan(inv(MAC), pickOne('atlassian', { route: 'local' }), opts('/h')).errors[0]!, /no local route/);
     assert.strictEqual(addStep(plan(inv(MAC), pickOne('gitlab', { params: { host: 'git.corp.example' } }), opts('/h'))).entry.url, 'https://git.corp.example/api/v4/mcp');
@@ -286,10 +288,10 @@ test('at local and global scope the key line names the files its reader takes, i
     assert.ok(!JSON.stringify(local.steps).includes('"auth"'));
     const user = plan(inv(MAC), pickOne('github', { route: 'remote', scope: 'user' }), opts('/h'));
     assert.deepStrictEqual(user.keys[0]!.files, [P('/h', '.alfred-tools', '.mcps-secrets'), P('/h', '.alfred', '.mcps-secrets')]);
-    // a stdio route: the apply writes the key in from the stdio chain - the project root's file, then the global root's
+    // a stdio route: the launcher reads the key from the stdio chain at each start - the project root's file, then the global root's
     const docker = plan(inv(MAC), pickOne('github', { route: 'local', scope: 'local' }), opts('/h'));
-    assert.deepStrictEqual([docker.keys[0]!.kind, docker.keys[0]!.files], ['stdio', [P('/work/shop', '.alfred-tools', '.mcps-secrets'), P('/h', '.alfred-tools', '.mcps-secrets')]]);
-    assert.match(renderPlan(docker), /the apply writes it into the registration, from /);
+    assert.deepStrictEqual([docker.keys[0]!.kind, docker.keys[0]!.files], ['bridge', [P('/work/shop', '.alfred-tools', '.mcps-secrets'), P('/h', '.alfred-tools', '.mcps-secrets')]]);
+    assert.match(renderPlan(docker), /mcp-bridge\.js reads it/);
 });
 
 test('scopes: every scope writes absolute paths with ~ expanded; project scope too, proven relative or not', () => {
@@ -527,7 +529,7 @@ test('changing the route rebuilds from the catalog; changing only the key adds t
     const user = installed('context7', { route: 'remote', scope: 'user' });
     const local = plan(inv(MAC, { registrations: [user] }), changeOf(user, { route: 'local' }), opts('/h'));
     const replace = (local.steps.find((x) => x.op === 'mcp-replace') as McpReplaceStep);
-    assert.deepStrictEqual([replace.entry.command, replace.entry.args!.includes('--api-key')], ['npx', false]);
+    assert.deepStrictEqual([replace.entry.command, replace.entry.args!.includes('--api-key'), launcherParts(replace.entry)?.inner.command, launcherParts(replace.entry)?.optional], ['node', false, 'npx', true]);
     assert.ok(!('CONTEXT7_API_KEY' in (replace.entry.env || {})));
     assert.ok(local.notes.some((n) => n.startsWith('context7: fill CONTEXT7_API_KEY in ')), local.notes.join('\n'));
     const moved = plan(inv(MAC, { registrations: [r] }), changeOf(r, { route: 'local', scope: 'local' }), opts('/h'));
@@ -839,7 +841,7 @@ test('the CLI form prints a plan and writes it for apply.js', () => {
 });
 
 test('answers.machine from prereq.js reaches the plan: no docker picks the github binary, docker keeps the image; an explicit option wins', () => {
-    const entryOf = (answers: Answers, machine?: { docker?: boolean }) => addStep(plan(inv(MAC), answers, opts('/Users/me', { machine }))).entry;
+    const entryOf = (answers: Answers, machine?: { docker?: boolean }) => launchOf(addStep(plan(inv(MAC), answers, opts('/Users/me', { machine }))).entry);
     const github = { picks: { github: { route: 'local' } } };
     assert.strictEqual(entryOf({ ...github, machine: { docker: true } }).command, 'docker');
     const bin = entryOf({ ...github, machine: { docker: false } });
@@ -1524,20 +1526,23 @@ test('D5: each keyed route at each scope', () => {
         {
             const p = at(id!, { route, scope });
             assert.deepStrictEqual(p.errors, [], `${id} ${scope}`);
-            assert.strictEqual(p.keys[0]!.kind, 'stdio');
+            assert.strictEqual(p.keys[0]!.kind, 'bridge');
+            assert.notStrictEqual(launcherParts(addStep(p).entry), null, `${id} ${scope}`);
         }
     }
-    // context7 npm: keyless only at project scope, written in when picked at local and global scope
+    // context7 npm: keyless only at project scope, the launcher when picked at local and global scope
     assert.ok(!addStep(at('context7', { route: 'local', scope: 'project' })).entry.args!.includes('--api-key'));
     assert.ok(!('CONTEXT7_API_KEY' in (addStep(at('context7', { route: 'local', scope: 'project' })).entry.env || {})));
     assert.match(at('context7', { route: 'local', scope: 'project', token: true }).errors.join(), /keyless at project scope/);
-    // picked at local and global scope with the name filled nowhere: no key argument, and the line to fill it (spec F2)
+    // picked at local and global scope with the name filled nowhere: the optional launcher, and the line to fill it
     for (const scope of ['local', 'user'])
     {
         const p = at('context7', { route: 'local', scope, token: true });
-        assert.ok(!addStep(p).entry.args!.includes('--api-key'), scope);
-        assert.ok(!('CONTEXT7_API_KEY' in (addStep(p).entry.env || {})), scope);
-        assert.ok(p.notes.some((n) => n.startsWith('context7: fill CONTEXT7_API_KEY in ')), scope);
+        const entry = addStep(p).entry;
+        assert.ok(!entry.args!.includes('--api-key'), scope);
+        assert.ok(!('CONTEXT7_API_KEY' in (entry.env || {})), scope);
+        assert.strictEqual(launcherParts(entry)?.optional, true, scope);
+        assert.ok(p.notes.some((n) => n.startsWith('context7: fill CONTEXT7_API_KEY in ') && n.includes('(optional)')), scope);
     }
 });
 
@@ -1719,9 +1724,10 @@ test('a key name outside ^[A-Za-z_][A-Za-z0-9_]*$ is a plan error that states th
     assert.strictEqual(ok.keys[0]!.variable, 'ACME_GITHUB_TOKEN');
     // a stdio route: the step carries the name and the stdio chain; the server's own variable keeps its name
     const d = plan(inv(MAC), { picks: { github: { route: 'local', scope: 'local' } }, keyNames: { github: 'ACME_GITHUB_TOKEN' } }, opts('/Users/me'));
-    assert.deepStrictEqual(addStep(d).key, { name: 'ACME_GITHUB_TOKEN', files: [path.posix.join('/work/shop', '.alfred-tools', '.mcps-secrets'), path.posix.join('/Users/me', '.alfred-tools', '.mcps-secrets')] });
-    assert.ok(Object.hasOwn(addStep(d).entry.env!, G));
-    assert.strictEqual(addStep(plan(inv(MAC), pickOne('github', { route: 'local', scope: 'local' }), opts('/Users/me'))).key!.name, G, 'no answer: the catalog\'s name');
+    assert.strictEqual(addStep(d).key, undefined, 'a launcher reads the key itself: no key step');
+    assert.strictEqual(d.keys[0]!.variable, 'ACME_GITHUB_TOKEN');
+    assert.deepStrictEqual([launcherParts(addStep(d).entry)?.envVar, launcherParts(addStep(d).entry)?.keyName], [G, 'ACME_GITHUB_TOKEN'], 'the server\'s own variable keeps its name');
+    assert.strictEqual(launcherParts(addStep(plan(inv(MAC), pickOne('github', { route: 'local', scope: 'local' }), opts('/Users/me'))).entry)?.keyName, G, 'no answer: the catalog\'s name');
     assert.strictEqual(addStep(plan(inv(MAC), pickOne('context7', { route: 'local', scope: 'local' }), opts('/Users/me'))).key, undefined, 'no key picked: no key step');
 });
 
@@ -1747,7 +1753,7 @@ test('settings: \'Keep these settings\' lists NAME=value; \'No settings\' for an
     assert.deepStrictEqual([(env as EntryEnv).NO_UI, (env as EntryEnv).EXTRA_FLAG, (env as EntryEnv).ALLOW_REMOTE_APP_URLS], ['false', '1', 'false']);
     // a Docker route passes each new setting into the container
     const gh = addStep(plan(inv(MAC), { picks: { github: { route: 'local', scope: 'local' } }, settings: { github: { GITHUB_TOOLSETS: 'repos' } } }, opts('/Users/me'))).entry;
-    assert.deepStrictEqual(gh.args, ['run', '-i', '--rm', '-e', G, '-e', 'GITHUB_TOOLSETS', 'ghcr.io/github/github-mcp-server:v2.1.0', 'stdio']);
+    assert.deepStrictEqual(launchOf(gh).args, ['run', '-i', '--rm', '-e', G, '-e', 'GITHUB_TOOLSETS', 'ghcr.io/github/github-mcp-server:v2.1.0', 'stdio']);
     assert.strictEqual((gh.env as EntryEnv).GITHUB_TOOLSETS, 'repos');
 });
 
@@ -1817,14 +1823,17 @@ test('the file steps come before the registration steps and the records last', {
     const p = plan(inv(MAC), { picks: { github: { route: 'remote', scope: 'user' }, 'playwright-chrome': { scope: 'local' }, sentry: { route: 'local', scope: 'local' } } }, opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
     const ops = p.steps.map((s) => s.op);
-    const files = ['root-ignore', 'write-helper', 'ensure-key-name'];
+    const files = ['root-ignore', 'write-helper', 'write-bridge', 'ensure-key-name'];
     const lastFile = Math.max(...ops.map((o, i) => (files.includes(o) ? i : -1)));
     const firstReg = ops.findIndex((o) => !files.includes(o));
     assert.ok(lastFile < firstReg, ops.join(', '));
     assert.deepStrictEqual(ops.slice(-2), ['record-root', 'record-root']);
     const of = (op: string) => p.steps.filter((s) => s.op === op);
     assert.deepStrictEqual(of('root-ignore').map((s) => (s as PathStep).path), ['/work/shop/.alfred-tools', '/Users/me/.alfred-tools']);
-    assert.deepStrictEqual(of('write-helper').map((s) => (s as PathStep).path), ['/Users/me/.alfred-tools']);
+    // the hosted github at user scope writes the helper in the global root; sentry's launcher at local scope writes the helper
+    // and the bridge in the project root
+    assert.deepStrictEqual(of('write-helper').map((s) => (s as PathStep).path), ['/work/shop/.alfred-tools', '/Users/me/.alfred-tools']);
+    assert.deepStrictEqual(of('write-bridge').map((s) => (s as PathStep).path), ['/work/shop/.alfred-tools']);
     assert.deepStrictEqual(of('ensure-key-name').map((s) => [(s as ListWriteStep).file, (s as EnsureKeyNameStep).names]), [['/work/shop/.alfred-tools/.mcps-secrets', [S_VAR]], ['/Users/me/.alfred-tools/.mcps-secrets', [G]]]);
     assert.deepStrictEqual(of('record-root').map((s) => [(s as ListWriteStep).family, (s as RecordRootStep).root]), [['project', '/work/shop/.alfred-tools'], ['global', '/Users/me/.alfred-tools']]);
     const text = renderPlan(p);
@@ -1950,7 +1959,7 @@ test('install with no key answer: gitlab gets the helper, an empty name line and
     assert.ok(!oauth.steps.some((s) => s.op === 'ensure-key-name'));
 });
 
-test("context7's local route: keyless at project scope; at local scope an unfilled key leaves CONTEXT7_API_KEY out", { skip: POSIX_FIXTURE }, () => {
+test("context7's local route: keyless at project scope; at local scope the launcher, optional while its name is unfilled", { skip: POSIX_FIXTURE }, () => {
     const project = plan(inv(MAC), pickOne('context7', { route: 'local', scope: 'project' }), opts('/Users/me'));
     assert.deepStrictEqual(project.errors, []);
     assert.ok(!(project.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry.args!.includes('--api-key'));
@@ -1964,9 +1973,10 @@ test("context7's local route: keyless at project scope; at local scope an unfill
         const add = (local.steps.find((s) => s.op === 'mcp-add') as McpAddStep);
         assert.ok(!add.entry.args!.includes('--api-key'), JSON.stringify(add.entry));
         assert.ok(!('CONTEXT7_API_KEY' in (add.entry.env || {})), JSON.stringify(add.entry));
+        assert.strictEqual(launcherParts(add.entry)?.optional, true);
         assert.strictEqual(add.key, undefined);
         assert.deepStrictEqual((local.steps.filter((s) => s.op === 'ensure-key-name') as EnsureKeyNameStep[]).map((s) => [s.file, s.names]), [[file, ['CONTEXT7_API_KEY']]]);
-        assert.ok(local.notes.includes(`context7: fill CONTEXT7_API_KEY in ${file}, then /alfred-tools:configure -> Use a key from .mcps-secrets writes it in`), local.notes.join('\n'));
+        assert.ok(local.notes.some((n) => n.startsWith(`context7: fill CONTEXT7_API_KEY in ${file} (optional); the launcher reads it`)), local.notes.join('\n'));
         // filled: the key goes in
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, 'CONTEXT7_API_KEY=v-not-printed\n');
@@ -1974,8 +1984,9 @@ test("context7's local route: keyless at project scope; at local scope an unfill
         assert.deepStrictEqual(filled.errors, []);
         const f = (filled.steps.find((s) => s.op === 'mcp-add') as McpAddStep);
         assert.ok(!f.entry.args!.includes('--api-key'), JSON.stringify(f.entry));
-        assert.strictEqual(f.entry.env!['CONTEXT7_API_KEY'], '${CONTEXT7_API_KEY}');
-        assert.strictEqual(f.key!.name, 'CONTEXT7_API_KEY');
+        assert.ok(!('CONTEXT7_API_KEY' in (f.entry.env || {})), JSON.stringify(f.entry));
+        assert.strictEqual(f.key, undefined);
+        assert.ok(f.entry.args!.includes('CONTEXT7_API_KEY=CONTEXT7_API_KEY?'));
         assert.ok(!JSON.stringify(filled).includes('v-not-printed'));
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
@@ -2204,7 +2215,8 @@ test('the 0.1.x key files are read for names only: a held key is never matched a
     try
     {
         const v = `v-${Date.now()}-not-printed`;
-        const entry = installed('sentry', { route: 'local', scope: 'local' }).entry;
+        // the plain sentry entry as 0.6.0 wrote it: its key in the env under the route's own name
+        const entry = launcherParts(installed('sentry', { route: 'local', scope: 'local' }).entry)!.inner;
         entry.env = { ...entry.env, SENTRY_ACCESS_TOKEN: v };
         assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'sentry', JSON.stringify(entry), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
         // the project's 0.1.x key file holds the same value under a name of the user's own

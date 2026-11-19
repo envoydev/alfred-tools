@@ -40,11 +40,9 @@ export function pickAnswers(base: PickBase, pick: PickAnswer, inventory: Invento
     // a switch between the hosted route and the bridge keeps the name: both read it from the hosted chain (0.4.0); a
     // route with no key has none
     const keyName = pick.keyName || ((route.helper || (current && launcherParts(current.entry))) && current && current.keyName ? current.keyName : null) || (liveKey && keyState ? keys.nameOfValue(keyState.files, liveKey) : null) || keyVar;
-    // a stdio optional key whose name is filled nowhere in the chain (spec F2): written with no key argument, never as an
-    // empty one - a stdio key is read only when the registration is written. A registration that holds its key keeps it.
-    const unfilledStdio = keyState !== null && keyState.kind === 'stdio' && route.authMode === 'optional-token' && scope !== 'project'
-        && !(sameRoute && current && current.token) && !keys.filledNames(keyState.files).some((filledEntry) => keyName !== undefined && filledEntry.names.includes(keyName));
-    const sendNow = wantToken && !unfilledStdio;
+    // a stdio key at local or global scope starts through the launcher, which reads the name at each start: a name filled nowhere
+    // is written empty into the chain's first file and the launcher starts without the key (an optional one) or says so
+    const sendNow = wantToken;
     // a bridge's URL names (0.4.0): answered, else the registration's (by position), else the catalog's. A name that is
     // the key's or reads as a credential is refused, typed or read (Ruling 3): a key never goes in a URL.
     const urlNames: Record<string, string> = {};
@@ -63,10 +61,9 @@ export function pickAnswers(base: PickBase, pick: PickAnswer, inventory: Invento
             urlNames[urlVar.var] = urlName;
         }
     }
-    if (unfilledStdio) out.notes.push(`${row.id}: fill ${keyName} in ${keyState.files[0]}, then /alfred-tools:configure -> Use a key from .mcps-secrets writes it in`);
     // macos-mcp's Shell (spec D4): answered, else what the registration has (its --config naming a known root's file), else
     // Off unless ~/.macos-mcp/config.toml is there
     const exists = context.exists || ((filePath: string) => fs.existsSync(filePath));
     const exclude = !route.excludeFile ? false : pick.exclude !== undefined ? Boolean(pick.exclude) : sameRoute && current ? excludeArgAt(current.entry, route.excludeFile, context) >= 0 : excludeRecommended({ platform: context.platform, home: context.home, exists });
-    return { params, wantToken, keyState, liveKey, keyName, unfilledStdio, sendNow, urlNames, exclude };
+    return { params, wantToken, keyState, liveKey, keyName, sendNow, urlNames, exclude };
 }

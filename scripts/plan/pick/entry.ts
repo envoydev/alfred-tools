@@ -1,11 +1,14 @@
 // One MCP pick's entry: its settings checked, its data folder placed, and the entry built from the catalog for a fresh
 // add or a new route, else edited from the registration as read - its pin, cut-off and the user's own args kept.
+import fs from 'node:fs';
 import { formatRoot, applyRoot } from '../../entries/locations.ts';
 import { checkHostedSettings, currentHostedSettings, defaultHostedSettings } from '../hosted-settings.ts';
 import { buildEntry, applyContext, bridgeParts, helperParts, helperGlobalRoot, bridgePathFor, launcherPlace, renameTemplate, helperFor, subst, rebridgedArgs } from '../../entries/entry.ts';
 import { EXECUTABLE_PATH_FLAG } from '../../entries/constants.ts';
 import { withExclude } from '../../entries/exclude.ts';
-import { launcherParts, launcherRoute, relaunchedArgs, unlaunched } from '../../entries/launcher.ts';
+import { launcherForm, launcherParts, launcherRoute, relaunchedArgs, unlaunched } from '../../entries/launcher.ts';
+import { pathFor } from '../../entries/platform.ts';
+import * as roots from '../../roots/roots.ts';
 import { routeField } from '../../catalog/rows.ts';
 import * as keys from '../../keys/keys.ts';
 import * as kept from '../../core/kept.ts';
@@ -129,8 +132,23 @@ export function pickEntry(base: PickBase, answers: PickAnswers, pick: PickAnswer
 
     const { params, sendNow, keyName, urlNames } = answers;
     const fresh = !current || current.route !== routeId;
-    const entry = !current || current.route !== routeId
+    let entry = !current || current.route !== routeId
         ? buildEntry(row, routeId, { rootStr, scope, executablePath: wantExec, token: sendNow, keyName, params, urlNames, settings: toolSettings, exclude: answers.exclude }, context, catalog.rules)
         : editedEntry(base, answers, current, { rootStr, wantExec, toolSettings }, context, out);
+    // a stdio route that uses a key (a required one, or an optional one that is on) at local or global scope starts through
+    // the launcher: the registration holds no key, and mcp-bridge.js reads it from .mcps-secrets at each start. A plain entry
+    // that holds its key (a move the user declined to launch) stays plain and is filled at the apply as before
+    if (launcherRoute(route, routeId, scope) && (route.authMode === 'token' || sendNow) && launcherParts(entry) === null && (fresh || keys.tokenFields(current?.entry, route).length === 0))
+    {
+        const wrapped = launcherForm(route, required(keyName, `${row.id}: its stdio route names no key`), launcherPlace(scope, context), entry);
+        entry = required(wrapped, `${row.id}: its stdio route holds no key in its environment to launch with`);
+    }
+    const launcher = launcherParts(entry);
+    if (launcher)
+    {
+        const exists = context.exists || ((filePath: string) => fs.existsSync(filePath));
+        if (roots.shippedState('bridge', launcher.path, exists).state === 'edited')
+            return out.errors.push(`${row.id}: mcp-bridge.js in ${pathFor(context.platform).dirname(launcher.path)} changed since alfred-tools wrote it - a launcher there would not start; /alfred-tools:fix (helper-stale) rewrites it, or delete it, then run this again`);
+    }
     return { entry, fresh, rootStr, ensure, dataAbs, hostedSettings: Boolean(hostedSettings) };
 }

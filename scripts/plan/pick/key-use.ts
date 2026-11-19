@@ -16,7 +16,7 @@ import type { PickAnswers, PickBase, PickKeyUse, Plan, PlanCtx } from '../types.
 export function pickKeyUse(base: PickBase, answers: PickAnswers, entry: ServerEntry, inventory: Inventory, context: PlanCtx, out: Plan): PickKeyUse
 {
     const { row, current, route, scope, name } = base;
-    const { keyState, keyName, liveKey, unfilledStdio } = answers;
+    const { keyState, keyName, liveKey } = answers;
     // a hosted route's helper reads the hosted chain each time Claude Code connects, a stdio route's key is written in by
     // the apply from the stdio chain; a route that sends a key has its name
     const keyed = keyState && keyName !== undefined && !(entry.headers && entry.headers.Authorization) ? { state: keyState, name: keyName } : null;
@@ -69,7 +69,7 @@ export function pickKeyUse(base: PickBase, answers: PickAnswers, entry: ServerEn
     }
     // a stdio key at local or global scope: the apply writes it in from the stdio chain under the key's name (R7); configure
     // rewrites a registration whose key differs from the chosen name's filled value, even when nothing else changed
-    const stepKey = !launcher && keyed && keyed.state.kind === 'stdio' && scope !== 'project' && !unfilledStdio ? { name: keyed.name, files: keyed.state.files } : null;
+    const stepKey = !launcher && keyed && keyed.state.kind === 'stdio' && scope !== 'project' ? { name: keyed.name, files: keyed.state.files } : null;
     const chosen = stepKey && current ? keys.valueIn(stepKey.files, stepKey.name) : null;
     const staleKey = chosen !== null && chosen.value !== liveKey;
     // the helper's own conditions (spec D4): the folder's trust at project and local scope, the declaring folder only at

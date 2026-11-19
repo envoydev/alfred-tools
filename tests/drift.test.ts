@@ -18,6 +18,7 @@ import type { Answers } from '../scripts/plan/types.ts';
 import type { DriftQuestion, Finding, MachineProbe } from '../scripts/fix/types.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
 import type { World } from './types.ts';
+import { installPlain } from './update-helpers.ts';
 
 const noMachine = (): MachineProbe => ({ exists: () => false, realpath: () => null, which: () => null, run: () => ({ status: 1, stdout: '', stderr: '' }), nodeVersion: '24.0.0' });
 
@@ -137,7 +138,8 @@ function keyInRegistrationOnly(w: World)
     fs.mkdirSync(root, { recursive: true });
     const value = `sntryu_${'0b'.repeat(16)}`;
     fs.writeFileSync(path.join(root, '.mcps-secrets'), `SENTRY_ACCESS_TOKEN=${value}\n`);
-    install(w, { picks: { sentry: { route: 'local', scope: 'user', token: true } } });
+    // the plain form a registration that holds its key keeps through a change; a fresh install writes the launcher instead
+    installPlain(w, 'sentry', 'user', { command: 'npx', args: ['-y', '@sentry/mcp-server@0.49.0'], env: { npm_config_before: '2026-11-19T23:59:59Z', SENTRY_AUTH_TOKEN: value } });
     fs.writeFileSync(path.join(root, '.mcps-secrets'), 'SENTRY_ACCESS_TOKEN=\n');
     return value;
 }

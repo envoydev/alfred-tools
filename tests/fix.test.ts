@@ -49,6 +49,7 @@ import type { Machine } from '../scripts/entries/types.ts';
 import type { Answers } from '../scripts/plan/types.ts';
 import type { World } from './types.ts';
 import type { CtxFor } from './fix-helpers.ts';
+import { installPlain } from './update-helpers.ts';
 import { noMachine, reg, ctxFor, detect, seed, ctxOf, put, ptRoot, localEntry, logged, gitInit, shownOf, SERENA_OLD } from './fix-helpers.ts';
 
 const catalog = catalogLib.load();
@@ -2220,9 +2221,10 @@ test('token-sync with a key changed in .mcps-secrets refills ~/.cursor/mcp.json 
     {
         const [v1, v2] = [hexv('one'), hexv('two')];
         secretsAt(homeRoot(w), { [SK]: v1 });
-        installBoth(w, { picks: { sentry: { route: 'local', scope: 'user', token: true } } });
+        // the plain form of an alfred-tools before 0.7.0: a fresh install now writes the launcher, which holds no key to sync
+        installPlain(w, 'sentry', 'user', { command: 'npx', args: ['-y', '@sentry/mcp-server@0.49.0'], env: { npm_config_before: '2026-11-19T23:59:59Z', [SA]: v1 } });
         const cursorFile = path.join(w.home, '.cursor', 'mcp.json');
-        assert.strictEqual(readJson(cursorFile).mcpServers.sentry.env[SA], v1, 'the install wrote the key into Cursor');
+        assert.strictEqual(readJson(cursorFile).mcpServers.sentry.env[SA], v1, 'the plain copy holds the key in Cursor');
         secretsAt(homeRoot(w), { [SK]: v2 });
         const ts = () => detect(ctxOf(w), 'token-sync').found;
         assert.deepStrictEqual(ts().map((f) => [f.name, f.scope, Boolean(f.blocked)]), [['sentry', 'user', false]]);

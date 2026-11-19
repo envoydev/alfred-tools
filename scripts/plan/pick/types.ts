@@ -34,7 +34,6 @@ export interface PickAnswers
     keyState: KeyState | null;
     liveKey: string | null;
     keyName: string | undefined;
-    unfilledStdio: boolean;
     sendNow: boolean;
     urlNames: Record<string, string>;
     exclude: boolean;

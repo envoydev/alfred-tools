@@ -5,8 +5,11 @@ import path from 'node:path';
 import * as update from '../scripts/update/command.ts';
 import * as inventory from '../scripts/inventory/inventory.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
+import { plan } from '../scripts/plan/plan.ts';
+import { apply } from '../scripts/apply/run.ts';
 import { readJson } from './helpers.ts';
-import type { Release } from '../scripts/catalog/types.ts';
+import type { Catalog, Release } from '../scripts/catalog/types.ts';
+import type { ServerEntry } from '../scripts/core/types.ts';
 import type { MachineProbe } from '../scripts/fix/types.ts';
 import type { World } from './types.ts';
 
@@ -38,3 +41,14 @@ export const reAdd = (w: World, name: string, entry: unknown) =>
     cli.runClaude(['mcp', 'remove', name, '-s', 'local'], { cwd: w.project, env: w.env });
     assert.strictEqual(cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
 };
+
+// A stdio registration in the plain form an alfred-tools before 0.7.0 wrote, its key in its env: it is registered as it is, then
+// a configure that only adds Cursor writes the list entry and Cursor's copy from it. A plain entry that holds its key stays
+// plain through a change, so this is the form the install no longer builds.
+export function installPlain(w: World, name: string, scope: string, entry: ServerEntry, catalog?: Catalog)
+{
+    assert.strictEqual(cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
+    const p = plan(inventory.buildInventory({ project: w.project, env: w.env }), { change: { [`mcp:${name}~${scope}`]: { clients: ['claude', 'cursor'] } } }, { home: w.home, env: w.env, ...(catalog ? { catalog } : {}) });
+    assert.deepStrictEqual(p.errors, []);
+    assert.strictEqual(apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
+}

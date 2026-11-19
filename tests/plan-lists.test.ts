@@ -14,6 +14,7 @@ import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
 import { load } from '../scripts/catalog/catalog.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import { renderPlan } from '../scripts/plan/render.ts';
+import { launcherParts } from '../scripts/entries/launcher.ts';
 import { signInParts, signInFormOf } from '../scripts/entries/sign-in.ts';
 import { FILES, READ_GUARD } from '../scripts/roots/roots.ts';
 import * as wsLib from '../scripts/roots/workspace.ts';
@@ -595,8 +596,8 @@ test('workspace: a record read as no workspace is named once in a plan that writ
 });
 
 // ---- stdio keyed routes (spec D6) --------------------------------------------------------------------------------------
-const D6_NOTE = 'Cursor: not written - this route keeps its key in the registration, and .cursor/mcp.json may be committed; pick the hosted route for Cursor';
-// context7 local holds its key only once the name is filled (its --api-key arg): a real project with a filled key file
+const D6_NOTE = 'Cursor: not written - Cursor has no private per-project file, and .cursor/mcp.json may be committed; install at user scope for Cursor';
+// context7 local is the launcher once a key is picked: a real project with a filled key file
 function keyedProject()
 {
     const w = cursorWorld();
@@ -610,7 +611,7 @@ for (const id of ['github', 'sentry', 'context7'])
     test(`${id} local, keyed, at local scope: no Cursor write and the note`, { skip: POSIX_FIXTURE }, () => {
         const k = id === 'context7' ? keyedProject() : { inv: hinv(), opts: HOPTS };
         const p = plan(k.inv, { clients: ['claude', 'cursor'], picks: { [id]: { route: 'local', scope: 'local', token: true } } }, k.opts);
-        assert.ok(cursorMcp.stdioKeyed((p.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry, catalogAll.byId.get(id), 'local'), 'the entry holds its key field');
+        assert.notStrictEqual(launcherParts((p.steps.find((s) => s.op === 'mcp-add') as McpAddStep).entry), null, 'the entry is a launcher');
         assert.deepStrictEqual(p.errors, []);
         assert.ok(p.notes.includes(D6_NOTE), p.notes.join('\n'));
         assert.deepStrictEqual(upsertsOf(p).map((u) => u.server.clients), [['claude']]);

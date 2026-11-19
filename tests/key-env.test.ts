@@ -9,6 +9,7 @@ import * as catalogLib from '../scripts/catalog/catalog.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import { renderPlan } from '../scripts/plan/render.ts';
 import { currentOf } from '../scripts/entries/entry.ts';
+import { launcherParts } from '../scripts/entries/launcher.ts';
 import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
 import { MAC, POSIX_FIXTURE, inv, opts, pickOne, addStep, reg, changeOf } from './plan-helpers.ts';
 import type { McpReplaceStep } from '../scripts/plan/types.ts';
@@ -25,7 +26,7 @@ test("stdioKeyed reads a context7 key in env.CONTEXT7_API_KEY on the 'local' rou
     assert.strictEqual(cursorMcp.stdioKeyed({ command: 'npx', args: ['-y', '@upstash/context7-mcp'], env: { CONTEXT7_API_KEY: 'x' } }, catalog.byId.get('context7'), 'local'), true);
 });
 
-test("context7's local route with a key at Local and Global puts it in env.CONTEXT7_API_KEY, never --api-key (spec D1)", { skip: POSIX_FIXTURE }, () => {
+test("context7's local route with a key at Local and Global starts through the launcher, never --api-key and no key in the env (spec D1)", { skip: POSIX_FIXTURE }, () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'c7-env-'));
     try
     {
@@ -42,8 +43,9 @@ test("context7's local route with a key at Local and Global puts it in env.CONTE
             assert.deepStrictEqual(p.errors, [], scope);
             const add = addStep(p);
             assert.ok(!add.entry.args!.includes('--api-key'), scope);
-            assert.strictEqual(add.entry.env!['CONTEXT7_API_KEY'], '${CONTEXT7_API_KEY}', scope);
-            assert.strictEqual(add.key!.name, 'CONTEXT7_API_KEY', scope);
+            assert.ok(!('CONTEXT7_API_KEY' in (add.entry.env || {})), scope);
+            assert.deepStrictEqual([launcherParts(add.entry)?.envVar, launcherParts(add.entry)?.keyName, launcherParts(add.entry)?.optional], ['CONTEXT7_API_KEY', 'CONTEXT7_API_KEY', true], scope);
+            assert.strictEqual(add.key, undefined, scope);
             assert.ok(!JSON.stringify(p).includes('test-key-not-real'), scope);
         }
         const keyless = addStep(plan(inv({ ...MAC, project }), pickOne('context7', { route: 'local', scope: 'local', token: false }), opts(home))).entry;
@@ -70,7 +72,7 @@ test('configure switching context7 local key off removes it from env, and a form
     }
 });
 
-test('configure turning the key on for a keyless local context7 puts it in env.CONTEXT7_API_KEY, never --api-key (spec D1)', { skip: POSIX_FIXTURE }, () => {
+test('configure turning the key on for a keyless local context7 makes it the launcher, never --api-key (spec D1)', { skip: POSIX_FIXTURE }, () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'c7-on-'));
     try
     {
@@ -87,7 +89,8 @@ test('configure turning the key on for a keyless local context7 puts it in env.C
         assert.deepStrictEqual(p.errors, []);
         const replace = p.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep;
         assert.ok(replace, 'the key route is a change to apply');
-        assert.strictEqual(replace.entry.env!['CONTEXT7_API_KEY'], '${CONTEXT7_API_KEY}');
+        assert.strictEqual(launcherParts(replace.entry)?.envVar, 'CONTEXT7_API_KEY');
+        assert.ok(!('CONTEXT7_API_KEY' in (replace.entry.env || {})), JSON.stringify(replace.entry));
         assert.ok(!replace.entry.args!.includes('--api-key'), JSON.stringify(replace.entry));
         assert.ok(!JSON.stringify(p).includes('test-key-not-real'));
     }
