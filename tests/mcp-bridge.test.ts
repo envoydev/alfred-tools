@@ -400,11 +400,11 @@ test('a root under a type-module package.json runs with its own commonjs package
 
 test('the bridge requires only node: modules and ./mcp-headers.js, and its CREDENTIAL equals keys.js', () => {
     const src = fs.readFileSync(BRIDGE, 'utf8');
-    assert.match(src.split(/\r?\n/)[0]!, /^\/\/ alfred-tools mcp-bridge 3$/, 'the first line, CRLF or LF (roots.js SHIPPED_LINE reads both)');
+    assert.match(src.split(/\r?\n/)[0]!, /^\/\/ alfred-tools mcp-bridge 4$/, 'the first line, CRLF or LF (roots.js SHIPPED_LINE reads both)');
     const reqs = [...src.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]);
     assert.ok(reqs.length && reqs.every((r) => r!.startsWith('node:') || r === './mcp-headers.js'), reqs.join(', '));
     const b = bridge();
-    assert.strictEqual(b.BRIDGE_VERSION, 3);
+    assert.strictEqual(b.BRIDGE_VERSION, 4);
     assert.strictEqual(b.NEEDS_HELPER, 4);
     assert.ok(b.CREDENTIAL.test('MY_API_KEY') && !b.CREDENTIAL.test('SENTRY_ORG'));
     assert.strictEqual(helper().HELPER_VERSION, 6);

@@ -1,4 +1,4 @@
-// alfred-tools mcp-bridge 3
+// alfred-tools mcp-bridge 4
 'use strict';
 // The bridge a hosted route of runtime 'bridge' registers (0.4.0): `node <root>/mcp-bridge.js <url template> <KEY_NAME>
 // <SCHEME> <package@version> [<global root>] [--header NAME=VAR | --header NAME:value]...`. A hosted server whose URL holds a per-project value - Sentry's
@@ -25,11 +25,18 @@
 // chain as the key; its value reaches mcp-remote only as PT_BRIDGE_H<i> in its environment, and the command line holds
 // `NAME:${PT_BRIDGE_H<i>}`. An empty one is left out and takes no number. `NAME:value` is a fixed setting and goes in the
 // command line as written. A VAR that is the key's name, or a value equal to the key's, is refused.
+//
+// The run mode (bridge 4): `node mcp-bridge.js --run <ENV>=<KEY_NAME>[?] [<global root>] -- <command> [<args>...]` starts a
+// stdio server with one key. At each start it reads KEY_NAME from the stdio chain - .mcps-secrets beside the bridge, then
+// in the global root, the first non-empty value wins - and starts the command with the value as ENV in the child's
+// environment only; the registration holds names, never a value. `?` makes the key optional: with none, the child starts
+// without it. A usage error exits 2 before any file is read; a required key with no value exits 1 before the command starts.
+const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
-const BRIDGE_VERSION = 3;
+const BRIDGE_VERSION = 4;
 const NEEDS_HELPER = 4;
 // a copy of keys.js credentialName's test (tests/lint.js checks the two are equal)
 const CREDENTIAL = /TOKEN|SECRET|PASSWORD|KEY|AUTH/i;
@@ -44,6 +51,13 @@ const ARG_RULE = /^[A-Za-z0-9_./:@+,=${}-]+$/;
 const PLACEHOLDER = /^\{([^{}?]*)(\?)?\}$/;
 const USAGE = 'usage: node mcp-bridge.js <url template> <KEY_NAME> <SCHEME> <package@version> [<root>] [--header NAME=VAR | --header NAME:value]...';
 const PLAIN = 'is not a plain name (letters, digits, _ . -)';
+const RUN_FLAG = '--run';
+const RUN_END = '--';
+const RUN_PAIR = /^([A-Za-z_][A-Za-z0-9_]*)=([A-Za-z_][A-Za-z0-9_]*)(\?)?$/;
+const RESERVED_ENV = /^PT_BRIDGE_/;
+const SECRETS = '.mcps-secrets';
+const RUN_USAGE = 'usage: node mcp-bridge.js --run <ENV>=<KEY_NAME>[?] [<root>] -- <command> [<args>...]';
+const EXIT = { usage: 2, failed: 1 };
 
 // The template's origin and path segments. -> { origin, segments } | null (not http(s), a brace in the origin, a query or
 // a fragment)
@@ -221,10 +235,69 @@ function launch(argv, env, { dir, platform, helper } = {})
     };
 }
 
-const fail = (text) => { process.stderr.write(`mcp-bridge: ${String(text).replace(/[\r\n]+/g, ' ')}\n`); process.exit(1); };
+// The files the run mode reads a key from: .mcps-secrets in `dir` (the folder beside the bridge), then in the global root;
+// equal to keys.js stdioChain at Local (dir = the project root) and at Global (dir = the global root, no globalRoot).
+function runChain(dir, globalRoot)
+{
+    return [...new Set([dir, globalRoot].filter(Boolean).map((d) => path.join(d, SECRETS)))];
+}
+
+// The run mode's arguments, as they follow `--run`; no file is read. -> { envVar, keyName, optional, globalRoot, command, args } | { error, code }
+function parseRun(argv)
+{
+    const usage = { error: RUN_USAGE, code: EXIT.usage };
+    const pair = RUN_PAIR.exec(argv[0] || '');
+    if (!pair || RESERVED_ENV.test(pair[1])) return usage;
+    const end = argv.indexOf(RUN_END);
+    if (end < 0) return usage;
+    const between = argv.slice(1, end);
+    const command = argv[end + 1];
+    if (between.length > 1 || !command) return usage;
+    return { envVar: pair[1], keyName: pair[2], optional: Boolean(pair[3]), globalRoot: between[0] || null, command, args: argv.slice(end + 2) };
+}
+
+// On Windows a command that is cmd, a .exe or a .com, or has a <name>.exe or <name>.com in a PATH folder, starts as it is;
+// anything else (npx.cmd, a script) goes through cmd.exe. -> { command, args }
+function winLaunch(command, args, env, exists)
+{
+    const base = path.win32.basename(command).toLowerCase();
+    const direct = base === 'cmd' || base === 'cmd.exe' || /\.(exe|com)$/.test(base);
+    const folders = String(env.PATH || env.Path || '').split(';').filter(Boolean);
+    if (direct || folders.some((folder) => ['.exe', '.com'].some((ext) => exists(path.win32.join(folder, command + ext))))) return { command, args };
+    return { command: env.ComSpec || 'cmd.exe', args: ['/d', '/c', command, ...args] };
+}
+
+// What to start for the run mode, read from argv (after `--run`) and the stdio chain; nothing is started here.
+// -> { command, args, childEnv, envVar, keyName, keyFile } | { error, code }
+function runLaunch(argv, env, { dir, platform, helper, exists } = {})
+{
+    const parsed = parseRun(argv);
+    if (parsed.error) return parsed;
+    const h = helper || require('./mcp-headers.js');
+    const files = runChain(dir, parsed.globalRoot ? path.resolve(parsed.globalRoot) : null);
+    const found = h.valueIn(parsed.keyName, files);
+    if (!found && !parsed.optional) return { error: `no value for ${parsed.keyName} in ${files.join(', ')}`, code: EXIT.failed };
+    const start = platform === 'win32' ? winLaunch(parsed.command, parsed.args, env, exists || fs.existsSync) : { command: parsed.command, args: parsed.args };
+    return {
+        ...start,
+        childEnv: found ? { ...env, [parsed.envVar]: found.value } : { ...env },
+        envVar: parsed.envVar,
+        keyName: parsed.keyName,
+        keyFile: found ? found.file : null,
+    };
+}
+
+const fail = (text, code = EXIT.failed) => { process.stderr.write(`mcp-bridge: ${String(text).replace(/[\r\n]+/g, ' ')}\n`); process.exit(code); };
 
 function main()
 {
+    const argv = process.argv.slice(2);
+    const run = argv[0] === RUN_FLAG;
+    if (run)
+    {
+        const checked = parseRun(argv.slice(1));
+        if (checked.error) fail(checked.error, checked.code);
+    }
     let helper = null;
     try { helper = require('./mcp-headers.js'); }
     catch { helper = null; }
@@ -232,15 +305,19 @@ function main()
     if (!helper || !(helper.HELPER_VERSION >= NEEDS_HELPER) || typeof helper.valueIn !== 'function' || typeof helper.readDotenv !== 'function' || typeof helper.authValue !== 'function')
         fail(`mcp-headers.js beside it is helper ${number} - the bridge needs ${NEEDS_HELPER}; run /alfred-tools:fix`);
     let r;
-    try { r = launch(process.argv.slice(2), process.env, { dir: __dirname, platform: process.platform, helper }); }
+    try
+    {
+        const options = { dir: __dirname, platform: process.platform, helper };
+        r = run ? runLaunch(argv.slice(1), process.env, options) : launch(argv, process.env, options);
+    }
     catch { r = { error: 'could not read the key files' }; }
-    if (r.error) fail(r.error);
+    if (r.error) fail(r.error, r.code);
     const child = spawn(r.command, r.args, { stdio: 'inherit', windowsHide: true, env: r.childEnv });
-    child.on('error', (e) => fail(`could not start npx - ${e.message}`));
+    child.on('error', (e) => fail(`could not start ${run ? r.command : 'npx'} - ${e.message}`));
     for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { child.kill(sig); } catch { /* already gone */ } });
     child.on('exit', (code, signal) => process.exit(signal ? 1 : (code === null ? 1 : code)));
 }
 
 if (require.main === module) main();
 
-module.exports = { BRIDGE_VERSION, NEEDS_HELPER, CREDENTIAL, templateNames, fillTemplate, launch };
+module.exports = { BRIDGE_VERSION, NEEDS_HELPER, CREDENTIAL, RUN_FLAG, templateNames, fillTemplate, launch, runChain, parseRun, runLaunch };

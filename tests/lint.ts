@@ -157,6 +157,7 @@ const BRIDGE_SHA256: Record<number, string> = {
     1: '8aff5de859ba6b69c3f40d20d35c2d36738d6c35c791a821614f53a48bc29635', // 0.4.0
     2: 'f4a2b606ee8ab71c0df750b09c47ea80d3474e887a85de81bc1f3dd1904a293c', // the plugin is alfred-tools
     3: '965f7464ba807f096826df78545f55357a573a203f5fe733ae7ba3fb51b41750', // header pairs: --header NAME=VAR or NAME:value
+    4: '2c1b879f0d1c71b6e0dff7c9f530a160aef5f5c9d6f8341ee9bab4ac84a247db', // the run mode: --run ENV=KEY -- <launch>
 };
 {
     const rel = path.join('scripts', 'copied', 'mcp-bridge.js');
