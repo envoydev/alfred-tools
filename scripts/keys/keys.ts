@@ -214,7 +214,6 @@ export function nameOfValue(files: string[], value: unknown): string | null
 // A name that looks like a credential (spec D9, the docs' own test): a key belongs in .mcps-secrets, never in a setting.
 export const credentialName = (name: unknown): boolean => /TOKEN|SECRET|PASSWORD|KEY|AUTH/i.test(String(name));
 
-
 // The entry with each former env field renamed to the route's current name once the pin `to` reads it (`envSince`), the
 // value kept: sentry's SENTRY_ACCESS_TOKEN becomes SENTRY_AUTH_TOKEN from @sentry/mcp-server 0.48.0 (spec D2). Below that
 // pin, with a pin that is not a version, or with nothing to rename: the same object, unchanged.

@@ -208,10 +208,11 @@ test('every fix row has the fields the brief names and points at an existing row
 
 // A secret guard reads a string under a key named like a credential as a key, so the catalog holds none: its mode
 // fields are `authMode` and `keyless`, and a credential-named field holds only a ${VAR}, a variable's name or a flag.
-// Then no guard treats the catalog as a key file, whatever words it knows.
+// Then no guard treats the catalog as a key file, whatever words it knows. The one subtree skipped is `envSince`: its
+// keys are env names (SENTRY_AUTH_TOKEN) and its values are release numbers, never a key.
 test('no catalog field named like a credential holds a plain string', () => {
     const CREDENTIAL = /(?:auth|token|key|secret|passw(?:or)?d|pwd|credentials?)$/i;
-    const NOT_A_VALUE = [/^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/, /^[A-Z][A-Z0-9_]*$/, /^--[a-z0-9-]+$/, /^\d+(\.\d+)+$/];
+    const NOT_A_VALUE = [/^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/, /^[A-Z][A-Z0-9_]*$/, /^--[a-z0-9-]+$/];
     const bad: string[] = [];
     const walk = (v: unknown, at: string): void =>
     {
@@ -219,6 +220,7 @@ test('no catalog field named like a credential holds a plain string', () => {
         if (!v || typeof v !== 'object') return undefined;
         for (const [k, x] of Object.entries(v))
         {
+            if (k === 'envSince') continue;
             if (typeof x === 'string' && CREDENTIAL.test(k) && !NOT_A_VALUE.some((re) => re.test(x))) bad.push(`${at}.${k}`);
             walk(x, `${at}.${k}`);
         }

@@ -262,7 +262,7 @@
       "symptom": "sentry's local route at @sentry/mcp-server 0.48.0 or newer passes its key as SENTRY_ACCESS_TOKEN, which that release reads only as a deprecated alias with a warning; since 0.7.0 alfred-tools passes SENTRY_AUTH_TOKEN, and the key's name in .mcps-secrets stays SENTRY_ACCESS_TOKEN",
       "detect": "sentryAuthEnvDetect",
       "fix": "sentryAuthEnvFix",
-      "verifiedOn": "this build: tests/fix.test.ts and tests/update.test.ts sentry-auth-env (2026-11-19)",
+      "verifiedOn": "this build: tests/sentry-env.test.ts sentry-auth-env (2026-11-19)",
       "source": "docs/sources.md 'Sentry MCP server - SENTRY_AUTH_TOKEN (read 2026-11-19)'; docs/superpowers/specs/2026-11-19-pre-release-follow-up-design.md D2"
     },
     {
