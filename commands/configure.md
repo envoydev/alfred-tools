@@ -318,7 +318,7 @@ its output file for the link line. The sign-in returns to `http://localhost:<por
 running the client: over SSH, forward that port first with `ssh -L <port>:localhost:<port> <host>` (the port is in the
 link's `redirect_uri`), or open the link in a browser on that machine. On a failure say why, that the user can run it
 again, and that otherwise the first session start opens the browser inside its 30-second limit. 'At the next session
-start': say that, and that `/mcp` reconnects the server after the browser sign-in.
+start': say exactly that, and that `/mcp` reconnects the server after the browser sign-in.
 
 <!-- /shared:sign-in -->
 
