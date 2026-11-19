@@ -66,7 +66,7 @@ test('configure switching context7 local key off removes it from env, and a form
 
 test("a key route's env key is not read as a kept optional key: sentry local -> remote with no key answer stays OAuth (spec D1, currentOf)", () => {
     const sentry = catalog.byId.get('sentry')!;
-    const r = reg('sentry', 'local', { command: 'npx', args: ['-y', '@sentry/mcp-server@0.49.0'], env: { npm_config_before: '2026-11-19T23:59:59Z', SENTRY_AUTH_TOKEN: 'test-key-not-real' } }, 'sentry', 'local');
+    const r = reg('sentry', 'local', { command: 'npx', args: ['-y', '@sentry/mcp-server@0.49.0'], env: { npm_config_before: '2026-11-19T23:59:59Z', SENTRY_ACCESS_TOKEN: 'test-key-not-real' } }, 'sentry', 'local');
     assert.strictEqual(currentOf(sentry, r).token, false, 'token reads an optional key only');
     const p = plan(inv(MAC, { registrations: [r] }), changeOf(r, { route: 'remote' }), opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
