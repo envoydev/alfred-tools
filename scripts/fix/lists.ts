@@ -21,7 +21,7 @@ import * as workspace from '../roots/workspace.ts';
 import { deepEqual } from '../core/json-file.ts';
 import * as serenaConfig from '../apply/serena-config.ts';
 import { fieldOf, isManaged } from './common.ts';
-import { restoredLauncher } from './key-to-launcher.ts';
+import { restoredLauncher, restoreLauncherSteps } from './key-to-launcher.ts';
 import { READ_GUARD_RESIDUAL } from './constants.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRow } from '../catalog/types.ts';
@@ -352,7 +352,7 @@ export function clientDriftSteps(finding: Finding, context: FixCtx, input: Recor
             if (at) entry = keys.fillKeys(entry, row, routeId, fieldOf(finding, 'scope'), { [tokenVar]: at.value });
         }
         if (kept.holdsKept(entry)) throw new Error(`${finding.name} (${finding.scope}): the list's entry holds a key ${listServer.key ? `named ${listServer.key} ` : ''}that is filled nowhere - fill it, then run fix again`);
-        return [claudeStep(entry)];
+        return launched ? restoreLauncherSteps(claudeStep(entry), context) : [claudeStep(entry)];
     }
     if (answer === 'drop')
     {

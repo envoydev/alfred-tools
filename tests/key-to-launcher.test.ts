@@ -220,6 +220,93 @@ test('restore from a 0.6.0 list entry builds the launcher and writes no value', 
     finally { w.clean(); }
 });
 
+// a 0.6.0 list holding plain github at Local, and a registration that drifted from it with an arg the list lacks
+function driftedGithub(w: World, key: string): void
+{
+    secrets(projectRoot(w), { [GITHUB_KEY]: key });
+    writeJson(path.join(projectRoot(w), 'mcps.json'), { version: 1, servers: [{ name: 'github', scope: 'local', row: 'github', route: 'local', clients: ['claude'], entry: kept.maskCredentials(plainGithub(key), catalog.byId.get('github')), key: GITHUB_KEY }], own: [] });
+    seed(w, 'github', 'local', plainGithub(key, ['--read-only']));
+}
+const afterRestore = (w: World): string[] => detectAll(ctxOf(w)).found.filter((finding) => (finding.id === 'helper-missing' || finding.id === 'client-drift') && /github/.test(`${finding.found} ${finding.name}`)).map((finding) => finding.id);
+
+test('restore to the launcher writes the helper and the bridge, and the list entry follows, so detect finds neither helper-missing nor client-drift', () =>
+{
+    const w = world();
+    try
+    {
+        const key = keyValue();
+        driftedGithub(w, key);
+        assert.ok(!fs.existsSync(path.join(projectRoot(w), 'mcp-bridge.js')), 'no bridge in the root before');
+        const out = logged();
+        const result = applyFixes(ctxOf(w), ['none'], { tmp: tmpOf(w), log: out.log, input: { 'drift:claude:github~local': 'restore' } });
+        assert.strictEqual(result.failed, null, out.text());
+        assert.ok(launcherParts(localEntry(w, 'github')), 'the registration is a launcher');
+        for (const file of ['mcp-bridge.js', 'mcp-headers.js']) assert.ok(fs.existsSync(path.join(projectRoot(w), file)), `${file} written`);
+        assert.strictEqual(roots.shippedState('bridge', path.join(projectRoot(w), 'mcp-bridge.js')).state, 'same');
+        const listed = readJson(path.join(projectRoot(w), 'mcps.json')).servers.find((server: { name: string }) => server.name === 'github');
+        assert.ok(launcherParts(listed.entry), 'the list entry is the launcher form');
+        assert.deepStrictEqual(afterRestore(w), []);
+        assert.deepStrictEqual(filesShowing(w, key), [], 'no file but .mcps-secrets holds the key');
+    }
+    finally { w.clean(); }
+});
+
+test('restore to the launcher over an edited bridge is blocked with the helper-stale text and writes nothing', () =>
+{
+    const w = world();
+    try
+    {
+        const key = keyValue();
+        driftedGithub(w, key);
+        const bridge = path.join(projectRoot(w), 'mcp-bridge.js');
+        put(bridge, `${roots.shippedSource('bridge')}// mine\n`);
+        const [entry, list] = [localEntry(w, 'github'), fs.readFileSync(path.join(projectRoot(w), 'mcps.json'), 'utf8')];
+        const result = applyFixes(ctxOf(w), ['none'], { tmp: tmpOf(w), log: () => {}, input: { 'drift:claude:github~local': 'restore' } });
+        assert.ok(result.failed?.includes(`mcp-bridge.js in ${projectRoot(w)} changed since alfred-tools wrote it - /alfred-tools:fix (helper-stale) rewrites it, or delete it, then run fix again`), String(result.failed));
+        assert.deepStrictEqual(localEntry(w, 'github'), entry, 'the registration is as it was');
+        assert.strictEqual(fs.readFileSync(path.join(projectRoot(w), 'mcps.json'), 'utf8'), list, 'the list is as it was');
+        assert.strictEqual(fs.readFileSync(bridge, 'utf8'), `${roots.shippedSource('bridge')}// mine\n`, 'the edited bridge is as it was');
+        assert.ok(!fs.existsSync(path.join(projectRoot(w), 'mcp-headers.js')), 'no helper written');
+    }
+    finally { w.clean(); }
+});
+
+test('key-to-launcher and a restore answer on one drifted server: the restore comes first, key-to-launcher waits for the next run', () =>
+{
+    const w = world();
+    try
+    {
+        const key = keyValue();
+        driftedGithub(w, key);
+        const out = logged();
+        const result = applyFixes(ctxOf(w), ['key-to-launcher'], { tmp: tmpOf(w), log: out.log, input: { 'drift:claude:github~local': 'restore' } });
+        assert.strictEqual(result.failed, null, out.text());
+        const parts = launcherParts(localEntry(w, 'github'));
+        assert.ok(parts, 'a launcher');
+        assert.deepStrictEqual(parts.inner.args, plainGithub(key).args, 'the list entry, not the drifted one (no --read-only)');
+        assert.deepStrictEqual(afterRestore(w), []);
+        assert.deepStrictEqual(found(w), []);
+    }
+    finally { w.clean(); }
+});
+
+test('key-to-launcher skips a server with a client-drift finding no answer was given for, and says why', () =>
+{
+    const w = world();
+    try
+    {
+        const key = keyValue();
+        driftedGithub(w, key);
+        const entry = localEntry(w, 'github');
+        const out = logged();
+        const result = applyFixes(ctxOf(w), ['key-to-launcher'], { tmp: tmpOf(w), log: out.log });
+        assert.deepStrictEqual(result.skipped.map((skipped) => skipped.id), ['key-to-launcher']);
+        assert.match(out.text(), /skipped key-to-launcher on .*github.*client-drift/);
+        assert.deepStrictEqual(localEntry(w, 'github'), entry);
+    }
+    finally { w.clean(); }
+});
+
 test('restore keeps a registration key that differs from the file', () =>
 {
     const w = world();

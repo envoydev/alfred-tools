@@ -24,6 +24,7 @@ import { apply } from '../apply/run.ts';
 import * as cli from '../core/claude-cli.ts';
 import { writeJob, fetchJob, nextLines } from '../apply/fetch.ts';
 import { DETECTORS, FILE_STEPS, MACHINE_FIXES, REGISTRATION_FIXES, gates, helperStaleFix, machineOf, movedRoots, passesGate, repointDataMap, repointEntry, rootMoveFix } from './fix-functions.ts';
+import { waitsForDrift } from './key-to-launcher.ts';
 import { realMachine, clone, fieldOf, isManaged } from './common.ts';
 import { retiredServerSteps } from './retired-server.ts';
 import { FIX_ID } from './constants.ts';
@@ -249,6 +250,11 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         if (why === 'left') { result.skipped.push(finding); log(`left    client-drift on ${where(finding)}: ${finding.app === 'cursor' ? 'Cursor' : 'Claude Code'}'s copy as it is`); continue; }
         result.skipped.push(finding);
         log(`skipped client-drift on ${where(finding)}: ${why}`);
+    }
+    for (const finding of picked.filter((candidate) => !result.skipped.includes(candidate) && waitsForDrift(candidate, detected.found, input)))
+    {
+        result.skipped.push(finding);
+        log(`skipped ${finding.id} on ${where(finding)}: client-drift is open on it - answer that first (restore or keep), then run fix again`);
     }
     let todo = picked.filter((candidate) => !result.skipped.includes(candidate));
 

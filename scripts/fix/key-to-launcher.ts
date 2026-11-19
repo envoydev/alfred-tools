@@ -10,10 +10,13 @@ import { launcherPlace } from '../entries/entry.ts';
 import { launcherParts } from '../entries/launcher.ts';
 import { launcherForm, launcherRoute } from '../entries/launcher-form.ts';
 import { keyIn } from './registration.ts';
+import { useRoots, fileSteps } from '../plan/root-files.ts';
+import { repairTail } from '../plan/repair-tail.ts';
 import { FIX_ID, LAUNCHER_SCOPES, ONE_VAR } from './constants.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
 import type { Roots } from '../entries/types.ts';
+import type { McpAddStep, McpReplaceStep, PlanStep } from '../plan/types.ts';
 import type { InvRegistration } from '../inventory/types.ts';
 import type { Finding, FixCtx } from './types.ts';
 
@@ -40,6 +43,14 @@ function heldKeyOf(entry: ServerEntry, route: CatalogRoute): string | null
 // marker) that differs from the chain's value is the only copy of the one that works. Compared in process, never printed.
 const isOnlyCopy = (held: string, fileValue: string): boolean => held !== '' && !ONE_VAR.test(held) && !held.includes(kept.MARKER) && held !== fileValue;
 
+// The scope's root, when its mcp-bridge.js is one the user edited: the launcher would run it, so it is never overwritten here.
+const editedBridgeRoot = (context: FixCtx, resolved: Roots, scope: string): string | null =>
+{
+    const root = resolved[roots.familyOf(scope)];
+    return root && roots.shippedState('bridge', pathFor(context.platform).join(root, roots.FILES.bridge)).state === 'edited' ? root : null;
+};
+const editedBridgeText = (root: string): string => `mcp-bridge.js in ${root} changed since alfred-tools wrote it - /alfred-tools:fix (helper-stale) rewrites it, or delete it, then run fix again`;
+
 export function keyToLauncherDetect(context: FixCtx): Finding[]
 {
     const resolved = rootsOf(context);
@@ -65,9 +76,9 @@ export function keyToLauncherDetect(context: FixCtx): Finding[]
         // a placeholder or an empty field holds no key to lose; a real key that differs from the file's is the only copy of the one that works
         if (isOnlyCopy(held, hit.value))
             return [common.finding(FIX_ID.keyToLauncher, registration, `the registration holds a key that differs from the one in ${hit.file}`, { ...extra, blocked: `${registration.name} holds a key that differs from the one in ${hit.file} - put the key that works in ${hit.file} as ${name} (or run fix, whose token-sync takes the file's), then run fix again` })];
-        const root = resolved[roots.familyOf(registration.scope)];
-        if (root && roots.shippedState('bridge', pathFor(context.platform).join(root, roots.FILES.bridge)).state === 'edited')
-            return [common.finding(FIX_ID.keyToLauncher, registration, 'the root\'s mcp-bridge.js is not the one alfred-tools wrote', { ...extra, blocked: `mcp-bridge.js in ${root} changed since alfred-tools wrote it - /alfred-tools:fix (helper-stale) rewrites it, or delete it, then run fix again` })];
+        const editedIn = editedBridgeRoot(context, resolved, registration.scope);
+        if (editedIn !== null)
+            return [common.finding(FIX_ID.keyToLauncher, registration, 'the root\'s mcp-bridge.js is not the one alfred-tools wrote', { ...extra, blocked: editedBridgeText(editedIn) })];
         return [common.finding(FIX_ID.keyToLauncher, registration, `the registration holds its key - it moves to the launcher, which reads ${name} from ${hit.file} each time the server starts`, extra)];
     });
 }
@@ -97,3 +108,25 @@ export function restoredLauncher(entry: ServerEntry, listKey: string | null, row
     const held = heldKeyOf(keys.moveArgKeyToEnv(entry, route), route);
     return held !== null && isOnlyCopy(held, hit.value) ? null : launcherForm(route, name, placeOf(context, scope, resolved), entry);
 }
+
+// The plan of a restore that built a launcher (spec Step 5): the root's helper and bridge first, as fix writes them for a
+// registration fix, then the registration, then the list entry and Cursor's copy from it - so the launcher starts, and the
+// list holds the launcher form, not the plain one the next run would find drifted. A root whose bridge was edited blocks
+// it and nothing is written, as key-to-launcher's detect does.
+export function restoreLauncherSteps(step: McpReplaceStep | McpAddStep, context: FixCtx): PlanStep[]
+{
+    const resolved = rootsOf(context);
+    const editedIn = editedBridgeRoot(context, resolved, step.scope);
+    if (editedIn !== null) throw new Error(`${step.name} (${step.scope}): ${editedBridgeText(editedIn)}`);
+    const fileContext = { platform: context.platform, project: context.inventory.project, home: context.home, roots: resolved, uses: [] };
+    useRoots(fileContext, step.scope, { helper: true, bridge: true, keyFile: null, keyName: null, data: null });
+    const files = fileSteps(context.inventory, fileContext, { notes: [] });
+    const tail = repairTail(context.inventory, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, notes: [] }, [step]);
+    return [...files.before, step, ...tail];
+}
+
+// A key-to-launcher finding waits while its registration has a Claude Code client-drift finding to settle first: the move
+// would write the drifted entry into the list and the restore or keep answer would find nothing to do. An answer of
+// 'leave' settles it as it is, so the move goes on.
+export const waitsForDrift = (finding: Finding, found: Finding[], input: Record<string, string>): boolean =>
+    finding.id === FIX_ID.keyToLauncher && found.some((candidate) => candidate.id === 'client-drift' && candidate.app === 'claude' && candidate.name === finding.name && candidate.scope === finding.scope && (candidate.driftKey === undefined || input[candidate.driftKey] !== 'leave'));
