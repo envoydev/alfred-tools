@@ -7,7 +7,7 @@ import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import { homeDir } from '../core/account.ts';
 import * as fixLib from '../fix/fix.ts';
 import { clientDriftDetect } from '../fix/lists.ts';
-import { waitsForDrift } from '../fix/key-to-launcher.ts';
+import { driftAnswersOf, waitsForDrift } from '../fix/key-to-launcher.ts';
 import { isManaged } from '../inventory/fingerprint.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { ShippedKind } from '../roots/types.ts';
@@ -83,7 +83,7 @@ export function upgradeOffers(context: UpdateCtx, out: UpdateCheck): void
             continue;
         }
         const label = upgradeLabel(finding);
-        const driftWait = waitsForDrift(finding, openDrift) ? 'client-drift is open on it, so the move waits for that answer - run /alfred-tools:fix (restore or keep), then update again' : null;
+        const driftWait = waitsForDrift(finding, openDrift) ? `client-drift is open on it, so the move waits for that answer - run /alfred-tools:fix (${driftAnswersOf(finding, openDrift)}), then update again` : null;
         const why = finding.blocked || (finding.input && `needs a folder from you (${finding.input.prompt})`) || driftWait;
         if (why)
         {

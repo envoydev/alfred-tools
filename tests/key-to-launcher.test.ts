@@ -563,7 +563,7 @@ test('update does not offer the move for a server with an open client-drift: a n
         const entry = localReg(w, 'github').entry;
         const check = await run(w, ['--check', '--no-refresh']);
         assert.doesNotMatch(check.text, /New ways to pass data:[\s\S]*key-to-launcher/);
-        assert.match(check.text, /github \(local\): .* - not applied here: client-drift is open on it, so the move waits for that answer - run \/alfred-tools:fix \(restore or keep\), then update again/);
+        assert.match(check.text, /github \(local\): .* - not applied here: client-drift is open on it, so the move waits for that answer - run \/alfred-tools:fix \(restore or keep; 'leave' does not settle it\), then update again/);
         const applied = await run(w, ['--apply', 'all', '--no-refresh']);
         assert.strictEqual(applied.code, 0, applied.text);
         assert.deepStrictEqual(localReg(w, 'github').entry, entry, 'the registration is as it was');
