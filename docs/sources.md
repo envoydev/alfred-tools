@@ -1632,6 +1632,9 @@ Page: https://pypi.org/project/macos-mcp/ (read 2026-11-19); the published 0.4.7
 - Measured 2026-11-19, macOS arm64, npm 11.6.1: `npm exec` / npx contacts the registry at every start even with the exact
   pin cached - with the registry unreachable it hangs past 40 s; `prefer-offline` does not change that; `offline`
   fails. So a pre-fetched cache does not make the first start of the day immune to a slow network.
+- Measured 2026-11-19 on a Windows 11 VM (Claude Code 2.1.309, the matrix's `starts` case): memory's uvx launch answered
+  its first `initialize` in 54.6 s after `fetch.js` had filled the cache - past 30 s, inside 90 s. So uvx needs the
+  guard too, on that machine.
 - Seen in the field: a server started through `cmd /c npx -y mcp-remote@<pin> <url>` on Windows logged 'connection timed
   out after 30000ms', printed nothing in those 30 s, and connected in 6.6 s on the retry.
 - The guard: `MCP_TIMEOUT=90000` added to `env` in Claude Code's settings by the `settings-env` step and fix's

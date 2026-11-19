@@ -36,6 +36,12 @@ const NETWORK = /could not resolve|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|EC
 const START_MS = 600000;
 // Claude Code's own limit for a server's first answer (`claude mcp get` reports 'timed out after 30000ms' past it)
 const CLAUDE_MS = 30000;
+// -> the start limit a session in `account` gets: its settings' env MCP_TIMEOUT, else Claude Code's 30 s
+function startLimitMs(account: string): number
+{
+    try { const held = Number(JSON.parse(fs.readFileSync(path.join(account, 'settings.json'), 'utf8')).env?.MCP_TIMEOUT); return held > 0 ? held : CLAUDE_MS; }
+    catch { return CLAUDE_MS; }
+}
 const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'alfred-tools-matrix', version: '0' } } };
 
 const children: ChildProcess[] = [];
@@ -141,12 +147,14 @@ for (const c of LOCAL)
         assert.deepStrictEqual(f.warnings, [], f.text);
         t.diagnostic(`${c.row}: ${f.text.split('\n').filter((l) => /ok |skip |: Status/.test(l)).map((l) => l.trim()).join('; ')}`);
         assert.match(f.status[0]!.out, /Connected/, `claude mcp get after fetch.js: ${f.status[0]!.out}`);
-        // then a start as the next session makes it, inside Claude Code's 30 seconds
+        // then a start as the next session makes it, inside the start limit the session will have
         const got = await initialize(reg.entry, p);
         if (!got.ok && NETWORK.test(got.why!)) return t.skip(`NOT RUN: no network (${got.why!.slice(0, 160)})`);
         assert.ok(got.ok, `${c.row} did not start: ${got.why}`);
         t.diagnostic(`${c.row} on ${process.platform}: ${`${got.info!.name || '?'} ${got.info!.version || ''}`.trim()}, answered in ${(got.ms / 1000).toFixed(1)}s after fetch.js`);
-        assert.ok(got.ms <= CLAUDE_MS, `${c.row} answered in ${got.ms} ms, past Claude Code's ${CLAUDE_MS} ms, even after fetch.js`);
+        // the limit Claude Code will use: MCP_TIMEOUT in the throwaway settings, which the install wrote (start-timeout), else 30 s
+        const limitMs = startLimitMs(h.account);
+        assert.ok(got.ms <= limitMs, `${c.row} answered in ${got.ms} ms, past Claude Code's ${limitMs} ms, even after fetch.js`);
         h.claude(p, ['mcp', 'remove', name, '-s', 'local']);
     });
 }

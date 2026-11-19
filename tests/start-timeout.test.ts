@@ -9,7 +9,7 @@ import { load } from '../scripts/catalog/catalog.ts';
 import { world, readJson } from './helpers.ts';
 import { runSteps } from './apply-helpers.ts';
 import { ctxFor, ctxOf, logged, put, reg, seed } from './fix-helpers.ts';
-import { MAC, inv, opts, pickOne } from './plan-helpers.ts';
+import { MAC, POSIX_FIXTURE, inv, opts, pickOne } from './plan-helpers.ts';
 import { detectAll, applyFixes } from '../scripts/fix/fix.ts';
 import { settingsEnv } from '../scripts/apply/file-steps.ts';
 import { plan } from '../scripts/plan/plan.ts';
@@ -148,7 +148,7 @@ test('a settings file that cannot be read is no file to write: startTimeoutOf ca
 
 const planIn = (conf: string, answers: Parameters<typeof plan>[1]) => plan(inv(MAC), answers, opts('/Users/me', { env: { CLAUDE_CONFIG_DIR: conf } }));
 
-test('an install of an npx route plans one settings-env step, with the plan line', () =>
+test('an install of an npx route plans one settings-env step, with the plan line', { skip: POSIX_FIXTURE }, () =>
 {
     const w = world();
     try
@@ -179,7 +179,7 @@ test('an install of a hosted http route plans no settings-env step', () =>
     finally { w.clean(); }
 });
 
-test('settings that already hold MCP_TIMEOUT, at any value, plan no step; one that is not an object is a note and the plan is still written', () =>
+test('settings that already hold MCP_TIMEOUT, at any value, plan no step; one that is not an object is a note and the plan is still written', { skip: POSIX_FIXTURE }, () =>
 {
     const w = world();
     try
