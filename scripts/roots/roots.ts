@@ -15,7 +15,8 @@ import { replaceFile } from '../core/replace-file.ts';
 import { errorCode, isRecord } from '../core/guards.ts';
 import { rootOfEntry, alfredData } from '../entries/locations.ts';
 import { pathFor } from '../entries/platform.ts';
-import { helperParts, bridgeParts, helperNameOf } from '../entries/entry.ts';
+import { helperParts, bridgeParts, bridgeFileOf, helperNameOf } from '../entries/entry.ts';
+import { launcherParts } from '../entries/launcher.ts';
 import * as helper from '../copied/mcp-headers.js';
 import { load } from '../catalog/catalog.ts';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
@@ -329,13 +330,16 @@ export function resolveRoots(inventory: InventoryView, answers: Partial<Record<F
 export function pointsIntoRoot(registration: RootReg, inventory: InventoryView, context: RootsCtx): string | null
 {
     const pathApi = pathFor(context.platform);
-    // a bridge (0.4.0): this plugin's when its file has a number line, or - no file yet - when its launch names a key
-    const bridge = bridgeParts(registration.entry);
-    if (bridge)
+    // a bridge (0.4.0) or a stdio key launcher: this plugin's when its file has a number line, or - no file yet - when its
+    // launch names a key (a launcher always does)
+    const bridgeFile = bridgeFileOf(registration.entry);
+    if (bridgeFile)
     {
-        const absolutePath = absOf(bridge.path, context);
+        const bridge = bridgeParts(registration.entry);
+        const absolutePath = absOf(bridgeFile, context);
         const { state, number } = shippedState('bridge', absolutePath, context.exists || ((filePath: string) => fs.existsSync(filePath)));
-        const ours = state === 'absent' ? Boolean(bridge.keyName && /^[A-Za-z_][A-Za-z0-9_]*$/.test(bridge.keyName)) : number !== null;
+        const named = bridge ? Boolean(bridge.keyName && /^[A-Za-z_][A-Za-z0-9_]*$/.test(bridge.keyName)) : launcherParts(registration.entry) !== null;
+        const ours = state === 'absent' ? named : number !== null;
         return ours ? pathApi.dirname(absolutePath) : null;
     }
     const command = registration.entry && registration.entry.headersHelper;

@@ -2,6 +2,7 @@
 // and every reader that looks through it to the inner launch.
 import test from 'node:test';
 import assert from 'node:assert';
+import path from 'node:path';
 import { load } from '../scripts/catalog/catalog.ts';
 import { bridgeFileOf, bridgeParts, launcherPlace, mergeSettings } from '../scripts/entries/entry.ts';
 import { launcherParts, launchOf, relaunchedArgs, unlaunched, withLaunch } from '../scripts/entries/launcher.ts';
@@ -12,7 +13,14 @@ import { credentialPaths, maskCredentials } from '../scripts/core/kept.ts';
 import { launchesPackage } from '../scripts/plan/repair-tail.ts';
 import { bumpEntry } from '../scripts/update/offers-plugins.ts';
 import * as F from '../scripts/fix/fix-functions.ts';
-import { ctxFor, detect, reg } from './fix-helpers.ts';
+import { ctxFor, ctxOf, detect, ptRoot, put, reg, seed } from './fix-helpers.ts';
+import { world } from './helpers.ts';
+import { makeCtx, checkUpdates } from '../scripts/update/check.ts';
+import * as inventory from '../scripts/inventory/inventory.ts';
+import * as rootsLib from '../scripts/roots/roots.ts';
+import { BRIDGE_VERSION } from '../scripts/copied/mcp-bridge.js';
+import { fakeRegistry, noLsp } from './update-helpers.ts';
+import type { Finding } from '../scripts/fix/types.ts';
 import { detectAll } from '../scripts/fix/fix.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
 
@@ -167,4 +175,72 @@ test('kept.maskCredentials and credentialPaths leave a launcher as it is', () =>
     assert.deepStrictEqual(maskCredentials(github, row('github')), github);
     assert.deepStrictEqual(credentialPaths(github, row('github')), []);
     assert.deepStrictEqual(maskCredentials(C7(R, G), row('context7')), C7(R, G));
+});
+
+const bridgeNumbered = (root: string, number: number) => put(path.join(root, 'mcp-bridge.js'), rootsLib.shippedSource('bridge').replace(/^\/\/ alfred-tools mcp-bridge \d+/, `// alfred-tools mcp-bridge ${number}`));
+
+test('a launcher whose root lacks the bridge is helper-missing, does not start, and asks for a restart', () =>
+{
+    const w = world();
+    try
+    {
+        seed(w, 'github', 'local', LAUNCHER(ptRoot(w), path.join(w.home, '.alfred-tools')));
+        const found = detect(ctxOf(w), 'helper-missing').found.filter((x) => x.id === 'helper-missing');
+        assert.deepStrictEqual(found.map((x) => x.shipped).sort(), ['bridge', 'helper']);
+        for (const finding of found)
+        {
+            assert.match(finding.found, /github \(local\) does not start$/);
+            assert.strictEqual(finding.bridged, true);
+        }
+        const bridgeFinding = found.find((x) => x.shipped === 'bridge') as Finding;
+        assert.strictEqual(F.helperMissingFix(bridgeFinding).restart, true);
+    }
+    finally { w.clean(); }
+});
+
+test('a launcher whose root holds bridge 3 is helper-stale', () =>
+{
+    const w = world();
+    try
+    {
+        seed(w, 'github', 'local', LAUNCHER(ptRoot(w), path.join(w.home, '.alfred-tools')));
+        bridgeNumbered(ptRoot(w), 3);
+        const stale = detect(ctxOf(w), 'helper-stale').found.filter((x) => x.id === 'helper-stale');
+        assert.ok(stale.some((x) => x.found === `mcp-bridge.js is bridge 3 - this plugin's is ${BRIDGE_VERSION}`), stale.map((x) => x.found).join('\n'));
+    }
+    finally { w.clean(); }
+});
+
+test('update offers a newer bridge for a root only a launcher names', async () =>
+{
+    const w = world();
+    try
+    {
+        seed(w, 'github', 'local', LAUNCHER(ptRoot(w), path.join(w.home, '.alfred-tools')));
+        bridgeNumbered(ptRoot(w), 3);
+        const inv = inventory.buildInventory({ project: w.project, env: w.env });
+        const out = await checkUpdates(makeCtx({ inventory: inv, project: w.project, env: w.env, machine: noLsp, registry: fakeRegistry({}), refresh: false }));
+        const offer = out.offers.find((x) => x.kind === 'bridge');
+        assert.ok(offer, JSON.stringify(out));
+        assert.strictEqual(offer.from, '3');
+        assert.strictEqual(offer.to, String(BRIDGE_VERSION));
+    }
+    finally { w.clean(); }
+});
+
+test("pointsIntoRoot reads a launcher as this plugin's root", () =>
+{
+    const w = world();
+    try
+    {
+        const entry = LAUNCHER(ptRoot(w), path.join(w.home, '.alfred-tools'));
+        const registration = { name: 'github', scope: 'local', entry };
+        const machine = { platform: process.platform, project: w.project, home: w.home };
+        assert.strictEqual(rootsLib.pointsIntoRoot(registration, { registrations: [] }, machine), ptRoot(w));
+        bridgeNumbered(ptRoot(w), BRIDGE_VERSION);
+        assert.strictEqual(rootsLib.pointsIntoRoot(registration, { registrations: [] }, machine), ptRoot(w));
+        put(path.join(ptRoot(w), 'mcp-bridge.js'), 'module.exports = {};\n');
+        assert.strictEqual(rootsLib.pointsIntoRoot(registration, { registrations: [] }, machine), null);
+    }
+    finally { w.clean(); }
 });

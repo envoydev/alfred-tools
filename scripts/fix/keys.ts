@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathFor } from '../entries/platform.ts';
-import { helperFor, contextArgAt, bridgeParts } from '../entries/entry.ts';
+import { helperFor, contextArgAt, bridgeFileOf } from '../entries/entry.ts';
 import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
 import { ALFRED_DATA } from '../core/constants.ts';
@@ -107,9 +107,9 @@ function shippedFiles(context: FixCtx, fixId: string): ShippedFile[]
             const root = (familyRoots || (familyRoots = rootsOf(context)))[roots.familyOf(registration.scope)];
             if ((root && file === pathApi.join(root, roots.FILES.serenaContext)) || file === common.homeContextOf(registration.entry, context.platform, roots.FILES.serenaContext)) add(file, 'serenaContext', registration);
         }
-        const bridge = bridgeParts(registration.entry);
-        if (!bridge) continue;
-        const file = roots.absOf(bridge.path, rootCtx(context));
+        const bridgeFile = bridgeFileOf(registration.entry);
+        if (!bridgeFile) continue;
+        const file = roots.absOf(bridgeFile, rootCtx(context));
         add(file, 'bridge', registration);
         add(pathApi.join(pathApi.dirname(file), roots.FILES.helper), 'helper', registration);
     }
@@ -118,7 +118,7 @@ function shippedFiles(context: FixCtx, fixId: string): ShippedFile[]
 
 // `bridged`: found through a bridge registration, which did not start without the file - so its fix needs a new start,
 // where a hosted server's helper runs at each connect (review)
-const helperFinding = (fixId: string, shippedFile: ShippedFile, what: string, extra: Partial<Finding> = {}): Finding => ({ ...common.finding(fixId, shippedFile.registration, what, extra), name: shippedFile.file, path: shippedFile.file, shipped: shippedFile.kind, bridged: Boolean(bridgeParts(shippedFile.registration.entry)) || shippedFile.kind === 'serenaContext' });
+const helperFinding = (fixId: string, shippedFile: ShippedFile, what: string, extra: Partial<Finding> = {}): Finding => ({ ...common.finding(fixId, shippedFile.registration, what, extra), name: shippedFile.file, path: shippedFile.file, shipped: shippedFile.kind, bridged: bridgeFileOf(shippedFile.registration.entry) !== null || shippedFile.kind === 'serenaContext' });
 const nameOf = (shippedFile: ShippedFile) => roots.FILES[shippedFile.kind];
 // the file this finding writes: 'helper', 'bridge' or 'serenaContext' (a finding from before 0.4.0 carries none: a helper)
 const kindOf = (finding: Finding): ShippedKind => (finding.shipped === 'bridge' || finding.shipped === 'serenaContext' ? finding.shipped : 'helper');
@@ -133,7 +133,7 @@ const withCommonjs = (root: string, result: MachineFixResult, kind: ShippedKind)
 export function helperMissingDetect(context: FixCtx): Finding[]
 {
     return shippedFiles(context, 'helper-missing').filter((shippedFile) => !fs.existsSync(shippedFile.file))
-        .map((shippedFile) => helperFinding('helper-missing', shippedFile, `${nameOf(shippedFile)} is missing - ${shippedFile.registration.name} (${shippedFile.registration.scope}) ${bridgeParts(shippedFile.registration.entry) || shippedFile.kind === 'serenaContext' ? 'does not start' : 'connects without its key'}`));
+        .map((shippedFile) => helperFinding('helper-missing', shippedFile, `${nameOf(shippedFile)} is missing - ${shippedFile.registration.name} (${shippedFile.registration.scope}) ${bridgeFileOf(shippedFile.registration.entry) !== null || shippedFile.kind === 'serenaContext' ? 'does not start' : 'connects without its key'}`));
 }
 
 export function helperMissingFix(finding: Finding): MachineFixResult

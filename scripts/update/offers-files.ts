@@ -1,6 +1,6 @@
 // The file offers: the helper, bridge and serena-context copies behind the plugin's own.
 import { pathFor } from '../entries/platform.ts';
-import { contextArgAt, bridgeParts } from '../entries/entry.ts';
+import { contextArgAt, bridgeFileOf } from '../entries/entry.ts';
 import * as roots from '../roots/roots.ts';
 import { HELPER_VERSION } from '../copied/mcp-headers.js';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
@@ -32,9 +32,9 @@ export function helperOffers(context: UpdateCtx, out: UpdateCheck): void
         if (contextArg !== undefined) contextDirs.add(pathApi.dirname(roots.absOf(contextArg, rootContext)));
         const named = roots.helperPathOf(registration.entry && registration.entry.headersHelper);
         if (named) dirs.add(pathApi.dirname(roots.absOf(named, rootContext)));
-        // a bridge's folder holds its bridge and the helper it requires (0.4.0)
-        const bridge = bridgeParts(registration.entry);
-        if (bridge) bridgeDirs.add(pathApi.dirname(roots.absOf(bridge.path, rootContext)));
+        // a bridge's or a launcher's folder holds its bridge and the helper it requires (0.4.0)
+        const bridgeFile = bridgeFileOf(registration.entry);
+        if (bridgeFile) bridgeDirs.add(pathApi.dirname(roots.absOf(bridgeFile, rootContext)));
     }
     for (const root of bridgeDirs) dirs.add(root);
     const offer = (kind: ShippedKind, root: string, version: number) =>
