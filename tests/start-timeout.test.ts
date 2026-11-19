@@ -16,6 +16,7 @@ import { plan } from '../scripts/plan/plan.ts';
 import { renderPlan } from '../scripts/plan/render.ts';
 import { startTimeoutOf } from '../scripts/plan/repair-tail.ts';
 import { START_TIMEOUT } from '../scripts/plan/start-timeout-constants.ts';
+import { run, fakeRegistry, ago } from './update-helpers.ts';
 import type { SettingsEnvStep } from '../scripts/plan/types.ts';
 import type { World } from './types.ts';
 
@@ -244,12 +245,23 @@ test('start-timeout finds nothing for a hosted http route only', () =>
     finally { w.clean(); }
 });
 
-test('start-timeout reads a launch through cmd /c, and a hosted route beside it adds nothing', () =>
+test('start-timeout reads a launch through cmd /c, and a hosted route beside it in the same inventory adds nothing', () =>
 {
     const via = reg('atlassian', { command: 'cmd', args: ['/c', 'npx', '-y', 'mcp-remote@0.16.0', 'https://mcp.atlassian.com/v2/mcp'] }, { scope: 'user', route: 'remote' });
-    assert.strictEqual(detectAll(ctxFor({ platform: 'win32', registrations: [via] })).found.filter((f) => f.id === 'start-timeout').length, 1);
     const hosted = reg('context7', HOSTED, { scope: 'user', route: 'remote' });
-    assert.strictEqual(detectAll(ctxFor({ registrations: [hosted] })).found.filter((f) => f.id === 'start-timeout').length, 0);
+    assert.strictEqual(detectAll(ctxFor({ platform: 'win32', registrations: [via, hosted] })).found.filter((f) => f.id === 'start-timeout').length, 1);
+});
+
+test('an unmanaged, an inherited and an alfred-retired npx registration give no start-timeout finding', () =>
+{
+    const mine = { own: true };
+    const inherited = { scope: 'inherited' };
+    const retired = { alfredRetired: true };
+    for (const over of [mine, inherited, retired])
+    {
+        const registration = { ...reg('playwright-chrome', NPX_CHROME, { scope: 'user' }), ...over };
+        assert.deepStrictEqual(detectAll(ctxFor({ registrations: [registration] })).found.filter((f) => f.id === 'start-timeout'), [], JSON.stringify(over));
+    }
 });
 
 test('start-timeout refuses a settings file that is not an object, names it, and writes nothing', () =>
@@ -294,6 +306,25 @@ test('start-timeout gives another config dir with the plugin its own finding, an
         assert.deepStrictEqual(readJson(path.join(personal, 'settings.json')), { theme: 'dark', env: SETTING });
         assert.deepStrictEqual(readJson(path.join(stranger, 'settings.json')), {}, 'a dir without the plugin is left');
         assert.deepStrictEqual(found(w), []);
+    }
+    finally { w.clean(); }
+});
+
+test('update offers start-timeout under New ways to pass data and applies it', async () =>
+{
+    const w = world();
+    try
+    {
+        seed(w, 'playwright-chrome', 'user', NPX_CHROME);
+        const root = path.join(w.home, '.alfred-tools');
+        put(path.join(root, 'mcps.json'), JSON.stringify({ version: 1, servers: [{ name: 'playwright-chrome', scope: 'user', row: 'playwright-chrome', route: 'local', clients: ['claude'], entry: NPX_CHROME, key: null }], own: [] }));
+        const registry = fakeRegistry({ 'npm:@playwright/mcp': [{ version: '0.0.85', time: ago(30) }] });
+        const c = await run(w, ['--check', '--no-refresh'], { registry });
+        assert.strictEqual(c.code, 0, c.text);
+        assert.match(c.text, /New ways to pass data:[\s\S]*start-timeout: /);
+        const a = await run(w, ['--apply', `upgrade:start-timeout:${settingsOf(w)}`, '--no-refresh'], { registry });
+        assert.strictEqual(a.code, 0, a.text);
+        assert.strictEqual(readJson(settingsOf(w)).env.MCP_TIMEOUT, '90000');
     }
     finally { w.clean(); }
 });
