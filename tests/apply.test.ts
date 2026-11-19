@@ -23,8 +23,9 @@ import { rootIgnoreLines, rootIgnore, denyRead, listWrite, serenaConfigInit, mov
 import { readList } from '../scripts/mcps-list/mcps-list.ts';
 import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
 import type { World } from './types.ts';
-import type { Answers, PlanOptions, PlanStep, McpAddStep, ListWriteStep, Reconnect } from '../scripts/plan/types.ts';
-import type { ApplyCtx, ApplyOptions, ApplyPlan } from '../scripts/apply/types.ts';
+import { mcpJson, runSteps } from './apply-helpers.ts';
+import type { Answers, PlanOptions, McpAddStep, ListWriteStep, Reconnect } from '../scripts/plan/types.ts';
+import type { ApplyCtx } from '../scripts/apply/types.ts';
 import type { CliOptions, CliResult } from '../scripts/core/types.ts';
 import type { Inventory } from '../scripts/inventory/types.ts';
 import type { RecordEntry } from '../scripts/roots/types.ts';
@@ -41,7 +42,6 @@ function walk(w: World, answers: Answers, { fail, planOpts = {} }: { fail?: stri
     return { inv, p, report, lines, text: lines.join('\n'), env };
 }
 const accountDoc = (w: World) => readJson(account.accountFile(w.env));
-const mcpJson = (w: World) => readJson(path.join(w.project, '.mcp.json'));
 
 test('an apply from a subfolder reads back where the CLI wrote (M4)', () => {
     const w = world();
@@ -825,12 +825,6 @@ test('a replace or a move keeps the stdio key the registration holds when the ch
 // ---- 0.2.0: the apply's file steps (spec D2-D4, D6, D8; plan R8, R13) -------------------------------------------------
 const HELPER_SRC = path.join(import.meta.dirname, '..', 'scripts', 'copied', 'mcp-headers.js');
 const KEY_HEAD = '# alfred-tools MCP keys - fill in each value; this file is never committed';
-function runSteps(w: World, list: unknown[], opts: ApplyOptions = {})
-{
-    const lines: string[] = [];
-    const report = apply({ version: 1, project: w.project, steps: list as PlanStep[], errors: [] } as ApplyPlan, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: (...a) => lines.push(a.join(' ')), ...opts });
-    return { report, text: lines.join('\n') };
-}
 const git = (dir: string, ...args: string[]) => spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
 
 test('write-helper: absent is written; a lower number is rewritten; the same number is left; a higher number is left with the note', () => {

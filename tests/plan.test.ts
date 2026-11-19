@@ -10,6 +10,7 @@ import { serenaConfigInitStep } from '../scripts/plan/serena-init.ts';
 import { renderPlan, argvOf, reconnectLine } from '../scripts/plan/render.ts';
 import { makeCtx } from '../scripts/plan/context.ts';
 import { fileSteps } from '../scripts/plan/root-files.ts';
+import { MAC, POSIX_FIXTURE, inv, opts, pickOne, addStep, reg, changeOf, PFILE, OLD_ROOT, usedRoots } from './plan-helpers.ts';
 import { scopeOfLabel, SCOPE_LABEL, PARENT_HELPER_IN_CHILD, keyNameQuestion, settingsQuestion, SCOPE_TEXT } from '../scripts/plan/asks-keys.ts';
 import { pickQuestions, packed, alsoProvided } from '../scripts/plan/asks-picks.ts';
 import { scopeQuestion, routeQuestion, changeQuestions, scopesFor, nameQuestion } from '../scripts/plan/asks-tool.ts';
@@ -65,23 +66,12 @@ const withRelative = (...ids: string[]) => relativeAs(true, ids);
 const withoutRelative = (...ids: string[]) => relativeAs(false, ids);
 const flag = (e: ServerEntry, f: string) => e.args![e.args!.indexOf(f) + 1];
 
-const MAC = { os: 'darwin', arch: 'arm64', project: '/work/shop' };
 const LINUX = { os: 'linux', arch: 'x64', project: '/work/shop' };
 const WIN = { os: 'win32', arch: 'x64', project: 'C:\\work\\shop' };
 const WINARM = { os: 'win32', arch: 'arm64', project: 'C:\\work\\shop' };
-// a test of a darwin plan whose fixture paths (/work/shop, /Users/me) or real folders meet node's own path module: on a
-// Windows host that module is win32 and the two never agree - the plan runs with one platform's paths on a real machine,
-// and the matrix runs these flows on Windows
-const POSIX_FIXTURE = process.platform === 'win32' && 'NOT RUN: a darwin fixture meets node\'s win32 path module on this host (the matrix covers Windows)';
-const inv = (base: { os: string; arch: string; project: string }, extra: Record<string, unknown> = {}) => ({ version: 1, ...base, cli: { ok: true }, unreadable: [], registrations: [], plugins: [], marketplaces: [], alfredCodeEnabled: false, sources: {}, ...extra }) as unknown as Inventory;
-const opts = (home: string, extra: PlanOptions = {}) => ({ home, env: {}, exists: () => false, machine: { docker: true }, ...extra });
-const pickOne = (id: string, pick: PickAnswer = {}): Answers => ({ picks: { [id]: pick } });
 // the steps that change a registration, without the root's file steps and the records (spec D8)
 const FILE_OPS = ['root-ignore', 'write-helper', 'write-bridge', 'serena-config-init', 'ensure-key-name', 'deny-read', 'list-write', 'record-root'];
 const regSteps = (p: Plan) => p.steps.filter((s) => !FILE_OPS.includes(s.op));
-const addStep = (p: Plan, i = 0) => (p.steps.filter((s) => s.op === 'mcp-add') as McpAddStep[])[i] as McpAddStep;
-const reg = (name: string, scope: string, entry: ServerEntry, rowId: string | null = null, route: string | null = null, flags: Partial<InvRegistration> = {}): InvRegistration => ({ name, scope, entry, rowId, route, own: !rowId, alfredRetired: false, ...flags });
-const changeOf = (r: { name: string; scope: string }, answers: PickAnswer = {}): Answers => ({ change: { [`mcp:${r.name}~${r.scope}`]: answers } });
 
 test('serena, fresh, per OS: python request, cut-off, telemetry off, home by the OS\'s rules', () => {
     const mac = plan(inv(MAC), pickOne('serena'), opts('/Users/me'));
@@ -1924,7 +1914,6 @@ test("configure: the 'On their own' group, and 'Let alfred-tools manage it' plan
 });
 
 // ---- 0.3.0: the servers left on their own (spec F4), in the list's own since 0.5.0 -------------------------------------
-const PFILE = '/work/shop/.alfred-tools/mcps.json';
 const GFILE = '/Users/me/.alfred-tools/mcps.json';
 const GH_URL = { type: 'http', url: 'https://api.githubcopilot.com/mcp/' };
 const cleans = (p: Plan) => (p.steps.filter((s) => s.op === 'list-write' && s.own) as ListWriteStep[]).map((s) => [s.file, s.own!.entries, s.own!.keep]);
@@ -2066,9 +2055,7 @@ test("a project entry in the global root's list stays there and is named; its ma
 });
 
 // ---- 0.2.0: configure changes a root folder, a key's name and the settings (spec D7, D9; plan R3) ----------------------
-const OLD_ROOT = '/work/shop/.alfred-tools';
 const ghHelper = (root: string, name = G) => ({ type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: `node ${root}/mcp-headers.js ${name} Bearer` });
-const usedRoots = (project: string | null, global: string | null = null) => ({ map: null, project: project && { path: project, from: 'registration' }, global: global && { path: global, from: 'registration' } });
 
 test('change the root: each managed registration of the family is re-added with its data folder and helper in the new root', () => {
     const pw = installed('playwright-chrome', { scope: 'local' });

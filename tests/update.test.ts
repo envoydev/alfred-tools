@@ -26,23 +26,11 @@ import { readAccount, accountFile } from '../scripts/core/account.ts';
 import { repairTail } from '../scripts/plan/repair-tail.ts';
 import type { AddressInfo } from 'node:net';
 import type { World } from './types.ts';
-import type { MachineProbe } from '../scripts/fix/types.ts';
-import type { Release } from '../scripts/catalog/types.ts';
+import { NOW, ago, fakeRegistry, noLsp, run, projectList, listed0, localReg, reAdd } from './update-helpers.ts';
 import type { Answers } from '../scripts/plan/types.ts';
 import type { McpOffer, Offer, UpdateCheck } from '../scripts/update/types.ts';
 import type { PlanStep, CursorWritePlanStep } from '../scripts/plan/types.ts';
 import type { ServerEntry, ServerMap } from '../scripts/core/types.ts';
-
-type MainOpts = NonNullable<Parameters<typeof update.runUpdateCommand>[1]>;
-
-const DAY = 86400000;
-const NOW = Date.parse('2026-10-27T12:00:00Z');
-const ago = (days: number) => NOW - days * DAY;
-
-// a fake registry: { 'pypi:serena-agent': [{ version, time }] }
-const fakeRegistry = (table: Record<string, Release[]>) => ({ versionsOf: async (reg: string, name: string) => { const v = table[`${reg}:${name}`]; if (!v) throw new Error(`no such package ${name}`); return v; } });
-// a machine with no runtimes on it
-const noLsp = { which: () => null, run: () => ({ status: 1, stdout: '', stderr: '' }), nodeVersion: process.versions.node } as unknown as MachineProbe;
 
 const install = (w: World, answers: Answers) =>
 {
@@ -52,15 +40,6 @@ const install = (w: World, answers: Answers) =>
     const r = apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} });
     assert.strictEqual(r.failed, null);
 };
-
-async function run(w: World, argv: string[], opts: MainOpts = {})
-{
-    const lines: string[] = [];
-    // an apply that hands a fetch file on keeps its <tmp> for the command's next step: inside the world, w.clean() takes it
-    const tmp = argv.includes('--apply') && !argv.includes('--tmp') ? ['--tmp', fs.mkdtempSync(path.join(w.dir, 'alfred-tools-'))] : [];
-    const code = await update.runUpdateCommand([...argv, ...tmp, '--project', w.project], { env: w.env, out: (s) => lines.push(s), machine: noLsp, now: NOW, registry: fakeRegistry({}), ...opts });
-    return { code, text: lines.join('\n') };
-}
 
 const pypiSerena = (...v: [string, number][]) => ({ 'pypi:serena-agent': v.map(([version, days]) => ({ version, time: ago(days) })) });
 
@@ -1005,16 +984,8 @@ test('the context file offer finds a copy per home', async () => {
 });
 
 // ---- 0.5.0: every pin move reaches the list and Cursor; update offers Cursor once per root (spec D1, D9) ------------
-const projectList = (w: World) => path.join(w.project, '.alfred-tools', 'mcps.json');
 const projectCursor = (w: World) => path.join(w.project, '.cursor', 'mcp.json');
-const listed0 = (w: World, name: string) => readJson(projectList(w)).servers.find((x: { name: string }) => x.name === name);
 const cursorCopy = (w: World, name: string, file = projectCursor(w)) => readJson(file).mcpServers[name];
-const localReg = (w: World, name: string) => inventory.buildInventory({ project: w.project, env: w.env }).registrations.find((r) => r.name === name && r.scope === 'local')!;
-const reAdd = (w: World, name: string, entry: unknown) =>
-{
-    cli.runClaude(['mcp', 'remove', name, '-s', 'local'], { cwd: w.project, env: w.env });
-    assert.strictEqual(cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', 'local'], { cwd: w.project, env: w.env }).status, 0);
-};
 const serenaPin = (e: ServerEntry) => pinnedVersion(e, 'serena-agent');
 
 test('a registration whose pin is newer than its list entry is updated from the registration, never downgraded', async () =>
