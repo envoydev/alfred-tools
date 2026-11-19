@@ -25,6 +25,8 @@ import * as cli from '../core/claude-cli.ts';
 import { writeJob, fetchJob, nextLines } from '../apply/fetch.ts';
 import { DETECTORS, FILE_STEPS, MACHINE_FIXES, REGISTRATION_FIXES, gates, helperStaleFix, machineOf, movedRoots, passesGate, repointDataMap, repointEntry, rootMoveFix } from './fix-functions.ts';
 import { realMachine, clone, fieldOf, isManaged } from './common.ts';
+import { retiredServerSteps } from './retired-server.ts';
+import { FIX_ID } from './constants.ts';
 import { errorMessage } from '../core/guards.ts';
 import { deepEqual } from '../core/json-file.ts';
 import { makeTempDir } from '../core/tmpdir.ts';
@@ -298,7 +300,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     const groups = new Map<string, Finding[]>();
     // R9: a fix that gives a registration a helper brings its root's file steps - the .gitignore and the helper - first
     const fileCtx: { platform: string; project: string; home: string; roots: Roots | null; uses: RootUse[] } = { platform: context.platform, project: context.inventory.project, home: context.home, roots: null, uses: [] };
-    for (const finding of todo.filter((candidate) => candidate.kind === 'registration' && !candidate.tailOnly)) groups.set(`${finding.scope}\u0000${finding.name}`, [...(groups.get(`${finding.scope}\u0000${finding.name}`) || []), finding]);
+    for (const finding of todo.filter((candidate) => candidate.kind === 'registration' && !candidate.tailOnly && candidate.id !== FIX_ID.retiredServer)) groups.set(`${finding.scope}\u0000${finding.name}`, [...(groups.get(`${finding.scope}\u0000${finding.name}`) || []), finding]);
     for (const list of groups.values())
     {
         const found = list.find((candidate) => candidate.roots);
@@ -333,7 +335,9 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         const contextArg = (entry.args || [])[contextAt];
         if (contextArg !== undefined && fileCtx.roots) useRoots(fileCtx, registration.scope, { serenaContext: pathFor(context.platform).dirname(contextArg) });
     }
-    result.steps = steps.length;
+    // retired-server (D3) removes, never rewrites: its steps join the replaces for the list, Cursor and the apply
+    const removals = retiredServerSteps(context, todo);
+    result.steps = steps.length + removals.length;
     // each list the repaired servers sit in, and Cursor's files from them, in the same run (spec D1); a Cursor copy whose
     // key token-sync found behind is refilled with the list as it is
     const refresh = todo.flatMap(({ id, cursorOnly, name, scope }) => (id === 'token-sync' && cursorOnly && scope !== null ? [{ name, scope }] : []));
@@ -346,8 +350,8 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     // a server helper-foreign brings into a list that does not name it yet is listed for the apps its other servers share
     const clientsFor = new Map(todo.flatMap(({ id, name, scope, clients }): [string, string[]][] => (id === 'helper-foreign' && clients ? [[`mcp:${name}~${scope}`, clients]] : [])));
     const bridgeFor = new Set(todo.filter((finding) => finding.id === 'helper-foreign' && finding.cursor).map((finding) => `mcp:${finding.name}~${finding.scope}`));
-    const tail = steps.length || refresh.length || repoint.length ? repairTail(context.inventory, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, notes: tailNotes }, steps, { refresh, repoint, normalize, clientsFor, bridgeFor }) : [];
-    if (steps.length || tail.length)
+    const tail = steps.length || removals.length || refresh.length || repoint.length ? repairTail(context.inventory, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, notes: tailNotes }, [...steps, ...removals], { refresh, repoint, normalize, clientsFor, bridgeFor }) : [];
+    if (steps.length || removals.length || tail.length)
     {
         // a fix that changes what is fetched (a python request, a cut-off, cmd /c) is fetched once it is written
         const withFetch = steps.flatMap((step) =>
@@ -360,7 +364,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         const files = fileCtx.uses.length && usedRoots ? fileSteps(context.inventory, { ...fileCtx, roots: usedRoots }, { notes: fileNotes }) : { before: [] };
         for (const rootUse of [...new Map(fileCtx.uses.map((usage) => [usage.root, usage] as const)).values()]) log(`the key helper goes in the ${rootUse.family} root ${rootUse.root}`);
         for (const note of [...fileNotes, ...tailNotes]) log(`note: ${note}`);
-        const plan = { version: 1, project: context.inventory.project, os: context.platform, alfredCodeEnabled: Boolean(context.inventory.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch, ...tail, ...retireContextSteps(context, rewritesOf(steps))], context.inventory.project, mcpOrder.ownProjectNames(context.inventory)), notes: [], errors: [], expect: steps.map((step) => ({ kind: 'mcp', name: step.name, scope: step.scope, route: step.route })) };
+        const plan = { version: 1, project: context.inventory.project, os: context.platform, alfredCodeEnabled: Boolean(context.inventory.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch, ...removals, ...tail, ...retireContextSteps(context, rewritesOf(steps))], context.inventory.project, mcpOrder.ownProjectNames(context.inventory)), notes: [], errors: [], expect: steps.map((step) => ({ kind: 'mcp', name: step.name, scope: step.scope, route: step.route })) };
         result.tmp = tmp || makeTempDir();
         const report = apply(plan, { env: context.env, tmp: result.tmp, runCli, log, fetchFile });
         result.fetchFile = report.fetchFile;

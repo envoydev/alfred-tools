@@ -377,6 +377,18 @@
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D8, D9; docs/superpowers/specs/2026-11-14-alfred-tools-rename-design.md D5"
     },
     {
+      "id": "retired-server",
+      "upgrade": "0.7.0",
+      "tool": [],
+      "os": ["darwin", "linux", "win32"],
+      "kind": "registration",
+      "symptom": "a server alfred-tools manages (its family's mcps.json lists it) runs a tool the catalog retired - the row left catalog/tools.json for its `retired` list - so nothing updates or repairs it any more; its removal was not declined in this project",
+      "detect": "retiredServerDetect",
+      "fix": "retiredServerSteps",
+      "verifiedOn": "this build: tests/retired-server.test.ts retired-server (2026-11-19)",
+      "source": "docs/superpowers/specs/2026-11-19-pre-release-follow-up-design.md D3"
+    },
+    {
       "id": "read-guard",
       "upgrade": "0.5.0",
       "tool": [

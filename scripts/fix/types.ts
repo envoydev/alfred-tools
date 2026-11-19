@@ -74,6 +74,7 @@ export interface Finding
     inherited?: string | null; // stored - do not rename
     alfred?: boolean; // stored - do not rename
     declined?: boolean; // stored - do not rename
+    declineId?: string; // stored - do not rename
     path?: string; // stored - do not rename
     shipped?: string; // stored - do not rename
     bridged?: boolean; // stored - do not rename

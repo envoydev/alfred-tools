@@ -28,6 +28,8 @@ export function planChange(key: string, pick: PickAnswer, inventory: Inventory, 
     // an `mcp:` key names a registration
     if (target.kind !== 'mcp' || !isRegistration(target.item)) return out.errors.push(`change: '${key}' is a plugin - the catalog lists none since 0.5.0, so it is not changed here`);
     const registration = target.item;
+    // a retired managed server has no row and is not the user's own: fix and update remove it
+    if (registration.retiredRow && !registration.own) return out.errors.push(`change: '${registration.name}' runs ${registration.retiredRow}, which the catalog retired - /alfred-tools:fix removes it; it is not changed here`);
     if (!registration.rowId) return out.errors.push(`change: '${registration.name}' is your own (it matches no catalog row) - left alone`);
     if (registration.alfredRetired) return out.errors.push(`change: '${registration.name}' is alfred-code's (retired) - left alone`);
     const row = required(catalog.byId.get(registration.rowId), `change: '${registration.name}' names the catalog row '${registration.rowId}', which the catalog lacks`);
@@ -150,7 +152,7 @@ export function planRemove(removeAnswer: RemoveAnswer, inventory: Inventory, _ca
     if (!registration) return out.errors.push(`remove: no registration '${removeAnswer.name}' at ${removeAnswer.scope} scope`);
     if (registration.own) return out.errors.push(`remove: '${removeAnswer.name}' is your own server (it matches no catalog row) - left alone`);
     if (registration.alfredRetired) return out.errors.push(`remove: '${removeAnswer.name}' is alfred-code's (retired) - left alone`);
-    out.steps.push({ op: 'mcp-remove', name: registration.name, scope: removeAnswer.scope, old: registration.entry, row: registration.rowId, why: `remove '${removeAnswer.name}' (${registration.rowId}) at ${removeAnswer.scope} scope` });
+    out.steps.push({ op: 'mcp-remove', name: registration.name, scope: removeAnswer.scope, old: registration.entry, row: registration.rowId, why: `remove '${removeAnswer.name}' (${registration.rowId ?? registration.retiredRow}) at ${removeAnswer.scope} scope` });
     return undefined;
 }
 

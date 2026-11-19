@@ -2,12 +2,26 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import path from 'node:path';
+import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import * as inventory from '../scripts/inventory/inventory.ts';
 import * as account from '../scripts/core/account.ts';
 import { renderTable } from '../scripts/inventory/table.ts';
 import { markRetired } from '../scripts/inventory/retired.ts';
-import { world, writeJson, accountKey } from './helpers.ts';
+import { isManaged } from '../scripts/inventory/fingerprint.ts';
+import { plan } from '../scripts/plan/plan.ts';
+import { apply } from '../scripts/apply/run.ts';
+import * as cli from '../scripts/core/claude-cli.ts';
+import { readAccount } from '../scripts/core/account.ts';
+import { makeCtx, detectAll, applyFixes, renderFixes } from '../scripts/fix/fix.ts';
+import { makeCtx as makeUpdateCtx, checkUpdates } from '../scripts/update/check.ts';
+import { applyUpdates } from '../scripts/update/apply.ts';
+import { world, writeJson, accountKey, readJson } from './helpers.ts';
+import { noMachine, seed, ptRoot, localEntry, logged } from './fix-helpers.ts';
+import { fakeRegistry, NOW, noLsp, listed0 } from './update-helpers.ts';
+import type { Finding } from '../scripts/fix/types.ts';
+import type { UpgradeOffer } from '../scripts/update/types.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
 import type { World } from './types.ts';
 
@@ -78,6 +92,128 @@ test('a list that carries a note or comes from the 0.4.x record holds no server 
         assert.deepStrictEqual([inventoryOf({}).retiredRow, inventoryOf({}).own], ['old-tool', false], 'a plain list names it: managed');
         assert.strictEqual(inventoryOf({ note: 'the list is unreadable - read as empty' }).own, true, 'a note: not listed');
         assert.strictEqual(inventoryOf({ old: 'record.json' }).own, true, 'the old record: not listed');
+    }
+    finally { w.clean(); }
+});
+
+// an emptied list is removed by writeList, so a missing file holds no entry
+const listedNames = (file: string): string[] => (fs.existsSync(file) ? readJson(file).servers.map((server: { name: string }) => server.name) : []);
+const retiredCtx = (w: World, data: string | null = null) => { const cat = { ...catalog, retired: [RETIRED_ROW] }; return makeCtx({ inventory: inventory.buildInventory({ project: w.project, env: w.env, catalog: cat, data }), catalog: cat, env: w.env, machine: noMachine(), data }); };
+
+test("retired-server offers a managed retired server for removal, never one off the list; removing it drops its list entry and Cursor's copy (spec D3)", () =>
+{
+    const w = world();
+    try
+    {
+        seed(w, 'old', 'local', OLD_TOOL);
+        seed(w, 'mine', 'local', OLD_TOOL);
+        writeJson(path.join(ptRoot(w), 'mcps.json'), { version: 1, servers: [{ name: 'old', scope: 'local', row: 'old-tool', route: 'local', clients: ['claude', 'cursor'], entry: OLD_TOOL, key: null }], own: [] });
+        writeJson(path.join(w.project, '.cursor', 'mcp.json'), { mcpServers: { old: OLD_TOOL } });
+        const found = detectAll(retiredCtx(w)).found.filter((f) => f.id === 'retired-server');
+        assert.deepStrictEqual(found.map((f) => [f.name, f.scope]), [['old', 'local']]);
+        const hash = createHash('sha256').update(path.resolve(w.project)).digest('hex').slice(0, 12);
+        assert.strictEqual(found[0]!.declineId, `mcp:old:${hash}`);
+        assert.match(renderFixes(detectAll(retiredCtx(w))), new RegExp(`retired-declined=mcp:old:${hash}~local`));
+        const out = logged();
+        const res = applyFixes(retiredCtx(w), ['retired-server'], { log: out.log });
+        assert.strictEqual(res.failed, null, out.text());
+        assert.strictEqual(localEntry(w, 'old'), undefined);
+        assert.ok(localEntry(w, 'mine'), "the user's own is left");
+        assert.ok(!listedNames(path.join(ptRoot(w), 'mcps.json')).includes('old'));
+        assert.ok(!('old' in readJson(path.join(w.project, '.cursor', 'mcp.json')).mcpServers));
+    }
+    finally { w.clean(); }
+});
+
+test('retired-server: a decline is advice from then on, in this project only (spec D3)', () =>
+{
+    const w = world();
+    const data = path.join(w.dir, 'data');
+    try
+    {
+        seed(w, 'old', 'local', OLD_TOOL);
+        writeJson(path.join(ptRoot(w), 'mcps.json'), { version: 1, servers: [{ name: 'old', scope: 'local', row: 'old-tool', route: 'local', clients: ['claude'], entry: OLD_TOOL, key: null }], own: [] });
+        const [f] = detectAll(retiredCtx(w, data)).found.filter((x) => x.id === 'retired-server') as [Finding];
+        applyFixes(retiredCtx(w, data), ['none'], { input: { 'retired-declined': `${f.declineId}~local` }, log: () => {} });
+        const [again] = detectAll(retiredCtx(w, data)).found.filter((x) => x.id === 'retired-server') as [Finding];
+        assert.deepStrictEqual([again.declined, Boolean(again.blocked)], [true, true]);
+        assert.ok(localEntry(w, 'old'), 'nothing removed');
+    }
+    finally { w.clean(); }
+});
+
+const seedRetired = (w: World, project = w.project) =>
+{
+    assert.strictEqual(cli.runClaude(['mcp', 'add-json', 'old', JSON.stringify(OLD_TOOL), '-s', 'local'], { cwd: project, env: w.env }).status, 0);
+    writeJson(path.join(project, '.alfred-tools', 'mcps.json'), { version: 1, servers: [{ name: 'old', scope: 'local', row: 'old-tool', route: 'local', clients: ['claude'], entry: OLD_TOOL, key: null }], own: [] });
+};
+
+test('update offers a retired server once under New ways to pass data; an install between keeps its list entry; a decline holds in this project only; the removal applies (spec D3)', async () =>
+{
+    const w = world();
+    const data = path.join(w.dir, 'data');
+    try
+    {
+        const cat = { ...catalog, retired: [RETIRED_ROW] };
+        const ctxAt = (project: string) => makeUpdateCtx({ inventory: inventory.buildInventory({ project, env: w.env, catalog: cat, data }), project, catalog: cat, env: w.env, machine: noLsp, registry: fakeRegistry({}), now: NOW, refresh: false, data });
+        seedRetired(w);
+        // an install between the release and the update: the list keeps the retired entry, and inventory reads it retiredRow
+        const p = plan(inventory.buildInventory({ project: w.project, env: w.env, catalog: cat }), { picks: { 'playwright-chrome': { scope: 'local' } } }, { home: w.home, env: w.env, catalog: cat });
+        assert.deepStrictEqual(p.errors, []);
+        assert.strictEqual(apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
+        assert.ok(listed0(w, 'old'), 'the list still holds the retired entry');
+        const reg = inventory.buildInventory({ project: w.project, env: w.env, catalog: cat }).registrations.find((r) => r.name === 'old')!;
+        assert.deepStrictEqual([reg.retiredRow, reg.own], ['old-tool', false]);
+        const found = await checkUpdates(ctxAt(w.project));
+        const offer = found.offers.find((o) => o.id === 'upgrade:retired-server:old~local') as UpgradeOffer | undefined;
+        assert.ok(offer, found.offers.map((o) => o.id).join());
+        // a retired registration has no row and no route: update offers it no pin move (offers-pins.ts:33-35 already holds)
+        assert.ok(!found.offers.some((o) => o.id === 'mcp:old~local'), 'no pin offer for a retired server');
+        const declineId = `mcp:old:${createHash('sha256').update(path.resolve(w.project)).digest('hex').slice(0, 12)}`;
+        assert.strictEqual(offer.declineId, declineId);
+        assert.ok((offer.notes || []).some((note) => note.includes(`retired-declined=${declineId}~local`)));
+        // another project with the same name: its own offer
+        const other = path.join(w.dir, 'other');
+        fs.mkdirSync(other, { recursive: true });
+        seedRetired(w, other);
+        // declined here: not offered again here, still offered there
+        applyUpdates(ctxAt(w.project), ['none'], found, { log: () => {}, input: { 'retired-declined': `${declineId}~local` } });
+        assert.ok(!(await checkUpdates(ctxAt(w.project))).offers.some((o) => o.id.startsWith('upgrade:retired-server:')));
+        const there = await checkUpdates(ctxAt(other));
+        assert.ok(there.offers.some((o) => o.id === 'upgrade:retired-server:old~local'), 'the other project is offered still');
+        // picked there: removed with its list entry
+        const run2 = applyUpdates(ctxAt(other), ['upgrade:retired-server:old~local'], there, { log: () => {}, tmp: path.join(w.dir, 'tmp2') });
+        assert.deepStrictEqual(run2.failed, []);
+        assert.strictEqual(readAccount(w.env, other).local['old'], undefined);
+        assert.ok(!listedNames(path.join(other, '.alfred-tools', 'mcps.json')).includes('old'));
+    }
+    finally { w.clean(); }
+});
+
+test("a retired managed server is never called the user's own in a change plan; a plan neither re-lists it nor keeps it on a remove (spec D3)", () =>
+{
+    const w = world();
+    try
+    {
+        const cat = { ...catalog, retired: [RETIRED_ROW] };
+        localServers(w, { old: OLD_TOOL });
+        writeJson(path.join(w.project, '.alfred-tools', 'mcps.json'), { version: 1, servers: [{ name: 'old', scope: 'local', row: 'old-tool', route: 'local', clients: ['claude'], entry: OLD_TOOL, key: null }], own: [] });
+        const i = build(w, cat);
+        const old = i.registrations.find((r) => r.name === 'old')!;
+        assert.deepStrictEqual([old.rowId, old.own, isManaged(old)], [null, false, true]);
+        const changed = plan(i, { change: { 'mcp:old~local': { name: 'renamed' } } }, { home: w.home, env: w.env, catalog: cat });
+        assert.strictEqual(changed.errors.length, 1);
+        assert.match(changed.errors[0]!, /retired/);
+        assert.ok(!/your own|matches no catalog row/.test(changed.errors[0]!), changed.errors[0]);
+        // an unrelated install never upserts the retired entry into the list
+        const added = plan(i, { picks: { 'playwright-chrome': { scope: 'local' } } }, { home: w.home, env: w.env, catalog: cat });
+        const upserted = added.steps.flatMap((step) => (step.op === 'list-write' ? step.upserts.map((upsert) => upsert.server.name) : []));
+        assert.ok(upserted.length > 0 && !upserted.includes('old'), upserted.join());
+        // a remove takes the registration and drops its list entry
+        const removed = plan(i, { remove: [{ kind: 'mcp', name: 'old', scope: 'local' }] }, { home: w.home, env: w.env, catalog: cat });
+        assert.deepStrictEqual(removed.errors, []);
+        const dropped = removed.steps.flatMap((step) => (step.op === 'list-write' ? step.drops.map((drop) => drop.key) : []));
+        assert.deepStrictEqual([removed.steps.some((step) => step.op === 'mcp-remove' && step.name === 'old'), dropped], [true, ['mcp:old~local']]);
     }
     finally { w.clean(); }
 });
