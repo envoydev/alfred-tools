@@ -5,6 +5,7 @@ export * from './helper-foreign.ts';
 export * from './paths.ts';
 export * from './lists.ts';
 export * from './rename.ts';
+export * from './key-env.ts';
 import { appiumSdkEnvDetect, appiumSdkEnvFix, playwrightWebmcpDetect, playwrightWebmcpFix, serenaContextDetect, serenaContextFix, serenaTelemetryDetect, serenaTelemetryFix, serenaWindowsHomeDetect, serenaWindowsHomeFix, tokenSyncDetect, tokenSyncFix, uvxPythonDetect, uvxPythonFix, windowsArmPythonDetect, windowsArmPythonFix, windowsMcpOneDetect, windowsNpxCmdDetect, windowsNpxCmdFix } from './registration.ts';
 import { dataFolderIgnoreDetect, dataFolderIgnoreFix, npxCacheEntryDetect, npxCacheEntryFix, retiredPluginDetect, retiredPluginFix } from './machine.ts';
 import { helperMissingDetect, helperMissingFix, helperStaleDetect, helperStaleFix, keyToHelperDetect, keyToHelperFix, rootIgnoreDetect, rootIgnoreFix } from './keys.ts';
@@ -12,6 +13,7 @@ import { helperForeignDetect, helperForeignFix } from './helper-foreign.ts';
 import { helperChildFolderDetect, mcpOrderDetect, mcpOrderFix, projectRelativePathDetect, projectRelativePathFix } from './paths.ts';
 import { clientDriftDetect, clientDriftSteps, cursorFileDetect, listImportDetect, listImportSteps, readGuardDetect, readGuardSteps, serenaBaseModesDetect, serenaBaseModesSteps, serenaProjectFolderDetect, serenaProjectFolderSteps } from './lists.ts';
 import { rootMoveDetect, rootMoveFix, rootRepointDetect, rootRepointFix } from './rename.ts';
+import { context7KeyEnvDetect, context7KeyEnvFix } from './key-env.ts';
 import type { Detector, FileSteps, MachineFix, RegistrationFix } from './types.ts';
 
 // catalog/fixes.json names its `detect`, `fix` and `steps` functions; this is where they are found, each kind in a table of
@@ -27,6 +29,7 @@ export const DETECTORS: ReadonlyMap<string, Detector> = new Map<string, Detector
     ['appiumSdkEnvDetect', appiumSdkEnvDetect],
     ['serenaTelemetryDetect', serenaTelemetryDetect],
     ['tokenSyncDetect', tokenSyncDetect],
+    ['context7KeyEnvDetect', context7KeyEnvDetect],
     ['serenaContextDetect', serenaContextDetect],
     ['serenaBaseModesDetect', serenaBaseModesDetect],
     ['serenaProjectFolderDetect', serenaProjectFolderDetect],
@@ -57,6 +60,7 @@ export const REGISTRATION_FIXES: ReadonlyMap<string, RegistrationFix> = new Map<
     ['appiumSdkEnvFix', appiumSdkEnvFix],
     ['serenaTelemetryFix', serenaTelemetryFix],
     ['tokenSyncFix', tokenSyncFix],
+    ['context7KeyEnvFix', context7KeyEnvFix],
     ['serenaContextFix', serenaContextFix],
     ['keyToHelperFix', keyToHelperFix],
     ['helperForeignFix', helperForeignFix],

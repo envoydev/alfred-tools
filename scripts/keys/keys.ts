@@ -89,6 +89,22 @@ export function withoutTokenFields(entry: ServerEntry, route: CatalogRoute | nul
     return out;
 }
 
+// A key an entry still passes in a former optional args pair (context7's --api-key, spec D1), moved to the route's optional
+// env pair: the flag and its value out of args, the value under each name of `optionalEnv.token`, all else kept. A value in
+// both places keeps the args one, which the server reads first. No args field, or no env pair to move it to: as it is.
+export function moveArgKeyToEnv(entry: ServerEntry, route: CatalogRoute): ServerEntry
+{
+    const names = Object.keys((route.optionalEnv && route.optionalEnv.token) || {});
+    const field = tokenFields(entry, route).find((candidate) => candidate.at[0] === 'args');
+    if (!field || field.at[0] !== 'args' || !names.length || !entry.args) return entry;
+    const at = field.at[1];
+    const value = entry.args[at];
+    if (value === undefined) return entry;
+    const args = [...entry.args];
+    args.splice(at - 1, 2);
+    return { ...entry, args, env: { ...(entry.env || {}), ...Object.fromEntries(names.map((name) => [name, value])) } };
+}
+
 // valueAt and PLACEHOLDER are core/kept.ts's, which masks by them too; plan, apply, cursor, fix and mcps-list read them here.
 export { PLACEHOLDER, valueAt };
 

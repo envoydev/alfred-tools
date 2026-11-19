@@ -12,6 +12,12 @@ import { currentOf } from '../scripts/entries/entry.ts';
 import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
 import { MAC, POSIX_FIXTURE, inv, opts, pickOne, addStep, reg, changeOf } from './plan-helpers.ts';
 import type { McpReplaceStep } from '../scripts/plan/types.ts';
+import { world } from './helpers.ts';
+import * as F from '../scripts/fix/fix-functions.ts';
+import { detectAll, applyFixes } from '../scripts/fix/fix.ts';
+import { reg as fixReg, ctxFor, detect, seed, ctxOf, localEntry, logged, shownOf } from './fix-helpers.ts';
+import { run, fakeRegistry, ago, reAdd, localReg } from './update-helpers.ts';
+import type { Finding } from '../scripts/fix/types.ts';
 
 const catalog = catalogLib.load();
 
@@ -73,4 +79,61 @@ test("a key route's env key is not read as a kept optional key: sentry local -> 
     const step = p.steps.find((s) => (s.op === 'mcp-replace' || s.op === 'mcp-add') && s.name === 'sentry') as McpReplaceStep;
     assert.ok(step && !('headersHelper' in step.entry), JSON.stringify(step && step.entry));
     assert.ok(!renderPlan(p).includes('test-key-not-real'));
+});
+
+test('context7-key-env moves a registration\'s --api-key <v> into env.CONTEXT7_API_KEY, same value, nothing printed (spec D1)', () =>
+{
+    const w = world();
+    try
+    {
+        const before = { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.5.0', '--api-key', 'test-key-not-real'], env: { npm_config_before: '2026-11-03T23:59:59Z' } };
+        seed(w, 'context7', 'local', before);
+        const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'context7-key-env');
+        assert.deepStrictEqual(found.map((f) => [f.name, f.scope]), [['context7', 'local']]);
+        assert.ok(!shownOf(detectAll(ctxOf(w))).includes('test-key-not-real'));
+        // a failed write stops the row: the registration is as it was
+        const failing = logged();
+        const bad = applyFixes(ctxOf(w, { env: { ...w.env, FAKE_CLAUDE_FAIL: '"CONTEXT7_API_KEY"' } }), ['context7-key-env'], { log: failing.log });
+        assert.ok(bad.failed, failing.text());
+        assert.deepStrictEqual(localEntry(w, 'context7')?.args, before.args);
+        const out = logged();
+        const res = applyFixes(ctxOf(w), ['context7-key-env'], { log: out.log });
+        assert.strictEqual(res.failed, null, out.text());
+        const after = localEntry(w, 'context7');
+        assert.ok(after);
+        assert.deepStrictEqual(after.args, ['-y', '@upstash/context7-mcp@4.5.0']);
+        assert.deepStrictEqual(after.env, { npm_config_before: '2026-11-03T23:59:59Z', CONTEXT7_API_KEY: 'test-key-not-real' });
+        assert.ok(!out.text().includes('test-key-not-real') && !failing.text().includes('test-key-not-real'));
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'context7-key-env'), []);
+    }
+    finally { w.clean(); }
+});
+
+test('context7-key-env: a key in both places keeps the --api-key value, the one the server reads first', () =>
+{
+    const both = { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.5.0', '--api-key', 'test-key-args'], env: { CONTEXT7_API_KEY: 'test-key-env' } };
+    const ctx = ctxFor({ registrations: [fixReg('context7', both)] });
+    const [f] = detect(ctx).found.filter((x) => x.id === 'context7-key-env') as [Finding];
+    assert.deepStrictEqual(F.context7KeyEnvFix(both, f, ctx), { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.5.0'], env: { CONTEXT7_API_KEY: 'test-key-args' } });
+    assert.deepStrictEqual(detect(ctxFor({ registrations: [fixReg('context7', { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.7.0'], env: { CONTEXT7_API_KEY: 'x' } })] })).found.filter((x) => x.id === 'context7-key-env'), [], 'the key already in env');
+});
+
+test('update offers context7-key-env under New ways to pass data and moves --api-key into env, nothing printed (spec D1)', async () =>
+{
+    const w = world();
+    try
+    {
+        reAdd(w, 'context7', { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.7.0', '--api-key', 'test-key-not-real'], env: { npm_config_before: '2026-11-19T23:59:59Z' } });
+        const registry = fakeRegistry({ 'npm:@upstash/context7-mcp': [{ version: '4.7.0', time: ago(30) }] });
+        const c = await run(w, ['--check', '--no-refresh'], { registry });
+        assert.match(c.text, /New ways to pass data:[\s\S]*context7 \(local\)\s+context7-key-env: /);
+        assert.ok(!c.text.includes('test-key-not-real'));
+        const a = await run(w, ['--apply', 'upgrade:context7-key-env:context7~local', '--no-refresh'], { registry });
+        assert.strictEqual(a.code, 0, a.text);
+        assert.ok(!a.text.includes('test-key-not-real'));
+        const after = localReg(w, 'context7').entry;
+        assert.deepStrictEqual(after.args, ['-y', '@upstash/context7-mcp@4.7.0']);
+        assert.strictEqual(after.env!['CONTEXT7_API_KEY'], 'test-key-not-real');
+    }
+    finally { w.clean(); }
 });

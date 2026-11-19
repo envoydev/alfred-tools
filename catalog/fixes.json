@@ -230,6 +230,24 @@
       "source": "docs/build-prompt.md D7; docs/sources.md 'Claude Code - headersHelper'"
     },
     {
+      "id": "context7-key-env",
+      "upgrade": "0.7.0",
+      "tool": [
+        "context7"
+      ],
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "kind": "registration",
+      "symptom": "context7's local route passes its key as --api-key <key>, so the key is in every process listing; since 0.7.0 alfred-tools passes it in the server's environment, CONTEXT7_API_KEY",
+      "detect": "context7KeyEnvDetect",
+      "fix": "context7KeyEnvFix",
+      "verifiedOn": "this build: tests/fix.test.ts and tests/update.test.ts context7-key-env (2026-11-19)",
+      "source": "docs/sources.md 'context7 - the key in the environment (read 2026-11-19)'; docs/superpowers/specs/2026-11-19-pre-release-follow-up-design.md D1"
+    },
+    {
       "id": "serena-context",
       "upgrade": "0.5.0",
       "os": [
