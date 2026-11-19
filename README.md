@@ -331,13 +331,13 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
   to every other Claude Code config folder on this machine (`~/.claude`, `~/.claude-<name>`) that has this plugin
   installed, and say which. Each of those folders keeps its own plugin data, so an update run there may offer a
   retired plugin's uninstall again after a 'No' given elsewhere.
-- **Start limit.** Claude Code gives a server 30 s to start, and `npx` asks the npm registry at every start (measured;
-  `uvx` and Docker were not), so a slow first network of the day fails the first start until you pick Reconnect in
-  `/mcp`. When a plan writes such a server, the plugin adds `MCP_TIMEOUT=90000` (90 s) to `env` in the same settings
-  file; `/alfred-tools:fix` and `/alfred-tools:update` add it for the servers you have, in every config folder with the
-  plugin. A value you set yourself, in the file or in your shell, is never changed. A side effect: a hosted server's
-  stalled request also waits 90 s before it fails, not 60 s. Measured with `npm` 11.6.1 and Claude Code 2.1.328: see
-  `docs/sources.md`.
+- **Start limit.** Claude Code gives a server 30 s to start, and `npx` asks the npm registry at every start (measured; a
+  `uvx` server took 54.6 s on Windows; Docker not measured), so a slow first network of the day fails the first start
+  until you pick Reconnect in `/mcp`. When a plan writes such a server, the plugin adds `MCP_TIMEOUT=90000` (90 s) to
+  `env` in the same settings file; `/alfred-tools:fix` and `/alfred-tools:update` add it for the servers you have, in
+  every config folder with the plugin. A value you set yourself, in the file or in your shell, is never changed. A side
+  effect: a hosted server's stalled request also waits 90 s before it fails, not 60 s. Measured with `npm` 11.6.1 and
+  Claude Code 2.1.328: see `docs/sources.md`.
 - **Signing in.** After an install, configure or update that sets up a new sign-in, a question offers 'Sign in now'
   (recommended): the browser opens and waits up to five minutes. Otherwise the first session start opens it, which has
   only Claude Code's start limit (30 s, or 90 s with the 'Start limit' setting above), and `/mcp` -> the server ->

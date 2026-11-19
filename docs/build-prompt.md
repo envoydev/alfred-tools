@@ -921,8 +921,8 @@ Each step ends with its check; the next step starts only when it passes.
 - The 30 s start limit (measured 2026-11-19, `docs/sources.md`, 'Claude Code - the MCP start limit'). Claude Code cuts
   a stdio server that has not answered in 30 s and does not retry the first connection. `npm exec` / npx asks the
   registry at every start even with the exact pin cached (past 40 s with the registry unreachable; `prefer-offline`
-  does not help), so a slow first network of the day fails an npx server, the sign-in form included (uvx and Docker
-  launches get the same guard, unmeasured).
+  does not help), so a slow first network of the day fails an npx server, the sign-in form included (a uvx start took
+  54.6 s on a Windows VM; Docker unmeasured).
   Guard: `MCP_TIMEOUT=90000` in the `env` of Claude Code's settings (`settings-env` step; the `start-timeout` row for
   what is installed). A value the user set is never replaced. The install fetch (`fetch.ts`) fills the cache but does
   not skip that registry check.

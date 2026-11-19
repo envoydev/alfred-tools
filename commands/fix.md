@@ -50,7 +50,7 @@ sentry's variable to `SENTRY_AUTH_TOKEN` - keeping the value and printing nothin
 `macos-mcp.toml` again, the file a managed macos-control's `--config` names. `start-timeout` adds
 `MCP_TIMEOUT=90000` to `env` in Claude Code's settings - this config dir's and every other one with the plugin - when a
 managed server launches through npx, uvx or docker: Claude Code gives a server 30 s to start, and npx asks the npm
-registry first (uvx and docker unmeasured). A value already there stays; a settings file it cannot read is named, never written.
+registry first (a uvx start took 54.6 s on Windows; docker unmeasured). A value already there stays; a settings file it cannot read is named, never written.
 
 A finding about a parent folder's `.mcp.json` ends 'NOT APPLICABLE: run /alfred-tools:fix in <folder>': that file
 is the parent's, and fix run there repairs it. `data-folder-ignore` also finds a 0.2.0 copy a session made in this

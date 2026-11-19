@@ -1,5 +1,5 @@
-// start-timeout (0.7.0): Claude Code gives a server 30 s to start, and npx asks the npm registry first (uvx and
-// docker launches unmeasured), so a slow first network of the day fails it. A managed registration at any scope that launches a package gets
+// start-timeout (0.7.0): Claude Code gives a server 30 s to start, and npx asks the npm registry first (a uvx
+// start took 54.6 s on Windows; docker unmeasured), so a slow first network of the day fails it. A managed registration at any scope that launches a package gets
 // MCP_TIMEOUT in the env of Claude Code's settings: one finding per settings file that lacks it - the current config dir's
 // and each other config dir under the home that has this plugin installed (configDirsWithPlugin, as read-guard does); its
 // plan is one settings-env.
