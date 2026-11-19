@@ -113,7 +113,9 @@ export function fileSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
         }
         // macos-mcp's exclude file (D4): planned only while it is not there - one there is the user's to edit
         const excludeAt = pathApi.join(rootWrite.root, roots.FILES.macosExclude);
-        if (rootWrite.exclude && !exists(excludeAt))
+        // a root change that moves the file there carries it: no second write
+        const movedHere = (context.rootMoves || []).some((move) => move.to === excludeAt);
+        if (rootWrite.exclude && !exists(excludeAt) && !movedHere)
             helpers.push({ op: 'write-exclude-file', path: rootWrite.root, tools: rootWrite.exclude, why: `${rootWrite.root}: ${roots.FILES.macosExclude}, the tools macos-mcp leaves out (${rootWrite.exclude.join(', ')})` });
         if (!gap || !gap.secrets)
             for (const [file, want] of rootWrite.keys)

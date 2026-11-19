@@ -55,6 +55,9 @@ test('macos-control: Off adds --config <root>/macos-mcp.toml, Keep adds none; co
     const bare = reg('macos-desktop', 'project', { ...off, args: off.args!.slice(0, -2) }, 'macos-control', 'local');
     const turnOff = plan(inv(MAC, { registrations: [bare] }), changeOf(bare, { exclude: true }), opts('/Users/me'));
     assert.deepStrictEqual((turnOff.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep).entry.args!.slice(-2), ['--config', '/work/shop/.alfred-tools/macos-mcp.toml']);
+    const turnOffWrite = turnOff.steps.find((s) => s.op === 'write-exclude-file') as ExcludeFileStep;
+    assert.deepStrictEqual([turnOffWrite.path, turnOffWrite.tools], ['/work/shop/.alfred-tools', ['Shell']]);
+    assert.ok(turnOff.steps.indexOf(turnOffWrite) < turnOff.steps.findIndex((s) => s.op === 'mcp-replace'), 'configure Off writes the file before the registration names it');
     const mine = reg('macos-desktop', 'project', { ...off, args: [...off.args!.slice(0, -1), '/Users/me/mine.toml'] }, 'macos-control', 'local');
     assert.ok(!plan(inv(MAC, { registrations: [mine] }), changeOf(mine, { exclude: true }), opts('/Users/me')).steps.some((s) => s.op === 'mcp-replace'), "a --config of the user's: kept, no second one");
     // the same file name outside every root (Review Focus 2): not re-pointed by a scope move, not removed by Keep
@@ -147,6 +150,15 @@ test('macos-control: a root change moves macos-mcp.toml and re-points --config; 
     const replace = p.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep;
     assert.deepStrictEqual(replace.entry.args!.slice(-2), ['--config', '/work/shop/tools/macos-mcp.toml']);
     assert.ok(p.steps.indexOf(move) < p.steps.indexOf(replace));
+    assert.ok(!p.steps.some((s) => s.op === 'write-exclude-file'), 'the move carries the file to the new root: no second write there');
+    assert.ok(!renderPlan(p).includes('only when it is not there'));
+    // nothing there to move: the new root gets the file written, before the re-pointed registration
+    const bare = plan(i, { rootChange: ['project'], roots: { project: { id: 'named', path: 'tools' } } }, opts('/Users/me'));
+    assert.deepStrictEqual(bare.errors, []);
+    assert.ok(!bare.steps.some((s) => s.op === 'move-root-file' && (s as MoveRootFileStep).from === oldFile));
+    const kept = bare.steps.find((s) => s.op === 'write-exclude-file') as ExcludeFileStep;
+    assert.deepStrictEqual([kept.path, kept.tools], ['/work/shop/tools', ['Shell']]);
+    assert.ok(bare.steps.indexOf(kept) < bare.steps.indexOf(bare.steps.find((s) => s.op === 'mcp-replace')!));
     // Local -> Global: written in the global root by the same op, and --config names it
     const g = plan(inv(MAC, { registrations: [r] }), changeOf(r, { scope: 'user' }), opts('/Users/me'));
     assert.deepStrictEqual(g.errors, []);
@@ -193,6 +205,31 @@ test('a 0.6.0 root .gitignore gains !macos-mcp.toml from fix root-ignore, so a c
         assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), 'macos-mcp.toml')), false);
         assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), '.mcps-secrets')), true, 'the key file stays ignored');
         assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((x) => x.id === 'root-ignore'), []);
+    }
+    finally { w.clean(); }
+});
+
+test('macos-config end to end: fix writes the missing root file once, the registration is unchanged, a file there is kept (spec D4)', { skip: process.platform !== 'darwin' && 'macos-control is offered on darwin only' }, () =>
+{
+    const w = world();
+    try
+    {
+        const real = { machine: noMachine({ exists: (target: string) => fs.existsSync(target) }) };
+        const file = path.join(ptRoot(w), 'macos-mcp.toml');
+        const entry = { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-11-10T23:59:59Z', '--from', 'macos-mcp==0.4.7', 'macos-mcp', 'serve', '--config', file], env: { ANONYMIZED_TELEMETRY: 'false' } };
+        seed(w, 'macos-desktop', 'project', entry);
+        const before = mcpJson(w).mcpServers['macos-desktop'];
+        const [f] = detectAll(ctxOf(w, real)).found.filter((x) => x.id === 'macos-config') as [Finding];
+        assert.ok(f, 'found with the file missing');
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w, real), ['macos-config'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), '[tools]\nexclude = ["Shell"]\n');
+        assert.deepStrictEqual(mcpJson(w).mcpServers['macos-desktop'], before, 'the registration is as it was');
+        assert.deepStrictEqual(detectAll(ctxOf(w, real)).found.filter((x) => x.id === 'macos-config'), []);
+        // a file the user edited is never found, never rewritten
+        fs.writeFileSync(file, '[tools]\nexclude = ["Shell", "App"]\n');
+        assert.deepStrictEqual(detectAll(ctxOf(w, real)).found.filter((x) => x.id === 'macos-config'), []);
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), '[tools]\nexclude = ["Shell", "App"]\n');
     }
     finally { w.clean(); }
 });

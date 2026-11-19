@@ -60,6 +60,7 @@ export interface ListCtx extends Machine
     recordEntries?: Record<string, OwnEntry[]> | undefined;
     recordLive?: Live | undefined;
     normalizeCopy?: ((entry: ServerEntry) => ServerEntry) | undefined;
+    rootMoves?: RootMove[] | undefined; // the root files a root change moves (planRootChange)
 }
 // The plan's own context: makeCtx's, the changes it plans, and what planMcp records for the lists.
 export interface PlanCtx extends MadeCtx, ListCtx
