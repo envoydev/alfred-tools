@@ -138,7 +138,9 @@ https://code.claude.com/docs/en/managed-mcp.md), ask your administrator to allow
 
 - a hosted route by a `serverUrl` entry, `*` wildcards allowed (`https://mcp.sentry.dev/*`);
 - a local route by a `serverCommand` entry: the exact command and arguments the plugin registers, paths and pin
-  included, so the entry changes with every pin install or `/alfred-tools:update` moves;
+  included, so the entry changes with every pin install or `/alfred-tools:update` moves; for a keyed local route at Local
+  or Global scope the registered command is the key launcher (`node <root>/mcp-bridge.js --run ...`), so the entry names
+  that command and its arguments;
 - a bridge route by its own command, `node <root>/mcp-bridge.js <url> <key name> <scheme> mcp-remote@<pin>`, and a
   sign-in shared with Cursor by `npx -y mcp-remote@<pin> <url>` - not by the package alone.
 

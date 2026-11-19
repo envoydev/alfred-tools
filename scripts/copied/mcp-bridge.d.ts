@@ -41,6 +41,7 @@ export interface RunLaunch
     envVar: string;
     keyName: string;
     keyFile: string | null;
+    startName: string;
 }
 export interface RunError { error: string; code: 1 | 2 }
 // The files the run mode reads a key from: .mcps-secrets in `dir`, then in the global root; duplicates dropped.

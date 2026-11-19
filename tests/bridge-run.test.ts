@@ -130,6 +130,20 @@ test('on win32 a bare npx runs through ComSpec, and cmd or an .exe on the PATH r
     finally { w.clean(); }
 });
 
+test("a start error names the inner command the registration gave, on win32 too", () => {
+    const w = world();
+    try
+    {
+        const env = { HOME: w.home, ComSpec: 'C:\\Windows\\system32\\cmd.exe', PATH: 'C:\\bin' };
+        const launch = bridge().runLaunch([`${CONTEXT7}=${CONTEXT7}?`, '--', 'npx', '-y', 'pkg@1'], env, { dir: w.root, platform: 'win32', exists: () => false });
+        assert.strictEqual(launch.command, 'C:\\Windows\\system32\\cmd.exe', 'what is spawned is ComSpec');
+        assert.strictEqual(launch.startName, 'npx', 'what an error names is the command the registration gave');
+        const missing = w.run(['--run', `${CONTEXT7}=${CONTEXT7}?`, '--', path.join(w.dir, 'no-such-server')]);
+        assert.match(missing.stderr, /^mcp-bridge: could not start .*no-such-server - /);
+    }
+    finally { w.clean(); }
+});
+
 test('hand-written .mcps-secrets lines give the exact value', () => {
     const w = world();
     try

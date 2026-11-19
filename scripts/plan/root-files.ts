@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { isInside, pathFor } from '../entries/platform.ts';
 import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
-import { ALFRED_DATA } from '../core/constants.ts';
+import { ALFRED_DATA, BRIDGE_WHY } from '../core/constants.ts';
 import { listSteps } from './lists.ts';
 import { rootIgnoreLines } from '../apply/file-steps.ts';
 import type { Roots } from '../entries/types.ts';
@@ -99,7 +99,7 @@ export function fileSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
         {
             const { state } = roots.shippedState('bridge', pathApi.join(rootWrite.root, roots.FILES.bridge), exists);
             if (state === 'absent' || state === 'lower')
-                helpers.push({ op: 'write-bridge', path: rootWrite.root, why: `${rootWrite.root}: mcp-bridge.js, which fills a hosted URL from .mcps-secrets each time the server starts` });
+                helpers.push({ op: 'write-bridge', path: rootWrite.root, why: `${rootWrite.root}: mcp-bridge.js, which ${BRIDGE_WHY}` });
             else if (state === 'higher') out.notes.push(`mcp-bridge.js in ${rootWrite.root} is newer than this plugin - update alfred-tools`);
             else if (state === 'edited') out.notes.push(`mcp-bridge.js in ${rootWrite.root} changed since alfred-tools wrote it - left as it is; /alfred-tools:fix (helper-stale) rewrites it`);
         }

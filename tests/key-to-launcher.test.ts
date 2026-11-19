@@ -295,6 +295,32 @@ test('composed with token-sync and sentry-auth-env on one registration gives one
     finally { w.clean(); }
 });
 
+test('a plain sentry with a stale literal composes in two runs: token-sync first, then the move', () =>
+{
+    const w = world();
+    try
+    {
+        const [held, newer] = [keyValue(), keyValue()];
+        secrets(projectRoot(w), { [SENTRY_KEY]: newer });
+        seed(w, 'sentry', 'local', plainSentry(held));
+        const [blocked] = found(w) as [Finding];
+        assert.ok(blocked && blocked.blocked, 'the stale literal blocks the move');
+        const out = logged();
+        assert.strictEqual(applyFixes(ctxOf(w), ['token-sync', 'key-to-launcher'], { tmp: tmpOf(w), log: out.log }).failed, null, out.text());
+        assert.strictEqual(launcherParts(localEntry(w, 'sentry')), null, 'the first run syncs and leaves the move blocked');
+        const [after] = found(w) as [Finding];
+        assert.ok(after && !after.blocked, 'unblocked once the values agree');
+        const before = w.calls().length;
+        assert.strictEqual(applyFixes(ctxOf(w), ['token-sync', 'key-to-launcher'], { tmp: tmpOf(w), log: out.log }).failed, null, out.text());
+        const parts = launcherParts(localEntry(w, 'sentry'));
+        assert.ok(parts, 'the second run moves');
+        assert.strictEqual(`${parts.envVar}=${parts.keyName}`, `${SENTRY_ENV}=${SENTRY_KEY}`);
+        assert.ok(!showsAny(w, before, held, newer), 'neither value in the account file');
+        assert.ok(!out.text().includes(held) && !out.text().includes(newer), 'no value printed');
+    }
+    finally { w.clean(); }
+});
+
 test("context7's former --api-key moves too when key-to-launcher runs alone", () =>
 {
     const w = world();

@@ -1,4 +1,5 @@
 // Printing a plan: each step as the command it runs, and the notes.
+import { BRIDGE_RENDER } from '../core/constants.ts';
 import { pathFor } from '../entries/platform.ts';
 import * as roots from '../roots/roots.ts';
 import { renderLine } from './repair-tail.ts';
@@ -63,7 +64,7 @@ export function renderPlan(plan: Plan): string
         else if (step.op === 'ensure-dir') lines.push(`   writes ${step.path}/.gitignore  (contents: *)`);
         else if (step.op === 'root-ignore') lines.push(`   writes ${pathApi.join(step.path, '.gitignore')}  (${roots.GITIGNORE.trim().split('\n').join(', ')} - or the lines it lacks, appended)`);
         else if (step.op === 'write-helper') lines.push(`   writes ${pathApi.join(step.path, roots.FILES.helper)}  (this plugin's header helper)`, `   (and package.json, type commonjs, when absent)`);
-        else if (step.op === 'write-bridge') lines.push(`   writes ${pathApi.join(step.path, roots.FILES.bridge)}  (this plugin's URL bridge)`, `   (and package.json, type commonjs, when absent)`);
+        else if (step.op === 'write-bridge') lines.push(`   writes ${pathApi.join(step.path, roots.FILES.bridge)}  (${BRIDGE_RENDER})`, `   (and package.json, type commonjs, when absent)`);
         else if (step.op === 'move-root-file') lines.push(`   moves ${step.from} to ${step.to}  (the root's own file goes with it)`);
         else if (step.op === 'write-serena-context') lines.push(`   writes ${pathApi.join(step.path, roots.FILES.serenaContext)}  (serena's context: code navigation only)`);
         else if (step.op === 'write-exclude-file') lines.push(`   writes ${pathApi.join(step.path, roots.FILES.macosExclude)}  (the tools macos-mcp leaves out: ${step.tools.join(', ')} - only when it is not there)`);

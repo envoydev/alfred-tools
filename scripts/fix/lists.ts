@@ -7,7 +7,7 @@
 // (plan/lists.ts), with the same importUnlisted.
 import fs from 'node:fs';
 import * as roots from '../roots/roots.ts';
-import { ALFRED_DATA } from '../core/constants.ts';
+import { ALFRED_DATA, BRIDGE_WHY } from '../core/constants.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import { importUnlisted, adoptedClients } from '../plan/lists.ts';
 import { SCOPES, folderList, cursorSteps } from '../plan/cursor-steps.ts';
@@ -83,7 +83,7 @@ export function listImportSteps(finding: Finding, context: FixCtx): PlanStep[]
     const twoForms = fieldOf(finding, 'servers').filter((server) => (server.clients || []).includes('cursor') && helperParts(server.entry.headersHelper));
     const bridge = pathApi.join(root, roots.FILES.bridge);
     if (twoForms.length && ['absent', 'lower'].includes(roots.shippedState('bridge', bridge).state))
-        steps.push({ op: 'write-bridge', path: root, why: `${root}: mcp-bridge.js, which fills a hosted URL from .mcps-secrets each time the server starts` });
+        steps.push({ op: 'write-bridge', path: root, why: `${root}: mcp-bridge.js, which ${BRIDGE_WHY}` });
     const write: ListWriteStep = {
         op: 'list-write', file: finding.name, family: fieldOf(finding, 'family'),
         upserts: fieldOf(finding, 'servers').map((server) => ({ server: twoForms.includes(server) ? { ...server, form: 'two' } : server, after: null, cursorFile: null })), drops: [],

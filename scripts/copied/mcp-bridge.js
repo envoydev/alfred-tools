@@ -284,6 +284,7 @@ function runLaunch(argv, env, { dir, platform, helper, exists } = {})
         envVar: parsed.envVar,
         keyName: parsed.keyName,
         keyFile: found ? found.file : null,
+        startName: parsed.command,
     };
 }
 
@@ -313,7 +314,7 @@ function main()
     catch { r = { error: 'could not read the key files' }; }
     if (r.error) fail(r.error, r.code);
     const child = spawn(r.command, r.args, { stdio: 'inherit', windowsHide: true, env: r.childEnv });
-    child.on('error', (e) => fail(`could not start ${run ? r.command : 'npx'} - ${e.message}`));
+    child.on('error', (e) => fail(`could not start ${run ? r.startName : 'npx'} - ${e.message}`));
     for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { child.kill(sig); } catch { /* already gone */ } });
     child.on('exit', (code, signal) => process.exit(signal ? 1 : (code === null ? 1 : code)));
 }

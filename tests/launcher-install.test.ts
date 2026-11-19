@@ -66,6 +66,21 @@ test('install writes the launcher for github, sentry and context7 local at Local
     }
 });
 
+test('a fresh install of the launcher form gives no key-to-launcher finding', () =>
+{
+    for (const rowId of ROWS)
+    {
+        const w = world();
+        try
+        {
+            fillKeys(w, keyValue());
+            installBoth(w, { picks: { [rowId]: { route: 'local', scope: 'local', token: true } } });
+            assert.deepStrictEqual(detect(ctxOf(w), 'key-to-launcher').found.filter((finding) => finding.id === 'key-to-launcher'), [], rowId);
+        }
+        finally { w.clean(); }
+    }
+});
+
 test('write-helper and write-bridge come before the add', () =>
 {
     const p = plan(inv(MAC), pickOne('github', { route: 'local', scope: 'local' }), opts('/h'));

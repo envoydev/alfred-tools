@@ -2481,7 +2481,8 @@ test('a sentry bridge install writes helper and bridge, names the key and the UR
         assert.ok(!p.notes.some((n) => /child folder connects without this key/.test(n)));
         assert.ok(!p.notes.some((n) => /mcp-headers\.js runs under it/.test(n)));
         assert.strictEqual(p.notes.filter((n) => n === 'node must be on the PATH Claude Code starts with - mcp-bridge.js runs under it, as this plugin\'s commands do').length, 1);
-        assert.match(renderPlan(p), /writes .*mcp-bridge\.js {2}\(this plugin's URL bridge\)/);
+        assert.match(renderPlan(p), /writes .*mcp-bridge\.js {2}\(this plugin's bridge: it fills a hosted URL or starts a stdio server with its key\)/);
+        assert.ok(p.steps.some((s) => s.op === 'write-bridge' && s.why === `${b.proot}: mcp-bridge.js, which fills a hosted URL or starts a stdio server with its key from .mcps-secrets each time the server starts`), 'the step says what the file does for both uses');
         putSecrets(b.proot, 'SENTRY_ACCESS_TOKEN=x\nSENTRY_SLUG=acme\n');
         assert.strictEqual(addStep(bridgePlan(b, { route: 'bridge', scope: 'project', urlNames: { SENTRY_ORG: 'SENTRY_SLUG' } })).filled, true);
     }

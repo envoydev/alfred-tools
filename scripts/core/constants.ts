@@ -28,6 +28,9 @@ export const NO_FILE_NAMES = new Set(['', '.', '..']);
 
 // ---- a root folder's names (roots/roots.ts re-exports FILES, ROOT_NAME, FORMER_ROOT_NAME) ---------------------------
 // the files a root folder holds, and the roots map's name in the plugin's data folder
+// what mcp-bridge.js does, for the plan's write-bridge step: one file serves a URL bridge and a stdio key launcher
+export const BRIDGE_WHY = 'fills a hosted URL or starts a stdio server with its key from .mcps-secrets each time the server starts';
+export const BRIDGE_RENDER = "this plugin's bridge: it fills a hosted URL or starts a stdio server with its key";
 export const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json', signIns: 'mcp-remote-v1', serenaContext: 'serena-context.yml', macosExclude: 'macos-mcp.toml' };
 // the root folder's name, and the one this plugin gave it under its former name (preferred-tools until 0.4.0, spec D3)
 export const ROOT_NAME = '.alfred-tools';
