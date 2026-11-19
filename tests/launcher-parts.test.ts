@@ -4,8 +4,8 @@ import test from 'node:test';
 import assert from 'node:assert';
 import path from 'node:path';
 import { load } from '../scripts/catalog/catalog.ts';
-import { bridgeFileOf, bridgeParts, launcherPlace, mergeSettings } from '../scripts/entries/entry.ts';
-import { launcherParts, launchOf, relaunchedArgs, unlaunched, withLaunch } from '../scripts/entries/launcher.ts';
+import { bridgeFileOf, bridgeParts, buildEntry, launcherPlace, mergeSettings } from '../scripts/entries/entry.ts';
+import { launcherForm, launcherParts, launcherRoute, launchOf, relaunchedArgs, unlaunched, withLaunch } from '../scripts/entries/launcher.ts';
 import { fetchStep } from '../scripts/entries/names.ts';
 import { catalogMatch, launcher, launchArgs, pinnedVersion } from '../scripts/inventory/fingerprint.ts';
 import { renameSinceEnv } from '../scripts/keys/keys.ts';
@@ -18,11 +18,12 @@ import { world } from './helpers.ts';
 import { makeCtx, checkUpdates } from '../scripts/update/check.ts';
 import * as inventory from '../scripts/inventory/inventory.ts';
 import * as rootsLib from '../scripts/roots/roots.ts';
-import { BRIDGE_VERSION } from '../scripts/copied/mcp-bridge.js';
+import { BRIDGE_VERSION, parseRun } from '../scripts/copied/mcp-bridge.js';
 import { fakeRegistry, noLsp } from './update-helpers.ts';
 import type { Finding } from '../scripts/fix/types.ts';
 import { detectAll } from '../scripts/fix/fix.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
+import type { LauncherPlace } from '../scripts/entries/types.ts';
 
 const R = '/proj/.alfred-tools';
 const R2 = '/other/.alfred-tools';
@@ -243,4 +244,57 @@ test("pointsIntoRoot reads a launcher as this plugin's root", () =>
         assert.strictEqual(rootsLib.pointsIntoRoot(registration, { registrations: [] }, machine), null);
     }
     finally { w.clean(); }
+});
+
+// ---- the launcher form: a built entry wrapped for the bridge's run mode ------------------------------------------------
+
+const catalog = load();
+const FORM_MACHINE = { platform: 'darwin', project: '/work/shop', home: '/Users/me', machine: { docker: true } };
+const DARWIN_PLACE = { bridgePath: '/work/shop/.alfred-tools/mcp-bridge.js', globalRoot: '/Users/me/.alfred-tools' };
+const WIN_PLACE = { bridgePath: 'C:\\Users\\First Last\\proj\\.alfred-tools\\mcp-bridge.js', globalRoot: 'C:\\Users\\First Last\\.alfred-tools' };
+const routeOf = (id: string) => row(id).routes.local!;
+const plainEntry = (id: string, token: boolean, machine: Record<string, unknown> = FORM_MACHINE) => buildEntry(row(id), 'local', { scope: 'local', token, keyName: undefined }, machine as never, catalog.rules);
+const formOf = (id: string, keyName: string, place: LauncherPlace = DARWIN_PLACE, token = true) => launcherForm(routeOf(id), keyName, place, plainEntry(id, token));
+
+test('launcherForm per route, on darwin and win32 path forms', () =>
+{
+    const github = formOf('github', GITHUB_ENV)!;
+    assert.deepStrictEqual(github, { command: 'node', args: [DARWIN_PLACE.bridgePath, '--run', `${GITHUB_ENV}=${GITHUB_ENV}`, DARWIN_PLACE.globalRoot, '--', 'docker', ...DOCKER_ARGS], env: {} });
+    const sentry = formOf('sentry', 'SENTRY_ACCESS_TOKEN')!;
+    assert.deepStrictEqual(sentry.args!.slice(0, 4), [DARWIN_PLACE.bridgePath, '--run', 'SENTRY_AUTH_TOKEN=SENTRY_ACCESS_TOKEN', DARWIN_PLACE.globalRoot]);
+    assert.deepStrictEqual(sentry.env, { npm_config_before: routeOf('sentry').package!.cutoff });
+    const context7 = formOf('context7', 'CONTEXT7_API_KEY')!;
+    assert.strictEqual(context7.args![2], 'CONTEXT7_API_KEY=CONTEXT7_API_KEY?');
+    assert.deepStrictEqual(context7.env, { npm_config_before: routeOf('context7').package!.cutoff });
+    // no global root slot when the place has none
+    assert.strictEqual(launcherForm(routeOf('github'), GITHUB_ENV, { bridgePath: DARWIN_PLACE.bridgePath, globalRoot: null }, plainEntry('github', true))!.args![3], '--');
+    // win32: the bridge path is one argument, whole; the inner launch is cmd /c npx
+    const win = launcherForm(routeOf('sentry'), 'SENTRY_ACCESS_TOKEN', WIN_PLACE, plainEntry('sentry', true, { ...FORM_MACHINE, platform: 'win32', project: 'C:\\proj', home: 'C:\\Users\\First Last' }))!;
+    assert.strictEqual(win.args![0], WIN_PLACE.bridgePath);
+    assert.deepStrictEqual(win.args!.slice(win.args!.indexOf('--') + 1, win.args!.indexOf('--') + 4), ['cmd', '/c', 'npx']);
+    assert.strictEqual(launcherParts(win)!.path, WIN_PLACE.bridgePath);
+    // context7 without a key has no env token field to name
+    assert.strictEqual(formOf('context7', 'CONTEXT7_API_KEY', DARWIN_PLACE, false), null);
+});
+
+test("the bridge's parser takes every form launcherForm builds", () =>
+{
+    const forms = [formOf('github', 'ACME_GITHUB_TOKEN'), formOf('sentry', 'SENTRY_ACCESS_TOKEN'), formOf('context7', 'CONTEXT7_API_KEY'), formOf('github', GITHUB_ENV, { bridgePath: DARWIN_PLACE.bridgePath, globalRoot: null })];
+    for (const form of forms)
+    {
+        const parts = launcherParts(form);
+        const parsed = parseRun(form!.args!.slice(2));
+        assert.ok(parts && !('error' in parsed), JSON.stringify(parsed));
+        assert.deepStrictEqual({ envVar: parsed.envVar, keyName: parsed.keyName, optional: parsed.optional, globalRoot: parsed.globalRoot, command: parsed.command, args: parsed.args }, { envVar: parts.envVar, keyName: parts.keyName, optional: parts.optional, globalRoot: parts.globalRoot, command: parts.inner.command, args: parts.inner.args });
+    }
+});
+
+test('launcherRoute: a stdio route with a key, not at Project, not a bridge or a hosted route', () =>
+{
+    assert.strictEqual(launcherRoute(routeOf('github'), 'local', 'local'), true);
+    assert.strictEqual(launcherRoute(routeOf('github'), 'local', 'user'), true);
+    assert.strictEqual(launcherRoute(routeOf('github'), 'local', 'project'), false);
+    assert.strictEqual(launcherRoute(row('github').routes.remote!, 'remote', 'local'), false);
+    assert.strictEqual(launcherRoute(row('sentry').routes.bridge!, 'bridge', 'local'), false);
+    assert.strictEqual(launcherRoute(routeOf('context7'), 'local', 'local'), true);
 });

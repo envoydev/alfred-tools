@@ -2,6 +2,7 @@
 // the apply writes into a stdio registration, the helper's conditions and the reconnect line. The lines name the files,
 // never a value; a name found only in a file 0.1.x read names that file.
 import { bridgeParts } from '../../entries/entry.ts';
+import { launcherParts } from '../../entries/launcher.ts';
 import { pairNames, optionalNameNotes } from '../hosted-settings.ts';
 import { PARENT_HELPER_IN_CHILD, CHILD_FOLDER_REMEDY } from '../asks-keys.ts';
 import * as keys from '../../keys/keys.ts';
@@ -23,12 +24,16 @@ export function pickKeyUse(base: PickBase, answers: PickAnswers, entry: ServerEn
     // a bridge (0.4.0) reads its key and its URL names from the hosted chain each time the server starts, never through
     // Claude Code
     const bridge = bridgeParts(entry);
+    // a stdio key launcher reads the stdio chain at each start, through the bridge file a URL bridge uses
+    const launcher = launcherParts(entry);
+    let launcherFilled: boolean | null = null;
     let keyFile: string | null = null;
     let keyNames = keyName === undefined ? [] : [keyName];
     if (keyed && !(keyed.state.kind === 'stdio' && scope === 'project'))
     {
         const filled = keys.filledNames(keyed.state.files).some((filledEntry) => filledEntry.names.includes(keyed.name));
-        out.keys.push({ row: row.id, name, scope, variable: keyed.name, kind: bridge ? 'bridge' : keyed.state.kind, files: keyed.state.files, filled, old: filled ? null : keys.oldHolding(context.project, context.home, keyed.name) });
+        out.keys.push({ row: row.id, name, scope, variable: keyed.name, kind: bridge || launcher ? 'bridge' : keyed.state.kind, files: keyed.state.files, filled, old: filled ? null : keys.oldHolding(context.project, context.home, keyed.name), ...(launcher?.optional ? { optional: true } : {}) });
+        if (launcher) launcherFilled = filled;
         // a name filled nowhere in the chain is written, empty, into the chain's first file (D3)
         if (!filled) keyFile = keyed.state.files[0] ?? null;
         // a helper's `NAME=VAR` pairs (sonarqube's organization): their names are written too, and optional
@@ -54,16 +59,24 @@ export function pickKeyUse(base: PickBase, answers: PickAnswers, entry: ServerEn
             ? `${row.id}: fill ${andList(needed.length ? needed : optional)} in ${keyed.state.files[0]}${needed.length && optional.length ? ` (${andList(optional)} ${optional.length > 1 ? 'are' : 'is'} optional)` : !needed.length ? ` (optional)` : ''}; the bridge reads them ${after}`
             : `${row.id}: the bridge reads its key and URL names from .mcps-secrets ${after}`);
     }
+    if (launcher && keyed)
+    {
+        const eachStart = 'each time the server starts';
+        bridgeFilled = launcher.optional || Boolean(launcherFilled);
+        out.notes.push(launcherFilled
+            ? `${row.id}: the launcher reads its key from .mcps-secrets ${eachStart}`
+            : `${row.id}: fill ${keyed.name} in ${chainFile(keyed.state.files)}${launcher.optional ? ' (optional)' : ''}; the launcher reads it ${eachStart} - after a change, restart Claude Code or reconnect it in /mcp`);
+    }
     // a stdio key at local or global scope: the apply writes it in from the stdio chain under the key's name (R7); configure
     // rewrites a registration whose key differs from the chosen name's filled value, even when nothing else changed
-    const stepKey = keyed && keyed.state.kind === 'stdio' && scope !== 'project' && !unfilledStdio ? { name: keyed.name, files: keyed.state.files } : null;
+    const stepKey = !launcher && keyed && keyed.state.kind === 'stdio' && scope !== 'project' && !unfilledStdio ? { name: keyed.name, files: keyed.state.files } : null;
     const chosen = stepKey && current ? keys.valueIn(stepKey.files, stepKey.name) : null;
     const staleKey = chosen !== null && chosen.value !== liveKey;
     // the helper's own conditions (spec D4): the folder's trust at project and local scope, the declaring folder only at
     // project scope, node on the PATH - each said once
     const once = (text: string) => { if (!out.notes.includes(text)) out.notes.push(text); };
     // a bridge connects in a child folder too (F3) and sends no key through Claude Code: node is its one condition
-    if (bridge) once('node must be on the PATH Claude Code starts with - mcp-bridge.js runs under it, as this plugin\'s commands do');
+    if (bridge || launcher) once('node must be on the PATH Claude Code starts with - mcp-bridge.js runs under it, as this plugin\'s commands do');
     if (keyed && keyed.state.kind === 'helper' && entry.headersHelper)
     {
         if (scope !== 'user' && inventory.trusted === false) once(`accept the trust dialog the next time Claude Code starts in ${context.project} - until then the server connects without its key`);
@@ -75,5 +88,5 @@ export function pickKeyUse(base: PickBase, answers: PickAnswers, entry: ServerEn
     const reconnect = keyed && keyed.state.kind === 'helper' && entry.headersHelper
         ? { row: row.id, name, variable: keyed.name, file: chainFile(keyed.state.files), filled: keys.filledNames(keyed.state.files).some((filledEntry) => filledEntry.names.includes(keyed.name)), anonymous: route.authMode === 'optional-token' && !route.keyless, hint: (route.helper && route.helper.hint) || null, untrusted: scope !== 'user' && inventory.trusted === false }
         : null;
-    return { bridge: Boolean(bridge), bridgeFilled, keyFile, keyNames, withKey: stepKey ? { key: stepKey } : {}, chosen, staleKey, reconnect };
+    return { bridge: Boolean(bridge), launcher: launcher !== null, bridgeFilled, keyFile, keyNames, withKey: stepKey ? { key: stepKey } : {}, chosen, staleKey, reconnect };
 }

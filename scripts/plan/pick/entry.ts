@@ -2,9 +2,10 @@
 // add or a new route, else edited from the registration as read - its pin, cut-off and the user's own args kept.
 import { formatRoot, applyRoot } from '../../entries/locations.ts';
 import { checkHostedSettings, currentHostedSettings, defaultHostedSettings } from '../hosted-settings.ts';
-import { buildEntry, applyContext, bridgeParts, helperParts, helperGlobalRoot, bridgePathFor, renameTemplate, helperFor, subst, rebridgedArgs } from '../../entries/entry.ts';
+import { buildEntry, applyContext, bridgeParts, helperParts, helperGlobalRoot, bridgePathFor, launcherPlace, renameTemplate, helperFor, subst, rebridgedArgs } from '../../entries/entry.ts';
 import { EXECUTABLE_PATH_FLAG } from '../../entries/constants.ts';
 import { withExclude } from '../../entries/exclude.ts';
+import { launcherParts, launcherRoute, relaunchedArgs, unlaunched } from '../../entries/launcher.ts';
 import { routeField } from '../../catalog/rows.ts';
 import * as keys from '../../keys/keys.ts';
 import * as kept from '../../core/kept.ts';
@@ -16,12 +17,13 @@ import type { Current } from '../../entries/types.ts';
 import type { PickAnswer, PickAnswers, PickBase, PickEntry, Plan, PlanCtx } from '../types.ts';
 
 // The registration's entry with this pick's answers: the data folder, serena's context, the browser binary, the bridge's
-// path, template and key name, the hosted helper, the optional key and the host.
+// path, template and key name, a launcher's path, root and key name, the hosted helper, the optional key and the host.
 function editedEntry(base: PickBase, answers: PickAnswers, current: Current, edit: { rootStr: string | undefined; wantExec: string | null | undefined; toolSettings: Record<string, string> | undefined }, context: PlanCtx, out: Plan): ServerEntry
 {
     const { row, routeId, route, scope } = base;
     const { params, wantToken, sendNow, keyName, urlNames } = answers;
     let entry: ServerEntry = JSON.parse(JSON.stringify(current.entry));
+    const launcher = launcherParts(entry);
     if (row.locations && edit.rootStr !== current.rootStr && edit.rootStr !== undefined) entry = applyRoot(entry, row, edit.rootStr, scope, context);
     // serena's context file follows the scope's root (D7)
     if (route.run && route.run.includes('{contextFile}')) entry = applyContext(entry, scope, context);
@@ -58,6 +60,17 @@ function editedEntry(base: PickBase, answers: PickAnswers, current: Current, edi
         }
         else if (header) out.notes.push(`${row.id}: '${current.name}' sends its key from an Authorization header - /alfred-tools:fix moves it into .mcps-secrets, read by mcp-headers.js (key-to-helper)`);
         else entry.headersHelper = helperFor(route, scope, context, keyName, edit.toolSettings, (helperParts(current.entry.headersHelper) || { pairs: null }).pairs);
+    }
+    else if (launcher && launcherRoute(route, routeId, current.scope))
+    {
+        // a launcher keeps its form where a key is sent: its two slots follow the scope and its pair the key's name, and
+        // nothing after `--` changes. At Project, or with the key off, it is the plain entry again
+        if (scope === 'project' || !sendNow) entry = unlaunched(entry);
+        else
+        {
+            const place = launcherPlace(scope, context);
+            entry.args = relaunchedArgs(entry.args || [], { ...launcher, path: place.bridgePath, globalRoot: place.globalRoot, keyName: keyName ?? launcher.keyName });
+        }
     }
     else if (route.authMode === 'optional-token' && sendNow !== current.token)
     {

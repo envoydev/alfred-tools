@@ -60,10 +60,11 @@ export interface PickCursor
     signInRoot: string | null;
 }
 
-// What the key needs: the key file and names written, a bridge's state, the key the apply writes in and the reconnect line.
+// What the key needs: the key file and names written, a bridge's or launcher's state, the key the apply writes in and the reconnect line.
 export interface PickKeyUse
 {
     bridge: boolean;
+    launcher: boolean;
     bridgeFilled: boolean | null;
     keyFile: string | null;
     keyNames: string[];

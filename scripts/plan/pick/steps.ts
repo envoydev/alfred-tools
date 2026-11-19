@@ -20,18 +20,18 @@ export function pickSteps(base: PickBase, built: PickEntry, cursor: PickCursor, 
     const { row, route, current, listedClients, routeId, scope, name } = base;
     const { fresh, rootStr, ensure, dataAbs } = built;
     const { form, clients, signInRoot } = cursor;
-    const { bridge, bridgeFilled, keyFile, keyNames, withKey, chosen, staleKey, reconnect } = keyUse;
+    const { bridge, launcher, bridgeFilled, keyFile, keyNames, withKey, chosen, staleKey, reconnect } = keyUse;
     // a launch the cache may not hold yet is fetched once it is written (entries/names.ts fetchStep says why); a change that
     // keeps the package, such as a location or a name, fetches nothing
     const fetch = fetchStep(name, entry, row.id, current && current.entry);
     const contextFile = entry.args?.[contextArgAt(entry)];
-    const uses: RootUses = { helper: Boolean(entry.headersHelper) || bridge, bridge: bridge || form === 'two', serenaContext: contextFile === undefined ? undefined : pathFor(context.platform).dirname(contextFile), exclude: route.excludeFile && excludeArgAt(entry, route.excludeFile, context) >= 0 ? route.excludeFile.tools : undefined, keyFile, keyName, keyNames, data: dataAbs };
+    const uses: RootUses = { helper: Boolean(entry.headersHelper) || bridge || launcher, bridge: bridge || launcher || form === 'two', serenaContext: contextFile === undefined ? undefined : pathFor(context.platform).dirname(contextFile), exclude: route.excludeFile && excludeArgAt(entry, route.excludeFile, context) >= 0 ? route.excludeFile.tools : undefined, keyFile, keyName, keyNames, data: dataAbs };
     // the shared sign-in's folder sits in the family's root: the root is written (its .gitignore) like any other
     const signInUse = () => { if (signInRoot !== null) context.uses.push({ family: roots.familyOf(scope), root: signInRoot }); };
     // the apps and the form this registration is listed with (plan/lists.ts)
     const record = () => { const registrationKey = keyOf('mcp', name, scope); if (context.clientsFor) context.clientsFor.set(registrationKey, clients); if (context.formFor) context.formFor.set(registrationKey, form); };
-    // a bridge step says whether its names are filled: the apply's background start skips one that cannot start yet
-    const withFilled = bridge ? { filled: Boolean(bridgeFilled) } : {};
+    // a bridge or launcher step says whether its names are filled: the apply's background start skips one that cannot start yet
+    const withFilled = bridge || launcher ? { filled: Boolean(bridgeFilled) } : {};
     // serena's base modes (D7): the edit runs after its first start, so the plan says what it does first
     const serenaLine = () => { const noteLine = row.id === 'serena' ? serenaConfig.planNote(entry, context) : null; if (noteLine && !out.notes.includes(noteLine)) out.notes.push(noteLine); };
     if (!current)

@@ -2,9 +2,11 @@
 // Pure; the run mode itself is scripts/copied/mcp-bridge.js, which a root runs outside the plugin.
 import path from 'node:path';
 import { FILES } from '../core/constants.ts';
+import * as keys from '../keys/keys.ts';
 import { RUN, RUN_PAIR } from './constants.ts';
 import type { ServerEntry } from '../core/types.ts';
-import type { LauncherParts } from './types.ts';
+import type { CatalogRoute } from '../catalog/types.ts';
+import type { LauncherParts, LauncherPlace } from './types.ts';
 
 const isNode = (command: string): boolean => path.basename(command.replace(/\\/g, '/')).replace(/\.exe$/i, '').toLowerCase() === 'node';
 const isBridgePath = (argument: string): boolean => argument.replace(/\\/g, '/').split('/').pop() === FILES.bridge;
@@ -55,3 +57,25 @@ export function withLaunch(entry: ServerEntry, inner: ServerEntry): ServerEntry
 
 // A launcher's inner command and args with the entry's env; any other entry as it is.
 export const unlaunched = (entry: ServerEntry): ServerEntry => launchOf(entry);
+
+// Whether a route's registration at `scope` runs as a launcher: a stdio route with a key, which a committed Project file
+// never carries. A hosted route and a URL bridge read their key another way.
+export const launcherRoute = (route: CatalogRoute, routeId: string, scope: string): boolean =>
+    routeId !== 'remote' && route.runtime !== 'bridge' && !route.helper && Boolean(route.tokenVar) && scope !== 'project';
+
+// A built stdio entry wrapped for the bridge's run mode: the first env field the route's key sits in names the variable the
+// bridge fills, `keyName` names the entry of .mcps-secrets it reads, and no key field is left in the env. null when the
+// entry holds no key in its env - or still holds one in its args, where the launcher's argv would show it.
+export function launcherForm(route: CatalogRoute, keyName: string, place: LauncherPlace, inner: ServerEntry): ServerEntry | null
+{
+    const moved = keys.moveArgKeyToEnv(inner, route);
+    const fields = keys.tokenFields(moved, route);
+    const first = fields.find((field) => field.at[0] === 'env');
+    if (!first || fields.some((field) => field.at[0] === 'args')) return null;
+    const pair = `${first.at[1]}=${keyName}${route.authMode === 'optional-token' ? RUN.optional : ''}`;
+    return {
+        command: 'node',
+        args: [place.bridgePath, RUN.flag, pair, ...(place.globalRoot ? [place.globalRoot] : []), RUN.end, moved.command ?? '', ...(moved.args ?? [])],
+        env: keys.withoutTokenFields(moved, route).env ?? {},
+    };
+}

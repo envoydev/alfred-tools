@@ -214,6 +214,7 @@ export interface KeyLine
     files: string[]; // stored - do not rename
     filled: boolean; // stored - do not rename
     old: string | null; // stored - do not rename
+    optional?: boolean; // stored - do not rename
 }
 export interface Reconnect
 {
