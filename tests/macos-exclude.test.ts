@@ -5,6 +5,7 @@ import assert from 'node:assert';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import { excludeQuestion } from '../scripts/plan/asks-keys.ts';
+import { excludeArgAt, withExclude } from '../scripts/entries/exclude.ts';
 import * as asks from '../scripts/plan/asks-all.ts';
 import { MAC, inv, opts, pickOne, addStep, reg, changeOf } from './plan-helpers.ts';
 import type { McpMoveStep, McpReplaceStep } from '../scripts/plan/types.ts';
@@ -51,4 +52,30 @@ test('macos-control: Off adds --config <root>/macos-mcp.toml, Keep adds none; co
     assert.deepStrictEqual(moved.errors, []);
     assert.deepStrictEqual((moved.steps.find((s) => s.op === 'mcp-move') as McpMoveStep).entry.args!.slice(-2), ['--config', '/Users/me/configs/macos-mcp.toml'], 'a scope move leaves it');
     assert.ok(!moved.steps.some((s) => String(s.op) === 'write-exclude-file')); // the step is Task 8's: its op is not in the union yet
+});
+
+test("macos-control: a user's --config=<path> is foreign - not asked, not re-pointed, not removed, never doubled (spec D4)", () => {
+    const row = catalog.byId.get('macos-control')!;
+    const route = row.routes['local']!;
+    const context = { platform: 'darwin', project: '/work/shop', home: '/Users/me', exists: () => false };
+    const entry = { command: 'uvx', args: ['--from', 'macos-mcp==0.4.7', 'macos-mcp', 'serve', '--config=/Users/me/configs/x.toml'] };
+    assert.strictEqual(excludeQuestion(row, 'local', { entry, context }), null);
+    for (const on of [true, false]) assert.deepStrictEqual(withExclude(entry, route, on, 'project', context).args, entry.args, `on=${on}`);
+    const mineInRoot = { ...entry, args: [...entry.args.slice(0, -1), '--config=/work/shop/.alfred-tools/macos-mcp.toml'] };
+    assert.strictEqual(excludeArgAt(mineInRoot, route.excludeFile, context), -1, 'the = form is never the plugin\'s');
+    const r = reg('macos-desktop', 'project', entry, 'macos-control', 'local');
+    for (const exclude of [true, false])
+        assert.ok(!plan(inv(MAC, { registrations: [r] }), changeOf(r, { exclude }), opts('/Users/me')).steps.some((s) => s.op === 'mcp-replace'), `change exclude=${exclude}`);
+});
+
+test('macos-control: the known-root match ignores trailing separators, and is case-blind on win32 only (spec D4)', () => {
+    const excludeFile = catalog.byId.get('macos-control')!.routes['local']!.excludeFile;
+    const at = (platform: string, root: string, value: string) => excludeArgAt({ command: 'uvx', args: ['serve', '--config', value] }, excludeFile, { platform, project: '/p', home: '/h', knownRoots: [root] });
+    assert.strictEqual(at('darwin', '/a/root/', '/a/root/macos-mcp.toml'), 2, 'a root with a trailing slash still owns its file');
+    assert.strictEqual(at('win32', 'C:\\a\\root\\', 'C:\\a\\root\\macos-mcp.toml'), 2);
+    assert.strictEqual(at('win32', 'c:\\a\\root', 'C:\\A\\Root\\macos-mcp.toml'), 2, 'win32 compares without case');
+    assert.strictEqual(at('win32', 'C:\\a\\root', 'C:/a/root/macos-mcp.toml'), 2, 'win32 reads both slash forms');
+    assert.strictEqual(at('darwin', '/a/root', '/A/Root/macos-mcp.toml'), -1, 'posix stays case-sensitive');
+    assert.strictEqual(at('darwin', '/a/root', '/a/root-other/macos-mcp.toml'), -1);
+    assert.strictEqual(at('win32', 'C:\\a\\root', 'C:\\a\\root-other\\macos-mcp.toml'), -1);
 });

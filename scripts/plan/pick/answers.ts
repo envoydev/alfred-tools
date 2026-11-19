@@ -1,8 +1,8 @@
 // One MCP pick's answers that edit an entry: its host, whether it sends a key and under which name (spec D9, F2), and a
 // bridge's URL names (0.4.0).
+import fs from 'node:fs';
 import { keyStateOf, heldKey } from '../asks-keys.ts';
 import * as keys from '../../keys/keys.ts';
-import fs from 'node:fs';
 import { excludeArgAt, excludeRecommended } from '../../entries/exclude.ts';
 import { required } from '../required.ts';
 import type { Inventory } from '../../inventory/types.ts';

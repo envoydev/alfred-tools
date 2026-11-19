@@ -11,3 +11,6 @@ export const BRIDGE_SLOT = { path: 0, template: 1, keyName: 2, scheme: 3, packag
 // macos-mcp's own config file under the home: when it is there, turning a tool off makes the server read the root's file in
 // its place (spec D4)
 export const MACOS_USER_CONFIG = ['.macos-mcp', 'config.toml'] as const;
+
+// The separators that end a folder path: a root written with one still names the same folder
+export const TRAILING_SEPARATORS = /[\\/]+$/;
