@@ -15,6 +15,7 @@ import { plan } from '../scripts/plan/plan.ts';
 import { apply } from '../scripts/apply/run.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
 import { makeCtx, detectAll, applyFixes, renderFixes } from '../scripts/fix/fix.ts';
+import { declineIdOf } from '../scripts/fix/retired-server.ts';
 import { makeCtx as makeUpdateCtx, checkUpdates } from '../scripts/update/check.ts';
 import { applyUpdates } from '../scripts/update/apply.ts';
 import { world, writeJson, accountKey, readJson } from './helpers.ts';
@@ -279,4 +280,14 @@ test("configure's remove of a retired managed server names its retired row in th
         assert.ok(!/\bnull\b/.test(text), text);
     }
     finally { w.clean(); }
+});
+
+test('the decline id of a project: a posix path hashes as the raw text, a win32 path ignores its drive-letter case (spec D3)', () =>
+{
+    const hash = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 12);
+    assert.strictEqual(declineIdOf('old', 'local', '/work/shop', 'darwin'), `mcp:old:${hash('/work/shop')}`);
+    assert.strictEqual(declineIdOf('old', 'local', '/work/shop', 'linux'), `mcp:old:${hash('/work/shop')}`);
+    assert.strictEqual(declineIdOf('old', 'local', 'C:\\work\\shop', 'win32'), declineIdOf('old', 'local', 'c:\\work\\shop', 'win32'));
+    assert.notStrictEqual(declineIdOf('old', 'local', 'C:\\work\\shop', 'win32'), declineIdOf('old', 'local', 'C:\\work\\other', 'win32'));
+    assert.strictEqual(declineIdOf('old', 'user', 'C:\\work\\shop', 'win32'), 'mcp:old', 'user scope holds no project');
 });

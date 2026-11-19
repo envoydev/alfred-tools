@@ -21,7 +21,7 @@ import type { Finding } from '../scripts/fix/types.ts';
 
 const catalog = catalogLib.load();
 
-test('stdioKeyed reads a context7 key in env.CONTEXT7_API_KEY: Cursor is refused at Local (spec D1)', () => {
+test("stdioKeyed reads a context7 key in env.CONTEXT7_API_KEY on the 'local' route (spec D1)", () => {
     assert.strictEqual(cursorMcp.stdioKeyed({ command: 'npx', args: ['-y', '@upstash/context7-mcp'], env: { CONTEXT7_API_KEY: 'x' } }, catalog.byId.get('context7'), 'local'), true);
 });
 
@@ -68,6 +68,30 @@ test('configure switching context7 local key off removes it from env, and a form
         // kept as it is: nothing to do
         assert.ok(!plan(inv(MAC, { registrations: [r] }), changeOf(r, {}), opts('/Users/me')).steps.some((s) => s.op === 'mcp-replace'));
     }
+});
+
+test('configure turning the key on for a keyless local context7 puts it in env.CONTEXT7_API_KEY, never --api-key (spec D1)', { skip: POSIX_FIXTURE }, () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'c7-on-'));
+    try
+    {
+        const home = path.join(dir, 'home');
+        const project = path.join(dir, 'shop');
+        for (const root of [path.join(project, '.alfred-tools'), path.join(home, '.alfred-tools')])
+        {
+            fs.mkdirSync(root, { recursive: true });
+            fs.writeFileSync(path.join(root, '.mcps-secrets'), 'CONTEXT7_API_KEY=test-key-not-real\n');
+        }
+        const keyless = reg('c7', 'local', { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.7.0'], env: { npm_config_before: '2026-11-19T23:59:59Z' } }, 'context7', 'local');
+        assert.strictEqual(currentOf(catalog.byId.get('context7')!, keyless).token, false, 'no key to start with');
+        const p = plan(inv({ ...MAC, project }, { registrations: [keyless] }), changeOf(keyless, { token: true }), opts(home, { exists: (f) => fs.existsSync(f) }));
+        assert.deepStrictEqual(p.errors, []);
+        const replace = p.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep;
+        assert.ok(replace, 'the key route is a change to apply');
+        assert.strictEqual(replace.entry.env!['CONTEXT7_API_KEY'], '${CONTEXT7_API_KEY}');
+        assert.ok(!replace.entry.args!.includes('--api-key'), JSON.stringify(replace.entry));
+        assert.ok(!JSON.stringify(p).includes('test-key-not-real'));
+    }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("a key route's env key is not read as a kept optional key: sentry local -> remote with no key answer stays OAuth (spec D1, currentOf)", () => {

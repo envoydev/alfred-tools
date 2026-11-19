@@ -156,7 +156,7 @@ export function cursorWrite(step: CursorWriteStep, context: CursorCtx | null | u
 // ---- stdio routes that hold their key (spec D6) -----------------------------------------------------------------------
 
 // Does this entry carry its key in the registration? The rule, not a list: the route has a tokenVar and the entry holds
-// a field keys.tokenFields reads (github's Docker route, sentry's npm route, context7 local with --api-key).
+// a field keys.tokenFields reads (github's Docker route, sentry's npm route, context7 local with env CONTEXT7_API_KEY or a former --api-key).
 export function stdioKeyed(entry: ServerEntry, row: CatalogRow | null | undefined, routeId: string | null | undefined): boolean
 {
     const route = row && row.routes && routeId ? row.routes[routeId] : null;

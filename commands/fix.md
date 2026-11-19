@@ -78,7 +78,7 @@ Ask `choose` as one AskUserQuestion, exactly as printed:
   up, `all` leaves each `retired-plugin` finding marked for alfred-code: pass each of those as declined (below).
 - 'Pick which' - ask each call of `pick` as printed, one AskUserQuestion per call, and collect the labels picked
   (a label is a fix id). Go to step 3 with those ids. When `retired-plugin` was shown and not picked, each of its
-  plugins and scopes is declined (below). Nothing picked: go to step 3 with `none` when there is a decline to pass,
+  plugins and scopes is declined (below); so is each `retired-server` shown and not picked. Nothing picked: go to step 3 with `none` when there is a decline to pass,
   else it means 'Skip'.
 - 'Skip' - say nothing was changed and stop. Nothing is declined, so the uninstall offer comes back next time.
 

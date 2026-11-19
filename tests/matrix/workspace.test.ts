@@ -240,7 +240,7 @@ test('W4 - keys without alfred-code: the root and its ignores, a stdio key writt
 
         // a stdio key is written in at local scope, from the project root's .mcps-secrets
         run({ picks: { sentry: { route: 'local', scope: 'local' } } });
-        assert.strictEqual(localOf(h, api).sentry!.env![S], s1, 'the value from .alfred-tools/.mcps-secrets');
+        assert.strictEqual(localOf(h, api).sentry!.env!['SENTRY_AUTH_TOKEN'], s1, 'the value from .alfred-tools/.mcps-secrets');
 
         // the move to project scope keeps the helper: the committed file holds no key and no ${VAR}
         run({ change: { 'mcp:github~local': { scope: 'project' } } });
@@ -256,7 +256,7 @@ test('W4 - keys without alfred-code: the root and its ignores, a stdio key writt
         const log = (...a: unknown[]) => lines.push(a.join(' '));
         let res = applyFixes(ctx(), ['token-sync'], { tmp: path.join(h.root, 'tmp', 'fix'), log });
         assert.strictEqual(res.failed, null, lines.join('\n'));
-        assert.strictEqual(localOf(h, api).sentry!.env![S], s2, 'the new value written');
+        assert.strictEqual(localOf(h, api).sentry!.env!['SENTRY_AUTH_TOKEN'], s2, 'the new value written');
 
         // a 0.1.x registration - a ${VAR} in its Authorization header - moved to the helper by key-to-helper
         run({ remove: [{ kind: 'mcp', name: 'github', scope: 'project' }] });
@@ -290,7 +290,7 @@ test('W4 - keys with alfred-code: the root is .alfred, a key left in a 0.1.x sto
     const r = h.run(b.child!, { picks: { sentry: { route: 'local', scope: 'local', name: 'sentry-keys' } } });
     noErrors(r);
     ok(r);
-    assert.strictEqual(localOf(h, b.child!)['sentry-keys']!.env![S], sv, "the child's .alfred/.mcps-secrets");
+    assert.strictEqual(localOf(h, b.child!)['sentry-keys']!.env!['SENTRY_AUTH_TOKEN'], sv, "the child's .alfred/.mcps-secrets");
     assert.ok(!fs.existsSync(path.join(b.child!, '.alfred-tools')), 'no .alfred-tools root made');
     noValueInTmp(h, [sv]);
 
