@@ -6,6 +6,7 @@ import * as keys from '../keys/keys.ts';
 import * as kept from '../core/kept.ts';
 import * as roots from '../roots/roots.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
+import * as lists from '../mcps-list/mcps-list.ts';
 import { pathFor } from '../entries/platform.ts';
 import { launcherPlace } from '../entries/entry.ts';
 import { launcherParts } from '../entries/launcher.ts';
@@ -13,11 +14,12 @@ import { launcherForm, launcherRoute } from '../entries/launcher-form.ts';
 import { keyIn } from './registration.ts';
 import { useRoots, fileSteps } from '../plan/root-files.ts';
 import { repairTail } from '../plan/repair-tail.ts';
+import { SCOPES } from '../plan/cursor-steps.ts';
 import { FIX_ID, LAUNCHER_SCOPES, ONE_VAR } from './constants.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
 import type { Roots } from '../entries/types.ts';
-import type { McpAddStep, McpReplaceStep, PlanStep } from '../plan/types.ts';
+import type { CursorWritePlanStep, ListWriteStep, McpAddStep, McpReplaceStep, PlanStep } from '../plan/types.ts';
 import type { InvRegistration } from '../inventory/types.ts';
 import type { ListServer } from '../mcps-list/types.ts';
 import type { Finding, FixCtx } from './types.ts';
@@ -53,19 +55,30 @@ const editedBridgeRoot = (context: FixCtx, resolved: Roots, scope: string): stri
 };
 const editedBridgeText = (root: string): string => `mcp-bridge.js in ${root} changed since alfred-tools wrote it - /alfred-tools:fix (helper-stale) rewrites it, or delete it, then run fix again`;
 
-// Cursor's file, when the registration's Cursor copy holds a real key that differs from the file's value (compared in
-// process, never printed). Cursor reads a user-scope server only, and only one the list marks for it.
-function cursorCopyWithOtherKey(context: FixCtx, registration: InvRegistration, route: CatalogRoute, fileValue: string, listed: ListServer | undefined): string | null
+// Cursor's user-scope file, and the key its copy of `name` holds in its env (null: no copy, or none held). Read in process, never printed.
+function cursorCopyKey(context: FixCtx, name: string, route: CatalogRoute): { file: string; held: string | null }
 {
-    if (registration.scope !== 'user' || !(listed?.clients ?? []).includes('cursor')) return null;
     const file = cursorMcp.fileFor('global', { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env ?? {} });
     const read = cursorMcp.readCursor(file);
-    const copy = read.state === 'ok' ? read.servers[registration.name] : undefined;
-    const held = copy ? heldKeyOf(keys.moveArgKeyToEnv(copy, route), route) : null;
+    const copy = read.state === 'ok' ? read.servers[name] : undefined;
+    return { file, held: copy ? heldKeyOf(keys.moveArgKeyToEnv(copy, route), route) : null };
+}
+
+// Cursor's file, when the server's Cursor copy holds a real key that differs from the file's value (compared in
+// process, never printed). Cursor reads a user-scope server only, and only one the list marks for it.
+function cursorCopyWithOtherKey(context: FixCtx, target: { name: string; scope: string }, route: CatalogRoute, fileValue: string, listed: ListServer | undefined): string | null
+{
+    if (target.scope !== 'user' || !(listed?.clients ?? []).includes('cursor')) return null;
+    const { file, held } = cursorCopyKey(context, target.name, route);
     return held !== null && isOnlyCopy(held, fileValue) ? file : null;
 }
 
 export function keyToLauncherDetect(context: FixCtx): Finding[]
+{
+    return [...registrationFindings(context), ...cursorOnlyFindings(context)];
+}
+
+function registrationFindings(context: FixCtx): Finding[]
 {
     const resolved = rootsOf(context);
     return common.registrationsOf(context, FIX_ID.keyToLauncher).flatMap((registration) =>
@@ -102,6 +115,47 @@ export function keyToLauncherDetect(context: FixCtx): Finding[]
     });
 }
 
+// A list entry kept for Cursor alone (a client-drift 'drop' of Claude Code's copy): user scope, the plain keyed form of a
+// launcher route, no Claude Code registration of the name. Cursor's file holds its key, and no registration holds it for
+// the registration path to find. Its blocks are the registration path's, decided before anything is written: no value in
+// the chain, a different real key in Cursor's copy, an edited bridge. The key's value is looked up in process only.
+function cursorOnlyFindings(context: FixCtx): Finding[]
+{
+    const resolved = rootsOf(context);
+    const fixRow = common.fixRowOf(context, FIX_ID.keyToLauncher);
+    const claudeNames = new Set(context.inventory.registrations.filter((registration) => registration.scope === 'user').map((registration) => registration.name));
+    const usable = Object.values(context.inventory.lists ?? {}).flatMap((list) => (list && !list.note && !list.old ? [list] : []));
+    return usable.flatMap((list) => list.servers.flatMap((server): Finding[] =>
+    {
+        const clients = server.clients ?? [];
+        const row = server.row ? common.rowOf(context, server.row) : undefined;
+        const route = row && server.route ? row.routes[server.route] : undefined;
+        if (server.scope !== 'user' || !clients.includes('cursor') || clients.includes('claude') || claudeNames.has(server.name)) return [];
+        if (!row || !server.route || !route?.tokenVar || !fixRow.tool.includes(row.id) || !launcherRoute(route, server.route, server.scope)) return [];
+        if (launcherParts(server.entry) || !cursorMcp.stdioKeyed(server.entry, row, server.route)) return [];
+        const chain = chainOf(context, server.scope, resolved);
+        const name = server.key || route.tokenVar;
+        const hit = keys.valueIn(chain, name);
+        const target = { rowId: row.id, name: server.name, scope: server.scope };
+        const extra = { route: server.route, roots: resolved, chain, listOnly: true, list: list.file, family: roots.familyOf(server.scope), keyName: name };
+        const blocked = (found: string, text: string): Finding[] => [common.finding(FIX_ID.keyToLauncher, target, found, { ...extra, blocked: text })];
+        if (!hit)
+        {
+            const { held } = cursorCopyKey(context, server.name, route);
+            const where = `put it in ${chain[0] ?? '.mcps-secrets'} as ${name}, then run fix again`;
+            return held !== null && isOnlyCopy(held, '')
+                ? blocked("Cursor's copy holds its key, which no .mcps-secrets holds", `${server.name} holds a key no .mcps-secrets holds - ${where}`)
+                : blocked('the server has no key to move', `${server.name} has no key - ${where}`);
+        }
+        const cursorFile = cursorCopyWithOtherKey(context, target, route, hit.value, server);
+        if (cursorFile !== null)
+            return blocked(`Cursor's copy holds a key that differs from the one in ${hit.file}`, `${server.name}: Cursor's copy in ${cursorFile} holds a key that differs from the one in ${hit.file} - put the key that works in ${hit.file} as ${name} (or run fix, whose token-sync takes the file's), then run fix again`);
+        const editedIn = editedBridgeRoot(context, resolved, server.scope);
+        if (editedIn !== null) return blocked('the root\'s mcp-bridge.js is not the one alfred-tools wrote', editedBridgeText(editedIn));
+        return [common.finding(FIX_ID.keyToLauncher, target, `kept for Cursor alone, its key is in Cursor's file - it moves to the launcher, which reads ${name} from ${hit.file} each time the server starts`, extra)];
+    }));
+}
+
 export function keyToLauncherFix(entry: ServerEntry, finding: Finding, context: FixCtx): ServerEntry
 {
     const keyName = common.fieldOf(finding, 'keyName');
@@ -111,6 +165,32 @@ export function keyToLauncherFix(entry: ServerEntry, finding: Finding, context: 
     const launched = launcherForm(route, keyName, placeOf(context, common.fieldOf(finding, 'scope'), finding.roots), keys.moveArgKeyToEnv(entry, route));
     if (!launched) throw new Error(`${finding.name}: no key in its env to move - nothing written`);
     return launched;
+}
+
+// The plan of a list-entry move (a server kept for Cursor alone): the root's helper and bridge first, then the list entry
+// rewritten to the launcher form (no value), then Cursor's copy of that one name from the list, then the root's record. The
+// entry is read from the list as it is now, so a change since the detect is not overwritten with an old copy.
+export function keyToLauncherCursorSteps(finding: Finding, context: FixCtx, _input: Record<string, string> = {}, notes: string[] = []): PlanStep[]
+{
+    const [list, keyName, chain] = [common.fieldOf(finding, 'list'), common.fieldOf(finding, 'keyName'), common.fieldOf(finding, 'chain')];
+    if (!keys.valueIn(chain, keyName)) throw new Error(`${keyName} is filled in none of ${chain.join(', ')} any more - nothing written`);
+    const read = lists.readList(list);
+    const server = read && !read.state ? read.servers.find((candidate) => candidate.name === finding.name && candidate.scope === finding.scope) : undefined;
+    if (!server) throw new Error(`${finding.name}: not in ${list} any more - nothing written`);
+    const resolved = rootsOf(context);
+    const launched = launcherForm(common.findingRoute(context, finding), keyName, placeOf(context, server.scope, resolved), server.entry);
+    if (!launched) throw new Error(`${finding.name}: no key in its entry to move - nothing written`);
+    const editedIn = editedBridgeRoot(context, resolved, server.scope);
+    if (editedIn !== null) throw new RestoreBlocked(`${finding.name} (${server.scope}): ${editedBridgeText(editedIn)}`);
+    const fileContext = { platform: context.platform, project: context.inventory.project, home: context.home, roots: resolved, uses: [] };
+    useRoots(fileContext, server.scope, { helper: true, bridge: true, keyFile: null, keyName: null, data: null });
+    const files = fileSteps(context.inventory, fileContext, { notes });
+    const why = `${finding.name} (${server.scope}): the key moves out of Cursor's copy to the launcher`;
+    const family = common.fieldOf(finding, 'family');
+    const write: ListWriteStep = { op: 'list-write', file: list, family, upserts: [{ server: { ...server, entry: launched }, after: null, cursorFile: null }], drops: [], own: null, why: `${list}: ${why}` };
+    const cursorFile = cursorMcp.fileFor(family, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env ?? {} });
+    const cursorWrite: CursorWritePlanStep = { op: 'cursor-write', file: cursorFile, family, lists: [{ file: list, scopes: SCOPES.global }], before: [finding.name], only: [finding.name], skip: [], replace: [], why: `${cursorFile}: ${why}` };
+    return [...files.before, write, cursorWrite, ...files.after];
 }
 
 // A list entry in the 0.6.0 plain form, restored to Claude Code: the launcher form of it when its key name is filled, so no
@@ -149,8 +229,9 @@ export function restoreLauncherSteps(step: McpReplaceStep | McpAddStep, context:
     return [...files.before, step, ...tail, ...files.after];
 }
 
-// A key-to-launcher finding waits while its registration has a Claude Code client-drift finding to settle first: the move
-// would write the drifted entry into the list and the restore or keep answer would find nothing to do. An answer of
-// 'leave' settles it as it is, so the move goes on.
-export const waitsForDrift = (finding: Finding, found: Finding[], input: Record<string, string>): boolean =>
-    finding.id === FIX_ID.keyToLauncher && found.some((candidate) => candidate.id === 'client-drift' && candidate.app === 'claude' && candidate.name === finding.name && candidate.scope === finding.scope && (candidate.driftKey === undefined || input[candidate.driftKey] !== 'leave'));
+// A key-to-launcher finding waits while its server has a client-drift finding to settle first, whatever the answer given: the
+// move would write the drifted entry into the list, and an answer of 'leave' keeps it - a silent 'keep' - so only 'restore'
+// or 'keep' settles it. A registration waits on its Claude Code drift; a list entry kept for Cursor alone, which Claude
+// Code has no copy of, on Cursor's, since its copy is rewritten from the list.
+export const waitsForDrift = (finding: Finding, found: Finding[]): boolean =>
+    finding.id === FIX_ID.keyToLauncher && found.some((candidate) => candidate.id === 'client-drift' && (candidate.app === 'claude' || finding.listOnly === true) && candidate.name === finding.name && candidate.scope === finding.scope);

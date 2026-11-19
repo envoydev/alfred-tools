@@ -91,6 +91,7 @@ export interface Finding
     from?: number | null; // stored - do not rename
     fixes?: { secrets: boolean; helper: boolean; signIns: boolean; unignore: string[] }; // stored - do not rename
     tailOnly?: boolean; // stored - do not rename
+    listOnly?: boolean; // stored - do not rename
     moveFrom?: string; // stored - do not rename
     moveTo?: string; // stored - do not rename
     unmanaged?: string[]; // stored - do not rename

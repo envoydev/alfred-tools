@@ -18,7 +18,7 @@ import { helperChildFolderDetect, mcpOrderDetect, mcpOrderFix, projectRelativePa
 import { clientDriftDetect, clientDriftSteps, cursorFileDetect, listImportDetect, listImportSteps, readGuardDetect, readGuardSteps, serenaBaseModesDetect, serenaBaseModesSteps, serenaProjectFolderDetect, serenaProjectFolderSteps } from './lists.ts';
 import { rootMoveDetect, rootMoveFix, rootRepointDetect, rootRepointFix } from './rename.ts';
 import { context7KeyEnvDetect, context7KeyEnvFix, sentryAuthEnvDetect, sentryAuthEnvFix } from './key-env.ts';
-import { keyToLauncherDetect, keyToLauncherFix } from './key-to-launcher.ts';
+import { keyToLauncherCursorSteps, keyToLauncherDetect, keyToLauncherFix } from './key-to-launcher.ts';
 import { retiredServerDetect } from './retired-server.ts';
 import { macosConfigDetect, macosConfigSteps } from './macos-config.ts';
 import { startTimeoutDetect, startTimeoutSteps } from './start-timeout.ts';
@@ -98,5 +98,6 @@ export const FILE_STEPS: ReadonlyMap<string, FileSteps> = new Map<string, FileSt
     ['readGuardSteps', readGuardSteps],
     ['startTimeoutSteps', startTimeoutSteps],
     ['clientDriftSteps', clientDriftSteps],
+    ['keyToLauncherCursorSteps', keyToLauncherCursorSteps],
     ['macosConfigSteps', macosConfigSteps],
 ]);

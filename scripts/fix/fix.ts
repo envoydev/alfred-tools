@@ -105,8 +105,8 @@ export function detectAll(context: FixCtx, { only }: { only?: string | undefined
         if (!fix.os.includes(context.platform)) continue;
         const detect = DETECTORS.get(fix.detect);
         if (!detect) throw new Error(`fix row ${fix.id}: no function ${fix.detect} in scripts/fix/`);
-        // a file row plans its repair: one that is not advice names the function that does
-        if (fix.kind === 'file' && !fix.advice && !(fix.steps && FILE_STEPS.has(fix.steps))) throw new Error(`fix row ${fix.id}: no steps function ${fix.steps} in scripts/fix/`);
+        // a file row plans its repair: one that is not advice names the function that does; a registration row may name one for its list-entry findings
+        if ((fix.kind === 'file' ? !fix.advice : fix.steps !== undefined) && !(fix.steps && FILE_STEPS.has(fix.steps))) throw new Error(`fix row ${fix.id}: no steps function ${fix.steps} in scripts/fix/`);
         // an advice row has no fix: its finding is shown and never offered, whatever its detector returned
         const advice = (finding: Finding) => (fix.advice && !finding.blocked ? { blocked: 'advice only - nothing here is applied' } : {});
         for (const finding of detect(context))
@@ -254,7 +254,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     }
     // the guard reads the open drift whatever `only` narrowed the findings to
     const openDrift = picked.some((candidate) => candidate.id === FIX_ID.keyToLauncher) ? clientDriftDetect(context) : [];
-    for (const finding of picked.filter((candidate) => !result.skipped.includes(candidate) && waitsForDrift(candidate, openDrift, input)))
+    for (const finding of picked.filter((candidate) => !result.skipped.includes(candidate) && waitsForDrift(candidate, openDrift)))
     {
         result.skipped.push(finding);
         log(`skipped ${finding.id} on ${where(finding)}: client-drift is open on it - answer that first (restore or keep), then run fix again`);
@@ -310,7 +310,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     const groups = new Map<string, Finding[]>();
     // R9: a fix that gives a registration a helper brings its root's file steps - the .gitignore and the helper - first
     const fileCtx: { platform: string; project: string; home: string; roots: Roots | null; uses: RootUse[] } = { platform: context.platform, project: context.inventory.project, home: context.home, roots: null, uses: [] };
-    for (const finding of todo.filter((candidate) => candidate.kind === 'registration' && !candidate.tailOnly && candidate.id !== FIX_ID.retiredServer)) groups.set(`${finding.scope}\u0000${finding.name}`, [...(groups.get(`${finding.scope}\u0000${finding.name}`) || []), finding]);
+    for (const finding of todo.filter((candidate) => candidate.kind === 'registration' && !candidate.tailOnly && !candidate.listOnly && candidate.id !== FIX_ID.retiredServer)) groups.set(`${finding.scope}\u0000${finding.name}`, [...(groups.get(`${finding.scope}\u0000${finding.name}`) || []), finding]);
     for (const list of groups.values())
     {
         const found = list.find((candidate) => candidate.roots);
@@ -388,14 +388,16 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
 
     // file fixes (spec D9): detected again on what the registration pass left, their steps in the catalog's row order
     // as one plan through apply.ts, read back below like the rest
-    const filePicked = todo.filter((finding) => finding.kind === 'file');
+    // a list-entry finding of a registration row (key-to-launcher for a server kept for Cursor alone) is planned the same way
+    const plannedAsFile = (finding: Finding): boolean => finding.kind === 'file' || finding.listOnly === true;
+    const filePicked = todo.filter(plannedAsFile);
     if (filePicked.length)
     {
         const fctx = steps.length ? { ...context, inventory: inventory.buildInventory({ project: context.inventory.project, env: context.env, data: context.data }) } : context;
-        const now = detectAll(fctx, { only }).found.filter((finding) => finding.kind === 'file' && !finding.blocked && filePicked.some((pickedFinding) => pickedFinding.id === finding.id && pickedFinding.name === finding.name && pickedFinding.scope === finding.scope && pickedFinding.app === finding.app));
+        const now = detectAll(fctx, { only }).found.filter((finding) => plannedAsFile(finding) && !finding.blocked && filePicked.some((pickedFinding) => pickedFinding.id === finding.id && pickedFinding.name === finding.name && pickedFinding.scope === finding.scope && pickedFinding.app === finding.app));
         const planned: PlanStep[] = [];
         const planNotes: string[] = [];
-        for (const row of context.catalog.fixes.filter((candidate) => candidate.kind === 'file'))
+        for (const row of context.catalog.fixes.filter((candidate) => candidate.kind === 'file' || candidate.steps !== undefined))
             for (const finding of now.filter((candidate) => candidate.id === row.id))
             {
                 try

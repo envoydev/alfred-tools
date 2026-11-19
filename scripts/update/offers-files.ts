@@ -83,7 +83,7 @@ export function upgradeOffers(context: UpdateCtx, out: UpdateCheck): void
             continue;
         }
         const label = upgradeLabel(finding);
-        const driftWait = waitsForDrift(finding, openDrift, {}) ? 'client-drift is open on it, so the move waits for that answer - run /alfred-tools:fix (restore or keep), then update again' : null;
+        const driftWait = waitsForDrift(finding, openDrift) ? 'client-drift is open on it, so the move waits for that answer - run /alfred-tools:fix (restore or keep), then update again' : null;
         const why = finding.blocked || (finding.input && `needs a folder from you (${finding.input.prompt})`) || driftWait;
         if (why)
         {
