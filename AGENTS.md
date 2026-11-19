@@ -92,7 +92,11 @@ The first five plus `kit:check` are what CI runs, in that order.
   user's ruling, 2026-11-11): a route whose URL holds a value from `.mcps-secrets` runs `node <root>/mcp-bridge.js`,
   which fills the URL at each start and runs a pinned mcp-remote; it is copied into the root like the helper, never run
   from the plugin cache. Since 0.5.0 the bridge also serves Cursor's copy of every keyed hosted route, since Cursor
-  ignores `headersHelper`; Claude Code's copy keeps the helper form.
+  ignores `headersHelper`; Claude Code's copy keeps the helper form. The second exception (the user's ruling,
+  2026-11-19, 'Do these: ... G1/G2'): github, sentry and context7 `local` at Local and Global start through
+  `node <root>/mcp-bridge.js --run <ENV>=<KEY_NAME>[?] [<global root>] -- <launch>` (bridge 4), which reads the key from
+  the stdio chain at each start and gives it to the server's environment only; the registration holds the name, never
+  the value.
 - **Identity is the launch, not the name.** A registration is matched to a catalog row by its fingerprint (the package
   in `args`, or the URL host plus path). That is how a custom per-project name works with no ledger. A registration
   that matches no row is the user's and is never touched. The exceptions to 'no ledger': the list `<root>/mcps.json`
@@ -110,7 +114,10 @@ The first five plus `kit:check` are what CI runs, in that order.
   that will be in root of .alfred-tools or .alfred', replacing the key-file rule of 2026-10-29). The user writes
   every value; the plugin writes names only (`ensure-key-name`). A hosted keyed route reads its key through the header
   helper `mcp-headers.js` each time Claude Code connects, and its registration holds neither the key nor a `${VAR}` for
-  it. A stdio keyed route is written in by `apply.ts` at local and global scope, and is not offered at project scope.
+  it. A stdio keyed route (github, sentry, context7 `local`) is written by `apply.ts` at local and global scope as the
+  launcher above, with the key's name and no value, and is not offered at project scope (context7's keyless `local`
+  route stays plain at Project). A server kept in its plain form (a declined move) keeps its key in the registration
+  until `key-to-launcher` moves it.
   The 0.1.x key files (alfred-code's store, `.alfred-tools/.secrets`) are read for names only. `scripts/keys/keys.ts` holds
   the chains. No key in a file a command line names (`scripts/core/kept.ts`), none printed, none asked for. A key is the
   recommended way into every hosted route (2026-11-11); with no key, a route that has OAuth uses it. Every route
@@ -128,11 +135,12 @@ The first five plus `kit:check` are what CI runs, in that order.
   Two `permissions.deny` rules in the user's Claude Code settings keep sessions out: `Read(//**/mcp-remote-v1/**)` and
   `Read(//**/.mcps-secrets)`. They reach Claude Code's file tools and the Bash file commands it recognizes (`cat`,
   `head`, `tail`, `sed`), not a `grep -r` run from a folder above or a script that opens the file itself, unless Claude
-  Code's sandbox is on (macOS, Linux, WSL2); and a stdio key written into a registration sits in the account file and,
-  for Cursor's copy, in `~/.cursor/mcp.json`, which no rule covers (`docs/sources.md`, F15). Both are residual risks the
-  user accepted (2026-11-19, 'Record as residual'): no guard closes the shell routes without the sandbox, which is off
-  by default and blocks broadly, and a `Read` deny on the account file would also stop the plugin's own `claude` and
-  `node` calls whenever the sandbox runs. With the sandbox on, the two rules reach every shell command - the plugin's
+  Code's sandbox is on (macOS, Linux, WSL2) - G1, which stays residual (the user accepted it, 2026-11-19, 'Record as
+  residual'; no sandbox offer: the sandbox is off by default and blocks broadly). G2, a stdio key written into a
+  registration, sat in the account file and, for Cursor's copy, in `~/.cursor/mcp.json`, which no rule covers
+  (`docs/sources.md`, F15); it is closed for what the plugin writes (the launcher holds the name only), and stays open
+  for a server kept in its plain form after a declined `key-to-launcher` move, until it is moved. A `Read` deny on the
+  account file is not used: it would stop the plugin's own `claude` and `node` calls whenever the sandbox runs. With the sandbox on, the two rules reach every shell command - the plugin's
   own key fills (`apply.ts`, fix `token-sync`) included, which Claude Code then offers to rerun unsandboxed (from the
   docs, not measured; `docs/sources.md`, 'Read guard - the residual routes').
 - **Paths absolute at every scope** (the user's ruling, 2026-11-11, 'Absolute, always'), `project` included, with `~`

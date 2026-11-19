@@ -8,9 +8,8 @@ allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"), Bash(node "
 Walk the user through changing or removing tools from alfred-tools that are already installed here. The scripts do the
 work and print what you paste; you ask the questions. Argument: `$ARGUMENTS`.
 
-Configure starts from what is installed: every question recommends what the tool has now, so keeping an answer changes
-nothing, and a change is built from the registration as read, so an updated pin is never downgraded. Adding a tool that
-is not installed is `/alfred-tools:install`.
+Configure starts from what is installed: every question recommends what the tool has now, and a change is built from
+the registration as read, so a pin is never downgraded. Adding a tool is `/alfred-tools:install`.
 
 ## Rules
 
@@ -122,7 +121,7 @@ Its `targets.<key>` holds each pick's `row` and what it has now; a target with a
 <!-- /shared:walk-steps -->
 
 It records the answers (leaving out each one that keeps what the tool has now) and prints the next step; exit 2 names
-what to fix. What each step is:
+the fault. What each step is:
 
 - **On its own** (a server left on its own, a plugin's server or a connector): 'Let alfred-tools manage it' hands it to
   configure, update and fix from now on; for a plugin's server or a connector, the other option lets install offer
@@ -131,9 +130,8 @@ what to fix. What each step is:
   and no key value, and names both.
 - **A registration**: its first question is 'Who looks after <name>?'. 'Leave it on its own' ends this pick: configure,
   update and fix skip it from now on. 'alfred-tools' goes on to its route, scope and name, location and extras, key name
-  and settings, then 'Set up <name> for which apps?'. macos-control's extras add 'Turn off the Shell tool' (recommending
-  what it has; your own `--config` file is not asked). A change of the apps alone makes no `claude` call: the plan
-  writes the list and Cursor's file only.
+  and settings, then 'Set up <name> for which apps?'. macos-control's extras add 'Turn off the Shell tool' (your own `--config` file is not asked). A change of the apps alone makes no `claude` call: the plan
+  writes the list and Cursor's file.
 
 <!-- shared:typed-values -->
 
@@ -152,7 +150,9 @@ These labels are answered by a value typed next, one plain line each (see the Ru
   `quality-gates`, `rules`, `security-hotspots`.
 
 A bridge route (sentry's 'Bridge') adds one 'URL name' question per value its URL takes from `.mcps-secrets`. A change
-takes effect when the server starts again: say to restart Claude Code or reconnect in `/mcp`.
+takes effect when the server starts again: say to restart Claude Code or reconnect in `/mcp`. Configure keeps a server's
+form: a launcher stays one, re-pathed with its root; a server that still holds its key keeps it until
+`/alfred-tools:fix` moves it (`key-to-launcher`).
 
 A scope change on an MCP server is a move: a copy for every project moved to Local is gone from the other projects. To
 keep it there and add this project's own copy, use `/alfred-tools:install`; say so when a Global registration moves.
@@ -252,7 +252,7 @@ the apply ask again with the plan as it was. `'another'` - ask for the pick in o
 from what is typed through `change.keys`. With the pick chosen it drops that pick's recorded steps and prints the walk's
 next step. Run step 5's loop again to `done` from that `next`, then steps 6 and 7's plan again, then the apply ask.
 
-A plan that says 'Nothing to do': show it and stop, no ask.
+A plan that says 'Nothing to do': show it and stop.
 
 ## 8. Apply
 
@@ -261,12 +261,12 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/apply.ts" <tmp>/plan.json --tmp <tmp> --data
 ```
 
 Run it with the Bash tool's `timeout: 600000`. Claude Code asks permission for this call itself. It stops at the first
-failure, leaving what was applied in place and naming it. Paste the output verbatim. A failure prints the line that puts
+failure, naming what was applied. Paste the output verbatim. A failure prints the line that puts
 a registration back (`RESTORE BY HAND`): give it to the user as written. A key in it shows as `${ALFRED_TOOLS_KEPT}`,
 never its value: the user puts their key back there.
 
 Then report each changed tool as the read-back printed it (name, scope, route). A moved data folder or root moves no
-data: the plan named the old folder, so name it again.
+data: name the old folder again.
 
 <!-- shared:key-lines -->
 
@@ -292,9 +292,9 @@ foreground with `timeout: 600000`, and again if the limit stops it.
 
 <!-- /shared:fetch -->
 
-An npx server that fails at every start with `ENOENT` afterwards was started beside the download: `/alfred-tools:fix`
-repairs it. End with the restart line: a changed
-registration loads on the next session start, and a project-scope server also needs the trust prompt then.
+An npx server that fails at every start with `ENOENT` afterwards started beside the download: `/alfred-tools:fix`
+repairs it. End with the restart line: a changed registration loads on the next session start (a project-scope server
+also needs the trust prompt).
 
 **Sign-in.** For each server the plan named in an `OAuth:` line that says its browser opens to sign in the first time it
 starts (the shared sign-in), ask once the fetch has reported (sign-in.ts and the fetch both start npx, and two at once
@@ -333,4 +333,4 @@ Remove what?
 'Pick which': ask the `remove` calls from step 3's output as printed. Each option's description is the exact command,
 from which you read the target: `claude mcp remove <name> -s <scope>` is `{"kind": "mcp", "name": ..., "scope": ...}`.
 'None of these', or nothing picked: say so and stop. Put them in `answers.json` under `"remove"` and go to step 7. Data
-folders and key files stay where they are; the plan names them.
+folders and key files stay; the plan names them.

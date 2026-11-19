@@ -1621,6 +1621,29 @@ Page: https://pypi.org/project/macos-mcp/ (read 2026-11-19); the published 0.4.7
   the sandbox on, stop the plugin's own `claude` and `node` calls too. The user's ruling (2026-11-19, 'Record as
   residual'): no further guard; the routes are named in AGENTS.md, README, the guide and every read-guard finding.
 
+## Stdio keys - the launcher (read 2026-11-19)
+
+- Docker, https://docs.docker.com/reference/cli/docker/container/run/ (read 2026-11-19), 'Set environment variables
+  (-e, --env, --env-file)': 'the Docker CLI client checks the value the variable has in your local environment and
+  passes it to the container', and 'If no `=` is provided and that variable isn't exported in your local environment,
+  the variable is unset in the container'. So github's `-e GITHUB_PERSONAL_ACCESS_TOKEN` with no value takes the value
+  from the process that starts `docker`: the bridge's child environment.
+- npx, https://docs.npmjs.com/cli/v10/commands/npx (read 2026-11-19): the page says nothing about the environment the
+  executed package receives (it names only `PATH`). Not verified: that npx passes its environment to the package it runs. The
+  bridge gives its child the whole environment with the key added; a real npx run with the key was not made here.
+- Node, https://nodejs.org/api/child_process.html (read 2026-11-19; the last 22,000 characters of the page were not
+  read): `spawn`'s `env` defaults to `process.env`. 'Spawning .bat and .cmd files on Windows': `.bat` and `.cmd` files
+  'cannot be launched using `child_process.execFile()`' and can be run by `spawn()` with the `shell` option, by `exec()`,
+  or by 'spawning `cmd.exe` and passing the `.bat` or `.cmd` file as an argument'; the example is `spawn('cmd.exe',
+  ['/c', 'my.bat'])`. Not verified at that URL: that `spawn` with no shell runs only `.exe` and `.com` files, and the
+  `/d` flag; the page shows `/c` only, and the page names no `.exe`/`.com` rule. The bridge's `winLaunch` starts a command that is `cmd`, a `.exe` or a `.com`, or
+  has one of those beside it in a `PATH` folder, as it is, and anything else (`npx.cmd`) through `cmd.exe /d /c`; both the
+  `.exe`/`.com` rule and the `/d` flag are not verified against a vendor page. Windows behaviour is proved on the Windows VM or reported NOT RUN.
+- The bridge (`scripts/copied/mcp-bridge.js`, bridge 4, read from the code): `--run <ENV>=<KEY_NAME>[?] [<global root>]
+  -- <command> [<args>...]`. The stdio chain is `.mcps-secrets` beside the bridge, then the global root's; the first
+  non-empty value wins. A usage error exits 2 before any file is read; a required key with no value exits 1 before the
+  command starts; `?` makes the key optional. The key reaches the child in its environment only, never in argv.
+
 ## Claude Code - the MCP start limit (read 2026-11-19)
 
 - https://code.claude.com/docs/en/mcp.md: 'Configure MCP server startup timeout using the `MCP_TIMEOUT` environment

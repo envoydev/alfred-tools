@@ -124,7 +124,8 @@ questions and what to choose.
 - **Global** (Claude Code's user scope; `~/.cursor/mcp.json` in Cursor): every project on this machine. Pick it for a
   server you want everywhere, or for a hosted server with a key you use from child folders (see below).
 - **Local**: this project, only you. Recommended only where Project is not offered: a local route that needs a key
-  (github's Docker and sentry's npm routes), which is written into the registration. Cursor has no private file per
+  (github's Docker and sentry's npm routes), which starts through `mcp-bridge.js --run`: it reads the key from
+  `.mcps-secrets` at each start, and the registration holds its name only. Cursor has no private file per
   project, so a Local server set up for Cursor goes in `.cursor/mcp.json`, which a project usually commits; the plan
   says so when git would commit it - add `.cursor/mcp.json` to `.gitignore` to keep it yours.
 
@@ -242,13 +243,20 @@ CONTEXT7_API_KEY=ctx7sk-...   # a note after whitespace and # is not part of the
   `/mcp` -> the server -> Reconnect.
 - The helper looks in the `.mcps-secrets` beside it, then the global root's, then `~/.alfred-tools` and `~/.alfred`:
   the first value found wins, so one key in the global root serves every project.
-- A local server (github in Docker, sentry with `npx`) gets its key written into its registration at Local or Global
-  scope; `/alfred-tools:fix` writes it again after you change it. Those routes are not offered at Project scope.
-  context7's local route (`npx`) with a key gets it written in the same way at Local or Global scope, in its
-  environment (`CONTEXT7_API_KEY`), never on the command line; at Project scope it runs without a key, so the
-  committed `.mcp.json` carries none. The hosted route keeps the key out of both.
+- A local server (github in Docker, sentry with `npx`) starts at Local or Global scope through
+  `node <root>/mcp-bridge.js --run <VARIABLE>=<KEY NAME> -- <the server's own command>`. The bridge reads the key from
+  the `.mcps-secrets` beside it, then the global root's, at each start and gives it to the server in its environment
+  only, so nothing holds the value: not the account file, not Cursor's file, not the command line. Changing a key is:
+  edit the file, then `/mcp` -> the server -> Reconnect. Those routes are not offered at Project scope. context7's local
+  route (`npx`) with a key starts the same way at Local or Global scope, in its environment (`CONTEXT7_API_KEY`); at
+  Project scope it runs without a key, so the committed `.mcp.json` carries none. The hosted route keeps the key out of
+  both. A server you set up with an older alfred-tools still holds its key in its registration until
+  `/alfred-tools:fix` moves it (`key-to-launcher`); one you decline to move keeps its key there.
   Sentry's local route passes the key to the server as `SENTRY_AUTH_TOKEN` (the name `@sentry/mcp-server` reads from
   0.48.0); the name in `.mcps-secrets` stays `SENTRY_ACCESS_TOKEN`.
+- Back to the plain form by hand: `claude mcp add-json <name> '<the 0.6.0 entry with the key filled>' -s <scope>`. The
+  launcher needs only `node` and the root's `mcp-bridge.js` and `mcp-headers.js`, so it keeps working whatever the plugin
+  version; an older alfred-tools reads it as your own entry and leaves it alone.
 - The helper prints a key only when Claude Code runs it; run by hand it prints `{}`. The file itself is plain text: a
   command that reads it shows its keys, so keep it out of anything you share.
 - After an install, the plan says for each keyed server whether its key is filled, and how it connects once it is. A
@@ -294,9 +302,10 @@ the `claude` CLI) and Cursor's file from it in the same run.
 - **Your own entries stay.** A server you added to Cursor's file yourself is kept as it is, in its place. A name you
   already have there is replaced only after a question.
 - **Keyed hosted servers.** Cursor does not run Claude Code's key helper, so its copy starts the URL bridge
-  (`mcp-bridge.js`), which reads the same `.mcps-secrets`. A server whose key is written into its registration (github
-  in Docker, sentry with `npx`, context7's `npx` route with a key) reaches Cursor at Global scope only, so the key
-  never lands in a project file. context7's `npx` route without a key, as it always runs at Project scope, reaches
+  (`mcp-bridge.js`), which reads the same `.mcps-secrets`. A keyed local server (github
+  in Docker, sentry with `npx`, context7's `npx` route with a key) reaches Cursor at Global scope only, as the
+  launcher, so no key lands in a project file; Cursor has no private per-project file, so a Local one is not written
+  for Cursor. context7's `npx` route without a key, as it always runs at Project scope, reaches
   Cursor at any scope.
 - **Approve again after a change.** Cursor asks you to approve a server again whenever its entry changes, so after an
   update that moves pins the plan names each one to approve.
@@ -320,10 +329,10 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
   `CLAUDE_CONFIG_DIR`'s) stop a session's file tools and the shell's `cat`, `head`, `tail` and `sed` from opening the
   tokens or the keys: `Read(//**/mcp-remote-v1/**)` and `Read(//**/.mcps-secrets)`. They do not stop a `grep -r` run
   from a folder above, or a script that opens the file itself, unless Claude Code's sandbox is on (`/sandbox`; macOS,
-  Linux and WSL2, not native Windows). A key the plugin writes into a local server's registration (github in Docker,
-  sentry with `npx`, context7 with `npx` and a key) sits in Claude Code's account file and, for Cursor's copy, in
-  `~/.cursor/mcp.json`, which no rule covers. Both routes are known and left open on purpose: closing them would mean
-  turning the sandbox on for every project, or a rule that also blocks the plugin's own calls. With the sandbox on,
+  Linux and WSL2, not native Windows). That route is known and left open on purpose: closing it would mean turning the
+  sandbox on for every project. A local server's key no longer sits in Claude Code's account file or Cursor's
+  `~/.cursor/mcp.json`: the launcher holds its name only. A server kept in its plain form (a declined `key-to-launcher`
+  move) still holds the key there, where no rule covers it, until it is moved. With the sandbox on,
   the rules also reach the plugin's own key fills, and Claude Code offers to rerun those unsandboxed. The plugin adds
   the two rules when it first writes a sign-in entry or a
   key name; a rule you remove by hand comes back on the next plan that needs it. `/alfred-tools:fix` and
@@ -435,7 +444,8 @@ embedding model for about 2 minutes). Restart Claude Code once it reports.
 ## How it works
 
 - Every MCP server is a plain registration written by the `claude` CLI (`claude mcp add-json`, `remove`, `get`); no
-  launcher sits between Claude Code and the server, except the URL bridge above, which the root holds, not the plugin.
+  launcher sits between Claude Code and the server, except the URL bridge above and the key launcher for github, sentry
+  and context7 `local` (`mcp-bridge.js --run`), which the root holds, not the plugin.
   The one write of its own: after a change at Project scope it puts `.mcp.json`'s catalog servers in a fixed order,
   your own servers after them, and changes no value.
 - Cursor has no command that adds a server, so the plugin writes Cursor's two files itself, from the root's

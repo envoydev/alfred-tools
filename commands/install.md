@@ -271,7 +271,8 @@ reconnects.
 
 <!-- /shared:key-lines -->
 
-A Project- or Local-scope server with a key helper connects with its key only once the trust prompt is accepted - say
+A local route that needs a key starts at Local or Global through `mcp-bridge.js --run`, which reads the key from
+`.mcps-secrets` each time; the registration holds its name only. A Project- or Local-scope server with a key helper connects with its key only once the trust prompt is accepted - say
 so. A bridge reads its key and URL names each time the server starts: repeat the plan's 'fill ... in ...' note, and say
 that after a change to them the user restarts Claude Code or reconnects the server in `/mcp`. Close with one line: a
 later change or remove is `/alfred-tools:configure`.

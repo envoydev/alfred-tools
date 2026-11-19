@@ -45,6 +45,8 @@ line ends '<id> - alfred-code also installs it, and this removes it for both'.
 
 `retired-server` offers to remove a server the plugin manages whose row the catalog retired (`claude mcp remove`, then
 its list entry and Cursor's copy). Its line's note names the decline to pass; one declined before is NOT APPLICABLE.
+`key-to-launcher` moves a stdio key out of a registration into `mcp-bridge.js --run`, only where the file holds the same
+value; it blocks a differing value and an edited bridge, and a declined move keeps the plain form and its key.
 `context7-key-env` and `sentry-auth-env` rewrite a registration - context7's key from `--api-key` into its environment,
 sentry's variable to `SENTRY_AUTH_TOKEN` - keeping the value and printing nothing of it. `macos-config` writes a missing
 `macos-mcp.toml` again, the file a managed macos-control's `--config` names. `start-timeout` adds
@@ -175,7 +177,8 @@ connect; one that wrote a bridge (`mcp-bridge.js`) or the helper beside it print
 - Nothing is applied before step 2's answer. A fix that was not picked is never run.
 - A registration that matches no catalog row is the user's and is never touched.
 - Keys live in `.mcps-secrets` in the root folder, filled by the user. A key's value goes from there into a
-  registration only through `token-sync`, for a local route, and a `client-drift` 'Restore from the list' in Claude
+  registration only through `token-sync`, for a local route kept in its plain form (`key-to-launcher` takes it out once
+  its name is filled), and a `client-drift` 'Restore from the list' in Claude
   Code; `context7-key-env` and `sentry-auth-env` move a key within its registration and keep its value, any other
   rewrite keeps the key the registration holds, and `key-to-helper` moves a hosted key out of a registration once its
   name is filled there. This command never asks for, prints or edits a key, a value or a sign-in token in

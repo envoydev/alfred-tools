@@ -913,11 +913,20 @@ Each step ends with its check; the next step starts only when it passes.
   mode `launch_executable`, macos-mcp's `Shell`). This build adds no guard of its own; see the deny-row line under
   'Optional'. It relies on no other plugin's guard.
 - Key reads past the read guard (the system audit's G1 and G2, 2026-11-19). The two `Read` deny rules stop the file
-  tools and `cat`-style commands, not a `grep -r` or a script, unless the sandbox is on; a stdio key written into a
-  registration sits in the account file and `~/.cursor/mcp.json`, which no rule covers. The user's ruling (2026-11-19,
-  'Record as residual', over a launcher for stdio keys and over offering the sandbox): no further guard - the sandbox
-  blocks broadly and a deny on the account file would also stop the plugin's own calls under it. The routes are named
-  in AGENTS.md, README, the guide and every read-guard finding (`docs/sources.md`, 'Read guard - the residual routes').
+  tools and `cat`-style commands, not a `grep -r` or a script, unless the sandbox is on: G1 stays residual (the user's
+  ruling, 2026-11-19, 'Record as residual'; no sandbox offer, the sandbox blocks broadly). G2, a stdio key written into
+  a registration (the account file and `~/.cursor/mcp.json`, which no rule covers), was first recorded as residual; the
+  user's later ruling (2026-11-19, 'Do these: ... G1/G2') closed it for what the plugin writes: github, sentry and
+  context7 `local` start through `mcp-bridge.js --run` (bridge 4), which reads the key from `.mcps-secrets` at each
+  start. The routes are named in AGENTS.md, README, the guide and every read-guard finding (`docs/sources.md`, 'Read
+  guard - the residual routes' and 'Stdio keys - the launcher').
+- The launcher's risks (2026-11-19). Every reader of a launch (inventory, fingerprint, the list, fix, update, apply)
+  must know the launcher form, or it reads a launcher as the user's own entry. A declined `key-to-launcher` move keeps
+  the plain form and its key: that is the one G2 residual, until the move is made. An edited bridge (one that is not
+  bridge 4 byte for byte) blocks the move, so a key is never moved to a launcher that would not run. A registration
+  copied by hand to a machine or folder with no `.mcps-secrets` there starts without its key (a required one exits 1,
+  'no value for <NAME>'): the file must be there too. Cursor gets no local-scope launcher, since `.cursor/mcp.json` may
+  be committed and Cursor has no private per-project file.
 - The 30 s start limit (measured 2026-11-19, `docs/sources.md`, 'Claude Code - the MCP start limit'). Claude Code cuts
   a stdio server that has not answered in 30 s and does not retry the first connection. `npm exec` / npx asks the
   registry at every start even with the exact pin cached (past 40 s with the registry unreachable; `prefer-offline`
@@ -1007,4 +1016,6 @@ at alfred-tools for those three would make one plugin need the other.
 - Claude Code lets a plugin's server take a per-project name - then plugin-declared servers beat plain registrations.
 - A fix row is applied on the same machine more than twice - the install-time rule behind it is wrong.
 - Claude Code ships a sandbox on native Windows, or a read rule that reaches shell commands without one - then the
-  read guard can close G1 and G2.
+  read guard can close G1. (G2 is closed for what the plugin writes, by the launcher.)
+- Claude Code or Cursor can pass a key from a file into a stdio server's environment - then the launcher goes.
+- The open G1 decision: no sandbox offer (spec 'Optional'). Revisit it only if the user wants the sandbox offered.
