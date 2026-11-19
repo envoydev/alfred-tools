@@ -922,7 +922,7 @@ Each step ends with its check; the next step starts only when it passes.
   guard - the residual routes' and 'Stdio keys - the launcher').
 - The launcher's risks (2026-11-19). Every reader of a launch (inventory, fingerprint, the list, fix, update, apply)
   must know the launcher form, or it reads a launcher as the user's own entry. A declined `key-to-launcher` move keeps
-  the plain form and its key: that is the one G2 residual, until the move is made. An edited bridge (one that is not
+  the plain form and its key: that is the G2 residual, as is a server whose drift was answered 'leave' (the move waits for 'restore' or 'keep'), until the move is made. An edited bridge (one that is not
   bridge 4 byte for byte) blocks the move, so a key is never moved to a launcher that would not run. A registration
   copied by hand to a machine or folder with no `.mcps-secrets` there starts without its key (a required one exits 1,
   'no value for <NAME>'): the file must be there too. Cursor gets no local-scope launcher, since `.cursor/mcp.json` may

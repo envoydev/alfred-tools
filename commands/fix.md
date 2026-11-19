@@ -46,7 +46,8 @@ line ends '<id> - alfred-code also installs it, and this removes it for both'.
 `retired-server` offers to remove a server the plugin manages whose row the catalog retired (`claude mcp remove`, then
 its list entry and Cursor's copy). Its line's note names the decline to pass; one declined before is NOT APPLICABLE.
 `key-to-launcher` moves a stdio key out of a registration into `mcp-bridge.js --run`, only where the file holds the same
-value; it blocks a differing value and an edited bridge, and a declined move keeps the plain form and its key.
+value, and so for a user-scope server kept for Cursor alone (its list entry and Cursor's copy); it blocks a differing value and an
+edited bridge, waits for 'restore' or 'keep' on a drifted server (a 'leave' does not settle it), and a declined move keeps the plain form and its key.
 `context7-key-env` and `sentry-auth-env` rewrite a registration - context7's key from `--api-key` into its environment,
 sentry's variable to `SENTRY_AUTH_TOKEN` - keeping the value and printing nothing of it. `macos-config` writes a missing
 `macos-mcp.toml` again, the file a managed macos-control's `--config` names. `start-timeout` adds

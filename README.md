@@ -335,7 +335,7 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
   Linux and WSL2, not native Windows). That route is known and left open on purpose: closing it would mean turning the
   sandbox on for every project. A local server's key no longer sits in Claude Code's account file or Cursor's
   `~/.cursor/mcp.json`: the launcher holds its name only. A server kept in its plain form (a declined `key-to-launcher`
-  move, and a server kept for Cursor alone) still holds the key there, where no rule covers it, until it is moved. With the sandbox on,
+  move, and one whose drift you left with 'leave', which waits for 'restore' or 'keep') still holds the key there, where no rule covers it, until it is moved. With the sandbox on,
   the rules also reach the plugin's own key fills, and Claude Code offers to rerun those unsandboxed. The plugin adds
   the two rules when it first writes a sign-in entry or a
   key name; a rule you remove by hand comes back on the next plan that needs it. `/alfred-tools:fix` and
@@ -343,6 +343,8 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
   to every other Claude Code config folder on this machine (`~/.claude`, `~/.claude-<name>`) that has this plugin
   installed, and say which. Each of those folders keeps its own plugin data, so an update run there may offer a
   retired plugin's uninstall again after a 'No' given elsewhere.
+  Cursor has no deny rule like Claude Code's: adding `**/.mcps-secrets` and `**/mcp-remote-v1/**` to Cursor's global
+  ignore list (Cursor Settings) keeps its Agent's file tools and @-mentions out, but not its terminal.
 - **Start limit.** Claude Code gives a server 30 s to start, and `npx` asks the npm registry at every start (measured; a
   `uvx` server took 54.6 s on Windows; Docker not measured), so a slow first network of the day fails the first start
   until you pick Reconnect in `/mcp`. When a plan writes such a server, the plugin adds `MCP_TIMEOUT=90000` (90 s) to
