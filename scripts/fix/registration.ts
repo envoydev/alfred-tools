@@ -268,7 +268,7 @@ export function serenaContextFix(entry: ServerEntry, finding: Finding): ServerEn
 const PICK_NAME = "pick the key's name with /alfred-tools:configure";
 
 // The key inside a token field: the field's text less the route template's text around ${VAR}.
-function keyIn(value: unknown, template: string, tokenVar: string): string
+export function keyIn(value: unknown, template: string, tokenVar: string): string
 {
     // split always gives a first part
     const [prefix = '', post = ''] = template.split(`\${${tokenVar}}`);

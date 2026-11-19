@@ -266,6 +266,26 @@
       "source": "docs/sources.md 'Sentry MCP server - SENTRY_AUTH_TOKEN (read 2026-11-19)'; docs/superpowers/specs/2026-11-19-pre-release-follow-up-design.md D2"
     },
     {
+      "id": "key-to-launcher",
+      "upgrade": "0.7.0",
+      "tool": [
+        "context7",
+        "github",
+        "sentry"
+      ],
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "kind": "registration",
+      "symptom": "a stdio key server at local or user scope holds its key in the registration, where the account file and Cursor's file keep it in plain text; since 0.7.0 alfred-tools starts it through mcp-bridge.js --run, which reads the key from .mcps-secrets at each start",
+      "detect": "keyToLauncherDetect",
+      "fix": "keyToLauncherFix",
+      "verifiedOn": "this build: tests/key-to-launcher.test.ts (2026-11-19)",
+      "source": "docs/sources.md 'Stdio keys - the launcher (read 2026-11-19)'; docs/superpowers/specs/2026-11-19-stdio-key-launcher-design.md Step 5"
+    },
+    {
       "id": "serena-context",
       "upgrade": "0.5.0",
       "os": [

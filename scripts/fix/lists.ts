@@ -21,6 +21,7 @@ import * as workspace from '../roots/workspace.ts';
 import { deepEqual } from '../core/json-file.ts';
 import * as serenaConfig from '../apply/serena-config.ts';
 import { fieldOf, isManaged } from './common.ts';
+import { restoredLauncher } from './key-to-launcher.ts';
 import { READ_GUARD_RESIDUAL } from './constants.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRow } from '../catalog/types.ts';
@@ -342,6 +343,8 @@ export function clientDriftSteps(finding: Finding, context: FixCtx, input: Recor
         const routeId = listServer.route;
         const route = row && routeId ? row.routes[routeId] : undefined;
         const tokenVar = route && route.tokenVar;
+        const launched = row && routeId ? restoredLauncher(entry, listServer.key, row, routeId, fieldOf(finding, 'scope'), context) : null;
+        if (launched) entry = launched;
         if (kept.holdsKept(entry) && listServer.key && row && routeId && tokenVar)
         {
             const resolvedRoots = roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog }).roots;

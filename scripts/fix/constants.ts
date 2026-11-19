@@ -4,7 +4,10 @@
 export const ONE_VAR = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
 
 // The fix rows of the 2026-11-19 follow-up, by their catalog/fixes.json id.
-export const FIX_ID = { context7KeyEnv: 'context7-key-env', sentryAuthEnv: 'sentry-auth-env', retiredServer: 'retired-server', macosConfig: 'macos-config', startTimeout: 'start-timeout' } as const;
+export const FIX_ID = { context7KeyEnv: 'context7-key-env', sentryAuthEnv: 'sentry-auth-env', keyToLauncher: 'key-to-launcher', retiredServer: 'retired-server', macosConfig: 'macos-config', startTimeout: 'start-timeout' } as const;
+
+// The scopes whose stdio key a launcher carries: a committed Project file takes none.
+export const LAUNCHER_SCOPES = ['local', 'user'] as const;
 
 // A retired server's decline id (spec D3): `mcp:<name>`, and at local and project scope `:<project>` - the first hex
 // characters of the SHA-256 of the project's absolute path - so a decline in one project never silences another's.

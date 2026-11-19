@@ -6,6 +6,7 @@ export * from './paths.ts';
 export * from './lists.ts';
 export * from './rename.ts';
 export * from './key-env.ts';
+export * from './key-to-launcher.ts';
 export * from './retired-server.ts';
 export * from './macos-config.ts';
 export * from './start-timeout.ts';
@@ -17,6 +18,7 @@ import { helperChildFolderDetect, mcpOrderDetect, mcpOrderFix, projectRelativePa
 import { clientDriftDetect, clientDriftSteps, cursorFileDetect, listImportDetect, listImportSteps, readGuardDetect, readGuardSteps, serenaBaseModesDetect, serenaBaseModesSteps, serenaProjectFolderDetect, serenaProjectFolderSteps } from './lists.ts';
 import { rootMoveDetect, rootMoveFix, rootRepointDetect, rootRepointFix } from './rename.ts';
 import { context7KeyEnvDetect, context7KeyEnvFix, sentryAuthEnvDetect, sentryAuthEnvFix } from './key-env.ts';
+import { keyToLauncherDetect, keyToLauncherFix } from './key-to-launcher.ts';
 import { retiredServerDetect } from './retired-server.ts';
 import { macosConfigDetect, macosConfigSteps } from './macos-config.ts';
 import { startTimeoutDetect, startTimeoutSteps } from './start-timeout.ts';
@@ -37,6 +39,7 @@ export const DETECTORS: ReadonlyMap<string, Detector> = new Map<string, Detector
     ['tokenSyncDetect', tokenSyncDetect],
     ['context7KeyEnvDetect', context7KeyEnvDetect],
     ['sentryAuthEnvDetect', sentryAuthEnvDetect],
+    ['keyToLauncherDetect', keyToLauncherDetect],
     ['serenaContextDetect', serenaContextDetect],
     ['serenaBaseModesDetect', serenaBaseModesDetect],
     ['serenaProjectFolderDetect', serenaProjectFolderDetect],
@@ -72,6 +75,7 @@ export const REGISTRATION_FIXES: ReadonlyMap<string, RegistrationFix> = new Map<
     ['tokenSyncFix', tokenSyncFix],
     ['context7KeyEnvFix', context7KeyEnvFix],
     ['sentryAuthEnvFix', sentryAuthEnvFix],
+    ['keyToLauncherFix', keyToLauncherFix],
     ['serenaContextFix', serenaContextFix],
     ['keyToHelperFix', keyToHelperFix],
     ['helperForeignFix', helperForeignFix],

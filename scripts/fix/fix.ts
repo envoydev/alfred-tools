@@ -33,6 +33,7 @@ import { makeTempDir } from '../core/tmpdir.ts';
 import { useRoots, fileSteps } from '../plan/root-files.ts';
 import { reconnectLine } from '../plan/render.ts';
 import { helperNameOf, helperParts, contextArgAt } from '../entries/entry.ts';
+import { launcherParts } from '../entries/launcher.ts';
 import { fetchStep } from '../entries/names.ts';
 import * as mcpOrder from '../mcps-list/mcp-order.ts';
 import * as keys from '../keys/keys.ts';
@@ -330,6 +331,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         // a helper new to the registration - none before, or one of the user's own (helper-foreign) - and, for an app that runs
         // the bridge, the bridge beside it
         if (entry.headersHelper && !helperParts(registration.entry.headersHelper) && fileCtx.roots) useRoots(fileCtx, registration.scope, { helper: true, bridge: list.some((finding) => finding.cursor), keyFile: null, keyName: null, data: null });
+        else if (launcherParts(entry) && !launcherParts(registration.entry) && fileCtx.roots) useRoots(fileCtx, registration.scope, { helper: true, bridge: true, keyFile: null, keyName: null, data: null });
         // serena's context file (D7) is written into its folder - its home, else the root - before the registration names it
         const contextAt = contextArgAt(entry);
         const contextArg = (entry.args || [])[contextAt];

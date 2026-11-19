@@ -9,6 +9,7 @@ import * as inventory from '../scripts/inventory/inventory.ts';
 import { pythonRequest, pathFor } from '../scripts/entries/platform.ts';
 import { expandVars } from '../scripts/entries/locations.ts';
 import { buildEntry } from '../scripts/entries/entry.ts';
+import { launcherRoute } from '../scripts/entries/launcher.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
 import * as account from '../scripts/core/account.ts';
 import * as F from '../scripts/fix/fix-functions.ts';
@@ -123,7 +124,9 @@ test('a fresh entry from the catalog is clean on every OS - no detector fires on
             // appium's SDK paths are looked up on the machine by this very fix: with none on it, the finding is blocked
             // a Windows-shaped home cannot be made on this host, so there the one config-on-disk finding is the fixture's, not the installer's
             const fixtureOnly = (f: { id: string }) => f.id === 'serena-project-folder' && r.id === 'serena' && platform === 'win32';
-            assert.deepStrictEqual(found.filter((f) => f.id !== 'appium-sdk-env' && !fixtureOnly(f)), [], `${r.id} on ${platform}/${arch}`);
+            // the builder's plain entry of a stdio key route is the form before 0.7.0, which the install now wraps in the launcher: key-to-launcher offers the move, blocked here as no key file is on the machine
+            const plainKeyForm = (f: { id: string }) => f.id === 'key-to-launcher' && launcherRoute(r.routes.local!, 'local', 'local');
+            assert.deepStrictEqual(found.filter((f) => f.id !== 'appium-sdk-env' && !fixtureOnly(f) && !plainKeyForm(f)), [], `${r.id} on ${platform}/${arch}`);
             for (const f of found.filter((candidate) => !fixtureOnly(candidate))) assert.ok(f.blocked, `${r.id}: ${f.id} should be blocked with nothing on the machine`);
         }
     }

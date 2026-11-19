@@ -657,7 +657,7 @@ const listed = (root: string, servers: [string, string, unknown][]) => writeJson
 test('the fix rows update applies are the ones marked upgrade, each with the version that brought its way', () =>
 {
     const catalog = load();
-    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['root-move', '0.5.0'], ['root-repoint', '0.5.0'], ['context7-key-env', '0.7.0'], ['sentry-auth-env', '0.7.0'], ['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['serena-project-folder', '0.6.0'], ['list-import', '0.5.0'], ['retired-plugin', '0.5.0'], ['retired-server', '0.7.0'], ['read-guard', '0.5.0'], ['start-timeout', '0.7.0'], ['key-to-helper', '0.2.0'], ['helper-foreign', '0.6.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
+    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['root-move', '0.5.0'], ['root-repoint', '0.5.0'], ['context7-key-env', '0.7.0'], ['sentry-auth-env', '0.7.0'], ['key-to-launcher', '0.7.0'], ['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['serena-project-folder', '0.6.0'], ['list-import', '0.5.0'], ['retired-plugin', '0.5.0'], ['retired-server', '0.7.0'], ['read-guard', '0.5.0'], ['start-timeout', '0.7.0'], ['key-to-helper', '0.2.0'], ['helper-foreign', '0.6.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
 });
 
 test('update offers the new ways to pass data that fix knows - a 0.1.x key header, a relative project path - and applies them after the pins, by registration', async () =>
