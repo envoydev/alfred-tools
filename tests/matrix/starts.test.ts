@@ -107,6 +107,8 @@ const LOCAL = [
     { row: 'serena', needs: ['uvx'] },
     { row: 'memory', needs: ['uvx'] },
     { row: 'context7', route: 'local', needs: ['npx'], fakeKey: 'CONTEXT7_API_KEY' },
+    // the key is optional: the same launcher starts with no .mcps-secrets at all
+    { row: 'context7', route: 'local', needs: ['npx'], fakeKey: 'CONTEXT7_API_KEY', noKeyFile: true },
     { row: 'playwright-chrome', needs: ['npx'] },
     { row: 'appium', needs: ['npx'] },
     { row: 'macos-control', needs: ['uvx'] },
@@ -118,20 +120,26 @@ const LOCAL = [
 for (const c of LOCAL)
 {
     const row = catalog.byId.get(c.row)!;
-    test(`starts: ${c.row}${c.route ? ` (${c.route})` : ''} answers initialize, launched from its registration as read`, { skip: skipAll, timeout: START_MS + 120000 }, async (t) =>
+    test(`starts: ${c.row}${c.route ? ` (${c.route})` : ''}${c.noKeyFile ? ' with no key file' : ''} answers initialize, launched from its registration as read`, { skip: skipAll, timeout: START_MS + 120000 }, async (t) =>
     {
         if (!row.os.includes(process.platform)) return t.skip(`NOT RUN: ${c.row} is offered on ${row.os.join(', ')}, this is ${process.platform}`);
         const missing = c.needs.filter((b) => !which(b));
         if (missing.length) return t.skip(`NOT RUN: ${missing.join(', ')} not on PATH`);
         if (c.token && !process.env[c.token]) return t.skip(`NOT RUN: the route needs ${c.token}, which this shell does not set (a real token; the plugin writes none)`);
         // the shell's token goes where 0.2.0 reads a stdio key: the throwaway global root's .mcps-secrets, removed with the world
-        if (c.token) fill(path.join(h.home, '.alfred-tools', roots.FILES.secrets), c.token, process.env[c.token]!);
+        // (the root folder does not exist before the install, so the test makes it before the first write)
+        const secrets = path.join(h.home, '.alfred-tools', roots.FILES.secrets);
+        const seeded = c.token || (c.fakeKey && !c.noKeyFile);
+        if (seeded) fs.mkdirSync(path.dirname(secrets), { recursive: true });
+        // the world is shared by the cases: the earlier case's file goes before the no-file case starts
+        if (c.noKeyFile) fs.rmSync(secrets, { force: true });
+        if (c.token) fill(secrets, c.token, process.env[c.token]!);
         // a fake value, built at run time: the start proves the launcher reads it, and the account file must never hold it
         const fakeValue = c.fakeKey ? ['fake', c.row, 'value', 'a1b2c3d4e5f6'].join('-') : null;
-        if (c.fakeKey && fakeValue) fill(path.join(h.home, '.alfred-tools', roots.FILES.secrets), c.fakeKey, fakeValue);
+        if (c.fakeKey && fakeValue && !c.noKeyFile) fill(secrets, c.fakeKey, fakeValue);
 
-        const p = h.project(`start-${c.row}`);
-        const name = `start-${c.row}`;
+        const name = `start-${c.row}${c.noKeyFile ? '-nokey' : ''}`;
+        const p = h.project(name);
         const r = h.run(p, { picks: { [c.row]: { scope: 'local', name, ...(c.route ? { route: c.route } : {}), ...(c.fakeKey ? { token: true } : {}) } } });
         assert.deepStrictEqual(r.plan.errors, []);
         assert.strictEqual(r.report.failed, null, r.text);
@@ -143,6 +151,7 @@ for (const c of LOCAL)
             assert.notStrictEqual(launcherParts(reg.entry), null, `${c.row}: the registration is a launcher: ${JSON.stringify(reg.entry.args)}`);
             assert.strictEqual(reg.entry.command, 'node');
             assert.ok(!fs.readFileSync(account.accountFile(h.env), 'utf8').includes(fakeValue), 'the account file holds no key value');
+            if (c.noKeyFile) assert.ok(!fs.existsSync(secrets), 'no key file exists when the launcher starts');
         }
         if (c.row === 'serena')
         {

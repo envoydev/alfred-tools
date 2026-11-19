@@ -16,6 +16,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as cli from '../../scripts/core/claude-cli.ts';
 import * as account from '../../scripts/core/account.ts';
+import { launcherParts } from '../../scripts/entries/launcher.ts';
 import * as kept from '../../scripts/core/kept.ts';
 import * as roots from '../../scripts/roots/roots.ts';
 import * as catalogLib from '../../scripts/catalog/catalog.ts';
@@ -118,7 +119,8 @@ function seedPlainContext7(h: Harness, dir: string, value: string)
 }
 
 // update as the command runs it: check, apply all; on RECHECK, check and apply all once more
-async function updateAll(h: Harness, dir: string)
+// `afterMove` runs once the folders moved and before the second apply, to read the state the move alone left
+async function updateAll(h: Harness, dir: string, afterMove?: () => void)
 {
     const go = async (argv: string[]) =>
     {
@@ -137,6 +139,7 @@ async function updateAll(h: Harness, dir: string)
     const second = await go(['--check', '--json']);
     const secondIds = (JSON.parse(second.text).offers as { id: string }[]).map((o) => o.id);
     assert.ok(!secondIds.some((id) => /root-move|root-repoint/.test(id)), secondIds.join(', '));
+    afterMove?.();
     const again = secondIds.length ? await go(['--apply', 'all']) : { code: 0, text: '' };
     assert.strictEqual(again.code, 0, again.text);
     assert.doesNotMatch(again.text, /RECHECK/);
@@ -212,13 +215,33 @@ test('R2 - a pre-rename 0.5.0 machine: lists, Cursor\'s copies, the old kept mar
     const oldList = fs.readFileSync(path.join(dir, OLD, roots.FILES.list), 'utf8') + (exists(path.join(h.home, OLD, roots.FILES.list)) ? fs.readFileSync(path.join(h.home, OLD, roots.FILES.list), 'utf8') : '');
     assert.ok(oldList.includes(kept.OLD_MARKER), 'the pre-rename list holds the old kept marker');
 
-    await updateAll(h, dir);
+    const listsOf = () => [listOf(path.join(dir, NEW)), listOf(path.join(h.home, NEW))].filter(Boolean) as McpsList[];
+    // after the move alone: the kept marker reads in its new name, and the plain entry still holds it
+    await updateAll(h, dir, () =>
+    {
+        const moved = listsOf().map((l) => JSON.stringify(l)).join('\n');
+        assert.ok(!moved.includes(kept.OLD_MARKER), 'the move left no old marker');
+        assert.ok(moved.includes(kept.MARKER), 'the kept marker reads in its new name');
+    });
     noOld(h, dir, 'R2');
-    const lists = [listOf(path.join(dir, NEW)), listOf(path.join(h.home, NEW))].filter(Boolean) as McpsList[];
+    const lists = listsOf();
     assert.deepStrictEqual(lists.flatMap((l) => l.servers.map((s) => `${s.name}~${s.scope}`)).sort(), servers.map((s) => `${s.name}~${s.scope}`).sort(), 'every server still listed');
     const listText = lists.map((l) => JSON.stringify(l)).join('\n');
     assert.ok(!listText.includes(kept.OLD_MARKER), 'no old marker left');
-    assert.ok(listText.includes(kept.MARKER), 'the kept marker reads in its new name');
+    // then key-to-launcher moved the key: context7 is the launcher in the account, the list and Cursor's copy, with the
+    // key's name and no marker and no value; the key stays only in the root's .mcps-secrets
+    assert.ok(!listText.includes(kept.MARKER), 'the launcher entry holds no kept marker');
+    const account7 = account.readRegistration('context7', 'local', dir, h.env)!;
+    assert.strictEqual(account7.command, 'node');
+    assert.notStrictEqual(launcherParts(account7), null, `context7 is a launcher: ${JSON.stringify(account7.args)}`);
+    assert.ok(account7.args!.includes('CONTEXT7_API_KEY=CONTEXT7_API_KEY?'), 'the launcher names the key');
+    const cursorC7 = readJson(path.join(dir, '.cursor', 'mcp.json')).mcpServers.context7;
+    assert.deepStrictEqual(cursorC7, account7, 'Cursor\'s copy is the same launcher');
+    const entry7 = lists.flatMap((l) => l.servers).find((s) => s.name === 'context7')!;
+    assert.deepStrictEqual(entry7.entry, account7, 'the list entry is the launcher');
+    for (const [label, text] of [['account file', fs.readFileSync(account.accountFile(h.env), 'utf8')], ['Cursor project file', fs.readFileSync(path.join(dir, '.cursor', 'mcp.json'), 'utf8')], ['list', listText]] as const)
+        assert.ok(!text.includes(c7Key), `${label} holds no key value`);
+    assert.ok(fs.readFileSync(path.join(dir, NEW, roots.FILES.secrets), 'utf8').includes(c7Key), 'the key stays in the root\'s .mcps-secrets');
     assert.strictEqual(firstLine(path.join(dir, NEW, 'serena', roots.FILES.serenaContext)), shippedLine('serena-context.yml'));
     for (const root of [path.join(dir, NEW), path.join(h.home, NEW)].filter((root) => exists(path.join(root, roots.FILES.helper))))
         assert.strictEqual(firstLine(path.join(root, roots.FILES.helper)), shippedLine('mcp-headers.js'));
