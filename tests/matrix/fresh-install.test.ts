@@ -78,6 +78,17 @@ for (const c of spec.cases)
                 // (absolute and in backslashes there, serena-windows-home)
                 assert.strictEqual(fs.readFileSync(path.join(project, c.expect.files, '.gitignore'), 'utf8'), '*\n', 'the data folder keeps itself out of git');
             }
+            if (route.excludeFile)
+            {
+                // the Shell question's recommended Off (no ~/.macos-mcp/config.toml in this home): the root file, written
+                // before the registration, and the flag naming it as the CLI stored it (spec D4)
+                const storedArgs = (stored[step.name] as StoredEntry).args || [];
+                const configPath = storedArgs[storedArgs.indexOf(route.excludeFile.flag) + 1];
+                assert.ok(storedArgs.includes(route.excludeFile.flag) && configPath, `${c.row}: ${route.excludeFile.flag} <file> in ${JSON.stringify(storedArgs)}`);
+                assert.strictEqual(path.basename(configPath), route.excludeFile.file);
+                const excluded = route.excludeFile.tools.map((tool) => JSON.stringify(tool)).join(', ');
+                assert.strictEqual(fs.readFileSync(configPath, 'utf8'), `[tools]\nexclude = [${excluded}]\n`, 'the Shell question recommends Off where the home has no config.toml');
+            }
             if (c.expect.scope === 'project')
             {
                 // 'Absolute, always' (AGENTS.md, 2026-11-11): a data folder is named by an absolute path, which must lie under
