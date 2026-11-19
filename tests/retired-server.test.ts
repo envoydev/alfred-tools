@@ -26,6 +26,9 @@ import type { UpgradeOffer } from '../scripts/update/types.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
 import type { World } from './types.ts';
 
+// The text a decline id hashes: the project's absolute path, lowercased on Windows, whose paths are case-blind
+const projectKeyOf = (project: string) => (process.platform === 'win32' ? path.resolve(project).toLowerCase() : path.resolve(project));
+
 const catalog = catalogLib.load();
 const RETIRED_ROW = { id: 'old-tool', fingerprints: [{ pkg: 'old-tool-mcp' }], since: '0.7.0', reason: 'test fixture: the vendor stopped it' };
 const OLD_TOOL: ServerEntry = { command: 'npx', args: ['-y', 'old-tool-mcp@1.0.0'] };
@@ -112,7 +115,7 @@ test("retired-server offers a managed retired server for removal, never one off 
         writeJson(path.join(w.project, '.cursor', 'mcp.json'), { mcpServers: { old: OLD_TOOL } });
         const found = detectAll(retiredCtx(w)).found.filter((f) => f.id === 'retired-server');
         assert.deepStrictEqual(found.map((f) => [f.name, f.scope]), [['old', 'local']]);
-        const hash = createHash('sha256').update(path.resolve(w.project)).digest('hex').slice(0, 12);
+        const hash = createHash('sha256').update(projectKeyOf(w.project)).digest('hex').slice(0, 12);
         assert.strictEqual(found[0]!.declineId, `mcp:old:${hash}`);
         assert.match(renderFixes(detectAll(retiredCtx(w))), new RegExp(`retired-declined=mcp:old:${hash}~local`));
         const out = logged();
@@ -170,7 +173,7 @@ test('update offers a retired server once under New ways to pass data; an instal
         assert.ok(offer, found.offers.map((o) => o.id).join());
         // a retired registration has no row and no route: update offers it no pin move (offers-pins.ts:33-35 already holds)
         assert.ok(!found.offers.some((o) => o.id === 'mcp:old~local'), 'no pin offer for a retired server');
-        const declineId = `mcp:old:${createHash('sha256').update(path.resolve(w.project)).digest('hex').slice(0, 12)}`;
+        const declineId = `mcp:old:${createHash('sha256').update(projectKeyOf(w.project)).digest('hex').slice(0, 12)}`;
         assert.strictEqual(offer.declineId, declineId);
         assert.ok((offer.notes || []).some((note) => note.includes(`retired-declined=${declineId}~local`)));
         // another project with the same name: its own offer

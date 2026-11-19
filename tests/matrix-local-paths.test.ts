@@ -34,3 +34,10 @@ test('entryStrings holds every string of an entry: command, url, headersHelper, 
     assert.deepStrictEqual(entryStrings({}), []);
     assert.deepStrictEqual(entryStrings({ args: [1 as unknown as string], env: { A: undefined as unknown as string } }), [], 'only strings');
 });
+
+test('localPathsOutside takes a Windows helper path written with / as under a data root built with \\', () =>
+{
+    const root = 'C:\\w\\projects\\p\\.alfred-tools';
+    assert.deepStrictEqual(localPathsOutside('node C:/w/projects/p/.alfred-tools/mcp-headers.js GITLAB_TOKEN Bearer', [root]), []);
+    assert.deepStrictEqual(localPathsOutside('node C:/w/projects/other/mcp-headers.js', [root]), ['C:/w/projects/other/mcp-headers.js']);
+});

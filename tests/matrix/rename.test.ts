@@ -27,6 +27,9 @@ import type { McpsList } from '../../scripts/mcps-list/types.ts';
 import { Harness } from '../harness.ts';
 import { keepWritten } from '../proof/matrix-keep.ts';
 
+// Does `text` name `folder`? As written, with '/' (a helper path on Windows) or JSON-escaped (a stringified entry)
+const namesFolder = (text: string, folder: string): boolean => [folder, folder.replace(/\\/g, '/'), JSON.stringify(folder).slice(1, -1)].some((form) => text.includes(form));
+
 const skipAll = cli.available() ? false : 'NOT RUN: no claude CLI on PATH';
 const T = { skip: skipAll, timeout: 900000 };
 const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-r-')));
@@ -160,8 +163,8 @@ test('R1 - a 0.4.0 machine: one update moves both folders, imports the record in
     }
     assert.strictEqual(firstLine(path.join(h.home, NEW, roots.FILES.bridge)), shippedLine('mcp-bridge.js'));
     const project = readJson(path.join(dir, '.mcp.json')).mcpServers;
-    assert.ok(project.gitlab.headersHelper.includes(path.join(dir, NEW, roots.FILES.helper)), project.gitlab.headersHelper);
-    assert.ok(JSON.stringify(project.memory).includes(path.join(dir, NEW, 'memory')), JSON.stringify(project.memory));
+    assert.ok(namesFolder(project.gitlab.headersHelper, path.join(dir, NEW, roots.FILES.helper)), project.gitlab.headersHelper);
+    assert.ok(namesFolder(JSON.stringify(project.memory), path.join(dir, NEW, 'memory')), JSON.stringify(project.memory));
     const sentry = account.readRegistration('sentry', 'user', dir, h.env)!;
     assert.strictEqual(sentry.args![0], path.join(h.home, NEW, roots.FILES.bridge));
     const map = readJson(path.join(h.data, roots.FILES.map));
@@ -199,6 +202,6 @@ test('R2 - a pre-rename 0.5.0 machine: lists, Cursor\'s copies, the old kept mar
     for (const root of [path.join(dir, NEW), path.join(h.home, NEW)].filter((root) => exists(path.join(root, roots.FILES.helper))))
         assert.strictEqual(firstLine(path.join(root, roots.FILES.helper)), shippedLine('mcp-headers.js'));
     const cursorProject = readJson(path.join(dir, '.cursor', 'mcp.json')).mcpServers;
-    assert.ok(JSON.stringify(cursorProject.serena).includes(path.join(dir, NEW)), JSON.stringify(cursorProject.serena));
+    assert.ok(namesFolder(JSON.stringify(cursorProject.serena), path.join(dir, NEW)), JSON.stringify(cursorProject.serena));
     assert.deepStrictEqual(h.realUntouched().changed, [], 'the real home and account are untouched');
 });

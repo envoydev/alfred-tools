@@ -4,7 +4,10 @@ const TOKEN_SEPARATOR = /[\s"'=,;]+/;
 const DRIVE_ARGUMENT = /^\/[a-z]$/i;
 const HOME_PATH = /(?:^|[^$])\/(?:Users|home)\//;
 
-const isUnder = (value: string, root: string): boolean => value === root || value.startsWith(`${root}/`) || value.startsWith(`${root}\\`);
+// One separator for the compare: on Windows the apply writes a helper path with '/' (entries' shellArg) beside a root
+// the matrix builds with '\\', and both name the same folder
+const forwardSlashed = (text: string): string => text.replace(/\\/g, '/');
+const isUnder = (value: string, root: string): boolean => forwardSlashed(value) === forwardSlashed(root) || forwardSlashed(value).startsWith(`${forwardSlashed(root)}/`);
 
 // -> each absolute token not under one of `dataRoots`, and, when a user-home path is left once the roots are removed, the field's
 // remaining home paths (a file URL, a path glued to a flag)
@@ -13,7 +16,7 @@ export function localPathsOutside(field: string, dataRoots: string[]): string[]
     const tokens = field.split(TOKEN_SEPARATOR).filter((token) => (token.startsWith('/') || /^[A-Za-z]:[\\/]/.test(token)) && !DRIVE_ARGUMENT.test(token));
     const outside = tokens.filter((token) => !dataRoots.some((root) => isUnder(token, root)));
     if (outside.length) return outside;
-    const rest = dataRoots.reduce((text, root) => text.split(root).join(''), field);
+    const rest = dataRoots.reduce((text, root) => text.split(forwardSlashed(root)).join(''), forwardSlashed(field));
     return HOME_PATH.test(rest) ? [rest] : [];
 }
 
