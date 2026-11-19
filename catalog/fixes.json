@@ -283,7 +283,7 @@
       "detect": "keyToLauncherDetect",
       "fix": "keyToLauncherFix",
       "steps": "keyToLauncherCursorSteps",
-      "verifiedOn": "this build: tests/key-to-launcher.test.ts (2026-11-19)",
+      "verifiedOn": "this build: tests/key-to-launcher.test.ts (2026-11-19), tests/key-to-launcher-cursor.test.ts (2026-11-20)",
       "source": "docs/sources.md 'Stdio keys - the launcher (read 2026-11-19)'; docs/superpowers/specs/2026-11-19-stdio-key-launcher-design.md Step 5"
     },
     {

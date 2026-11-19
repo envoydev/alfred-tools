@@ -132,7 +132,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --apply <id,id | all | none> --data 
 A drift answer runs after the registration and file rows: 'Keep' writes the edited entry into the list and the other
 app (Cursor's file, or Claude Code through the `claude` CLI); 'Restore' writes the list's entry back into that app;
 'Take <app> off' changes the list only. Every registration a fix rewrites is carried into the list and Cursor in the
-same run, and a Cursor copy changed by hand is left for its own question.
+same run, and a Cursor copy changed by hand is left for its own question. A `key-to-launcher` move waits on a drift of the same server - a server kept for Cursor alone on Cursor's - until it is answered with something other than 'leave'.
 
 Claude Code asks permission for this call itself - `--apply` is deliberately not in `allowed-tools`. It rewrites each registration through the `claude` CLI (remove, then add with the same name and scope) from the entry as
 it is now, so the user's pin, cut-off and added args stay. Several fixes on one registration are one rewrite. A key moved out of
