@@ -21,7 +21,8 @@ State one line before anything else: `Size: <trivial|spike|bounded|architectural
   made (`.claude/rules/execution.md`), its covering check runs, done. Anything that adds or changes behaviour - a new
   flag, option, output or branch - is at least bounded, however short the request.
 - spike, bounded, architectural - load superpowers:brainstorming next and take its path for this size: a spike has its question
-  and probe approved first, then ends in an answer and keeps nothing; a bounded change gets an in-chat design,
+  and probe approved first, then ends in an answer and keeps nothing in the tree - a spike branch that holds commits
+  is left and named, as the `cleanup` rule says; a bounded change gets an in-chat design,
   approved as step 3 says, then the build; an architectural change takes every step below.
 - A design already settled by a run order or the user's rulings skips the spec and goes to the plan.
 
@@ -80,12 +81,15 @@ things in the code for the other three.
 
 alfred-mods reads the plan's progress from a file (its README, 'Plan and score files', is the contract).
 
-- When the build starts from an approved plan file, Write `.alfred-mods/plans/<slug>.json` under the
-  project root. The slug follows the scores file's rule in `refining-plans`: the plan's basename without a leading
-  `YYYY-MM-DD-` and its extension. The score then joins the plan row.
+- When the build starts from an approved plan file, Write `<root>/plans/<slug>.json` under the project root. Take
+  the project root, the root and the slug from the Project root, Root and Slug bullets of 'The scores file' in
+  `refining-plans`, and Read that section first where this session has not loaded the skill (scoring off, a
+  compaction, a dispatched seat). Resolve the root before each write. The slug is the plan's basename without a leading `YYYY-MM-DD-` and its extension.
+  The score then joins the plan row.
 - Fields: `version` 1, `slug`, `title` (the plan's title), `updatedAt`, `steps[]` and `changes[]`.
 - `steps[]`: one per plan task, in order, `{ id, title, status, estimateMin, startedAt, doneAt }`. The id is `T<n>`
-  and the title is the task's heading. Every step starts `pending`.
+  and the title is the task's heading without its number prefix: `Task 2: Rotate tokens` gives `Rotate tokens`.
+  Every step starts `pending`.
 - `estimateMin`: the plan's figure where it gives one. Else the run's estimate of the builder's working minutes, with
   tests, the gate, one fix pass and build waits - not waits for the user. It can change only while the step is
   `pending`.
@@ -94,7 +98,8 @@ alfred-mods reads the plan's progress from a file (its README, 'Plan and score f
 - `changes[]` starts with `{ at, kind: 'created', source: 'claude' }`. Text the user gives to fold into the plan
   changes the affected steps and adds `{ at, kind: 'integrated', source: 'user', step, note }`, the note their words
   in 200 characters or fewer. Give `step` the step id when the text is about one step, else leave it out.
-- Always rewrite the whole file with the Write tool and update `updatedAt`. Never patch it with Edit.
+- Always rewrite the whole file with the Write tool and update `updatedAt`. Never patch it with Edit. A root that
+  changed mid-build changes the path only: the steps and `changes[]` carry on.
 - Every subagent dispatched on a task - implementer, reviewers, fix passes - carries the two lines `plan: <slug>` and
   `task: <step id>` in its prompt.
 - A run with no plan file - a bounded change built from an in-chat design - writes no plan file.
