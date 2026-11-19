@@ -9,7 +9,7 @@ import path from 'node:path';
 import { CATALOG_DIR } from './catalog.ts';
 import { isRecord } from '../core/shapes.ts';
 import { isReservedFile } from './shapes.ts';
-import type { AlfredFiles, RetiredRow } from './types.ts';
+import type { AlfredFiles, AlfredRetiredRow } from './types.ts';
 
 const FILE = path.join(CATALOG_DIR, 'reserved-names.json');
 const RETIRED_PLUGINS = 'meta/retired-plugins.json';
@@ -17,7 +17,7 @@ const STACK_MANIFEST = 'meta/stack-manifest.json';
 const ORIGINAL_MCPS = 'stack/mcp/original-mcps.json';
 
 const isText = (value: unknown): value is string => typeof value === 'string';
-const isRetiredRow = (value: unknown): value is RetiredRow => isRecord(value) && [value['id'], value['name'], value['retiredIn']].every((field) => field === undefined || isText(field));
+const isRetiredRow = (value: unknown): value is AlfredRetiredRow => isRecord(value) && [value['id'], value['name'], value['retiredIn']].every((field) => field === undefined || isText(field));
 
 // alfred-code's three files, each read and checked for the part used here, or the problem with the first that is not
 // what alfred-code writes - a checkout of another version, or a file cut short.

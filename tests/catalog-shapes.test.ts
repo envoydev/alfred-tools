@@ -46,3 +46,16 @@ test('refresh-pins refuses a tools.json of another shape with exit 2 and one lin
     assert.strictEqual(await runRefreshPinsCommand([], { file, out: (text) => lines.push(text) }), 2);
     assert.deepStrictEqual(lines, [`refresh-pins: ${file} is not a tools.json of rows, rules, groups and order - nothing read`]);
 });
+
+test('load refuses a tools.json with no retired list, or one retiring an id a row still has; the shipped list is empty (spec D3)', () => {
+    const tools: Record<string, unknown> = JSON.parse(fs.readFileSync(path.join(CATALOG_DIR, 'tools.json'), 'utf8'));
+    const refused = (text: string) => { const dir = catalogWith('tools.json', text); assert.throws(() => load(dir), { message: `catalog: ${path.join(dir, 'tools.json')} is not in the shape alfred-tools ships - reinstall the plugin` }); };
+    const without = { ...tools };
+    delete without['retired'];
+    refused(JSON.stringify(without));
+    refused(JSON.stringify({ ...tools, retired: [{ id: 'serena', fingerprints: [{ pkg: 'serena-agent' }], since: '0.7.0', reason: 'test fixture' }] }));
+    refused(JSON.stringify({ ...tools, retired: [{ id: 'old-tool', fingerprints: [{ pkg: 'old-tool-mcp' }], since: '0.7.0' }] }));
+    const ok = catalogWith('tools.json', JSON.stringify({ ...tools, retired: [{ id: 'old-tool', fingerprints: [{ pkg: 'old-tool-mcp' }], since: '0.7.0', reason: 'test fixture' }] }));
+    assert.deepStrictEqual(load(ok).retired.map((entry) => entry.id), ['old-tool']);
+    assert.deepStrictEqual(load().retired, []);
+});

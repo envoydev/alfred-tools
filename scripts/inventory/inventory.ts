@@ -27,6 +27,7 @@ import type { Family, InventoryView, RootsCtx } from '../roots/types.ts';
 import type { CursorOf } from '../cursor/types.ts';
 import type { OwnEntry } from '../mcps-list/types.ts';
 import type { Approval, ApprovalCtx, BuildOptions, Installed, InvList, InvRegistration, Inventory, PluginListRow, PluginRow, SettingsDoc, Shadow, Unreadable, WindowsMcp } from './types.ts';
+import { markRetired } from './retired.ts';
 
 const { readState } = account;
 
@@ -210,6 +211,7 @@ export function buildInventory({ project, env = process.env, platform = process.
     // the answers about servers already set up (spec D6): each family's list (0.5.0; the 0.4.x record while it has none),
     // and each registration's choice - null when never answered or when its launch changed since
     out.lists = { project: listOf(out, 'project', rootCtx), global: listOf(out, 'global', rootCtx) };
+    markRetired(out, catalog);
     out.cursor = cursorFiles(out.lists, { platform, env, project: projectDir }, catalog);
     // the workspace alfred-code records (spec D4a): the folders whose Cursor files take this folder's project servers
     out.workspace = workspaceOf(projectDir, env);

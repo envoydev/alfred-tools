@@ -162,6 +162,16 @@ export interface CatalogRules
     nameRe: string; // stored - do not rename
 }
 
+// An MCP row the catalog dropped (spec D3): what its registrations launch, the release that retired it, and why. A
+// registration that launches it is offered for removal by fix's retired-server while its list holds it.
+export interface RetiredRow
+{
+    id: string; // stored - do not rename
+    fingerprints: Fingerprint[]; // stored - do not rename
+    since: string; // stored - do not rename
+    reason: string; // stored - do not rename
+}
+
 export interface ToolsFile
 {
     schema: number; // stored - do not rename
@@ -170,6 +180,7 @@ export interface ToolsFile
     groups: { id: string; label: string }[]; // stored - do not rename
     order: string[]; // stored - do not rename
     tools: CatalogRow[]; // stored - do not rename
+    retired: RetiredRow[]; // stored - do not rename
 }
 
 // One recorded fix in catalog/fixes.json.
@@ -259,7 +270,7 @@ export interface Refresh
 
 // alfred-code's files, the part read here: meta/retired-plugins.json's rows (a list, or an object keyed by id), the
 // names meta/stack-manifest.json retires, and the server names stack/mcp/original-mcps.json keeps.
-export interface RetiredRow
+export interface AlfredRetiredRow
 {
     id?: string | undefined;
     name?: string | undefined;
@@ -267,7 +278,7 @@ export interface RetiredRow
 }
 export interface AlfredFiles
 {
-    rows: RetiredRow[];
+    rows: AlfredRetiredRow[];
     retiredMcps: string[];
     originalNames: string[];
 }

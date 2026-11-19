@@ -52,7 +52,7 @@ export function renderTable(inventory: Inventory, catalog: Catalog = catalogLib.
     const out = [line(head), line(widths.map((width) => '-'.repeat(width))), ...body.map(line)];
 
     const notes: string[] = [];
-    const own = inventory.registrations.filter((registration) => registration.own && !registration.alfredRetired && registration.scope !== 'inherited');
+    const own = inventory.registrations.filter((registration) => registration.own && !registration.alfredRetired && !registration.retiredRow && registration.scope !== 'inherited');
     if (own.length) notes.push(`Your own, not in this catalog and never touched: ${own.map((registration) => `${registration.name} (${registration.scope})`).join(', ')}.`);
     const inherited = inventory.registrations.filter((registration) => registration.scope === 'inherited');
     // an inherited registration and its shadow always name the folder they came from; 'a parent folder' stands in otherwise
@@ -61,6 +61,9 @@ export function renderTable(inventory: Inventory, catalog: Catalog = catalogLib.
     if (inherited.length) notes.push(`Inherited from a parent folder's .mcp.json - change them there: ${inherited.map((registration) => `${registration.name} (from ${folderOf(registration.from)}, ${registration.approval}${registration.shadowed ? `, not used here: ${usedBy(registration.shadowed)}` : ''})`).join(', ')}.`);
     const retired = inventory.registrations.filter((registration) => registration.alfredRetired && registration.scope !== 'inherited');
     if (retired.length) notes.push(`Under names alfred-code once registered, left alone: ${retired.map((registration) => `${registration.name} (${registration.scope})`).join(', ')}.`);
+    const dropped = inventory.registrations.filter((registration) => registration.retiredRow && registration.scope !== 'inherited');
+    const sinceOf = (id: string | undefined) => catalog.retired.find((retiredRow) => retiredRow.id === id)?.since ?? '?';
+    if (dropped.length) notes.push(`Retired from the catalog: ${dropped.map((registration) => `${registration.name} (${registration.scope}, retired in ${sinceOf(registration.retiredRow)})`).join(', ')} - /alfred-tools:update and /alfred-tools:fix offer to remove a managed one.`);
     const other = catalog.tools.filter((row) => !row.os.includes(inventory.os));
     if (other.length) notes.push(`Not offered on this OS (${inventory.os}): ${other.map((row) => row.label).join(', ')}.`);
     for (const unreadable of inventory.unreadable || [])

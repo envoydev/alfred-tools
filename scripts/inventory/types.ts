@@ -25,6 +25,7 @@ export interface InvRegistration
     route: string | null; // stored - do not rename
     own: boolean; // stored - do not rename
     alfredRetired: boolean; // stored - do not rename
+    retiredRow?: string; // stored - do not rename
     approval?: Approval; // stored - do not rename
     from?: string; // stored - do not rename
     file?: string; // stored - do not rename
