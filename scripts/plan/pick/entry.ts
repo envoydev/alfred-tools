@@ -142,7 +142,7 @@ export function pickEntry(base: PickBase, answers: PickAnswers, pick: PickAnswer
     if (launcherRoute(route, routeId, scope) && (route.authMode === 'token' || sendNow) && launcherParts(entry) === null && (fresh || keys.tokenFields(current?.entry, route).length === 0))
     {
         const wrapped = launcherForm(route, required(keyName, `${row.id}: its stdio route names no key`), launcherPlace(scope, context), entry);
-        if (!wrapped) return out.errors.push(`${name}: its entry holds no key field - reinstall it or run /alfred-tools:fix`);
+        if (!wrapped) return out.errors.push(`${name}: its entry holds no key field - remove it with /alfred-tools:configure, then add it again with /alfred-tools:install`);
         entry = wrapped;
     }
     const launcher = launcherParts(entry);

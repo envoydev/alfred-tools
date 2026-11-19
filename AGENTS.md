@@ -139,7 +139,8 @@ The first five plus `kit:check` are what CI runs, in that order.
   residual'; no sandbox offer: the sandbox is off by default and blocks broadly). G2, a stdio key written into a
   registration, sat in the account file and, for Cursor's copy, in `~/.cursor/mcp.json`, which no rule covers
   (`docs/sources.md`, F15); it is closed for what the plugin writes (the launcher holds the name only), and stays open
-  for a server kept in its plain form after a declined `key-to-launcher` move, until it is moved. A `Read` deny on the
+  for a server kept in its plain form after a declined `key-to-launcher` move, and a server kept for Cursor alone (after a drift
+  'drop' of Claude Code's copy `key-to-launcher` reads Claude Code's registrations only), until it is moved. A `Read` deny on the
   account file is not used: it would stop the plugin's own `claude` and `node` calls whenever the sandbox runs. With the sandbox on, the two rules reach every shell command - the plugin's
   own key fills (`apply.ts`, fix `token-sync`) included, which Claude Code then offers to rerun unsandboxed (from the
   docs, not measured; `docs/sources.md`, 'Read guard - the residual routes').

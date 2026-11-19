@@ -127,7 +127,8 @@ questions and what to choose.
   (github's Docker and sentry's npm routes), which starts through `mcp-bridge.js --run`: it reads the key from
   `.mcps-secrets` at each start, and the registration holds its name only. Cursor has no private file per
   project, so a Local server set up for Cursor goes in `.cursor/mcp.json`, which a project usually commits; the plan
-  says so when git would commit it - add `.cursor/mcp.json` to `.gitignore` to keep it yours.
+  says so when git would commit it - add `.cursor/mcp.json` to `.gitignore` to keep it yours. A keyed local route
+  (github, sentry, context7 with a key) is the exception: it reaches Cursor at Global only.
 
 A hosted server with a key at Project scope connects without its key in a session started in a subfolder: Claude Code
 does not run a parent folder's key helper there. Start a session in the folder that holds `.mcp.json`, or move the
@@ -334,7 +335,7 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
   Linux and WSL2, not native Windows). That route is known and left open on purpose: closing it would mean turning the
   sandbox on for every project. A local server's key no longer sits in Claude Code's account file or Cursor's
   `~/.cursor/mcp.json`: the launcher holds its name only. A server kept in its plain form (a declined `key-to-launcher`
-  move) still holds the key there, where no rule covers it, until it is moved. With the sandbox on,
+  move, and a server kept for Cursor alone) still holds the key there, where no rule covers it, until it is moved. With the sandbox on,
   the rules also reach the plugin's own key fills, and Claude Code offers to rerun those unsandboxed. The plugin adds
   the two rules when it first writes a sign-in entry or a
   key name; a rule you remove by hand comes back on the next plan that needs it. `/alfred-tools:fix` and

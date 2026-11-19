@@ -5,11 +5,11 @@ disable-model-invocation: true
 allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/table.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" *)
 ---
 
-Walk the user through changing or removing tools from alfred-tools that are already installed here. The scripts do the
+Walk the user through changing or removing alfred-tools tools already installed here. The scripts do the
 work and print what you paste; you ask the questions. Argument: `$ARGUMENTS`.
 
-Configure starts from what is installed: every question recommends what the tool has now, and a change is built from
-the registration as read, so a pin is never downgraded. Adding a tool is `/alfred-tools:install`.
+Configure starts from what is installed: every question recommends what the tool has now, so keeping an answer changes
+nothing, and a change is built from the registration as read, so a pin is never downgraded. Adding a tool is `/alfred-tools:install`.
 
 ## Rules
 
@@ -124,7 +124,7 @@ It records the answers (leaving out each one that keeps what the tool has now) a
 the fault. What each step is:
 
 - **On its own** (a server left on its own, a plugin's server or a connector): 'Let alfred-tools manage it' hands it to
-  configure, update and fix from now on; for a plugin's server or a connector, the other option lets install offer
+  configure, update and fix; for a plugin's server or a connector, the other option lets install offer
   alfred-tools' own beside it.
 - **A root folder**: another root re-adds each registration of that family pointing into the new root; it moves no data
   and no key value, and names both.
@@ -252,7 +252,7 @@ the apply ask again with the plan as it was. `'another'` - ask for the pick in o
 from what is typed through `change.keys`. With the pick chosen it drops that pick's recorded steps and prints the walk's
 next step. Run step 5's loop again to `done` from that `next`, then steps 6 and 7's plan again, then the apply ask.
 
-A plan that says 'Nothing to do': show it and stop.
+A plan that says 'Nothing to do': show it and stop, no ask.
 
 ## 8. Apply
 
@@ -298,7 +298,7 @@ also needs the trust prompt).
 
 **Sign-in.** For each server the plan named in an `OAuth:` line that says its browser opens to sign in the first time it
 starts (the shared sign-in), ask once the fetch has reported (sign-in.ts and the fetch both start npx, and two at once
-breaks a start); the scope is the one the registration has now:
+breaks a start); the scope is the registration's:
 
 <!-- shared:sign-in -->
 
@@ -318,7 +318,7 @@ its output file for the link line. The sign-in returns to `http://localhost:<por
 running the client: over SSH, forward that port first with `ssh -L <port>:localhost:<port> <host>` (the port is in the
 link's `redirect_uri`), or open the link in a browser on that machine. On a failure say why, that the user can run it
 again, and that otherwise the first session start opens the browser inside its 30-second limit. 'At the next session
-start': say exactly that, and that `/mcp` reconnects the server after the browser sign-in.
+start': say that, and that `/mcp` reconnects the server after the browser sign-in.
 
 <!-- /shared:sign-in -->
 

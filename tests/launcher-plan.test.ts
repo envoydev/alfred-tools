@@ -232,6 +232,6 @@ test('a token route whose entry holds no key field is a plan error at configure,
     const target = reg('gh', 'local', noKeyField, 'github', 'local');
     const p = planOf(inv(MAC, { registrations: [target], roots: usedRoots(PROJECT_ROOT, GLOBAL_ROOT) }), changeOf(target, { name: 'gh2' }));
     assert.strictEqual(p.errors.length, 1, p.errors.join('\n'));
-    assert.match(p.errors[0] ?? '', /^gh2?: its entry holds no key field - reinstall it or run \/alfred-tools:fix$/);
+    assert.match(p.errors[0] ?? '', /^gh2?: its entry holds no key field - remove it with \/alfred-tools:configure, then add it again with \/alfred-tools:install$/);
     assert.deepStrictEqual(p.steps.filter((step) => step.op === 'mcp-add' || step.op === 'mcp-replace' || step.op === 'mcp-move'), [], 'no registration is planned');
 });
