@@ -32,6 +32,7 @@ export function currentOf(row: CatalogRow, registration: Registration): Current
         const urlNames = Object.fromEntries(((route && route.urlVars) || []).map((urlVar, i) => [urlVar.var, held[i]?.name ?? urlVar.var]));
         return { name: registration.name, scope: registration.scope, route: registration.route, entry: entry, rootStr: null, executablePath: undefined, token: true, keyName: bridge.keyName, urlNames, host: null };
     }
+    const launcher = launcherParts(entry);
     const route = registration.route ? row.routes[registration.route] : undefined;
     // the shared sign-in form (D5) holds its URL as an argument
     const signIn = entry.url ? null : signInParts(entry);
@@ -39,8 +40,8 @@ export function currentOf(row: CatalogRow, registration: Registration): Current
         name: registration.name, scope: registration.scope, route: registration.route, entry: entry,
         rootStr: row.locations ? rootOfEntry(row, entry) : null,
         executablePath: flag(EXECUTABLE_PATH_FLAG),
-        token: Boolean(entry.headersHelper || (entry.headers && entry.headers['Authorization']) || args.includes(API_KEY_FLAG) || (route?.authMode === 'optional-token' && keys.tokenFields(entry, route).length > 0)),
-        keyName: helperNameOf(entry.headersHelper),
+        token: Boolean(launcher || entry.headersHelper || (entry.headers && entry.headers['Authorization']) || args.includes(API_KEY_FLAG) || (route?.authMode === 'optional-token' && keys.tokenFields(entry, route).length > 0)),
+        keyName: launcher ? launcher.keyName : helperNameOf(entry.headersHelper),
         host: entry.url ? new URL(entry.url).hostname : signIn ? new URL(signIn.url).hostname : null,
     };
 }

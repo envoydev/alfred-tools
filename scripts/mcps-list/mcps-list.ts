@@ -16,6 +16,7 @@ import { errorCode, isRecord } from '../core/guards.ts';
 import { isListServer, isOwnEntry, isStepEnd } from './guards.ts';
 import { replaceFile } from '../core/replace-file.ts';
 import { pathFor } from '../entries/platform.ts';
+import { launcherParts } from '../entries/launcher.ts';
 import type { Outcome, ServerEntry } from '../core/types.ts';
 import type { CatalogRow } from '../catalog/types.ts';
 import type { TokenField } from '../keys/types.ts';
@@ -137,7 +138,8 @@ function valueOf(entry: ServerEntry, field: TokenField, tokenVar: string): strin
 export function fromRegistration(registration: Registration, row: CatalogRow | null | undefined, clients: string[], files: string[] = []): ListServer
 {
     const route = row && row.routes && registration.route ? row.routes[registration.route] : null;
-    let key: string | null = null;
+    // a launcher holds its key's name, never a value
+    let key: string | null = launcherParts(registration.entry)?.keyName ?? null;
     // tokenFields finds a field only for a route that names a token variable
     const [field] = keys.tokenFields(registration.entry, route);
     const tokenVar = route && route.tokenVar;

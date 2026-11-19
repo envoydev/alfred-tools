@@ -4,6 +4,7 @@ import { isInside, pathFor } from '../entries/platform.ts';
 import { logicalRoot, formatRoot } from '../entries/locations.ts';
 import { currentOf, helperParts, contextArgAt } from '../entries/entry.ts';
 import { excludeArgAt } from '../entries/exclude.ts';
+import { launcherParts } from '../entries/launcher.ts';
 import * as serenaConfig from '../apply/serena-config.ts';
 import { heldKey } from './asks-keys.ts';
 import * as keys from '../keys/keys.ts';
@@ -88,10 +89,12 @@ export function planRootChange(answers: Answers, inventory: Inventory, context: 
             const dataAbs = row.locations && current.rootStr ? formatRoot(logicalRoot(current.rootStr, context), 'local', context).value : null;
             const moves = dataAbs ? inOld(dataAbs) : false;
             planMcp(row, { target: { name: registration.name, scope: registration.scope }, ...(moves ? { location: { side: family === 'global' ? 'account' : 'project' } } : {}) }, inventory, context, catalog, out);
-            // the name its key goes under: the helper's argument, else the name holding the key it holds, else the catalog's
+            // the name its key goes under: the launcher's or the helper's argument, else the name holding the key it holds,
+            // else the catalog's
             const route = current.route ? row.routes[current.route] : undefined;
-            let name = route && route.helper ? current.keyName : null;
-            if (route && !route.helper && route.tokenVar && keys.tokenFields(registration.entry, route).length)
+            const launch = launcherParts(registration.entry);
+            let name = launch ? launch.keyName : route && route.helper ? current.keyName : null;
+            if (!launch && route && !route.helper && route.tokenVar && keys.tokenFields(registration.entry, route).length)
             {
                 const held = heldKey(context.readLive(registration.name, registration.scope) || registration.entry, route);
                 name = held ? keys.nameOfValue([secretsOld], held) || route.tokenVar : null;
@@ -102,18 +105,22 @@ export function planRootChange(answers: Answers, inventory: Inventory, context: 
         }
         if (keyed) out.notes.push(`copy the values from ${secretsOld} to ${secretsNew} yourself - until then those servers connect without their keys`);
         // a local helper's third argument names a named global root: this project's are re-pointed (or lose it, for a
-        // standard root the helper reads itself); a local server elsewhere is configured in its own project
-        if (family === 'global' && !roots.standard('global', context).some((standardRoot) => standardRoot.root === used.path))
+        // standard root the helper reads itself). A local launcher names its global root whether it is standard or not, so
+        // each one that names the old root is re-planned; a local server elsewhere is configured in its own project
+        if (family === 'global')
         {
+            const standardOld = roots.standard('global', context).some((standardRoot) => standardRoot.root === used.path);
             for (const registration of inventory.registrations.filter((candidate) => candidate.rowId && isManaged(candidate) && candidate.scope === 'local'))
             {
-                const parts = helperParts(registration.entry && registration.entry.headersHelper);
+                const launch = launcherParts(registration.entry);
+                const helperRoot = standardOld ? null : helperParts(registration.entry && registration.entry.headersHelper)?.root;
+                const named = launch ? launch.globalRoot : helperRoot;
                 const row = registration.rowId ? catalog.byId.get(registration.rowId) : undefined;
-                if (!row || !parts || !parts.root || context.changing.has(keyOf('mcp', registration.name, registration.scope))) continue;
-                if (pathApi.resolve(roots.absOf(parts.root, context)) !== pathApi.resolve(used.path)) continue;
+                if (!row || !named || context.changing.has(keyOf('mcp', registration.name, registration.scope))) continue;
+                if (pathApi.resolve(roots.absOf(named, context)) !== pathApi.resolve(used.path)) continue;
                 planMcp(row, { target: { name: registration.name, scope: registration.scope } }, inventory, context, catalog, out);
             }
-            out.notes.push(`a local server in another project whose helper names ${used.path} keeps reading its .mcps-secrets until /alfred-tools:configure runs there`);
+            out.notes.push(`a local server in another project whose ${standardOld ? 'launcher' : 'helper or launcher'} names ${used.path} keeps reading its .mcps-secrets until /alfred-tools:configure runs there`);
         }
     }
 }

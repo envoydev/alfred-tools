@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { keyStateOf, heldKey } from '../asks-keys.ts';
 import * as keys from '../../keys/keys.ts';
 import { excludeArgAt, excludeRecommended } from '../../entries/exclude.ts';
+import { launcherParts } from '../../entries/launcher.ts';
 import { required } from '../required.ts';
 import type { Inventory } from '../../inventory/types.ts';
 import type { HostParams, PickAnswer, PickAnswers, PickBase, Plan, PlanCtx } from '../types.ts';
@@ -27,7 +28,7 @@ export function pickAnswers(base: PickBase, pick: PickAnswer, inventory: Invento
         out.notes.push(`${row.id}: ${route.tokenVar ?? 'its key'} is left out - its local route runs keyless at project scope`);
         wantToken = false;
     }
-    // the key's name (spec D9): answered, else the name the registration uses - the helper's argument, or for a stdio key
+    // the key's name (spec D9): answered, else the name the registration uses - the helper's or launcher's argument, or for a stdio key
     // the name whose value equals the key it holds, read from the live registration in this process (R1) and compared
     // with the chain's .mcps-secrets only - the 0.1.x key files are read for names, never values - else the catalog's
     const keyVar = route.helper ? route.helper.var : route.tokenVar;
@@ -38,7 +39,7 @@ export function pickAnswers(base: PickBase, pick: PickAnswer, inventory: Invento
     const liveKey = sameRoute && current && keyState && keyState.kind === 'stdio' ? heldKey(context.readLive(current.name, current.scope) || {}, route) : null;
     // a switch between the hosted route and the bridge keeps the name: both read it from the hosted chain (0.4.0); a
     // route with no key has none
-    const keyName = pick.keyName || (route.helper && current && current.keyName ? current.keyName : null) || (liveKey && keyState ? keys.nameOfValue(keyState.files, liveKey) : null) || keyVar;
+    const keyName = pick.keyName || ((route.helper || (current && launcherParts(current.entry))) && current && current.keyName ? current.keyName : null) || (liveKey && keyState ? keys.nameOfValue(keyState.files, liveKey) : null) || keyVar;
     // a stdio optional key whose name is filled nowhere in the chain (spec F2): written with no key argument, never as an
     // empty one - a stdio key is read only when the registration is written. A registration that holds its key keeps it.
     const unfilledStdio = keyState !== null && keyState.kind === 'stdio' && route.authMode === 'optional-token' && scope !== 'project'

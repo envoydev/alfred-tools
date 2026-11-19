@@ -2174,7 +2174,7 @@ test('change the global root: a local helper that names the old global root is r
     assert.deepStrictEqual(named.errors, []);
     assert.deepStrictEqual(regSteps(named).map((s) => [s.op, (s as McpAddStep).name, (s as McpAddStep).scope]), [['mcp-replace', 'sentry', 'user'], ['mcp-replace', 'github', 'local']]);
     assert.strictEqual((regSteps(named)[1] as McpAddStep).entry.headersHelper, `node /work/shop/.alfred-tools/mcp-headers.js ${G} Bearer /Users/me/vault`);
-    assert.ok(named.notes.includes(`a local server in another project whose helper names ${OLD} keeps reading its .mcps-secrets until /alfred-tools:configure runs there`), named.notes.join('\n'));
+    assert.ok(named.notes.includes(`a local server in another project whose helper or launcher names ${OLD} keeps reading its .mcps-secrets until /alfred-tools:configure runs there`), named.notes.join('\n'));
     // the standard global root: the helper reads it itself, so the third argument goes
     const standard = plan(i, { rootChange: ['global'], roots: { global: { id: 'alfred-tools' } } }, opts('/Users/me'));
     assert.deepStrictEqual(standard.errors, []);
