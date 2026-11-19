@@ -55,6 +55,8 @@ test('load refuses a tools.json with no retired list, or one retiring an id a ro
     refused(JSON.stringify(without));
     refused(JSON.stringify({ ...tools, retired: [{ id: 'serena', fingerprints: [{ pkg: 'serena-agent' }], since: '0.7.0', reason: 'test fixture' }] }));
     refused(JSON.stringify({ ...tools, retired: [{ id: 'old-tool', fingerprints: [{ pkg: 'old-tool-mcp' }], since: '0.7.0' }] }));
+    refused(JSON.stringify({ ...tools, retired: [{ id: 'old-tool', fingerprints: [{}], since: '0.7.0', reason: 'test fixture' }] }));
+    refused(JSON.stringify({ ...tools, retired: [{ id: 'old-tool', fingerprints: [{ pathPrefix: '/mcp' }], since: '0.7.0', reason: 'test fixture' }] }));
     const ok = catalogWith('tools.json', JSON.stringify({ ...tools, retired: [{ id: 'old-tool', fingerprints: [{ pkg: 'old-tool-mcp' }], since: '0.7.0', reason: 'test fixture' }] }));
     assert.deepStrictEqual(load(ok).retired.map((entry) => entry.id), ['old-tool']);
     assert.deepStrictEqual(load().retired, []);

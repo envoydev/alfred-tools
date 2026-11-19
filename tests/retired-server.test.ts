@@ -6,6 +6,7 @@ import * as catalogLib from '../scripts/catalog/catalog.ts';
 import * as inventory from '../scripts/inventory/inventory.ts';
 import * as account from '../scripts/core/account.ts';
 import { renderTable } from '../scripts/inventory/table.ts';
+import { markRetired } from '../scripts/inventory/retired.ts';
 import { world, writeJson, accountKey } from './helpers.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
 import type { World } from './types.ts';
@@ -33,6 +34,50 @@ test("a registration a retired entry fingerprints reads retiredRow: managed whil
         // the shipped catalog retires nothing: the same launch is the user's own
         const shipped = build(w).registrations.find((r) => r.name === 'old')!;
         assert.deepStrictEqual([shipped.retiredRow, shipped.own], [undefined, true]);
+    }
+    finally { w.clean(); }
+});
+
+test('a registration a current row matches stays that row, whatever a retired entry fingerprints (spec D3)', () => {
+    const w = world();
+    try
+    {
+        const cat = { ...catalog, retired: [{ ...RETIRED_ROW, fingerprints: [{ pkg: '@upstash/context7-mcp' }] }] };
+        localServers(w, { docs: { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.7.0'] } });
+        const docs = build(w, cat).registrations.find((r) => r.name === 'docs')!;
+        assert.deepStrictEqual([docs.rowId, docs.retiredRow], ['context7', undefined]);
+    }
+    finally { w.clean(); }
+});
+
+test("an inherited registration a retired entry fingerprints stays the parent folder's (spec D3)", () => {
+    const w = world();
+    try
+    {
+        writeJson(path.join(w.dir, '.mcp.json'), { mcpServers: { above: OLD_TOOL } });
+        const above = build(w, { ...catalog, retired: [RETIRED_ROW] }).registrations.find((r) => r.name === 'above' && r.scope === 'inherited')!;
+        assert.deepStrictEqual([above.retiredRow, above.own], [undefined, true]);
+    }
+    finally { w.clean(); }
+});
+
+test('a list that carries a note or comes from the 0.4.x record holds no server as managed (spec D3)', () => {
+    const w = world();
+    try
+    {
+        localServers(w, { old: OLD_TOOL });
+        writeJson(path.join(w.project, '.alfred-tools', 'mcps.json'), { version: 1, servers: [{ name: 'old', scope: 'local', row: 'old-tool', route: 'local', clients: ['claude'], entry: OLD_TOOL, key: null }], own: [] });
+        const cat = { ...catalog, retired: [RETIRED_ROW] };
+        const inventoryOf = (extra: { note?: string; old?: string }) =>
+        {
+            const built = build(w);
+            built.lists!.project = { ...built.lists!.project!, ...extra };
+            markRetired(built, cat);
+            return built.registrations.find((r) => r.name === 'old')!;
+        };
+        assert.deepStrictEqual([inventoryOf({}).retiredRow, inventoryOf({}).own], ['old-tool', false], 'a plain list names it: managed');
+        assert.strictEqual(inventoryOf({ note: 'the list is unreadable - read as empty' }).own, true, 'a note: not listed');
+        assert.strictEqual(inventoryOf({ old: 'record.json' }).own, true, 'the old record: not listed');
     }
     finally { w.clean(); }
 });

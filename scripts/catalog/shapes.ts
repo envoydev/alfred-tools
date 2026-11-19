@@ -6,9 +6,12 @@ import type { FixesFile, ReservedFile, ToolsFile } from './types.ts';
 
 const isRowList = (value: unknown): boolean => Array.isArray(value) && value.every((row) => isRecord(row) && typeof row['id'] === 'string');
 
+// A fingerprint names what it matches: a package, a command, a host or a bridge. An empty one would match every hosted URL.
+const isLaunchFingerprint = (fingerprint: unknown): boolean => isRecord(fingerprint)
+    && ['pkg', 'command', 'host', 'bridge'].some((key) => typeof fingerprint[key] === 'string' && fingerprint[key] !== '');
 // retired (spec D3): each entry an id, its fingerprints, the release that retired it and why - and never an id a row has.
 const isRetiredEntry = (entry: unknown): boolean => isRecord(entry) && typeof entry['id'] === 'string' && Array.isArray(entry['fingerprints'])
-    && entry['fingerprints'].every((fingerprint: unknown) => isRecord(fingerprint)) && typeof entry['since'] === 'string' && typeof entry['reason'] === 'string';
+    && entry['fingerprints'].every(isLaunchFingerprint) && typeof entry['since'] === 'string' && typeof entry['reason'] === 'string';
 const isRetiredList = (retired: unknown, tools: unknown): boolean => Array.isArray(retired) && retired.every(isRetiredEntry)
     && !retired.some((entry: unknown) => isRecord(entry) && Array.isArray(tools) && tools.some((row: unknown) => isRecord(row) && row['id'] === entry['id']));
 

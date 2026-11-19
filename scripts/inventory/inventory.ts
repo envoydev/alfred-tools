@@ -17,6 +17,7 @@ import { pathFor } from '../entries/platform.ts';
 import { ALFRED_CODE_PLUGIN, INVENTORY_VERSION, MARKETPLACE_LIST_UNREAD, PLUGIN_LIST_UNREAD, WINDOWS_MCP_MARKETPLACE } from './constants.ts';
 import { isMarketplaceListRow, isMcpJsonDoc, isPluginListRow, isSettingsDoc } from './guards.ts';
 import { catalogMatch } from './fingerprint.ts';
+import { markRetired } from './retired.ts';
 import * as existing from './existing.ts';
 import { workspaceOf } from '../roots/workspace.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
@@ -27,7 +28,6 @@ import type { Family, InventoryView, RootsCtx } from '../roots/types.ts';
 import type { CursorOf } from '../cursor/types.ts';
 import type { OwnEntry } from '../mcps-list/types.ts';
 import type { Approval, ApprovalCtx, BuildOptions, Installed, InvList, InvRegistration, Inventory, PluginListRow, PluginRow, SettingsDoc, Shadow, Unreadable, WindowsMcp } from './types.ts';
-import { markRetired } from './retired.ts';
 
 const { readState } = account;
 
