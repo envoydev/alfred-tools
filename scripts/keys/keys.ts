@@ -15,7 +15,7 @@ import { PLACEHOLDER, valueAt } from '../core/kept.ts';
 import { pathFor } from '../entries/platform.ts';
 import { isRecord, isServerEntry } from '../core/guards.ts';
 import type { ServerEntry } from '../core/types.ts';
-import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
+import type { CatalogRoute, CatalogRow, TokenForm } from '../catalog/types.ts';
 import type { FileNames, KeyChain, KeyHit, TokenField } from './types.ts';
 
 // 0.1.x's key file, at this plugin's folder and at its former one (spec D2), read in that order
@@ -33,22 +33,37 @@ const KEY_SHAPED = /(?:TOKEN|KEY|PAT)$/;
 const nearMiss = (candidate: string, name: string, word: string | null | undefined): boolean => candidate !== name && typeof word === 'string' && word !== '' && candidate.toUpperCase().includes(word) && KEY_SHAPED.test(candidate.toUpperCase());
 export const offeredName = (candidate: string, name: string, word: string | null | undefined): boolean => candidate === name || nearMiss(candidate, name, word);
 
-// The token fields a catalog route defines and an entry holds: [{ at: ['env', K] | ['headers', H] | ['args', i], template }]
+// The token fields a form defines and an entry holds: its env pairs and optional env pair, then its optional args pair.
+function formFields(entry: ServerEntry, form: TokenForm, ref: string): TokenField[]
+{
+    const out: TokenField[] = [];
+    const envTemplates: Record<string, string> = { ...(form.env || {}), ...((form.optionalEnv && form.optionalEnv.token) || {}) };
+    for (const [fieldName, template] of Object.entries(envTemplates))
+        if (template.includes(ref) && entry.env && Object.hasOwn(entry.env, fieldName)) out.push({ at: ['env', fieldName], template });
+    const [tokenFlag, tokenTemplate] = (form.optionalArgs && form.optionalArgs.token) || [];
+    const args = Array.isArray(entry.args) ? entry.args : [];
+    const i = tokenFlag === undefined ? -1 : args.indexOf(tokenFlag);
+    if (i >= 0 && i + 1 < args.length && tokenTemplate !== undefined) out.push({ at: ['args', i + 1], template: tokenTemplate });
+    return out;
+}
+
+// The token fields a catalog route defines and an entry holds: [{ at: ['env', K] | ['headers', H] | ['args', i], template }].
+// The route's own form first, then each place it kept the key before (`formerly`, spec D0), so every reader - Cursor's
+// refusal at Local, token-sync, fillKeys, the apply's held key, the list - sees a key wherever a registration keeps it.
 export function tokenFields(entry: ServerEntry | null | undefined, route: CatalogRoute | null | undefined): TokenField[]
 {
     if (!route || !route.tokenVar || !entry) return [];
     const ref = `\${${route.tokenVar}}`;
     const out: TokenField[] = [];
+    const seen = new Set<string>();
+    const add = (field: TokenField) => { const key = field.at.join('\u0000'); if (!seen.has(key)) { seen.add(key); out.push(field); } };
+    const current: TokenForm = { ...(route.env ? { env: route.env } : {}), ...(route.optionalEnv ? { optionalEnv: route.optionalEnv } : {}), ...(route.optionalArgs && route.optionalArgs.token ? { optionalArgs: { token: route.optionalArgs.token } } : {}) };
+    formFields(entry, current, ref).forEach(add);
     // a route declares no headers today; one that carries them is read as the env is
     const routeHeaders = 'headers' in route && isRecord(route.headers) ? route.headers : undefined;
-    const maps: ['env' | 'headers', Record<string, unknown> | undefined, Record<string, string> | undefined][] = [['env', route.env, entry.env], ['headers', routeHeaders, entry.headers]];
-    for (const [key, templates, held] of maps)
-        for (const [fieldName, template] of Object.entries(templates || {}))
-            if (typeof template === 'string' && template.includes(ref) && held && Object.hasOwn(held, fieldName)) out.push({ at: [key, fieldName], template });
-    const [tokenFlag, tokenTemplate] = (route.optionalArgs && route.optionalArgs['token']) || [];
-    const args = Array.isArray(entry.args) ? entry.args : [];
-    const i = tokenFlag === undefined ? -1 : args.indexOf(tokenFlag);
-    if (i >= 0 && i + 1 < args.length && tokenTemplate !== undefined) out.push({ at: ['args', i + 1], template: tokenTemplate });
+    for (const [fieldName, template] of Object.entries(routeHeaders || {}))
+        if (typeof template === 'string' && template.includes(ref) && entry.headers && Object.hasOwn(entry.headers, fieldName)) add({ at: ['headers', fieldName], template });
+    for (const form of route.formerly || []) formFields(entry, form, ref).forEach(add);
     return out;
 }
 

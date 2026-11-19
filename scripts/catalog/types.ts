@@ -61,6 +61,15 @@ export interface RouteFallback
     when: string; // stored - do not rename
 }
 
+// A place a route keeps its key, in the route's own form: an env pair, the optional env pair, the optional args pair
+// (spec D0). A route's `formerly` lists the places an older alfred-tools wrote it; keys.tokenFields reads them all.
+export interface TokenForm
+{
+    env?: Record<string, string>; // stored - do not rename
+    optionalEnv?: { token?: Record<string, string> }; // stored - do not rename
+    optionalArgs?: { token?: string[] }; // stored - do not rename
+}
+
 // One way to run a row's server: a local runtime, a hosted URL, or the bridge.
 export interface CatalogRoute
 {
@@ -78,6 +87,9 @@ export interface CatalogRoute
     helper?: RouteHelper; // stored - do not rename
     tokenVar?: string; // stored - do not rename
     optionalArgs?: { executablePath?: string[]; token?: string[]; [arg: string]: string[] | undefined }; // stored - do not rename
+    optionalEnv?: { token?: Record<string, string> }; // stored - do not rename
+    formerly?: TokenForm[]; // stored - do not rename
+    envSince?: Record<string, string>; // stored - do not rename
     image?: { name: string; tag: string }; // stored - do not rename
     fallback?: RouteFallback; // stored - do not rename
     keyless?: string; // stored - do not rename

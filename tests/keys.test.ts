@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import { world } from './helpers.ts';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import * as keys from '../scripts/keys/keys.ts';
+import type { CatalogRow } from '../scripts/catalog/types.ts';
 
 const catalog = catalogLib.load();
 const row = (id: string) => catalog.byId.get(id);
@@ -161,4 +162,25 @@ test('the 0.1.x key file is read at both folders', () => {
         }
     }
     finally { w.clean(); }
+});
+
+test('tokenFields and fillKeys see a key in a former place the route declares, and fill it there (spec D0)', () => {
+    const v = val();
+    const sentry = row('sentry')!;
+    const moved: CatalogRow = { ...sentry, routes: { ...sentry.routes, local: { ...sentry.routes['local']!, env: { SENTRY_AUTH_TOKEN: `\${${S}}` }, formerly: [{ env: { [S]: `\${${S}}` } }] } } };
+    const route = moved.routes['local'];
+    const old = { command: 'npx', args: ['-y', '@sentry/mcp-server@0.42.0'], env: { [S]: 'old' } };
+    const now = { command: 'npx', args: ['-y', '@sentry/mcp-server@0.49.0'], env: { SENTRY_AUTH_TOKEN: 'old' } };
+    assert.deepStrictEqual(keys.tokenFields(old, route), [{ at: ['env', S], template: `\${${S}}` }]);
+    assert.deepStrictEqual(keys.tokenFields(now, route), [{ at: ['env', 'SENTRY_AUTH_TOKEN'], template: `\${${S}}` }]);
+    assert.deepStrictEqual(keys.fillKeys(old, moved, 'local', 'local', { [S]: v }).env, { [S]: v }, 'a former field stays former');
+    assert.deepStrictEqual(keys.fillKeys(now, moved, 'local', 'local', { [S]: v }).env, { SENTRY_AUTH_TOKEN: v });
+    // an optional env pair, and a former optional args pair
+    const c7 = row('context7')!;
+    const c7moved: CatalogRow = { ...c7, routes: { ...c7.routes, local: { ...c7.routes['local']!, optionalArgs: {}, optionalEnv: { token: { CONTEXT7_API_KEY: '${CONTEXT7_API_KEY}' } }, formerly: [{ optionalArgs: { token: ['--api-key', '${CONTEXT7_API_KEY}'] } }] } } };
+    const inArgs = { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.5.0', '--api-key', '${CONTEXT7_API_KEY}'] };
+    assert.deepStrictEqual(keys.fillKeys(inArgs, c7moved, 'local', 'local', { CONTEXT7_API_KEY: v }).args!.slice(-2), ['--api-key', v]);
+    const inEnv = { command: 'npx', args: ['-y', '@upstash/context7-mcp@4.7.0'], env: { npm_config_before: 'x', CONTEXT7_API_KEY: '${CONTEXT7_API_KEY}' } };
+    assert.deepStrictEqual(keys.fillKeys(inEnv, c7moved, 'local', 'local', { CONTEXT7_API_KEY: v }).env, { npm_config_before: 'x', CONTEXT7_API_KEY: v });
+    assert.deepStrictEqual(keys.tokenFields({ command: 'npx', args: ['-y', '@upstash/context7-mcp@4.7.0'] }, c7moved.routes['local']), [], 'a keyless entry holds no field');
 });
