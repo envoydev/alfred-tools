@@ -3,6 +3,7 @@
 // .mcps-secrets at each start. The key is compared in this process only; a finding names a file and a name, never a value.
 import * as common from './common.ts';
 import * as keys from '../keys/keys.ts';
+import * as kept from '../core/kept.ts';
 import * as roots from '../roots/roots.ts';
 import { pathFor } from '../entries/platform.ts';
 import { launcherPlace } from '../entries/entry.ts';
@@ -34,6 +35,10 @@ function heldKeyOf(entry: ServerEntry, route: CatalogRoute): string | null
     return field && route.tokenVar ? keyIn(keys.valueAt(entry, field.at), field.template, route.tokenVar) : null;
 }
 
+// A held key the file's value would replace for the worse: a real key (not empty, not one ${NAME} placeholder, not the kept
+// marker) that differs from the chain's value is the only copy of the one that works. Compared in process, never printed.
+const isOnlyCopy = (held: string, fileValue: string): boolean => held !== '' && !ONE_VAR.test(held) && !held.includes(kept.MARKER) && held !== fileValue;
+
 export function keyToLauncherDetect(context: FixCtx): Finding[]
 {
     const resolved = rootsOf(context);
@@ -50,9 +55,14 @@ export function keyToLauncherDetect(context: FixCtx): Finding[]
         const hit = name ? keys.valueIn(chain, name) : null;
         const extra = { route: registration.route, roots: resolved, chain, ...(name ? { keyName: name } : {}) };
         if (!name || !hit)
-            return [common.finding(FIX_ID.keyToLauncher, registration, 'the registration holds its key, which no .mcps-secrets holds', { ...extra, blocked: `${registration.name} holds a key no .mcps-secrets holds - put it in ${chain[0] ?? '.mcps-secrets'} as ${listKey || route.tokenVar}, then run fix again` })];
+        {
+            const where = `put it in ${chain[0] ?? '.mcps-secrets'} as ${listKey || route.tokenVar}, then run fix again`;
+            return [held === ''
+                ? common.finding(FIX_ID.keyToLauncher, registration, 'the registration has no key to move', { ...extra, blocked: `${registration.name} has no key - ${where}` })
+                : common.finding(FIX_ID.keyToLauncher, registration, 'the registration holds its key, which no .mcps-secrets holds', { ...extra, blocked: `${registration.name} holds a key no .mcps-secrets holds - ${where}` })];
+        }
         // a placeholder or an empty field holds no key to lose; a real key that differs from the file's is the only copy of the one that works
-        if (held !== '' && !held.includes('${') && held !== hit.value)
+        if (isOnlyCopy(held, hit.value))
             return [common.finding(FIX_ID.keyToLauncher, registration, `the registration holds a key that differs from the one in ${hit.file}`, { ...extra, blocked: `${registration.name} holds a key that differs from the one in ${hit.file} - put the key that works in ${hit.file} as ${name} (or run fix, whose token-sync takes the file's), then run fix again` })];
         const root = resolved[roots.familyOf(registration.scope)];
         if (root && roots.shippedState('bridge', pathFor(context.platform).join(root, roots.FILES.bridge)).state === 'edited')
@@ -73,12 +83,16 @@ export function keyToLauncherFix(entry: ServerEntry, finding: Finding, context: 
 }
 
 // A list entry in the 0.6.0 plain form, restored to Claude Code: the launcher form of it when its key name is filled, so no
-// value is filled into a launcher route's entry. null for any other entry, which the caller's own key fill handles.
+// value is filled into a launcher route's entry. null for any other entry, and for one that holds a key differing from the
+// file's value (the plain form is restored with it, as in 0.6.0): the caller's own key fill handles both.
 export function restoredLauncher(entry: ServerEntry, listKey: string | null, row: CatalogRow, routeId: string, scope: string, context: FixCtx): ServerEntry | null
 {
     const route = row.routes[routeId];
     if (!route || !route.tokenVar || !isLauncherScope(scope) || !launcherRoute(route, routeId, scope) || launcherParts(entry)) return null;
     const resolved = rootsOf(context);
     const name = listKey || route.tokenVar;
-    return keys.valueIn(chainOf(context, scope, resolved), name) ? launcherForm(route, name, placeOf(context, scope, resolved), entry) : null;
+    const hit = keys.valueIn(chainOf(context, scope, resolved), name);
+    if (!hit) return null;
+    const held = heldKeyOf(keys.moveArgKeyToEnv(entry, route), route);
+    return held !== null && isOnlyCopy(held, hit.value) ? null : launcherForm(route, name, placeOf(context, scope, resolved), entry);
 }

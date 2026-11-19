@@ -220,6 +220,56 @@ test('restore from a 0.6.0 list entry builds the launcher and writes no value', 
     finally { w.clean(); }
 });
 
+test('restore keeps a registration key that differs from the file', () =>
+{
+    const w = world();
+    try
+    {
+        const [held, newer] = [keyValue(), keyValue()];
+        secrets(projectRoot(w), { [GITHUB_KEY]: newer });
+        writeJson(path.join(projectRoot(w), 'mcps.json'), { version: 1, servers: [{ name: 'github', scope: 'local', row: 'github', route: 'local', clients: ['claude'], entry: kept.maskCredentials(plainGithub(held), catalog.byId.get('github')), key: GITHUB_KEY }], own: [] });
+        const drifted = plainGithub(held, ['--read-only']);
+        seed(w, 'github', 'local', drifted);
+        const out = logged();
+        const result = applyFixes(ctxOf(w), ['none'], { tmp: tmpOf(w), log: out.log, input: { 'drift:claude:github~local': 'restore' } });
+        assert.strictEqual(result.failed, null, out.text());
+        const entry = localEntry(w, 'github')!;
+        assert.strictEqual(launcherParts(entry), null, 'no launcher: the registration key is not the file value');
+        assert.strictEqual(entry.env![GITHUB_KEY], held, 'the plain form is restored with the key as the registration held it');
+        assert.ok(!out.text().includes(held) && !out.text().includes(newer), 'no value printed');
+    }
+    finally { w.clean(); }
+});
+
+test('a literal key holding a placeholder-like text that differs from the file is blocked', () =>
+{
+    const w = world();
+    try
+    {
+        const [held, newer] = [[keyValue(), '$', '{tail}'].join(''), keyValue()];
+        secrets(projectRoot(w), { [GITHUB_KEY]: newer });
+        seed(w, 'github', 'local', plainGithub(held));
+        const [finding] = found(w) as [Finding];
+        assert.ok(finding && finding.blocked, 'blocked');
+        assert.match(finding.blocked, /^github holds a key that differs from the one in .*\.mcps-secrets - put the key that works/);
+        for (const value of [held, newer]) assert.ok(!`${finding.blocked}${finding.found}${shownOf(detectAll(ctxOf(w)))}`.includes(value));
+    }
+    finally { w.clean(); }
+});
+
+test('an empty key field is worded as no key, not as a key no file holds', () =>
+{
+    const w = world();
+    try
+    {
+        seed(w, 'github', 'local', plainGithub(''));
+        const [finding] = found(w) as [Finding];
+        assert.ok(finding, 'found');
+        assert.strictEqual(finding.blocked, `github has no key - put it in ${finding.chain![0]} as ${GITHUB_KEY}, then run fix again`);
+    }
+    finally { w.clean(); }
+});
+
 test('composed with token-sync and sentry-auth-env on one registration gives one launcher replace', () =>
 {
     const w = world();
