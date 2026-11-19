@@ -139,7 +139,10 @@ test("a start error names the inner command the registration gave, on win32 too"
         assert.strictEqual(launch.command, 'C:\\Windows\\system32\\cmd.exe', 'what is spawned is ComSpec');
         assert.strictEqual(launch.startName, 'npx', 'what an error names is the command the registration gave');
         const missing = w.run(['--run', `${CONTEXT7}=${CONTEXT7}?`, '--', path.join(w.dir, 'no-such-server')]);
-        assert.match(missing.stderr, /^mcp-bridge: could not start .*no-such-server - /);
+        // on a real win32 a command with no .exe starts through cmd /c, so cmd names it; elsewhere the spawn error does
+        if (process.platform === 'win32') assert.match(missing.stderr, /no-such-server' is not recognized/);
+        else assert.match(missing.stderr, /^mcp-bridge: could not start .*no-such-server - /);
+        assert.notStrictEqual(missing.status, 0, 'a missing command is a failed start');
     }
     finally { w.clean(); }
 });
