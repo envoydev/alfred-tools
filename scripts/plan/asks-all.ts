@@ -3,6 +3,7 @@
 // 'Other' is added by AskUserQuestion itself and never listed here.
 import fs from 'node:fs';
 import { currentOf } from '../entries/entry.ts';
+import { launcherParts } from '../entries/launcher.ts';
 import { installedOf, targetOf } from '../inventory/inventory.ts';
 import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
@@ -122,10 +123,11 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
         if (!routeId || !route) continue;
         const scope = scopes[key] || current.scope;
         const same = routeId === current.route;
-        // the name it uses: the helper's argument; for a stdio key, the name whose value equals the key it holds in the
-        // chain's .mcps-secrets (the 0.1.x key files are read for names only)
-        let name: string | null = same && route.helper ? current.keyName : null;
-        if (same && !route.helper && route.tokenVar)
+        // the name it uses: the launcher's or the helper's argument; for a stdio key, the name whose value equals the key it
+        // holds in the chain's .mcps-secrets (the 0.1.x key files are read for names only)
+        const launch = same ? launcherParts(registration.entry) : null;
+        let name: string | null = launch ? launch.keyName : same && route.helper ? current.keyName : null;
+        if (same && !launch && !route.helper && route.tokenVar)
         {
             const held = heldKey(live(registration.name, registration.scope) || {}, route);
             const keyState = keyStateOf(row, routeId, context, null, scope);

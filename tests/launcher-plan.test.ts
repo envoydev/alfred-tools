@@ -8,6 +8,7 @@ import { launcherParts } from '../scripts/entries/launcher.ts';
 import { heldKey } from '../scripts/plan/asks-keys.ts';
 import { fromRegistration } from '../scripts/mcps-list/mcps-list.ts';
 import { plan } from '../scripts/plan/plan.ts';
+import * as asks from '../scripts/plan/asks-all.ts';
 import { MAC, POSIX_FIXTURE, inv, opts, reg, changeOf, usedRoots } from './plan-helpers.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
 import type { EnsureKeyNameStep, McpAddStep, Plan } from '../scripts/plan/types.ts';
@@ -57,12 +58,18 @@ test('the list\'s key is the launcher\'s key name', () =>
 test('configure keeps a launcher\'s own key name with no key-name answer', { skip: POSIX_FIXTURE }, () =>
 {
     const target = githubLauncher();
-    const p = plan(inv(MAC, { registrations: [target], roots: usedRoots(PROJECT_ROOT, GLOBAL_ROOT) }), changeOf(target, { name: 'gh2' }), opts('/Users/me'));
+    const inventory = inv(MAC, { registrations: [target], roots: usedRoots(PROJECT_ROOT, GLOBAL_ROOT) });
+    // the key-name question recommends the launcher's own name, so taking the recommended option keeps it
+    const asked = asks.allQuestions(inventory, { targets: ['mcp:gh~local'] }, catalog, { home: '/Users/me' }).keyNames?.['mcp:gh~local'];
+    assert.ok(asked, 'a launcher\'s key name is asked');
+    const [first] = asked.question.options;
+    assert.strictEqual(first?.label, `${KEY_NAME} (Recommended)`);
+    assert.strictEqual(asked.answers[first?.label ?? ''], KEY_NAME);
+    const p = plan(inventory, changeOf(target, { name: 'gh2' }), opts('/Users/me'));
     assert.deepStrictEqual(p.errors, []);
     const [step] = p.steps.filter((candidate) => candidate.op === 'mcp-add' || candidate.op === 'mcp-replace' || candidate.op === 'mcp-move') as McpAddStep[];
     assert.ok(step, 'the change is planned');
-    assert.ok(launcherParts(step.entry)?.keyName === KEY_NAME, `the step's pair keeps the name: ${(step.entry.args ?? []).join(' ')}`);
-    assert.ok((step.entry.args ?? []).includes(`${TOKEN_VAR}=${KEY_NAME}`));
+    assert.ok((step.entry.args ?? []).includes(`${TOKEN_VAR}=${KEY_NAME}`), `the step's pair keeps the name: ${(step.entry.args ?? []).join(' ')}`);
     for (const keyStep of stepsOf(p, 'ensure-key-name') as EnsureKeyNameStep[]) assert.ok(!keyStep.names.includes(TOKEN_VAR), 'the route\'s own name is not put back');
 });
 
