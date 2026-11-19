@@ -7,13 +7,13 @@ import { createHash } from 'node:crypto';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import * as inventory from '../scripts/inventory/inventory.ts';
 import * as account from '../scripts/core/account.ts';
+import { renderPlan } from '../scripts/plan/render.ts';
 import { renderTable } from '../scripts/inventory/table.ts';
 import { markRetired } from '../scripts/inventory/retired.ts';
 import { isManaged } from '../scripts/inventory/fingerprint.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import { apply } from '../scripts/apply/run.ts';
 import * as cli from '../scripts/core/claude-cli.ts';
-import { readAccount } from '../scripts/core/account.ts';
 import { makeCtx, detectAll, applyFixes, renderFixes } from '../scripts/fix/fix.ts';
 import { makeCtx as makeUpdateCtx, checkUpdates } from '../scripts/update/check.ts';
 import { applyUpdates } from '../scripts/update/apply.ts';
@@ -98,7 +98,7 @@ test('a list that carries a note or comes from the 0.4.x record holds no server 
 
 // an emptied list is removed by writeList, so a missing file holds no entry
 const listedNames = (file: string): string[] => (fs.existsSync(file) ? readJson(file).servers.map((server: { name: string }) => server.name) : []);
-const retiredCtx = (w: World, data: string | null = null) => { const cat = { ...catalog, retired: [RETIRED_ROW] }; return makeCtx({ inventory: inventory.buildInventory({ project: w.project, env: w.env, catalog: cat, data }), catalog: cat, env: w.env, machine: noMachine(), data }); };
+const retiredCtx = (w: World, data: string | null = null, env = w.env, project = w.project) => { const cat = { ...catalog, retired: [RETIRED_ROW] }; return makeCtx({ inventory: inventory.buildInventory({ project, env: w.env, catalog: cat, data }), catalog: cat, env, machine: noMachine(), data }); };
 
 test("retired-server offers a managed retired server for removal, never one off the list; removing it drops its list entry and Cursor's copy (spec D3)", () =>
 {
@@ -184,7 +184,7 @@ test('update offers a retired server once under New ways to pass data; an instal
         // picked there: removed with its list entry
         const run2 = applyUpdates(ctxAt(other), ['upgrade:retired-server:old~local'], there, { log: () => {}, tmp: path.join(w.dir, 'tmp2') });
         assert.deepStrictEqual(run2.failed, []);
-        assert.strictEqual(readAccount(w.env, other).local['old'], undefined);
+        assert.strictEqual(account.readAccount(w.env, other).local['old'], undefined);
         assert.ok(!listedNames(path.join(other, '.alfred-tools', 'mcps.json')).includes('old'));
     }
     finally { w.clean(); }
@@ -214,6 +214,69 @@ test("a retired managed server is never called the user's own in a change plan; 
         assert.deepStrictEqual(removed.errors, []);
         const dropped = removed.steps.flatMap((step) => (step.op === 'list-write' ? step.drops.map((drop) => drop.key) : []));
         assert.deepStrictEqual([removed.steps.some((step) => step.op === 'mcp-remove' && step.name === 'old'), dropped], [true, ['mcp:old~local']]);
+    }
+    finally { w.clean(); }
+});
+
+test('a user-scope retired server has the decline id mcp:<name>, and a decline holds from a second project (spec D3)', async () =>
+{
+    const w = world();
+    const data = path.join(w.dir, 'data');
+    try
+    {
+        const cat = { ...catalog, retired: [RETIRED_ROW] };
+        seed(w, 'old', 'user', OLD_TOOL);
+        writeJson(path.join(w.home, '.alfred-tools', 'mcps.json'), { version: 1, servers: [{ name: 'old', scope: 'user', row: 'old-tool', route: 'local', clients: ['claude'], entry: OLD_TOOL, key: null }], own: [] });
+        const other = path.join(w.dir, 'other');
+        fs.mkdirSync(other, { recursive: true });
+        const [here] = detectAll(retiredCtx(w, data)).found.filter((f) => f.id === 'retired-server') as [Finding];
+        assert.deepStrictEqual([here.scope, here.declineId], ['user', 'mcp:old']);
+        assert.match(here.note || '', /retired-declined=mcp:old~user/);
+        applyFixes(retiredCtx(w, data), ['none'], { input: { 'retired-declined': 'mcp:old~user' }, log: () => {} });
+        for (const project of [w.project, other])
+        {
+            const [again] = detectAll(retiredCtx(w, data, w.env, project)).found.filter((f) => f.id === 'retired-server') as [Finding];
+            assert.deepStrictEqual([again.declineId, again.declined], ['mcp:old', true], project);
+            const updateCtx = makeUpdateCtx({ inventory: inventory.buildInventory({ project, env: w.env, catalog: cat, data }), project, catalog: cat, env: w.env, machine: noLsp, registry: fakeRegistry({}), now: NOW, refresh: false, data });
+            assert.ok(!(await checkUpdates(updateCtx)).offers.some((o) => o.id.startsWith('upgrade:retired-server:')), project);
+        }
+    }
+    finally { w.clean(); }
+});
+
+test("a failed retired-server removal leaves the registration, its list entry and Cursor's copy as they were (spec D3)", () =>
+{
+    const w = world();
+    try
+    {
+        seed(w, 'old', 'local', OLD_TOOL);
+        writeJson(path.join(ptRoot(w), 'mcps.json'), { version: 1, servers: [{ name: 'old', scope: 'local', row: 'old-tool', route: 'local', clients: ['claude', 'cursor'], entry: OLD_TOOL, key: null }], own: [] });
+        writeJson(path.join(w.project, '.cursor', 'mcp.json'), { mcpServers: { old: OLD_TOOL } });
+        const out = logged();
+        const res = applyFixes(retiredCtx(w, null, { ...w.env, FAKE_CLAUDE_FAIL: 'mcp remove old' }), ['retired-server'], { log: out.log, tmp: path.join(w.dir, 'tmp') });
+        assert.ok(res.failed, out.text());
+        assert.ok(localEntry(w, 'old'), 'the registration is still there');
+        assert.deepStrictEqual(listedNames(path.join(ptRoot(w), 'mcps.json')), ['old']);
+        assert.deepStrictEqual(readJson(path.join(w.project, '.cursor', 'mcp.json')).mcpServers, { old: OLD_TOOL });
+    }
+    finally { w.clean(); }
+});
+
+test("configure's remove of a retired managed server names its retired row in the plan, never null (spec D3)", () =>
+{
+    const w = world();
+    try
+    {
+        const cat = { ...catalog, retired: [RETIRED_ROW] };
+        localServers(w, { old: OLD_TOOL });
+        writeJson(path.join(w.project, '.alfred-tools', 'mcps.json'), { version: 1, servers: [{ name: 'old', scope: 'local', row: 'old-tool', route: 'local', clients: ['claude'], entry: OLD_TOOL, key: null }], own: [] });
+        const removed = plan(build(w, cat), { remove: [{ kind: 'mcp', name: 'old', scope: 'local' }] }, { home: w.home, env: w.env, catalog: cat });
+        assert.deepStrictEqual(removed.errors, []);
+        const step = removed.steps.find((candidate) => candidate.op === 'mcp-remove');
+        assert.strictEqual(step && 'why' in step ? step.why : undefined, "remove 'old' (old-tool) at local scope");
+        const text = renderPlan(removed);
+        assert.match(text, /old-tool/);
+        assert.ok(!/\bnull\b/.test(text), text);
     }
     finally { w.clean(); }
 });
