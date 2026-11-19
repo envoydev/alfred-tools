@@ -226,7 +226,7 @@
       "symptom": "a stdio token server at local or user scope holds a key no name in its key files (.mcps-secrets in the project root, then the global root) holds: the key changed in the file since, or the registration still holds the ${VAR} 0.1.x left; an empty key is never guessed at - the key's name is picked with /alfred-tools:configure",
       "detect": "tokenSyncDetect",
       "fix": "tokenSyncFix",
-      "verifiedOn": "this build: tests/fix.test.js token-sync (2026-11-10)",
+      "verifiedOn": "this build: tests/fix.test.ts token-sync (2026-11-10)",
       "source": "docs/build-prompt.md D7; docs/sources.md 'Claude Code - headersHelper'"
     },
     {
@@ -280,7 +280,7 @@
       "symptom": "a managed serena runs with a --context other than <SERENA_HOME>/serena-context.yml, or that file is missing - 0.4.x ran Serena's claude-code context, whose instructions name Claude Code's own tools, and 0.5.x kept the file in the root",
       "detect": "serenaContextDetect",
       "fix": "serenaContextFix",
-      "verifiedOn": "this build: tests/fix.test.js serena-context (2026-11-13)",
+      "verifiedOn": "this build: tests/fix.test.ts serena-context (2026-11-13)",
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D7"
     },
     {
@@ -299,7 +299,7 @@
       "detect": "serenaBaseModesDetect",
       "fix": null,
       "steps": "serenaBaseModesSteps",
-      "verifiedOn": "this build: tests/fix.test.js serena-base-modes (2026-11-13)",
+      "verifiedOn": "this build: tests/fix.test.ts serena-base-modes (2026-11-13)",
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D7, F9"
     },
     {
@@ -351,7 +351,7 @@
       "detect": "listImportDetect",
       "fix": null,
       "steps": "listImportSteps",
-      "verifiedOn": "this build: tests/fix.test.js list-import (2026-11-13)",
+      "verifiedOn": "this build: tests/fix.test.ts list-import (2026-11-13)",
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D1, D9"
     },
     {
@@ -418,7 +418,7 @@
       "detect": "readGuardDetect",
       "fix": null,
       "steps": "readGuardSteps",
-      "verifiedOn": "this build: tests/fix.test.js read-guard (2026-11-13), other config dirs (2026-11-18)",
+      "verifiedOn": "this build: tests/fix.test.ts read-guard (2026-11-13), other config dirs (2026-11-18)",
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md rulings 12, 13; docs/superpowers/specs/2026-11-18-session-issues-design.md Part E"
     },
     {
@@ -450,7 +450,7 @@
       "detect": "clientDriftDetect",
       "fix": null,
       "steps": "clientDriftSteps",
-      "verifiedOn": "this build: tests/drift.test.js (2026-11-13)",
+      "verifiedOn": "this build: tests/drift.test.ts (2026-11-13)",
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D9"
     },
     {
@@ -482,7 +482,7 @@
       "symptom": "Cursor's .cursor/mcp.json or ~/.cursor/mcp.json is a symbolic link, is not JSON (comments or trailing commas), or has no mcpServers object - alfred-tools writes no such file",
       "detect": "cursorFileDetect",
       "fix": null,
-      "verifiedOn": "this build: tests/drift.test.js cursor-file (2026-11-13)",
+      "verifiedOn": "this build: tests/drift.test.ts cursor-file (2026-11-13)",
       "source": "docs/superpowers/specs/2026-11-13-one-list-both-clients-design.md D9"
     },
     {
@@ -521,7 +521,7 @@
       "symptom": "a tool's data folder in a folder Claude starts in is not git-ignored, so a browser profile or a database is one git add from a commit: a project-scope registration writes its folder relative, and a session started in a child or a subfolder creates it there",
       "detect": "dataFolderIgnoreDetect",
       "fix": "dataFolderIgnoreFix",
-      "verifiedOn": "this build: tests/fix.test.js data-folder-ignore (2026-11-10); a stdio server starts in the session's folder (tests/probes/mcp-tree.js)",
+      "verifiedOn": "this build: tests/fix.test.ts data-folder-ignore (2026-11-10); a stdio server starts in the session's folder (tests/probes/mcp-tree.ts)",
       "source": "docs/build-prompt.md 'Locations' (a data folder in another folder Claude starts in); docs/sources.md 'Relative data folders - the probe'"
     },
     {
@@ -544,7 +544,7 @@
       "symptom": "an npx server - or a bridge server, whose mcp-remote runs through npx - fails at every start with ENOENT reading <npm cache>/_npx/<hash>/package.json: two first installs of one package at once - a session started while the fetch runs - left npx's cache folder without it, and npx never repairs it",
       "detect": "npxCacheEntryDetect",
       "fix": "npxCacheEntryFix",
-      "verifiedOn": "this build: npm 11.6.1 on macOS - an _npx folder without its package.json failed every later start with ENOENT (exit 254), and its name is libnpmexec's sha512 of the package spec; npm 10.9.2 and 11.6.1 refuse npm config get cache, and npm config ls -l names the cache in force; end to end on a throwaway cache: found, removed, fetched, then the start printed its answer (2026-11-10); tests/fix.test.js npx-cache-entry",
+      "verifiedOn": "this build: npm 11.6.1 on macOS - an _npx folder without its package.json failed every later start with ENOENT (exit 254), and its name is libnpmexec's sha512 of the package spec; npm 10.9.2 and 11.6.1 refuse npm config get cache, and npm config ls -l names the cache in force; end to end on a throwaway cache: found, removed, fetched, then the start printed its answer (2026-11-10); tests/fix.test.ts npx-cache-entry",
       "source": "docs/sources.md 'Claude Code - time limits behind the fetch step' (the npx measurements); npm 11.6.1 node_modules/libnpmexec/lib/index.js"
     },
     {
@@ -567,7 +567,7 @@
       "symptom": "a hosted server registered by 0.1.x carries its key in an Authorization header - a ${VAR} or the key itself - where 0.2.0 reads it through mcp-headers.js from .mcps-secrets; moved when the name, or a name holding the same key, is filled in the key files",
       "detect": "keyToHelperDetect",
       "fix": "keyToHelperFix",
-      "verifiedOn": "this build: tests/fix.test.js key-to-helper (2026-11-10)",
+      "verifiedOn": "this build: tests/fix.test.ts key-to-helper (2026-11-10)",
       "source": "docs/build-prompt.md D7; docs/sources.md 'Claude Code - headersHelper'"
     },
     {
@@ -613,7 +613,7 @@
       "symptom": "a hosted server names an mcp-headers.js that is not there (a fresh clone, a root moved by hand), so it connects without its key; or a bridge server's mcp-bridge.js, or the mcp-headers.js beside it, is not there, so it does not start",
       "detect": "helperMissingDetect",
       "fix": "helperMissingFix",
-      "verifiedOn": "this build: tests/fix.test.js helper-missing (2026-11-10), with a bridge (2026-11-12)",
+      "verifiedOn": "this build: tests/fix.test.ts helper-missing (2026-11-10), with a bridge (2026-11-12)",
       "source": "docs/build-prompt.md D7; docs/sources.md 'Claude Code - headersHelper'"
     },
     {
@@ -636,7 +636,7 @@
       "symptom": "the mcp-headers.js a hosted server names, or a bridge server's mcp-bridge.js or the helper beside it, is an older copy than this plugin's, or was changed by hand; a newer one is left and named, so the plugin is updated instead",
       "detect": "helperStaleDetect",
       "fix": "helperStaleFix",
-      "verifiedOn": "this build: tests/fix.test.js helper-stale (2026-11-10), with a bridge (2026-11-12)",
+      "verifiedOn": "this build: tests/fix.test.ts helper-stale (2026-11-10), with a bridge (2026-11-12)",
       "source": "docs/build-prompt.md D7; docs/sources.md 'Claude Code - headersHelper'"
     },
     {
@@ -659,7 +659,7 @@
       "symptom": "a root folder inside a git work tree whose .mcps-secrets git would commit, or whose mcp-headers.js git ignores though a project-scope server needs it committed (0.1.x wrote a .gitignore holding *)",
       "detect": "rootIgnoreDetect",
       "fix": "rootIgnoreFix",
-      "verifiedOn": "this build: tests/fix.test.js root-ignore (2026-11-10)",
+      "verifiedOn": "this build: tests/fix.test.ts root-ignore (2026-11-10)",
       "source": "docs/build-prompt.md D7; docs/sources.md 'Claude Code - headersHelper'"
     },
     {
@@ -689,7 +689,7 @@
       "symptom": "a project-scope registration names its data folder or key helper relative or through ${HOME}/${USERPROFILE}, so a session started in a child folder uses its own copy",
       "detect": "projectRelativePathDetect",
       "fix": "projectRelativePathFix",
-      "verifiedOn": "this build: tests/fix.test.js project-relative-path (2026-11-11); a stdio server starts in the session's folder (tests/probes/mcp-tree.js)",
+      "verifiedOn": "this build: tests/fix.test.ts project-relative-path (2026-11-11); a stdio server starts in the session's folder (tests/probes/mcp-tree.ts)",
       "source": "docs/superpowers/specs/2026-11-11-field-fixes-0.3.0-design.md F7; docs/sources.md '.mcp.json in parent folders' M1 and M4 (a session reads every parent .mcp.json and starts each stdio server in its own folder) and 'Relative data folders - the probe'"
     },
     {
@@ -721,7 +721,7 @@
       "symptom": "the catalog servers in .mcp.json are not in the user's order",
       "detect": "mcpOrderDetect",
       "fix": "mcpOrderFix",
-      "verifiedOn": "this build: tests/fix.test.js mcp-order and tests/mcp-order.test.js (2026-11-11)",
+      "verifiedOn": "this build: tests/fix.test.ts mcp-order and tests/mcp-order.test.ts (2026-11-11)",
       "source": "docs/superpowers/specs/2026-11-11-field-fixes-0.3.0-design.md F8 (the user's ruling, 2026-11-11)"
     },
     {
@@ -744,7 +744,7 @@
       "symptom": "a parent folder's hosted server connects without its key in a child folder",
       "detect": "helperChildFolderDetect",
       "fix": null,
-      "verifiedOn": "this build: tests/fix.test.js helper-child-folder (2026-11-11); tests/probes/headers-helper.js child-folder case (M1)",
+      "verifiedOn": "this build: tests/fix.test.ts helper-child-folder (2026-11-11); tests/probes/headers-helper.ts child-root-absolute (M1)",
       "source": "docs/superpowers/specs/2026-11-11-field-fixes-0.3.0-design.md F3a; docs/sources.md 'Claude Code - headersHelper' M1 (a parent folder's helper, named relative or absolute, does not run in a child folder)"
     },
     {

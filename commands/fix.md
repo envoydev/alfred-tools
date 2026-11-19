@@ -27,7 +27,7 @@ server left on its own at install is listed as 'on its own - not checked'; `/alf
 A `note:` line (a Project-scope key helper waiting for the trust prompt, say) is advice, not a fix: relay it. A row
 named 'Held' is an open decision, not a problem; mention it in one line and leave it.
 
-Three rows look after what 0.2.0 wrote at Project scope:
+These three rows look after a Project-scope `.mcp.json`:
 
 - `project-relative-path` - a data folder or the key helper named relative, or through `${HOME}` / `${USERPROFILE}`, in
   this folder's `.mcp.json`. The fix writes those paths absolute, from the entry as read; it moves no data, and names
@@ -171,8 +171,10 @@ connect; one that wrote a bridge (`mcp-bridge.js`) or the helper beside it print
 
 - Nothing is applied before step 2's answer. A fix that was not picked is never run.
 - A registration that matches no catalog row is the user's and is never touched.
-- Keys live in `.mcps-secrets` in the root folder, filled by the user. A key is written into a registration only by
-  `token-sync`, for a local route; `key-to-helper` moves a hosted key out of a registration once its name is filled
-  there. This command never asks for, prints or edits a key, a value or a sign-in token in `mcp-remote-v1/`; a finding
-  names the key and the file.
+- Keys live in `.mcps-secrets` in the root folder, filled by the user. A key's value goes from there into a
+  registration only through `token-sync`, for a local route, and a `client-drift` 'Restore from the list' in Claude
+  Code; `context7-key-env` and `sentry-auth-env` move a key within its registration and keep its value, any other
+  rewrite keeps the key the registration holds, and `key-to-helper` moves a hosted key out of a registration once its
+  name is filled there. This command never asks for, prints or edits a key, a value or a sign-in token in
+  `mcp-remote-v1/`; a finding names the key and the file.
 - Do not repeat a fix 'STILL FOUND' in a loop. Show it and stop; the finding's note says what is left to do.

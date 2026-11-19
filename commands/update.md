@@ -52,10 +52,8 @@ folder as `<fix id>: <what it found>`. Below them: plugins whose marketplace lis
 (`claude plugin update` is the check for those, so each is offered on its own), releases held back, what was skipped (a hosted URL has no
 pin; a Docker image tag is not checked; a server on its own), and what could not be checked. Among the new ways to pass data,
 `retired-plugin` offers to uninstall a plugin the catalog no longer lists (typescript-lsp, csharp-lsp, claude-hud - they
-work in Claude Code alone), one offer per plugin and scope; one the user turned down before is not offered. The same
-section also lists `context7-key-env` (a context7 key moved from `--api-key` into its environment), `sentry-auth-env`
-(sentry's variable renamed to `SENTRY_AUTH_TOKEN` where its pin reads that name) and `retired-server` (a managed server
-whose row the catalog retired, offered for removal).
+work in Claude Code alone), one offer per plugin and scope; one the user turned down before is not offered. Every other
+line in that section is one of the `upgrade` rows the Rules name.
 
 Above the tables, a line per server changed since alfred-tools last wrote it: '<name> was changed outside
 alfred-tools' (an update starts from the registration as it is, and carries it into the list and Cursor), or
@@ -225,4 +223,5 @@ A key helper that was edited by hand, or is newer than this plugin, is never rew
 ## Windows and serena
 
 A serena bump on Windows needs nothing extra here: this plugin does not patch serena's TypeScript launcher (the user's
-ruling, recorded in `docs/sources.md`). If symbol tools fail afterwards, `/alfred-tools:fix` lists what it can detect.
+ruling, recorded in `${CLAUDE_PLUGIN_ROOT}/docs/sources.md`). If symbol tools fail afterwards, `/alfred-tools:fix` lists
+what it can detect.
