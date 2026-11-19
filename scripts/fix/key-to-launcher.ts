@@ -128,20 +128,25 @@ export function restoredLauncher(entry: ServerEntry, listKey: string | null, row
     return held !== null && isOnlyCopy(held, hit.value) ? null : launcherForm(route, name, placeOf(context, scope, resolved), entry);
 }
 
+// A restore that cannot be planned for one registration, with the text to show: the run skips that finding, writes nothing
+// for it and goes on with the others (fix.ts), as key-to-launcher's detect blocks one finding.
+export class RestoreBlocked extends Error {}
+
 // The plan of a restore that built a launcher (spec Step 5): the root's helper and bridge first, as fix writes them for a
-// registration fix, then the registration, then the list entry and Cursor's copy from it - so the launcher starts, and the
-// list holds the launcher form, not the plain one the next run would find drifted. A root whose bridge was edited blocks
-// it and nothing is written, as key-to-launcher's detect does.
-export function restoreLauncherSteps(step: McpReplaceStep | McpAddStep, context: FixCtx): PlanStep[]
+// registration fix, then the registration, then the list entry and Cursor's copy from it, then the root's record - so the
+// launcher starts, and the list holds the launcher form, not the plain one the next run would find drifted. A root whose
+// bridge was edited blocks it (RestoreBlocked) and nothing is written, as key-to-launcher's detect does. A .gitignore gap
+// goes to `notes`.
+export function restoreLauncherSteps(step: McpReplaceStep | McpAddStep, context: FixCtx, notes: string[] = []): PlanStep[]
 {
     const resolved = rootsOf(context);
     const editedIn = editedBridgeRoot(context, resolved, step.scope);
-    if (editedIn !== null) throw new Error(`${step.name} (${step.scope}): ${editedBridgeText(editedIn)}`);
+    if (editedIn !== null) throw new RestoreBlocked(`${step.name} (${step.scope}): ${editedBridgeText(editedIn)}`);
     const fileContext = { platform: context.platform, project: context.inventory.project, home: context.home, roots: resolved, uses: [] };
     useRoots(fileContext, step.scope, { helper: true, bridge: true, keyFile: null, keyName: null, data: null });
-    const files = fileSteps(context.inventory, fileContext, { notes: [] });
-    const tail = repairTail(context.inventory, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, notes: [] }, [step]);
-    return [...files.before, step, ...tail];
+    const files = fileSteps(context.inventory, fileContext, { notes });
+    const tail = repairTail(context.inventory, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, notes }, [step]);
+    return [...files.before, step, ...tail, ...files.after];
 }
 
 // A key-to-launcher finding waits while its registration has a Claude Code client-drift finding to settle first: the move

@@ -15,7 +15,7 @@ import { launcherParts } from '../scripts/entries/launcher.ts';
 import { detectAll, applyFixes } from '../scripts/fix/fix.ts';
 import { pinnedVersion } from '../scripts/fix/common.ts';
 import { world, readJson, writeJson, files } from './helpers.ts';
-import { reg, ctxFor, ctxOf, localEntry, logged, put, seed, shownOf } from './fix-helpers.ts';
+import { reg, ctxFor, ctxOf, gitInit, localEntry, logged, put, seed, shownOf } from './fix-helpers.ts';
 import { run, fakeRegistry, ago, installPlain, localReg } from './update-helpers.ts';
 import type { Finding } from '../scripts/fix/types.ts';
 import type { ServerEntry } from '../scripts/core/types.ts';
@@ -276,22 +276,77 @@ test('restore to the launcher writes the helper and the bridge, and the list ent
     finally { w.clean(); }
 });
 
-test('restore to the launcher over an edited bridge is blocked with the helper-stale text and writes nothing', () =>
+test('restore to the launcher over an edited bridge is skipped with the helper-stale text and writes nothing; the run\'s other fixes still apply', () =>
+{
+    const w = world();
+    try
+    {
+        const [key, otherKey] = [keyValue(), keyValue()];
+        driftedGithub(w, key);
+        secrets(globalRoot(w), { [SENTRY_KEY]: otherKey });
+        seed(w, 'sentry', 'user', plainSentry(otherKey));
+        const bridge = path.join(projectRoot(w), 'mcp-bridge.js');
+        put(bridge, `${roots.shippedSource('bridge')}// mine\n`);
+        const [entry, list] = [localEntry(w, 'github'), fs.readFileSync(path.join(projectRoot(w), 'mcps.json'), 'utf8')];
+        const out = logged();
+        const result = applyFixes(ctxOf(w), ['key-to-launcher'], { tmp: tmpOf(w), log: out.log, input: { 'drift:claude:github~local': 'restore' } });
+        assert.strictEqual(result.failed, null, out.text());
+        assert.ok(launcherParts(readAccount(w.env, w.project).user['sentry']), 'the unrelated fix applied');
+        assert.deepStrictEqual(result.applied.map((finding) => `${finding.id}:${finding.name}`), ['key-to-launcher:sentry']);
+        assert.ok(result.skipped.some((skipped) => skipped.id === 'client-drift' && skipped.name === 'github'), 'the restore is skipped');
+        assert.ok(out.text().includes(`mcp-bridge.js in ${projectRoot(w)} changed since alfred-tools wrote it - /alfred-tools:fix (helper-stale) rewrites it, or delete it, then run fix again`), out.text());
+        assert.deepStrictEqual(localEntry(w, 'github'), entry, 'the registration is as it was');
+        assert.strictEqual(fs.readFileSync(path.join(projectRoot(w), 'mcps.json'), 'utf8'), list, 'the list is as it was');
+        assert.strictEqual(fs.readFileSync(bridge, 'utf8'), `${roots.shippedSource('bridge')}// mine\n`, 'the edited bridge is as it was');
+        assert.ok(!fs.existsSync(path.join(projectRoot(w), 'mcp-headers.js')), 'no helper written');
+    }
+    finally { w.clean(); }
+});
+
+test('restore into a root not yet recorded records it', () =>
 {
     const w = world();
     try
     {
         const key = keyValue();
         driftedGithub(w, key);
-        const bridge = path.join(projectRoot(w), 'mcp-bridge.js');
-        put(bridge, `${roots.shippedSource('bridge')}// mine\n`);
-        const [entry, list] = [localEntry(w, 'github'), fs.readFileSync(path.join(projectRoot(w), 'mcps.json'), 'utf8')];
-        const result = applyFixes(ctxOf(w), ['none'], { tmp: tmpOf(w), log: () => {}, input: { 'drift:claude:github~local': 'restore' } });
-        assert.ok(result.failed?.includes(`mcp-bridge.js in ${projectRoot(w)} changed since alfred-tools wrote it - /alfred-tools:fix (helper-stale) rewrites it, or delete it, then run fix again`), String(result.failed));
-        assert.deepStrictEqual(localEntry(w, 'github'), entry, 'the registration is as it was');
-        assert.strictEqual(fs.readFileSync(path.join(projectRoot(w), 'mcps.json'), 'utf8'), list, 'the list is as it was');
-        assert.strictEqual(fs.readFileSync(bridge, 'utf8'), `${roots.shippedSource('bridge')}// mine\n`, 'the edited bridge is as it was');
-        assert.ok(!fs.existsSync(path.join(projectRoot(w), 'mcp-headers.js')), 'no helper written');
+        const data = path.join(w.dir, 'data');
+        const out = logged();
+        const result = applyFixes(ctxOf(w, { data }), ['none'], { tmp: tmpOf(w), log: out.log, input: { 'drift:claude:github~local': 'restore' } });
+        assert.strictEqual(result.failed, null, out.text());
+        assert.ok(launcherParts(localEntry(w, 'github')), 'the registration is a launcher');
+        assert.strictEqual(readJson(path.join(data, 'roots.json')).projects[roots.mapKey(w.project)], projectRoot(w), 'the root is recorded');
+    }
+    finally { w.clean(); }
+});
+
+test('restore into a root git would commit shows the .gitignore note', () =>
+{
+    const w = world();
+    try
+    {
+        driftedGithub(w, keyValue());
+        gitInit(w.project);
+        const out = logged();
+        const result = applyFixes(ctxOf(w), ['none'], { tmp: tmpOf(w), log: out.log, input: { 'drift:claude:github~local': 'restore' } });
+        assert.strictEqual(result.failed, null, out.text());
+        assert.match(out.text(), /note: .*\.alfred-tools.*(no key file|root-ignore)/);
+    }
+    finally { w.clean(); }
+});
+
+test('--only key-to-launcher still sees the open client-drift: the move is skipped and says why', () =>
+{
+    const w = world();
+    try
+    {
+        driftedGithub(w, keyValue());
+        const entry = localEntry(w, 'github');
+        const out = logged();
+        const result = applyFixes(ctxOf(w), ['key-to-launcher'], { only: 'key-to-launcher', tmp: tmpOf(w), log: out.log });
+        assert.deepStrictEqual(result.skipped.map((skipped) => skipped.id), ['key-to-launcher']);
+        assert.match(out.text(), /skipped key-to-launcher on .*github.*client-drift/);
+        assert.deepStrictEqual(localEntry(w, 'github'), entry);
     }
     finally { w.clean(); }
 });
@@ -495,6 +550,23 @@ test("update offers it under 'New ways to pass data' and applies it", async () =
         assert.strictEqual(roots.shippedState('bridge', path.join(projectRoot(w), 'mcp-bridge.js')).state, 'same', 'the root bridge reads 4');
         assert.ok(!applied.text.includes(key));
         assert.deepStrictEqual(filesShowing(w, key), [], 'no file but .mcps-secrets holds the key');
+    }
+    finally { w.clean(); }
+});
+
+test('update does not offer the move for a server with an open client-drift: a note says it waits for the answer, and nothing is applied or failed', async () =>
+{
+    const w = world();
+    try
+    {
+        driftedGithub(w, keyValue());
+        const entry = localReg(w, 'github').entry;
+        const check = await run(w, ['--check', '--no-refresh']);
+        assert.doesNotMatch(check.text, /New ways to pass data:[\s\S]*key-to-launcher/);
+        assert.match(check.text, /github \(local\): .* - not applied here: client-drift is open on it, so the move waits for that answer - run \/alfred-tools:fix \(restore or keep\), then update again/);
+        const applied = await run(w, ['--apply', 'all', '--no-refresh']);
+        assert.strictEqual(applied.code, 0, applied.text);
+        assert.deepStrictEqual(localReg(w, 'github').entry, entry, 'the registration is as it was');
     }
     finally { w.clean(); }
 });

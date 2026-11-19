@@ -6,6 +6,8 @@ import { HELPER_VERSION } from '../copied/mcp-headers.js';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import { homeDir } from '../core/account.ts';
 import * as fixLib from '../fix/fix.ts';
+import { clientDriftDetect } from '../fix/lists.ts';
+import { waitsForDrift } from '../fix/key-to-launcher.ts';
 import { isManaged } from '../inventory/fingerprint.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { ShippedKind } from '../roots/types.ts';
@@ -67,6 +69,8 @@ export function upgradeOffers(context: UpdateCtx, out: UpdateCheck): void
     const catalog = upgradeCatalog(context.catalog);
     if (!catalog.fixes.length) return;
     const fixContext = fixLib.makeCtx({ inventory: context.inventory, catalog, env: context.env, machine: context.machine, data: context.data });
+    // update's catalog holds no client-drift row, so the open drift a key-to-launcher move waits for is read directly
+    const openDrift = clientDriftDetect(fixContext);
     for (const finding of fixLib.detectAll(fixContext).found)
     {
         // an uninstall the user turned down is theirs to keep: no offer, no note, nothing waiting (spec D9)
@@ -79,7 +83,8 @@ export function upgradeOffers(context: UpdateCtx, out: UpdateCheck): void
             continue;
         }
         const label = upgradeLabel(finding);
-        const why = finding.blocked || (finding.input && `needs a folder from you (${finding.input.prompt})`);
+        const driftWait = waitsForDrift(finding, openDrift, {}) ? 'client-drift is open on it, so the move waits for that answer - run /alfred-tools:fix (restore or keep), then update again' : null;
+        const why = finding.blocked || (finding.input && `needs a folder from you (${finding.input.prompt})`) || driftWait;
         if (why)
         {
             out.notes.push(`${label}: ${finding.found} - not applied here: ${why}${/\/alfred-tools:fix/.test(why) ? '' : '; then run /alfred-tools:fix'}`);

@@ -315,7 +315,7 @@ export function clientDriftDetect(context: FixCtx): Finding[]
 }
 
 // The steps of one answered finding. answer: keep | restore | leave | drop.
-export function clientDriftSteps(finding: Finding, context: FixCtx, input: Record<string, string> = {}): PlanStep[]
+export function clientDriftSteps(finding: Finding, context: FixCtx, input: Record<string, string> = {}, notes: string[] = []): PlanStep[]
 {
     const answer = input[fieldOf(finding, 'driftKey')];
     const catalog = context.catalog;
@@ -352,7 +352,7 @@ export function clientDriftSteps(finding: Finding, context: FixCtx, input: Recor
             if (at) entry = keys.fillKeys(entry, row, routeId, fieldOf(finding, 'scope'), { [tokenVar]: at.value });
         }
         if (kept.holdsKept(entry)) throw new Error(`${finding.name} (${finding.scope}): the list's entry holds a key ${listServer.key ? `named ${listServer.key} ` : ''}that is filled nowhere - fill it, then run fix again`);
-        return launched ? restoreLauncherSteps(claudeStep(entry), context) : [claudeStep(entry)];
+        return launched ? restoreLauncherSteps(claudeStep(entry), context, notes) : [claudeStep(entry)];
     }
     if (answer === 'drop')
     {

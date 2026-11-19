@@ -24,7 +24,8 @@ import { apply } from '../apply/run.ts';
 import * as cli from '../core/claude-cli.ts';
 import { writeJob, fetchJob, nextLines } from '../apply/fetch.ts';
 import { DETECTORS, FILE_STEPS, MACHINE_FIXES, REGISTRATION_FIXES, gates, helperStaleFix, machineOf, movedRoots, passesGate, repointDataMap, repointEntry, rootMoveFix } from './fix-functions.ts';
-import { waitsForDrift } from './key-to-launcher.ts';
+import { RestoreBlocked, waitsForDrift } from './key-to-launcher.ts';
+import { clientDriftDetect } from './lists.ts';
 import { realMachine, clone, fieldOf, isManaged } from './common.ts';
 import { retiredServerSteps } from './retired-server.ts';
 import { FIX_ID } from './constants.ts';
@@ -251,7 +252,9 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         result.skipped.push(finding);
         log(`skipped client-drift on ${where(finding)}: ${why}`);
     }
-    for (const finding of picked.filter((candidate) => !result.skipped.includes(candidate) && waitsForDrift(candidate, detected.found, input)))
+    // the guard reads the open drift whatever `only` narrowed the findings to
+    const openDrift = picked.some((candidate) => candidate.id === FIX_ID.keyToLauncher) ? clientDriftDetect(context) : [];
+    for (const finding of picked.filter((candidate) => !result.skipped.includes(candidate) && waitsForDrift(candidate, openDrift, input)))
     {
         result.skipped.push(finding);
         log(`skipped ${finding.id} on ${where(finding)}: client-drift is open on it - answer that first (restore or keep), then run fix again`);
@@ -391,6 +394,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         const fctx = steps.length ? { ...context, inventory: inventory.buildInventory({ project: context.inventory.project, env: context.env, data: context.data }) } : context;
         const now = detectAll(fctx, { only }).found.filter((finding) => finding.kind === 'file' && !finding.blocked && filePicked.some((pickedFinding) => pickedFinding.id === finding.id && pickedFinding.name === finding.name && pickedFinding.scope === finding.scope && pickedFinding.app === finding.app));
         const planned: PlanStep[] = [];
+        const planNotes: string[] = [];
         for (const row of context.catalog.fixes.filter((candidate) => candidate.kind === 'file'))
             for (const finding of now.filter((candidate) => candidate.id === row.id))
             {
@@ -398,10 +402,24 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
                 {
                     const stepsOf = row.steps ? FILE_STEPS.get(row.steps) : undefined;
                     if (!stepsOf) throw new Error(`fix row ${row.id}: no steps function ${row.steps} in scripts/fix/`);
-                    planned.push(...stepsOf(finding, fctx, input));
+                    planned.push(...stepsOf(finding, fctx, input, planNotes));
                 }
-                catch (caught) { result.failed = errorMessage(caught); log(`FAILED ${finding.id} on ${where(finding)}: ${result.failed}`); return result; }
+                catch (caught)
+                {
+                    // a finding that cannot be planned is skipped with its text and nothing written for it; the others go on
+                    if (caught instanceof RestoreBlocked)
+                    {
+                        result.skipped.push(finding);
+                        todo = todo.filter((candidate) => !(candidate.id === finding.id && candidate.name === finding.name && candidate.scope === finding.scope && candidate.app === finding.app));
+                        log(`skipped ${finding.id} on ${where(finding)}: ${caught.message}`);
+                        continue;
+                    }
+                    result.failed = errorMessage(caught);
+                    log(`FAILED ${finding.id} on ${where(finding)}: ${result.failed}`);
+                    return result;
+                }
             }
+        for (const note of planNotes) log(`note: ${note}`);
         if (planned.length)
         {
             const plan = { version: 1, project: context.inventory.project, os: context.platform, alfredCodeEnabled: Boolean(context.inventory.alfredCodeEnabled), steps: planned, notes: [], errors: [], expect: [] };

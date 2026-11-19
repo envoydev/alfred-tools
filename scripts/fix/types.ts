@@ -147,7 +147,7 @@ export interface MachineFixResult
     fetch?: JobStep | null;
 }
 export type MachineFix = (finding: Finding, context: FixCtx) => MachineFixResult;
-export type FileSteps = (finding: Finding, context: FixCtx, input: Record<string, string>) => PlanStep[];
+export type FileSteps = (finding: Finding, context: FixCtx, input: Record<string, string>, notes?: string[]) => PlanStep[];
 
 // detectAll's result (stored - do not rename: --json prints it).
 export interface Detected
