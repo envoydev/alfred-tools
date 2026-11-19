@@ -10,12 +10,12 @@ import { rootIgnoreLines } from '../apply/file-steps.ts';
 import type { Roots } from '../entries/types.ts';
 import type { Inventory } from '../inventory/types.ts';
 import type { Family } from '../roots/types.ts';
-import type { EnsureKeyNameStep, ListCtx, PathStep, PlanOut, PlanStep, RecordRootStep, RootUses, RootWrite } from './types.ts';
+import type { EnsureKeyNameStep, ExcludeFileStep, ListCtx, PathStep, PlanOut, PlanStep, RecordRootStep, RootUses, RootWrite } from './types.ts';
 
 // The roots a registration step writes into (spec D2-D4): its helper's - the scope's family root, with the bridge beside
 // it for a bridge route - its key file's and its data folder's. Only a step that is planned uses a root, so a plan with no
 // change writes no file. `keyNames` (a bridge's key and URL names) replaces the one `keyName` when given.
-export function useRoots(context: { platform: string; roots?: Roots | null | undefined; uses: ListCtx['uses'] }, scope: string, { helper, bridge, serenaContext, keyFile, keyName, keyNames, data }: RootUses): void
+export function useRoots(context: { platform: string; roots?: Roots | null | undefined; uses: ListCtx['uses'] }, scope: string, { helper, bridge, serenaContext, exclude, keyFile, keyName, keyNames, data }: RootUses): void
 {
     const pathApi = pathFor(context.platform);
     const rootOf = (family: Family): string | undefined => context.roots?.[family] || undefined;
@@ -33,6 +33,7 @@ export function useRoots(context: { platform: string; roots?: Roots | null | und
     const root = rootOf(family);
     if (helper && root) context.uses.push({ family, root, helper: true, bridge: Boolean(bridge), committed: scope === 'project' });
     if (serenaContext && root) context.uses.push({ family, root, serenaContext, committed: scope === 'project' });
+    if (exclude && root) context.uses.push({ family, root, exclude, committed: scope === 'project' });
     const keyHolder = holder(keyFile);
     // a key file comes with its key name (RootUses): one without it uses no root for a key
     if (keyHolder && keyFile && typeof keyName === 'string') context.uses.push({ ...keyHolder, key: { file: keyFile, name: keyName, names: keyNames || [keyName] } });
@@ -53,16 +54,17 @@ export function fileSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
     for (const family of roots.FAMILIES)
         for (const rootUse of context.uses.filter((candidate) => candidate.family === family))
         {
-            const rootWrite: RootWrite = byRoot.get(rootUse.root) || { family, root: rootUse.root, helper: false, bridge: false, serenaContext: new Set(), keys: new Map() };
+            const rootWrite: RootWrite = byRoot.get(rootUse.root) || { family, root: rootUse.root, helper: false, bridge: false, serenaContext: new Set(), exclude: null, keys: new Map() };
             byRoot.set(rootUse.root, rootWrite);
             if (rootUse.helper) rootWrite.helper = true;
             if (rootUse.bridge) rootWrite.bridge = true;
             if (rootUse.serenaContext) rootWrite.serenaContext.add(rootUse.serenaContext);
+            if (rootUse.exclude) rootWrite.exclude = rootUse.exclude;
             if (rootUse.committed) rootWrite.committed = true;
             if (rootUse.key) rootWrite.keys.set(rootUse.key.file, [...new Set([...(rootWrite.keys.get(rootUse.key.file) || []), ...(rootUse.key.names || [rootUse.key.name])])]);
         }
     const ignore: PathStep[] = [];
-    const helpers: PathStep[] = [];
+    const helpers: (PathStep | ExcludeFileStep)[] = [];
     const names: EnsureKeyNameStep[] = [];
     const records: RecordRootStep[] = [];
     const map = (inventory.roots && inventory.roots.map) || null;
@@ -73,7 +75,7 @@ export function fileSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
             ignore.push({ op: 'root-ignore', path: rootWrite.root, why: `the new root ${rootWrite.root}: its .gitignore keeps the key file, the record and the data out of git` });
         // a key file git would commit gets no name; an ignored helper matters only to a project-scope server, whose
         // committed .mcp.json names it - the key file beside it is still ignored, so its names are written
-        const gap = existed ? roots.ignoreGap(rootWrite.root, rootWrite.family, { writes: [...(rootWrite.bridge ? [roots.FILES.bridge] : []), ...(rootWrite.serenaContext.has(rootWrite.root) ? [roots.FILES.serenaContext] : [])] }) : null;
+        const gap = existed ? roots.ignoreGap(rootWrite.root, rootWrite.family, { writes: [...(rootWrite.bridge ? [roots.FILES.bridge] : []), ...(rootWrite.serenaContext.has(rootWrite.root) ? [roots.FILES.serenaContext] : []), ...(rootWrite.exclude ? [roots.FILES.macosExclude] : [])] }) : null;
         // a root of this plugin's own files whose .gitignore predates a line GITIGNORE has now (0.5.0: the bridge and
         // serena's context): rootIgnore appends only the lines it lacks
         if (existed && pathApi.basename(rootWrite.root) !== ALFRED_DATA)
@@ -109,6 +111,10 @@ export function fileSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
             else if (state === 'higher') out.notes.push(`serena-context.yml in ${folder} is newer than this plugin - update alfred-tools`);
             else if (state === 'edited') out.notes.push(`serena-context.yml in ${folder} changed since alfred-tools wrote it - left as it is; /alfred-tools:fix (helper-stale) rewrites it`);
         }
+        // macos-mcp's exclude file (D4): planned only while it is not there - one there is the user's to edit
+        const excludeAt = pathApi.join(rootWrite.root, roots.FILES.macosExclude);
+        if (rootWrite.exclude && !exists(excludeAt))
+            helpers.push({ op: 'write-exclude-file', path: rootWrite.root, tools: rootWrite.exclude, why: `${rootWrite.root}: ${roots.FILES.macosExclude}, the tools macos-mcp leaves out (${rootWrite.exclude.join(', ')})` });
         if (!gap || !gap.secrets)
             for (const [file, want] of rootWrite.keys)
             {

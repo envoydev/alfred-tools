@@ -101,6 +101,14 @@ export interface PathStep
     path: string; // stored - do not rename
     why: string; // stored - do not rename
 }
+// macos-mcp's exclude file in a root (spec D4): written only when it is not there.
+export interface ExcludeFileStep
+{
+    op: 'write-exclude-file'; // stored - do not rename
+    path: string; // stored - do not rename
+    tools: string[]; // stored - do not rename
+    why: string; // stored - do not rename
+}
 export interface MoveRootFileStep
 {
     op: 'move-root-file'; // stored - do not rename
@@ -185,7 +193,7 @@ export interface RecordRootStep
     root: string; // stored - do not rename
     why: string; // stored - do not rename
 }
-export type PlanStep = RegistrationStep | (FetchStep & { scope?: string }) | ListWriteStep | CursorWritePlanStep | PathStep | MoveRootFileStep | FileStep | RetireShippedStep | EnsureKeyNameStep | SerenaBaseModesStep | SerenaConfigInitStep | SerenaProjectFolderStep | DenyReadStep | RecordRootStep | OrderStep;
+export type PlanStep = RegistrationStep | (FetchStep & { scope?: string }) | ListWriteStep | CursorWritePlanStep | PathStep | ExcludeFileStep | MoveRootFileStep | FileStep | RetireShippedStep | EnsureKeyNameStep | SerenaBaseModesStep | SerenaConfigInitStep | SerenaProjectFolderStep | DenyReadStep | RecordRootStep | OrderStep;
 
 // The lines a plan prints beside its steps.
 export interface KeyLine

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { isInside, pathFor } from '../entries/platform.ts';
 import { logicalRoot, formatRoot } from '../entries/locations.ts';
 import { currentOf, helperParts, contextArgAt } from '../entries/entry.ts';
+import { excludeArgAt } from '../entries/exclude.ts';
 import * as serenaConfig from '../apply/serena-config.ts';
 import { heldKey } from './asks-keys.ts';
 import * as keys from '../keys/keys.ts';
@@ -62,11 +63,16 @@ export function planRootChange(answers: Answers, inventory: Inventory, context: 
         // a fresh copy in its new home, and the root's old copy is retired by the plan (plan/retire-context.ts)
         const keepsRootContext = inventory.registrations.some((registration) => registration.rowId && isManaged(registration) && scopes.includes(registration.scope)
             && contextArgAt(registration.entry) >= 0 && !(registration.entry.env && registration.entry.env.SERENA_HOME && serenaConfig.editableHome(registration.entry.env.SERENA_HOME, { platform: context.platform }).ok));
-        for (const fileName of [roots.FILES.list, roots.FILES.serenaContext, roots.FILES.signIns])
+        // macos-mcp's exclude file (D4) moves while a managed registration of the family names the old root's copy
+        const excludeOld = pathApi.join(used.path, roots.FILES.macosExclude);
+        const namesExclude = inventory.registrations.some((registration) => registration.rowId && isManaged(registration) && scopes.includes(registration.scope)
+            && (registration.entry.args || [])[excludeArgAt(registration.entry, catalog.byId.get(registration.rowId)?.routes[registration.route || '']?.excludeFile, context)] === excludeOld);
+        for (const fileName of [roots.FILES.list, roots.FILES.serenaContext, roots.FILES.signIns, roots.FILES.macosExclude])
         {
             const from = pathApi.join(used.path, fileName);
             if (fileName === roots.FILES.list && (!list || list.note || list.old || list.file !== from)) continue;
             if (fileName === roots.FILES.serenaContext && !keepsRootContext) continue;
+            if (fileName === roots.FILES.macosExclude && !namesExclude) continue;
             if (exists(from)) context.rootMoves.push({ family, name: fileName, from, to: pathApi.join(next, fileName) });
         }
         const secretsOld = pathApi.join(used.path, roots.FILES.secrets);

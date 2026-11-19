@@ -746,6 +746,18 @@
       "fix": null,
       "verifiedOn": "this build: tests/fix.test.js helper-child-folder (2026-11-11); tests/probes/headers-helper.js child-folder case (M1)",
       "source": "docs/superpowers/specs/2026-11-11-field-fixes-0.3.0-design.md F3a; docs/sources.md 'Claude Code - headersHelper' M1 (a parent folder's helper, named relative or absolute, does not run in a child folder)"
+    },
+    {
+      "id": "macos-config",
+      "tool": ["macos-control"],
+      "os": ["darwin"],
+      "kind": "file",
+      "symptom": "a managed macos-control's --config names a root's macos-mcp.toml that is not there (a fresh clone, a file removed by hand), so macos-mcp stops at start with 'Config file not found' - it never falls back to its defaults",
+      "detect": "macosConfigDetect",
+      "fix": null,
+      "steps": "macosConfigSteps",
+      "verifiedOn": "this build: tests/macos-exclude.test.ts macos-config (2026-11-19)",
+      "source": "docs/sources.md 'macos-mcp 0.4.7 - serve --config (read 2026-11-19)'; docs/superpowers/specs/2026-11-19-pre-release-follow-up-design.md D4"
     }
   ]
 }

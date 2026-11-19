@@ -4,6 +4,7 @@ import { pathFor } from '../../entries/platform.ts';
 import { logicalRoot, formatRoot } from '../../entries/locations.ts';
 import { contextArgAt } from '../../entries/entry.ts';
 import { fetchStep } from '../../entries/names.ts';
+import { excludeArgAt } from '../../entries/exclude.ts';
 import * as roots from '../../roots/roots.ts';
 import * as serenaConfig from '../../apply/serena-config.ts';
 import { keyOf } from '../../inventory/inventory.ts';
@@ -16,7 +17,7 @@ import type { PickBase, PickCursor, PickEntry, PickKeyUse, Plan, PlanCtx, RootUs
 // -> undefined, or the length of the unchanged list when nothing but the line is planned (planMcp's return)
 export function pickSteps(base: PickBase, built: PickEntry, cursor: PickCursor, keyUse: PickKeyUse, entry: ServerEntry, keyName: string | undefined, context: PlanCtx, out: Plan): number | undefined
 {
-    const { row, current, listedClients, routeId, scope, name } = base;
+    const { row, route, current, listedClients, routeId, scope, name } = base;
     const { fresh, rootStr, ensure, dataAbs } = built;
     const { form, clients, signInRoot } = cursor;
     const { bridge, bridgeFilled, keyFile, keyNames, withKey, chosen, staleKey, reconnect } = keyUse;
@@ -24,7 +25,7 @@ export function pickSteps(base: PickBase, built: PickEntry, cursor: PickCursor, 
     // keeps the package, such as a location or a name, fetches nothing
     const fetch = fetchStep(name, entry, row.id, current && current.entry);
     const contextFile = entry.args?.[contextArgAt(entry)];
-    const uses: RootUses = { helper: Boolean(entry.headersHelper) || bridge, bridge: bridge || form === 'two', serenaContext: contextFile === undefined ? undefined : pathFor(context.platform).dirname(contextFile), keyFile, keyName, keyNames, data: dataAbs };
+    const uses: RootUses = { helper: Boolean(entry.headersHelper) || bridge, bridge: bridge || form === 'two', serenaContext: contextFile === undefined ? undefined : pathFor(context.platform).dirname(contextFile), exclude: route.excludeFile && excludeArgAt(entry, route.excludeFile, context) >= 0 ? route.excludeFile.tools : undefined, keyFile, keyName, keyNames, data: dataAbs };
     // the shared sign-in's folder sits in the family's root: the root is written (its .gitignore) like any other
     const signInUse = () => { if (signInRoot !== null) context.uses.push({ family: roots.familyOf(scope), root: signInRoot }); };
     // the apps and the form this registration is listed with (plan/lists.ts)

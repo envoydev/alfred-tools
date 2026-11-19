@@ -15,6 +15,7 @@ import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { readRegistration, rowOf } from './cli-steps.ts';
 import { writeMinimalConfig } from './serena-config.ts';
 import { GITIGNORE_ALL } from './constants.ts';
+import { excludeToml } from '../entries/exclude.ts';
 import { HELPER_VERSION } from '../copied/mcp-headers.js';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import type { ListServer, McpsList } from '../mcps-list/types.ts';
@@ -49,6 +50,17 @@ export function rootIgnoreLines(root: string): { file: string; text: string | nu
     try { text = fs.readFileSync(file, 'utf8'); } catch { /* absent */ }
     const have = new Set((text || '').split(/\r?\n/).map((line) => line.trim()));
     return { file, text, mine, want, lack: want.filter((line) => !have.has(line)) };
+}
+
+// macos-mcp's exclude file (spec D4), through a temporary file and a rename, and only when it is not there: a file there
+// is the user's to edit and is never overwritten.
+export function writeExcludeFile(root: string, tools: string[]): StepResult
+{
+    const file = path.join(root, roots.FILES.macosExclude);
+    if (fs.existsSync(file)) return { ok: true, detail: `${file} is there - kept as it is`, unchanged: true };
+    fs.mkdirSync(root, { recursive: true });
+    replaceFile(file, excludeToml(tools));
+    return { ok: true, detail: `wrote ${file} (${tools.join(', ')} off)` };
 }
 
 // <root>/.gitignore: GITIGNORE when absent, else each of its lines the file lacks appended; in a folder holding the

@@ -296,8 +296,8 @@ test('the # version line is read', () => {
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('GITIGNORE keeps mcp-bridge.js and serena-context.yml in git', () => {
-    assert.strictEqual(roots.GITIGNORE, '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n');
+test('GITIGNORE keeps mcp-bridge.js, serena-context.yml and macos-mcp.toml in git', () => {
+    assert.strictEqual(roots.GITIGNORE, '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n!macos-mcp.toml\n');
 });
 
 test('a copy an older version wrote reads lower under either prefix', () => {

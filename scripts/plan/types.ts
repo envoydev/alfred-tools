@@ -26,6 +26,7 @@ export interface RootUse
     helper?: boolean;
     bridge?: boolean;
     serenaContext?: string; // the folder the context file goes in: serena's home, or the root
+    exclude?: string[]; // the tools macos-mcp's exclude file in the root leaves out
     committed?: boolean;
     key?: { file: string; name: string; names?: string[] };
 }
@@ -104,6 +105,7 @@ export interface RootWrite
     helper: boolean;
     bridge: boolean;
     serenaContext: Set<string>; // the folders the context file goes in
+    exclude: string[] | null; // the tools macos-mcp's exclude file in the root leaves out
     committed?: boolean;
     keys: Map<string, string[]>;
 }
@@ -113,6 +115,7 @@ export interface RootUses
     helper?: boolean;
     bridge?: boolean;
     serenaContext?: string | undefined;
+    exclude?: string[] | undefined;
     keyFile?: string | null;
     keyName?: string | null | undefined;
     keyNames?: string[];

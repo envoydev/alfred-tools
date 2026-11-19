@@ -7,6 +7,7 @@ export * from './lists.ts';
 export * from './rename.ts';
 export * from './key-env.ts';
 export * from './retired-server.ts';
+export * from './macos-config.ts';
 import { appiumSdkEnvDetect, appiumSdkEnvFix, playwrightWebmcpDetect, playwrightWebmcpFix, serenaContextDetect, serenaContextFix, serenaTelemetryDetect, serenaTelemetryFix, serenaWindowsHomeDetect, serenaWindowsHomeFix, tokenSyncDetect, tokenSyncFix, uvxPythonDetect, uvxPythonFix, windowsArmPythonDetect, windowsArmPythonFix, windowsMcpOneDetect, windowsNpxCmdDetect, windowsNpxCmdFix } from './registration.ts';
 import { dataFolderIgnoreDetect, dataFolderIgnoreFix, npxCacheEntryDetect, npxCacheEntryFix, retiredPluginDetect, retiredPluginFix } from './machine.ts';
 import { helperMissingDetect, helperMissingFix, helperStaleDetect, helperStaleFix, keyToHelperDetect, keyToHelperFix, rootIgnoreDetect, rootIgnoreFix } from './keys.ts';
@@ -16,6 +17,7 @@ import { clientDriftDetect, clientDriftSteps, cursorFileDetect, listImportDetect
 import { rootMoveDetect, rootMoveFix, rootRepointDetect, rootRepointFix } from './rename.ts';
 import { context7KeyEnvDetect, context7KeyEnvFix, sentryAuthEnvDetect, sentryAuthEnvFix } from './key-env.ts';
 import { retiredServerDetect } from './retired-server.ts';
+import { macosConfigDetect, macosConfigSteps } from './macos-config.ts';
 import type { Detector, FileSteps, MachineFix, RegistrationFix } from './types.ts';
 
 // catalog/fixes.json names its `detect`, `fix` and `steps` functions; this is where they are found, each kind in a table of
@@ -53,6 +55,7 @@ export const DETECTORS: ReadonlyMap<string, Detector> = new Map<string, Detector
     ['projectRelativePathDetect', projectRelativePathDetect],
     ['mcpOrderDetect', mcpOrderDetect],
     ['helperChildFolderDetect', helperChildFolderDetect],
+    ['macosConfigDetect', macosConfigDetect],
 ]);
 export const REGISTRATION_FIXES: ReadonlyMap<string, RegistrationFix> = new Map<string, RegistrationFix>([
     ['rootRepointFix', rootRepointFix],
@@ -87,4 +90,5 @@ export const FILE_STEPS: ReadonlyMap<string, FileSteps> = new Map<string, FileSt
     ['listImportSteps', listImportSteps],
     ['readGuardSteps', readGuardSteps],
     ['clientDriftSteps', clientDriftSteps],
+    ['macosConfigSteps', macosConfigSteps],
 ]);

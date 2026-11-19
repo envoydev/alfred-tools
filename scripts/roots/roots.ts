@@ -76,7 +76,7 @@ export function pendingMoves(context: { project: string; home: string; platform:
 // The read guard (0.5.0, ruling 13): two deny rules in Claude Code's settings that keep a session's Read tool out of
 // mcp-remote's sign-in tokens and the key file, wherever a root sits.
 export const READ_GUARD = { signIns: `Read(//**/${FILES.signIns}/**)`, secrets: `Read(//**/${FILES.secrets})` };
-export const GITIGNORE = '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n';
+export const GITIGNORE = '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n!macos-mcp.toml\n';
 // serena's context file (spec D7): its number, on its first line
 export const SERENA_CONTEXT_VERSION = 2;
 const MAP_VERSION = 1;
@@ -408,9 +408,9 @@ export function ignoreGap(root: string, family: string, { writes = [] }: { write
     const signIns = gitIgnores(path.join(root, FILES.signIns, SIGN_IN_PROBE)) === false;
     const file = path.join(root, FILES.helper);
     const projectRoot = family === 'project' && path.basename(root) !== ALFRED_DATA;
-    // the bridge and serena's context (0.5.0, D7): a committed entry names them too, when they are there or this plan
-    // writes them
-    const unignore = projectRoot ? [FILES.bridge, FILES.serenaContext].filter((fileName) => (writes.includes(fileName) || fs.existsSync(path.join(root, fileName))) && gitIgnores(path.join(root, fileName)) === true) : [];
+    // the bridge, serena's context (0.5.0, D7) and macos-mcp's exclude file: a committed entry names them too, when they
+    // are there or this plan writes them
+    const unignore = projectRoot ? [FILES.bridge, FILES.serenaContext, FILES.macosExclude].filter((fileName) => (writes.includes(fileName) || fs.existsSync(path.join(root, fileName))) && gitIgnores(path.join(root, fileName)) === true) : [];
     const extra = { ...(signIns ? { signIns: true } : {}), ...(unignore.length ? { unignore } : {}) };
     if (projectRoot && gitIgnores(file) === true)
         return { reason: `git ignores ${file}, which a project-scope server needs committed`, helper: true, excluded: gitIgnores(root) === true, ...extra };

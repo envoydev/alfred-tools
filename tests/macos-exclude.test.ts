@@ -2,13 +2,25 @@
 // root's .gitignore and the macos-config row.
 import test from 'node:test';
 import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import { excludeQuestion } from '../scripts/plan/asks-keys.ts';
 import { excludeArgAt, withExclude } from '../scripts/entries/exclude.ts';
 import * as asks from '../scripts/plan/asks-all.ts';
-import { MAC, inv, opts, pickOne, addStep, reg, changeOf } from './plan-helpers.ts';
-import type { McpMoveStep, McpReplaceStep } from '../scripts/plan/types.ts';
+import * as inventory from '../scripts/inventory/inventory.ts';
+import { apply } from '../scripts/apply/run.ts';
+import { renderPlan } from '../scripts/plan/render.ts';
+import * as rootsLib from '../scripts/roots/roots.ts';
+import * as F from '../scripts/fix/fix-functions.ts';
+import { detectAll, applyFixes } from '../scripts/fix/fix.ts';
+import { world } from './helpers.ts';
+import { MAC, inv, opts, pickOne, addStep, reg, changeOf, OLD_ROOT, usedRoots, PFILE } from './plan-helpers.ts';
+import { runSteps, mcpJson } from './apply-helpers.ts';
+import { reg as fixReg, ctxFor, detect, noMachine, seed, ctxOf, put, ptRoot, logged, gitInit, SERENA_OLD } from './fix-helpers.ts';
+import type { ExcludeFileStep, McpMoveStep, McpReplaceStep, MoveRootFileStep } from '../scripts/plan/types.ts';
+import type { Finding } from '../scripts/fix/types.ts';
 
 const catalog = catalogLib.load();
 
@@ -51,7 +63,7 @@ test('macos-control: Off adds --config <root>/macos-mcp.toml, Keep adds none; co
     const moved = plan(inv(MAC, { registrations: [sameName] }), changeOf(sameName, { scope: 'user' }), opts('/Users/me'));
     assert.deepStrictEqual(moved.errors, []);
     assert.deepStrictEqual((moved.steps.find((s) => s.op === 'mcp-move') as McpMoveStep).entry.args!.slice(-2), ['--config', '/Users/me/configs/macos-mcp.toml'], 'a scope move leaves it');
-    assert.ok(!moved.steps.some((s) => String(s.op) === 'write-exclude-file')); // the step is Task 8's: its op is not in the union yet
+    assert.ok(!moved.steps.some((s) => s.op === 'write-exclude-file'), 'a file of the user\'s is not ours to write');
 });
 
 test("macos-control: a user's --config=<path> is foreign - not asked, not re-pointed, not removed, never doubled (spec D4)", () => {
@@ -78,4 +90,109 @@ test('macos-control: the known-root match ignores trailing separators, and is ca
     assert.strictEqual(at('darwin', '/a/root', '/A/Root/macos-mcp.toml'), -1, 'posix stays case-sensitive');
     assert.strictEqual(at('darwin', '/a/root', '/a/root-other/macos-mcp.toml'), -1);
     assert.strictEqual(at('win32', 'C:\\a\\root', 'C:\\a\\root-other\\macos-mcp.toml'), -1);
+});
+
+test('write-exclude-file writes [tools] exclude once, and never over a file there (spec D4)', () => {
+    const w = world();
+    try
+    {
+        const root = path.join(w.project, '.alfred-tools');
+        const file = path.join(root, 'macos-mcp.toml');
+        let r = runSteps(w, [{ op: 'write-exclude-file', path: root, tools: ['Shell'], why: 'test' }]);
+        assert.strictEqual(r.report.failed, null, r.text);
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), '[tools]\nexclude = ["Shell"]\n');
+        fs.writeFileSync(file, '[tools]\nexclude = ["Shell", "App"]\n');
+        r = runSteps(w, [{ op: 'write-exclude-file', path: root, tools: ['Shell'], why: 'test' }]);
+        assert.strictEqual(r.report.failed, null, r.text);
+        assert.match(r.text, /kept as it is/);
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), '[tools]\nexclude = ["Shell", "App"]\n');
+    }
+    finally { w.clean(); }
+});
+
+test('install macos-control with Shell off: the root file is written before the registration names it (spec D4)', { skip: process.platform !== 'darwin' && 'macos-control is offered on darwin only' }, () => {
+    const w = world();
+    try
+    {
+        const p = plan(inventory.buildInventory({ project: w.project, env: w.env }), { picks: { 'macos-control': { scope: 'project' } } }, { home: w.home, env: w.env });
+        assert.deepStrictEqual(p.errors, []);
+        assert.strictEqual(apply(p, { env: w.env, tmp: path.join(w.dir, 'tmp'), log: () => {} }).failed, null);
+        const file = path.join(w.project, '.alfred-tools', 'macos-mcp.toml');
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), '[tools]\nexclude = ["Shell"]\n');
+        assert.deepStrictEqual(mcpJson(w).mcpServers['macos-desktop'].args.slice(-2), ['--config', file]);
+    }
+    finally { w.clean(); }
+});
+
+test('macos-control install with Shell off plans the root file before the add; a file there already is not planned (spec D4)', () => {
+    const p = plan(inv(MAC), pickOne('macos-control'), opts('/Users/me'));
+    assert.deepStrictEqual(p.errors, []);
+    const write = p.steps.find((s) => s.op === 'write-exclude-file') as ExcludeFileStep;
+    assert.deepStrictEqual([write.path, write.tools], ['/work/shop/.alfred-tools', ['Shell']]);
+    assert.ok(p.steps.indexOf(write) < p.steps.indexOf(addStep(p)));
+    assert.match(renderPlan(p), /writes \/work\/shop\/\.alfred-tools\/macos-mcp\.toml/);
+    assert.ok(!plan(inv(MAC), pickOne('macos-control', { exclude: false }), opts('/Users/me')).steps.some((s) => s.op === 'write-exclude-file'));
+    assert.ok(!plan(inv(MAC), pickOne('macos-control'), opts('/Users/me', { exists: (f) => f === '/work/shop/.alfred-tools/macos-mcp.toml' })).steps.some((s) => s.op === 'write-exclude-file'), 'the file there is kept');
+});
+
+test('macos-control: a root change moves macos-mcp.toml and re-points --config; a Local -> Global move writes it in the global root (spec D4)', () => {
+    const oldFile = `${OLD_ROOT}/macos-mcp.toml`;
+    const entry = { command: 'uvx', args: ['--python', '3.13', '--exclude-newer', '2026-11-10T23:59:59Z', '--from', 'macos-mcp==0.4.7', 'macos-mcp', 'serve', '--config', oldFile], env: { ANONYMIZED_TELEMETRY: 'false' } };
+    const r = reg('macos-desktop', 'local', entry, 'macos-control', 'local');
+    const i = inv(MAC, { registrations: [r], roots: usedRoots(OLD_ROOT), lists: { project: { file: PFILE, servers: [], own: [] }, global: null } });
+    const p = plan(i, { rootChange: ['project'], roots: { project: { id: 'named', path: 'tools' } } }, opts('/Users/me', { exists: (f) => f === oldFile }));
+    assert.deepStrictEqual(p.errors, []);
+    const move = p.steps.find((s) => s.op === 'move-root-file' && (s as MoveRootFileStep).from === oldFile) as MoveRootFileStep;
+    assert.strictEqual(move.to, '/work/shop/tools/macos-mcp.toml');
+    const replace = p.steps.find((s) => s.op === 'mcp-replace') as McpReplaceStep;
+    assert.deepStrictEqual(replace.entry.args!.slice(-2), ['--config', '/work/shop/tools/macos-mcp.toml']);
+    assert.ok(p.steps.indexOf(move) < p.steps.indexOf(replace));
+    // Local -> Global: written in the global root by the same op, and --config names it
+    const g = plan(inv(MAC, { registrations: [r] }), changeOf(r, { scope: 'user' }), opts('/Users/me'));
+    assert.deepStrictEqual(g.errors, []);
+    const write = g.steps.find((s) => s.op === 'write-exclude-file') as ExcludeFileStep;
+    assert.deepStrictEqual([write.path, write.tools], ['/Users/me/.alfred-tools', ['Shell']]);
+    const mv = g.steps.find((s) => s.op === 'mcp-move') as McpMoveStep;
+    assert.deepStrictEqual(mv.entry.args!.slice(-2), ['--config', '/Users/me/.alfred-tools/macos-mcp.toml']);
+    assert.ok(g.steps.indexOf(write) < g.steps.indexOf(mv));
+    // a global root that holds the user's edited file: no write, the file stays
+    assert.ok(!plan(inv(MAC, { registrations: [r] }), changeOf(r, { scope: 'user' }), opts('/Users/me', { exists: (f) => f === '/Users/me/.alfred-tools/macos-mcp.toml' })).steps.some((s) => s.op === 'write-exclude-file'));
+});
+
+test('macos-config: a --config naming a root\'s macos-mcp.toml that is not there is written again; one of the user\'s is not ours (spec D4)', () =>
+{
+    const at = (file: string) => fixReg('macos-control', { command: 'uvx', args: ['--from', 'macos-mcp==0.4.7', 'macos-mcp', 'serve', '--config', file] });
+    const rootFile = '/proj/.alfred-tools/macos-mcp.toml';
+    const ctx = ctxFor({ registrations: [at(rootFile)] });
+    const [f] = detect(ctx).found.filter((x) => x.id === 'macos-config') as [Finding];
+    assert.strictEqual(f.path, rootFile);
+    assert.deepStrictEqual(F.macosConfigSteps(f, ctx), [{ op: 'write-exclude-file', path: '/proj/.alfred-tools', tools: ['Shell'], why: `${rootFile}: written again - the tools macos-mcp leaves out` }]);
+    assert.deepStrictEqual(detect(ctxFor({ registrations: [at(rootFile)], machine: noMachine({ exists: (p: string) => p === rootFile }) })).found.filter((x) => x.id === 'macos-config'), [], 'the file is there');
+    assert.deepStrictEqual(detect(ctxFor({ registrations: [at('/elsewhere/macos-mcp.toml')] })).found.filter((x) => x.id === 'macos-config'), [], "outside a root: the user's");
+});
+
+test('a 0.6.0 root .gitignore gains !macos-mcp.toml from fix root-ignore, so a committed --config names a file git keeps (spec D4, M3 ruling)', () =>
+{
+    const w = world();
+    try
+    {
+        gitInit(w.project);
+        const OLD = '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n';
+        put(path.join(ptRoot(w), '.gitignore'), OLD);
+        put(path.join(ptRoot(w), '.mcps-secrets'), '');
+        put(path.join(ptRoot(w), 'macos-mcp.toml'), '[tools]\nexclude = ["Shell"]\n');
+        // the root is in use through a seeded serena, as in the 0.4.x .gitignore test
+        seed(w, 'serena', 'project', SERENA_OLD(path.join(ptRoot(w), 'serena')));
+        assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), 'macos-mcp.toml')), true, 'ignored before');
+        const [f] = detectAll(ctxOf(w)).found.filter((x) => x.id === 'root-ignore') as [Finding];
+        assert.ok(f && !f.blocked, JSON.stringify(f));
+        assert.match(f.found, /macos-mcp\.toml/);
+        const l = logged();
+        assert.strictEqual(applyFixes(ctxOf(w), ['root-ignore'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
+        assert.strictEqual(fs.readFileSync(path.join(ptRoot(w), '.gitignore'), 'utf8'), `${OLD}!macos-mcp.toml\n`);
+        assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), 'macos-mcp.toml')), false);
+        assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), '.mcps-secrets')), true, 'the key file stays ignored');
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((x) => x.id === 'root-ignore'), []);
+    }
+    finally { w.clean(); }
 });

@@ -2127,7 +2127,7 @@ test('a 0.4.x root .gitignore gains !mcp-bridge.js and !serena-context.yml from 
         // the plan that writes serena-context.yml plans the root's .gitignore first
         const l = logged();
         assert.strictEqual(applyFixes(ctxOf(w), ['serena-context'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
-        assert.strictEqual(fsx.readFileSync(path.join(ptRoot(w), '.gitignore'), 'utf8'), `${OLD}!mcp-bridge.js\n!serena-context.yml\n`);
+        assert.strictEqual(fsx.readFileSync(path.join(ptRoot(w), '.gitignore'), 'utf8'), `${OLD}!mcp-bridge.js\n!serena-context.yml\n!macos-mcp.toml\n`);
         assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), 'mcp-bridge.js')), false);
         assert.strictEqual(rootsLib.gitIgnores(path.join(ptRoot(w), '.mcps-secrets')), true, 'the key file stays ignored');
         assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'root-ignore'), []);

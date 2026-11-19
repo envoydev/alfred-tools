@@ -938,7 +938,7 @@ test('root-ignore: written once, left when present, never under .alfred', () => 
         // a 0.1.x .gitignore holding *: the lines it lacks appended, none rewritten
         fs.writeFileSync(file, '*\n');
         runSteps(w, [{ op: 'root-ignore', path: root }]);
-        assert.strictEqual(fs.readFileSync(file, 'utf8'), '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n');
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), '*\n!.gitignore\n!mcp-headers.js\n!mcp-bridge.js\n!serena-context.yml\n!macos-mcp.toml\n');
         // a folder holding the user's own files: only the key file, the record, the list and the sign-in folder, never *
         const named = path.join(w.project, 'tools');
         fs.mkdirSync(named, { recursive: true });
@@ -1154,7 +1154,7 @@ test('a new root gets root-ignore with GITIGNORE before any other step', () => {
         assert.strictEqual(r.p.steps[0]!.op, 'root-ignore');
         const root = path.join(w.project, '.alfred-tools');
         assert.strictEqual(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), GITIGNORE);
-        assert.match(r.text, /^1\. ok {5}wrote .*\.gitignore \(\*, !\.gitignore, !mcp-headers\.js, !mcp-bridge\.js, !serena-context\.yml\)$/m);
+        assert.match(r.text, /^1\. ok {5}wrote .*\.gitignore \(\*, !\.gitignore, !mcp-headers\.js, !mcp-bridge\.js, !serena-context\.yml, !macos-mcp\.toml\)$/m);
     }
     finally { w.clean(); }
 });

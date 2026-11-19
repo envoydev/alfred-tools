@@ -30,7 +30,7 @@ import * as mcpOrder from '../mcps-list/mcp-order.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { addAndVerify, rowOf, removeAndVerify, restoreBy, makeRunner, restoreStep, fillStep } from './cli-steps.ts';
-import { rootIgnore, writeHelper, writeShipped, moveRootFile, ensureKeyName, listWrite, retireRecord, retireShipped, serenaConfigInit, denyRead, recordRoot, failureLists } from './file-steps.ts';
+import { rootIgnore, writeHelper, writeShipped, moveRootFile, ensureKeyName, listWrite, retireRecord, retireShipped, serenaConfigInit, denyRead, recordRoot, failureLists, writeExcludeFile } from './file-steps.ts';
 import { emptyBaseModes, setProjectFolder } from './serena-config.ts';
 import { inTreeLines } from './serena-projects.ts';
 import { GITIGNORE_ALL } from './constants.ts';
@@ -52,6 +52,7 @@ function runStep(step: PlanStep, context: ApplyCtx, call: Call): StepResult
         case 'write-helper': return writeHelper(step.path);
         case 'write-bridge': return writeShipped('bridge', step.path);
         case 'write-serena-context': return writeShipped('serenaContext', step.path);
+        case 'write-exclude-file': return writeExcludeFile(step.path, step.tools);
         case 'move-root-file': return moveRootFile(step.from, step.to);
         case 'serena-base-modes': { const result = emptyBaseModes(step.file); return { ok: true, detail: result.detail }; }
         case 'serena-config-init': return serenaConfigInit(step.file, step.home);
