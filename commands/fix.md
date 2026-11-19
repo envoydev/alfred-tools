@@ -84,7 +84,8 @@ Ask `choose` as one AskUserQuestion, exactly as printed:
 
 A decline is passed as `--input retired-declined=<id>~<scope>,<id>~<scope>` - the plugin id and scope from each
 `retired-plugin` line, and for a `retired-server` the `retired-declined=` its note prints - and recorded in the plugin's
-data folder.
+data folder. A `retired-server` decline is kept per project at project and local scope, and for every project at user
+scope.
 
 Then ask the questions in `drift` as printed, one AskUserQuestion per call (at most four questions) - whatever the
 answer to `choose`, except 'Skip'. Each is one server whose copy in one app changed by hand:

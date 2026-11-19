@@ -13,9 +13,8 @@ import type { AskCtx, LocationAnswer, Place, Question, ToolOpts } from './types.
 // A tool's data folder is <root>/<name> in the root of its scope's family, so most picks ask nothing. A question is left
 // only where a tool needs one: memory only in configure or with alfred-code data (its defaultSide is the project, so
 // install asks none), serena on Windows when the root's path has a space, a tool with alfred-code 2.x data on disk, and
-// configure ('The folder it uses now' first). A label
-// names the place in words, fixed text, so the walk never reads a path out of it; the description gives the exact folder
-// on this machine and what follows from it.
+// configure ('The folder it uses now' first). A label names the place in words, fixed text, so the walk never reads a
+// path out of it; the description gives the exact folder on this machine and what follows from it.
 const SIDE_LABEL: Record<string, string> = {
     project: "The project root's folder",
     account: "The global root's folder",

@@ -32,8 +32,8 @@ ask. It takes no argument: one typed after the command changes nothing - say so.
   `.gitignore`, the `.mcp.json` order, the deny rules and the retired plugins; context7's key moved from `--api-key`
   into its environment (`context7-key-env`); sentry's variable renamed where its pin reads `SENTRY_AUTH_TOKEN`
   (`sentry-auth-env`); and a managed server whose row was retired offered for removal (`retired-server`) - offers what
-  they find under 'New ways to pass data', and applies it with fix's own code. A finding that needs the user - a key not filled yet, a folder to
-  name - is a note naming `/alfred-tools:fix`, never an offer.
+  they find under 'New ways to pass data', and applies it with fix's own code. A finding that needs the user - a key
+  not filled yet, a folder to name - is a note naming `/alfred-tools:fix`, never an offer.
 
 If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
 alfred-tools needs Node 22.18 or newer - `node --version` shows yours.
@@ -97,7 +97,8 @@ An uninstall offer (`upgrade:retired-plugin:<id>~<scope>`) shown under 'Pick whi
 so is one 'All of them' leaves out because alfred-code is set up (its label ends 'alfred-code also installs it, and this
 removes it for both'): pass each as `--input retired-declined=<id>~<scope>,...` in step 3, and it is not offered again.
 A removal offer (`upgrade:retired-server:<name>~<scope>`) left unpicked is a decline too: pass the
-`retired-declined=<id>~<scope>` its note prints.
+`retired-declined=<id>~<scope>` its note prints (kept per project at project and local scope, for every project at user
+scope).
 When nothing else was picked, step 3 runs with `none`. 'Skip' declines nothing.
 
 Each question in `cursorOffers` is asked as printed, one per root, by this procedure:
