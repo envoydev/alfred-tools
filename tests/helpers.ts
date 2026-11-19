@@ -65,6 +65,28 @@ export function world(prefix = 'pt-')
     return { dir, project, account, home, bin, log, env, calls, writes, fetches, clean };
 }
 
+// What macOS `security` answers when a lookup finds nothing
+const KEYCHAIN_NOT_FOUND_EXIT = 44;
+const KEYCHAIN_STUB = `#!/bin/sh
+case "$1" in find-*) echo 'security: The specified item could not be found in the keychain.' >&2; exit ${KEYCHAIN_NOT_FOUND_EXIT};; esac
+exit 1
+`;
+
+// On macOS the real claude reads and saves its credential through `security`. Under a throwaway HOME there is no
+// default keychain, so a save opens the system's 'Keychain Not Found' dialog on the user's screen (2026-11-19). The
+// env this returns puts a stub first on PATH: every lookup finds nothing and every save fails, as a Cancel would, so
+// no dialog opens and the real keychain is never read. Elsewhere the env comes back as it was.
+export function withKeychainStub(dir: string, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv
+{
+    if (process.platform !== 'darwin') return env;
+    const bin = path.join(dir, 'keychain-stub');
+    fs.mkdirSync(bin, { recursive: true });
+    const file = path.join(bin, 'security');
+    fs.writeFileSync(file, KEYCHAIN_STUB);
+    fs.chmodSync(file, 0o755);
+    return { ...env, PATH: `${bin}${path.delimiter}${env.PATH ?? ''}` };
+}
+
 export const writeJson = (file: string, value: unknown) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`); };
 export const readJson = (file: string) => JSON.parse(fs.readFileSync(file, 'utf8'));
 // The account `projects` key the real CLI writes for a folder (docs/sources.md): its real path, or on Windows the cwd as

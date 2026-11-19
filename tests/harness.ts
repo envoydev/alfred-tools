@@ -26,7 +26,7 @@ import type { ApplyReport, FetchRun } from '../scripts/apply/types.ts';
 import type { Inventory } from '../scripts/inventory/types.ts';
 import type { Catalog } from '../scripts/catalog/types.ts';
 import type { CliResult } from '../scripts/core/types.ts';
-import { TOKEN_VARS } from './helpers.ts';
+import { TOKEN_VARS, withKeychainStub } from './helpers.ts';
 
 // what Harness.run hands back: the apply's report, or a stand-in marked skipped when the plan held errors
 export type RunReport = ApplyReport & { skipped?: boolean };
@@ -98,7 +98,7 @@ export class Harness
         // the plugin's data folder, as ${CLAUDE_PLUGIN_DATA}: the roots map lives here
         this.data = path.join(this.root, 'data');
         for (const d of [this.home, this.account, this.projects, this.data]) fs.mkdirSync(d, { recursive: true });
-        this.env = { ...process.env, HOME: this.home, USERPROFILE: this.home, CLAUDE_CONFIG_DIR: this.account };
+        this.env = withKeychainStub(this.root, { ...process.env, HOME: this.home, USERPROFILE: this.home, CLAUDE_CONFIG_DIR: this.account });
         for (const k of Object.keys(this.env)) if (k.startsWith('FAKE_CLAUDE') || k.startsWith('FAKE_RUNTIME')) delete this.env[k];
         // the key variables come from a case itself, never from the shell running the matrix (the plan's defaults read them)
         for (const k of TOKEN_VARS) delete this.env[k];

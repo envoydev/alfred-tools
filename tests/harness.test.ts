@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import * as cli from '../scripts/core/claude-cli.ts';
 import * as account from '../scripts/core/account.ts';
 import { pythonRequest } from '../scripts/entries/platform.ts';
@@ -18,6 +19,18 @@ const skip = cli.available() ? false : 'no claude CLI on PATH';
 const roots: string[] = [];
 const root = () => { const r = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-harness-')); roots.push(r); return r; };
 test.after(() => { for (const r of roots) fs.rmSync(r, { recursive: true, force: true }); });
+
+// The real claude saves its credential through macOS `security`. Under a throwaway HOME there is no default keychain,
+// and that save opened the system's 'Keychain Not Found' dialog on the user's screen (2026-11-19).
+test('macOS: a child of the throwaway world reaches the keychain stub, so no Keychain Not Found dialog opens', { skip: process.platform === 'darwin' ? false : 'macOS only' }, () =>
+{
+    const h = new Harness({ root: root() });
+    const found = spawnSync('/bin/sh', ['-c', 'command -v security'], { env: h.env, encoding: 'utf8' }).stdout.trim();
+    // checked before any call, so the real tool never runs here with a throwaway HOME
+    assert.ok(found.startsWith(h.root + path.sep), `security resolves to ${found}`);
+    assert.strictEqual(spawnSync(found, ['find-generic-password', '-a', 'dev', '-s', 'probe', '-w'], { env: h.env }).status, 44, 'a lookup finds nothing');
+    assert.strictEqual(spawnSync(found, ['add-generic-password', '-a', 'dev', '-s', 'probe', '-w', 'secret'], { env: h.env }).status, 1, 'a save fails, as a Cancel would');
+});
 
 test('isolation: the CLI writes in the throwaway account and the real one is byte-identical', { skip }, () =>
 {

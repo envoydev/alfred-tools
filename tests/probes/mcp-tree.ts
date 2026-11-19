@@ -30,6 +30,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as cli from '../../scripts/core/claude-cli.ts';
+import { withKeychainStub } from '../helpers.ts';
 
 const FAKE = path.resolve(import.meta.dirname, '..', 'fake-mcp-server.ts');
 const WIN = process.platform === 'win32';
@@ -114,6 +115,7 @@ export function world(S: string, name: string, claudeDir?: string | null)
         CLAUDE_CONFIG_DIR: d.account, DISABLE_AUTOUPDATER: '1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
         MCP_SERVER_CONNECTION_BATCH_SIZE: '20',
     });
+    d.env = withKeychainStub(root, d.env);
     d.seq = 0;
     return d;
 }

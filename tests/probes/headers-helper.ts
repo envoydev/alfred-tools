@@ -25,6 +25,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as fake from '../fake-mcp-http.ts';
+import { withKeychainStub } from '../helpers.ts';
 
 const FAKE = ['probe', 'fake', 'value', '123'].join('-');
 const EXPECTED = `Bearer ${FAKE}`;
@@ -86,9 +87,9 @@ async function main()
     const child = path.join(proj, 'child');
     const proj2 = path.join(P, 'proj2');
     for (const d of [home, account, child, proj2]) fs.mkdirSync(d, { recursive: true });
-    const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: account };
+    const env = withKeychainStub(P, { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: account });
     // nothing below may reach the real account
-    if (![env.HOME, env.CLAUDE_CONFIG_DIR].every((d) => d.startsWith(P + path.sep))) throw new Error('HOME and CLAUDE_CONFIG_DIR must lie under the scratch folder');
+    if (![env.HOME, env.CLAUDE_CONFIG_DIR].every((d) => d?.startsWith(P + path.sep) === true)) throw new Error('HOME and CLAUDE_CONFIG_DIR must lie under the scratch folder');
     for (const d of [proj, proj2])
     {
         const root = path.join(d, '.alfred-tools');
