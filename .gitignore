@@ -164,3 +164,6 @@ docs/sessions-investigation/
 
 # A local MCP config: the repo root is the plugin root, so a tracked .mcp.json would ship its servers to every install
 .mcp.json
+
+# Machine-local: the plan and score files alfred-mods reads, written by the claude-kit skills
+.alfred-mods/
