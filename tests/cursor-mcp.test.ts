@@ -253,7 +253,7 @@ for (const id of ['context7', 'github', 'gitlab', 'atlassian', 'sentry'])
         const b = C.bridgeFormOf(e, catalog) as ServerEntry & { args: string[] };
         assert.equal(b.command, 'node');
         assert.strictEqual(b.args[4], `mcp-remote@${MR.version}`);
-        assert.match(b.args[4], /^mcp-remote@0\.16\.0$/);
+        assert.match(b.args[4], /^mcp-remote@0\.16\.6$/);
         assert.equal(b.args[0], '/Users/me/.alfred-tools/mcp-bridge.js');
         assert.equal(b.args[1], e.url);
         assert.deepEqual(b.args.slice(2, 4), helperParts(e.headersHelper)!.args.slice(0, 2));

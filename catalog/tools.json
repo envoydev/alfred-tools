@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "note": "The 15 rows of alfred-tools. A plugin row is added only when it works in Claude Code and Cursor (spec D8, 0.5.0). Facts are checked against the vendor docs in docs/sources.md (read 2026-10-27; pins refreshed 2026-11-10). Placeholders: {root} location root, {name} registration name, {host}, {value}, {contextFile} serena's context file. No secret in this file: a hosted key is named by its helper block, which mcp-headers.js reads from .mcps-secrets; a stdio key is only ever a ${VAR} reference.",
+  "note": "The 15 rows of alfred-tools. A plugin row is added only when it works in Claude Code and Cursor (spec D8, 0.5.0). Facts are checked against the vendor docs in docs/sources.md (read 2026-10-27 to 2026-11-19; pins refreshed 2026-11-19). Placeholders: {root} location root, {name} registration name, {host}, {value}, {contextFile} serena's context file. No secret in this file: a hosted key is named by its helper block, which mcp-headers.js reads from .mcps-secrets; a stdio key is only ever a ${VAR} reference.",
   "rules": {
     "ageGateDays": 7,
     "cutoff": "2026-10-20T23:59:59Z",
@@ -116,7 +116,7 @@
       "kind": "mcp",
       "group": "code",
       "label": "memory",
-      "summary": "persistent memory (sqlite-vec) shared across projects",
+      "summary": "persistent memory (sqlite-vec), one per project - shared by every project at Global scope",
       "name": "memory",
       "os": [
         "darwin",
@@ -132,9 +132,9 @@
           "package": {
             "registry": "pypi",
             "name": "mcp-memory-service",
-            "version": "12.5.0",
+            "version": "12.8.0",
             "fromSpec": "mcp-memory-service[sqlite]=={version}",
-            "cutoff": "2026-11-11T23:59:59Z"
+            "cutoff": "2026-11-19T23:59:59Z"
           },
           "run": [
             "memory",
@@ -205,8 +205,8 @@
           "package": {
             "registry": "npm",
             "name": "@upstash/context7-mcp",
-            "version": "4.5.0",
-            "cutoff": "2026-11-10T23:59:59Z"
+            "version": "4.7.0",
+            "cutoff": "2026-11-19T23:59:59Z"
           },
           "run": [],
           "optionalArgs": {
@@ -390,8 +390,8 @@
           "package": {
             "registry": "npm",
             "name": "@playwright/mcp",
-            "version": "0.0.84",
-            "cutoff": "2026-11-10T23:59:59Z"
+            "version": "0.0.85",
+            "cutoff": "2026-11-19T23:59:59Z"
           },
           "run": [
             "--browser",
@@ -461,8 +461,8 @@
           "package": {
             "registry": "npm",
             "name": "@playwright/mcp",
-            "version": "0.0.84",
-            "cutoff": "2026-11-10T23:59:59Z"
+            "version": "0.0.85",
+            "cutoff": "2026-11-19T23:59:59Z"
           },
           "run": [
             "--browser",
@@ -532,8 +532,8 @@
           "package": {
             "registry": "npm",
             "name": "@playwright/mcp",
-            "version": "0.0.84",
-            "cutoff": "2026-11-10T23:59:59Z"
+            "version": "0.0.85",
+            "cutoff": "2026-11-19T23:59:59Z"
           },
           "run": [
             "--browser",
@@ -602,8 +602,8 @@
           "package": {
             "registry": "npm",
             "name": "@playwright/mcp",
-            "version": "0.0.84",
-            "cutoff": "2026-11-10T23:59:59Z"
+            "version": "0.0.85",
+            "cutoff": "2026-11-19T23:59:59Z"
           },
           "run": [
             "--browser",
@@ -779,9 +779,9 @@
           "package": {
             "registry": "pypi",
             "name": "windows-mcp",
-            "version": "0.8.8",
+            "version": "0.8.9",
             "fromSpec": "windows-mcp=={version}",
-            "cutoff": "2026-10-20T23:59:59Z"
+            "cutoff": "2026-11-19T23:59:59Z"
           },
           "run": [
             "windows-mcp",
@@ -847,8 +847,8 @@
           "package": {
             "registry": "npm",
             "name": "@sentry/mcp-server",
-            "version": "0.42.0",
-            "cutoff": "2026-10-20T23:59:59Z"
+            "version": "0.49.0",
+            "cutoff": "2026-11-19T23:59:59Z"
           },
           "run": [],
           "env": {
@@ -884,8 +884,8 @@
           "package": {
             "registry": "npm",
             "name": "mcp-remote",
-            "version": "0.16.0",
-            "cutoff": "2026-11-11T23:59:59Z"
+            "version": "0.16.6",
+            "cutoff": "2026-11-19T23:59:59Z"
           },
           "fingerprints": [
             {

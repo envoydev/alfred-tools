@@ -480,7 +480,7 @@ test('update --apply keeps <tmp> while a fetch file is handed on, and apply() ca
         const before = inventory.buildInventory({ project: w.project, env: w.env }).registrations.find((r) => r.rowId === 'sentry')!;
         cli.runClaude(['mcp', 'remove', before.name, '-s', 'local'], { cwd: w.project, env: w.env });
         cli.runClaude(['mcp', 'add-json', before.name, JSON.stringify({ ...before.entry, env: { ...before.entry.env, SENTRY_ACCESS_TOKEN: token } }), '-s', 'local'], { cwd: w.project, env: w.env });
-        const reg = fakeRegistry({ ...pypiSerena(['2.1.0', 60], ['2.2.0', 20]), 'npm:@sentry/mcp-server': [{ version: '0.42.0', time: ago(60) }, { version: '0.43.0', time: ago(20) }] });
+        const reg = fakeRegistry({ ...pypiSerena(['2.1.0', 60], ['2.2.0', 20]), 'npm:@sentry/mcp-server': [{ version: '0.49.0', time: ago(60) }, { version: '0.50.0', time: ago(20) }] });
 
         const dir = t.made();
         fs.writeFileSync(path.join(dir, 'inventory.json'), '{}');
@@ -914,7 +914,7 @@ test('update moves cursorEntry\'s mcp-remote pin from Cursor\'s copy as read', a
         const claudeBefore = JSON.stringify(accountOf(w).mcpServers.context7);
         const reg = fakeRegistry(npmRemote(['0.16.0', 60], ['0.17.0', 8]));
         const c = await run(w, ['--check', '--no-refresh'], { registry: reg });
-        assert.match(c.text, /context7 \(user, Cursor\)\s+0\.16\.0 -> 0\.17\.0/);
+        assert.match(c.text, /context7 \(user, Cursor\)\s+0\.16\.6 -> 0\.17\.0/);
         const a = await run(w, ['--apply', 'cursor-pin:context7~user'], { registry: reg });
         assert.strictEqual(a.code, 0, a.text);
         const copy = readJson(cursorFile).mcpServers.context7;
@@ -937,7 +937,7 @@ test('a drifted Cursor copy gets no cursor-pin offer and is named', async () =>
         doc.mcpServers.context7.args.push('--extra');
         writeJson(cursorFile, doc);
         const c = await run(w, ['--check', '--no-refresh'], { registry: fakeRegistry(npmRemote(['0.16.0', 60], ['0.17.0', 8])) });
-        assert.doesNotMatch(c.text, /cursor-pin|\(user, Cursor\)\s+0\.16\.0/);
+        assert.doesNotMatch(c.text, /cursor-pin|\(user, Cursor\)\s+0\.16\.6/);
         assert.match(c.text, /context7 \(user\): Cursor's copy in .*mcp\.json differs from the list - not checked; \/alfred-tools:fix settles it/);
     }
     finally { w.clean(); }
@@ -951,7 +951,7 @@ test('update moves the shared form\'s mcp-remote pin in Claude Code', async () =
         install(w, { clients: ['claude', 'cursor'], picks: { atlassian: { route: 'remote', scope: 'user', token: false } } });
         const reg = fakeRegistry(npmRemote(['0.16.0', 60], ['0.17.0', 8]));
         const c = await run(w, ['--check', '--no-refresh'], { registry: reg });
-        assert.match(c.text, /atlassian \(user\)\s+0\.16\.0 -> 0\.17\.0/);
+        assert.match(c.text, /atlassian \(user\)\s+0\.16\.6 -> 0\.17\.0/);
         const a = await run(w, ['--apply', 'mcp:atlassian~user'], { registry: reg });
         assert.strictEqual(a.code, 0, a.text);
         const e = accountOf(w).mcpServers.atlassian;
@@ -1266,7 +1266,7 @@ test('accepting it prints the plan notes, hands its fetch on and states each mov
         assert.ok(!a.text.includes('serena: now the shared sign-in'), 'a server that does not move is not stated');
         const job = readJson(path.join(tmp, 'fetch.json'));
         const launch = (name: string) => job.fetch.find((s: { name: string }) => s.name === name).argv.join(' ');
-        assert.ok(launch('atlassian').includes('mcp-remote@0.16.0'), launch('atlassian'));
+        assert.ok(launch('atlassian').includes('mcp-remote@0.16.6'), launch('atlassian'));
         assert.deepStrictEqual(job.fetch.map((s: { name: string }) => s.name), ['atlassian'], 'serena\'s launch is unchanged, so the cache already holds it');
     }
     finally { w.clean(); }

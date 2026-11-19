@@ -155,13 +155,13 @@ test('serena on Windows: a root and a profile path with a space take the space-f
 
 test('uvx rows get their own python: windows-control 3.14 (x64 build on ARM64), memory 3.13', () => {
     const w = addStep(plan(inv(WIN), pickOne('windows-control'), opts('C:\\Users\\me'))).entry;
-    assert.deepStrictEqual(w.args!.slice(0, 4), ['--python', '3.14', '--exclude-newer', '2026-10-20T23:59:59Z']);
+    assert.deepStrictEqual(w.args!.slice(0, 4), ['--python', '3.14', '--exclude-newer', '2026-11-19T23:59:59Z']);
     assert.deepStrictEqual(w.args!.slice(-3), ['serve', '--exclude-tools', 'PowerShell,Registry,Process,FileSystem']);
     assert.strictEqual((w.env as EntryEnv).ANONYMIZED_TELEMETRY, 'false');
     const arm = addStep(plan(inv(WINARM), pickOne('windows-control'), opts('C:\\Users\\me'))).entry;
     assert.strictEqual(arm.args![1], 'cpython-3.14-windows-x86_64-none');
     const mem = addStep(plan(inv(MAC), pickOne('memory'), opts('/Users/me'))).entry;
-    assert.ok(mem.args!.includes('mcp-memory-service[sqlite]==12.5.0'));
+    assert.ok(mem.args!.includes('mcp-memory-service[sqlite]==12.8.0'));
     assert.ok(!mem.args!.includes('--with'), 'numpy is a core dependency of the pin');
     assert.strictEqual((mem.env as EntryEnv).MCP_MEMORY_SQLITE_PATH, '/work/shop/.alfred-tools/memory/memory.db');
 });
@@ -176,13 +176,13 @@ test('desktop control is offered only on its own OS', () => {
 test('npx rows: pinned, with the cut-off in npm_config_before; native Windows gets the cmd /c precaution', () => {
     const mac = addStep(plan(inv(MAC), pickOne('playwright-chrome'), opts('/Users/me'))).entry;
     assert.strictEqual(mac.command, 'npx');
-    assert.deepStrictEqual(mac.args!.slice(0, 4), ['-y', '@playwright/mcp@0.0.84', '--browser', 'chrome']);
+    assert.deepStrictEqual(mac.args!.slice(0, 4), ['-y', '@playwright/mcp@0.0.85', '--browser', 'chrome']);
     assert.ok(mac.args!.includes('--no-webmcp'));
-    assert.strictEqual(mac.env!.npm_config_before, '2026-11-10T23:59:59Z');
+    assert.strictEqual(mac.env!.npm_config_before, '2026-11-19T23:59:59Z');
     const win = addStep(plan(inv(WIN), pickOne('playwright-chrome'), opts('C:\\Users\\me'))).entry;
     assert.strictEqual(win.command, 'cmd');
     assert.deepStrictEqual(win.args!.slice(0, 3), ['/c', 'npx', '-y']);
-    assert.strictEqual(win.env!.npm_config_before, '2026-11-10T23:59:59Z');
+    assert.strictEqual(win.env!.npm_config_before, '2026-11-19T23:59:59Z');
     const ap = addStep(plan(inv(MAC), pickOne('appium'), opts('/Users/me'))).entry;
     assert.deepStrictEqual(ap.args, ['-y', 'appium-mcp@1.99.3']);
     assert.strictEqual((ap.env as EntryEnv).SCREENSHOTS_DIR, '/work/shop/.alfred-tools/appium-mcp/screenshots');
@@ -204,7 +204,7 @@ test('routes: context7, github and sentry each build both ways; the others have 
     assert.deepStrictEqual(c7k, { type: 'http', url: 'https://mcp.context7.com/mcp', headersHelper: 'node /work/shop/.alfred-tools/mcp-headers.js CONTEXT7_API_KEY Bearer' });
     // a stdio key whose name is filled nowhere: no key argument, never an empty one (spec F2)
     const c7l = addStep(plan(inv(MAC), pickOne('context7', { route: 'local', token: true, scope: 'local' }), opts('/h'))).entry;
-    assert.deepStrictEqual(c7l.args, ['-y', '@upstash/context7-mcp@4.5.0']);
+    assert.deepStrictEqual(c7l.args, ['-y', '@upstash/context7-mcp@4.7.0']);
     const gh = addStep(plan(inv(MAC), pickOne('github', { route: 'local' }), opts('/h'))).entry;
     assert.deepStrictEqual(gh.args, ['run', '-i', '--rm', '-e', 'GITHUB_PERSONAL_ACCESS_TOKEN', 'ghcr.io/github/github-mcp-server:v2.1.0', 'stdio']);
     assert.deepStrictEqual(gh.env, { GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}' });
@@ -2410,10 +2410,10 @@ test('the project-scope helper note says why and names the remedy, once', () => 
 
 test('buildEntry for the sentry bridge at local, project and user scope', () => {
     const row = catalog.byId.get('sentry');
-    const tail = (t: string) => [t, 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.0'];
+    const tail = (t: string) => [t, 'SENTRY_ACCESS_TOKEN', 'Sentry-Bearer', 'mcp-remote@0.16.6'];
     const mac = { platform: 'darwin', home: '/Users/me', project: '/work/shop' };
     const local = buildEntry(row!, 'bridge', { scope: 'local', urlNames: { SENTRY_ORG: 'SENTRY_SLUG' } }, mac, catalog.rules);
-    assert.deepStrictEqual(local, { command: 'node', args: ['/work/shop/.alfred-tools/mcp-bridge.js', ...tail('https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}')], env: { npm_config_before: '2026-11-11T23:59:59Z' } });
+    assert.deepStrictEqual(local, { command: 'node', args: ['/work/shop/.alfred-tools/mcp-bridge.js', ...tail('https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}')], env: { npm_config_before: '2026-11-19T23:59:59Z' } });
     const project = buildEntry(row!, 'bridge', { scope: 'project' }, mac, catalog.rules);
     assert.strictEqual(project.args![0], '/work/shop/.alfred-tools/mcp-bridge.js', 'absolute at project scope too');
     assert.strictEqual(project.args![1], 'https://mcp.sentry.dev/mcp/{SENTRY_ORG}/{SENTRY_PROJECT?}');
@@ -2433,7 +2433,7 @@ test('buildEntry for the sentry bridge at local, project and user scope', () => 
         assert.deepStrictEqual(cur.urlNames, urlNames, scope);
     }
     assert.deepStrictEqual(settingsOf(row!, 'bridge', local), [], 'the bridge passes no setting of the user\'s');
-    assert.deepStrictEqual(bridgeParts(local), { path: '/work/shop/.alfred-tools/mcp-bridge.js', template: 'https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}', keyName: 'SENTRY_ACCESS_TOKEN', scheme: 'Sentry-Bearer', packageSpec: 'mcp-remote@0.16.0', globalRoot: null, pairs: [] });
+    assert.deepStrictEqual(bridgeParts(local), { path: '/work/shop/.alfred-tools/mcp-bridge.js', template: 'https://mcp.sentry.dev/mcp/{SENTRY_SLUG}/{SENTRY_PROJECT?}', keyName: 'SENTRY_ACCESS_TOKEN', scheme: 'Sentry-Bearer', packageSpec: 'mcp-remote@0.16.6', globalRoot: null, pairs: [] });
     assert.strictEqual(bridgeParts({ command: 'npx', args: ['-y', 'mcp-remote@0.16.0'] }), null);
     assert.strictEqual(renameTemplate('https://h/mcp/{A}/{B?}', { A: 'X', B: 'Y' }), 'https://h/mcp/{X}/{Y?}');
 });

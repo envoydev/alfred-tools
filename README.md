@@ -126,6 +126,20 @@ A hosted server with a key at Project scope connects without its key in a sessio
 does not run a parent folder's key helper there. Start a session in the folder that holds `.mcp.json`, or move the
 server to Global with configure.
 
+In an organization whose managed settings restrict MCP servers (`allowedMcpServers`, `deniedMcpServers`;
+https://code.claude.com/docs/en/managed-mcp.md), ask your administrator to allow each server you install:
+
+- a hosted route by a `serverUrl` entry, `*` wildcards allowed (`https://mcp.sentry.dev/*`);
+- a local route by a `serverCommand` entry: the exact command and arguments the plugin registers, paths and pin
+  included, so the entry changes with every pin install or `/alfred-tools:update` moves;
+- a bridge route by its own command, `node <root>/mcp-bridge.js <url> <key name> <scheme> mcp-remote@<pin>`, and a
+  sign-in shared with Cursor by `npx -y mcp-remote@<pin> <url>` - not by the package alone.
+
+A `serverName` entry counts only while the allowlist holds no `serverUrl` (hosted) or `serverCommand` (local) entry,
+and it is no security control. Claude Code refuses to add a server the allowlist blocks ('not allowed by enterprise
+policy'), and install stops at that step; a server blocked later is hidden from `claude mcp list` and
+`claude mcp get`. The plugin reads and changes no managed setting.
+
 **Route** - for context7, github and sentry: 'Hosted' (the vendor's server, nothing to run) is recommended; 'Local'
 runs the server on your machine. sentry also has 'Bridge', for one organization and project (see
 [Sentry for one organization and project](#sentry-for-one-organization-and-project)).
@@ -224,6 +238,9 @@ CONTEXT7_API_KEY=ctx7sk-...   # a note after whitespace and # is not part of the
   the first value found wins, so one key in the global root serves every project.
 - A local server (github in Docker, sentry with `npx`) gets its key written into its registration at Local or Global
   scope; `/alfred-tools:fix` writes it again after you change it. Those routes are not offered at Project scope.
+  context7's local route (`npx`) with a key gets it written in the same way at Local or Global scope, as `--api-key`
+  on the server's command line, where the machine's process list shows it; at Project scope it runs without a key,
+  so the committed `.mcp.json` carries none. The hosted route keeps the key out of both.
 - The helper prints a key only when Claude Code runs it; run by hand it prints `{}`. The file itself is plain text: a
   command that reads it shows its keys, so keep it out of anything you share.
 - After an install, the plan says for each keyed server whether its key is filled, and how it connects once it is. A
@@ -270,7 +287,9 @@ the `claude` CLI) and Cursor's file from it in the same run.
   already have there is replaced only after a question.
 - **Keyed hosted servers.** Cursor does not run Claude Code's key helper, so its copy starts the URL bridge
   (`mcp-bridge.js`), which reads the same `.mcps-secrets`. A server whose key is written into its registration (github
-  in Docker, sentry with `npx`) reaches Cursor at Global scope only, so the key never lands in a project file.
+  in Docker, sentry with `npx`, context7's `npx` route with a key) reaches Cursor at Global scope only, so the key
+  never lands in a project file. context7's `npx` route without a key, as it always runs at Project scope, reaches
+  Cursor at any scope.
 - **Approve again after a change.** Cursor asks you to approve a server again whenever its entry changes, so after an
   update that moves pins the plan names each one to approve.
 - **Edited by hand.** When one app's copy differs from the list, `/alfred-tools:fix` asks which copy stays. A key
@@ -294,9 +313,10 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
   tokens or the keys: `Read(//**/mcp-remote-v1/**)` and `Read(//**/.mcps-secrets)`. They do not stop a `grep -r` run
   from a folder above, or a script that opens the file itself, unless Claude Code's sandbox is on (`/sandbox`; macOS,
   Linux and WSL2, not native Windows). A key the plugin writes into a local server's registration (github in Docker,
-  sentry with `npx`) sits in Claude Code's account file and, for Cursor's copy, in `~/.cursor/mcp.json`, which no rule
-  covers. The plugin adds the two rules when it first writes a sign-in entry or a key name; a rule you remove by hand
-  comes back on the next plan that needs it. `/alfred-tools:fix` and `/alfred-tools:update` also add them
+  sentry with `npx`, context7 with `npx` and a key) sits in Claude Code's account file and, for Cursor's copy, in
+  `~/.cursor/mcp.json`, which no rule covers. The plugin adds the two rules when it first writes a sign-in entry or a
+  key name; a rule you remove by hand comes back on the next plan that needs it. `/alfred-tools:fix` and
+  `/alfred-tools:update` also add them
   to every other Claude Code config folder on this machine (`~/.claude`, `~/.claude-<name>`) that has this plugin
   installed, and say which. Each of those folders keeps its own plugin data, so an update run there may offer a
   retired plugin's uninstall again after a 'No' given elsewhere.

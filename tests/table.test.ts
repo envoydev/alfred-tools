@@ -56,17 +56,17 @@ test('what is installed shows by scope as name [route, pin], a custom name inclu
     }), catalog);
     const row = (re: RegExp) => text.split('\n').find((l) => re.test(l));
     assert.match(row(/\bserena\s+mcp/)!, /proj-serena \[local, 2\.0\.0\]\s+-\s+serena \[local, 2\.1\.0\]$/, 'one row, two scopes, two pins');
-    assert.match(row(/\bmemory\s+mcp/)!, /memory \[local, 12\.5\.0\]$/);
+    assert.match(row(/\bmemory\s+mcp/)!, /memory \[local, 12\.8\.0\]$/);
     assert.match(row(/\bcontext7\s+mcp/)!, /-\s+context7 \[remote\]\s+-$/);
     assert.match(row(/\bgithub\s+mcp/)!, /github \[local, v2\.0\.2\]/);
-    assert.match(row(/playwright-chrome\s+mcp/)!, /playwright-chrome \[local, 0\.0\.84\]/);
+    assert.match(row(/playwright-chrome\s+mcp/)!, /playwright-chrome \[local, 0\.0\.85\]/);
 });
 
 test('four Playwright engines are four rows, each with its own registration', () =>
 {
     const regs = ['chrome', 'msedge', 'firefox', 'webkit'].map((e) => reg(`playwright-${e}`, `playwright-${e}`, 'local', entryOf(`playwright-${e}`)));
     const text = renderTable(inv({ registrations: regs }), catalog);
-    for (const e of ['chrome', 'msedge', 'firefox', 'webkit']) assert.match(text, new RegExp(`playwright-${e}\\s+mcp\\s+local\\s+playwright-${e} \\[local, 0\\.0\\.84\\]`));
+    for (const e of ['chrome', 'msedge', 'firefox', 'webkit']) assert.match(text, new RegExp(`playwright-${e}\\s+mcp\\s+local\\s+playwright-${e} \\[local, 0\\.0\\.85\\]`));
 });
 
 test('the user\'s own servers, alfred-code leftovers and unreadable files are named under the table', () =>

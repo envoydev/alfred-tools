@@ -141,6 +141,67 @@ days old.
   empty scratch folder, reports `{info 0, low 1, moderate 23, high 15, critical 0, total 39}` over 1177 dependencies.
   Release notes: https://github.com/appium/appium-mcp/releases/tag/v1.99.3.
 
+## Pins - refresh on 2026-11-19
+
+Moved by hand in the 2026-11-19 tools audit (`npm run refresh-pins` was not run): each pin to the newest release at
+least 7 x 24 hours old, the script's own gate (`scripts/catalog/registry.ts`), its cut-off to `2026-11-19T23:59:59Z` as
+the script would set it. `@upstash/context7-mcp` 4.7.0 (2026-11-12T09:04Z) and `windows-mcp` 0.8.9 (10:48Z) clear that
+gate at those times on 2026-11-19, and were written in after 10:48Z. Release times are
+the registries' own (`npm view <package> time --json`, `https://pypi.org/pypi/<package>/json`), read 2026-11-19. Each
+new release was unpacked and read beside the old pin's, never run, and OSV (`https://api.osv.dev/v1/query`) knows no
+vulnerability at any new pin.
+
+| Package | Was | Now (published) | Held back by the age gate |
+|---|---|---|---|
+| `@upstash/context7-mcp` | 4.5.0 | 4.7.0 (2026-11-12) | 4.7.1 (2026-11-16) to 4.7.3 (2026-11-17) |
+| `@playwright/mcp` | 0.0.84 | 0.0.85 (2026-11-09) | 0.0.86 (2026-11-18) |
+| `@sentry/mcp-server` | 0.42.0 | 0.49.0 (2026-11-07) | 0.50.0 (2026-11-18) |
+| `mcp-remote` | 0.16.0 | 0.16.6 (2026-11-11) | 0.16.7 (2026-11-19) |
+| `mcp-memory-service` | 12.5.0 | 12.8.0 (2026-11-10) | 12.9.0 (2026-11-13) to 12.11.0 (2026-11-16) |
+| `windows-mcp` | 0.8.8 | 0.8.9 (2026-11-12) | - |
+
+Unchanged: `serena-agent` 2.1.0, `macos-mcp` 0.4.7 and `appium-mcp` 1.99.3 are the newest releases;
+`ghcr.io/github/github-mcp-server` v2.2.0 (2026-11-16) is under the gate, so the image stays at v2.1.0.
+
+- `@upstash/context7-mcp` 4.7.0 - CONFIRMED from the tarball, against 4.5.0: `--api-key` and `CONTEXT7_API_KEY` are
+  still read in `dist/index.js` (:53, :70), and the tools `query-docs` and `resolve-library-id` are unchanged. New
+  are the tools `query-code` and `get-upgrade-guide` (4.6.0) and a `page` argument (4.7.0), all an opt-in research
+  preview the row does not turn on. Bin, `engines` and publisher are unchanged. `npm audit` at the pin: 1 moderate,
+  0 high, over 104 dependencies. Release notes:
+  https://github.com/upstash/context7/releases (4.5.1, 4.6.0, 4.7.0).
+- `@playwright/mcp` 0.0.85 - CONFIRMED from the tarball: the README still documents `--browser`, `--no-webmcp`,
+  `--user-data-dir`, `--output-dir`, `--executable-path` and `browser_run_code_unsafe`, with the same `browser_*` names
+  as 0.0.84's; bin and `engines` unchanged. The release notes say 'CLI and environment paths remain relative to the
+  working directory' (only config-file paths changed). `npm audit`: 0
+  over 3 dependencies. https://github.com/microsoft/playwright-mcp/releases/tag/v0.0.85.
+- `@sentry/mcp-server` 0.49.0 - read from the tarball: the package now comes from `getsentry/toolkit` and ships one
+  bundled file, bin `sentry-mcp` -> `dist/sentry-mcp.cjs`, `engines.node` `>=22.15`, published by sentry-bot as
+  before. CHANGED: the stdio variable is `SENTRY_AUTH_TOKEN`; `SENTRY_ACCESS_TOKEN` and `--access-token` are still
+  read as deprecated aliases (`dist/sentry-mcp.cjs:3172-3176`; the README at https://github.com/getsentry/sentry-mcp:
+  'still work but are deprecated: they act as `SENTRY_AUTH_TOKEN` and print a warning on stderr'). The row keeps
+  `SENTRY_ACCESS_TOKEN`, the key's name in `.mcps-secrets` and in the registrations already written; moving to the
+  new name needs a change that rewrites old registrations, and is open. `npm audit`: 0 (0.42.0 had 2 high via
+  `@modelcontextprotocol/sdk`).
+  Release notes: https://github.com/getsentry/sentry-mcp/releases (cli@0.46.0 to cli@0.49.0).
+- `mcp-remote` 0.16.6 - CONFIRMED from the tarball: the bins `mcp-remote` and `mcp-remote-client` are unchanged, and
+  everything `scripts/sign-in` reads is still in `dist` - the stderr lines 'Please authorize this client by
+  visiting:', 'Could not open a browser automatically' and 'Browser opened automatically', `MCP_REMOTE_CONFIG_DIR`,
+  `http-only`, `--auth-timeout` and the `/oauth/callback` redirect on 127.0.0.1. The commits between
+  (https://github.com/punkpeye/mcp-remote/compare/v0.16.0...v0.16.6) are fixes, among them 'require https for the
+  device grant (CVE-2026-108716), and keep credentials from following a redirect to another origin'. `npm audit`: 0
+  over 81 dependencies. A real sign-in (matrix `sign-in`) stays NOT RUN.
+- `mcp-memory-service` 12.8.0 - CONFIRMED from the wheel (sha256 `1671922f...` as PyPI lists it): console script
+  `memory` and the click command `server` with the same parameters, extra `[sqlite]`, `Requires-Python` `>=3.11`;
+  `MCP_MEMORY_STORAGE_BACKEND`, `MCP_MEMORY_SQLITE_PATH` and `MCP_MEMORY_SQLITE_PRAGMAS` still read; the ONNX model from
+  the same `chroma-onnx-models` URL. One new migration, additive: `022_add_ontology_entries.sql` (a new table, with a
+  rollback file). A changed default the row does not set: `MCP_TYPED_EDGES_ENABLED` is now `false`. Release notes:
+  https://github.com/doobidoo/mcp-memory-service/releases (v12.6.0 to v12.8.0).
+- `windows-mcp` 0.8.9 - CONFIRMED from the wheel (sha256 `e90e5b02...`): console script `windows-mcp`,
+  `--exclude-tools` and `WINDOWS_MCP_EXCLUDE_TOOLS`, `ANONYMIZED_TELEMETRY`, `App`'s `launch_executable`,
+  `Requires-Python` `>=3.14`; the tool names are 0.8.8's. The release adds 'Recover the control overlay after a missed
+  ack timeout' (#606, https://github.com/CursorTouch/Windows-MCP/releases), which may end the sticky failure the
+  `windows-mcp-one-per-desktop` advice rests on - NOT RUN (no Windows here), so the advice row stays.
+
 ## GitHub MCP server - github/github-mcp-server
 
 - Remote URL `https://api.githubcopilot.com/mcp/` - CONFIRMED. README (https://github.com/github/github-mcp-server).
@@ -1482,3 +1543,33 @@ Page: https://code.claude.com/docs/en/skills.md, 'Skill content lifecycle' (read
   "/alfred-tools:<command>" --max-turns 1 --output-format json` in a scratch project, less the same with the prompt
   `hi`, first turn's input plus cache tokens); a count over 4,750 lowers the cap by the excess at 3.5 characters a token
   and the file is cut again. The count and its date go here.
+
+## Claude Code - managed MCP allowlists (read 2026-11-19)
+
+Pages: https://code.claude.com/docs/en/managed-mcp.md and https://code.claude.com/docs/en/mcp.md, both read
+2026-11-19. README.md's paragraph on organizations rests on them.
+
+- Entries, from managed-mcp.md: `serverUrl` matches 'A remote server URL, exact or with `*` wildcards' (HTTP and SSE
+  servers); `serverCommand` 'The exact command and arguments that start a stdio server'; `serverName` 'The
+  user-assigned label. Exact match only'.
+- `serverCommand`: 'Commands match exactly. Every argument, in order.' and 'The `env` block isn't compared.' A plugin
+  row's entry holds its pin (and a `uvx` row's `--exclude-newer` cut-off), so it changes at every pin move; the npx
+  rows' `npm_config_before` sits in `env` and is not compared.
+- 'A `serverName` entry, in either list, is not a security control.' A remote server is allowed by a `serverUrl`
+  entry, and 'A `serverName` match counts only when the allowlist contains no `serverUrl` entries'; the same holds for
+  a stdio server and `serverCommand`.
+- Both values expand `${VAR}` before matching, and the page advises 'use literal URLs and commands for entries you rely
+  on for enforcement'.
+- What a user sees: 'The server isn't on the allowlist and the user runs `claude mcp add`' gives 'Cannot add MCP
+  server "<name>": not allowed by enterprise policy'; a denylisted one gives '... server is explicitly blocked by
+  enterprise policy'; 'A previously configured server is now blocked by policy' - 'The server disappears from `/mcp`
+  and `claude mcp list`'. The page names `claude mcp add`; that `claude mcp add-json`, which install runs, fails the
+  same way is NOT RUN (no managed settings here). Install stops at the first step that fails
+  (`scripts/apply/run.ts`).
+- From mcp.md: 'A server blocked by an allowlist, a denylist, or another restriction in managed MCP configuration is
+  hidden from both commands rather than shown with this status' - `claude mcp list` and `claude mcp get <name>`.
+- The forms the plugin registers, for a `serverCommand` entry: a bridge, `node <root>/mcp-bridge.js <url> <key name>
+  <scheme> mcp-remote@<pin>`; a sign-in shared with Cursor, `npx -y mcp-remote@<pin> <url>` with
+  `MCP_REMOTE_CONFIG_DIR` in `env`; an npx row on native Windows, `cmd /c npx -y ...`.
+- No script of the plugin reads or writes `allowedMcpServers`, `deniedMcpServers` or `managed-mcp.json` (a grep of
+  `scripts/`, 2026-11-19).

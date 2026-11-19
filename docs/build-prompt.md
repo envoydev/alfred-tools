@@ -46,7 +46,7 @@ its recommended scope (a hosted keyed route, 0.2.0 D5).
 
 Done means every acceptance criterion in 'Acceptance criteria' holds and its proof is in your report.
 
-## The catalog - 14 rows
+## The catalog - 15 rows
 
 The catalog held 17 rows until 0.5.0, which removed the three plugins (claude-hud, typescript-lsp, csharp-lsp): the
 catalog keeps only tools that work in Claude Code and Cursor (rulings 3, 5 and 6 of 'One list, both apps - 0.5.0').
@@ -54,7 +54,7 @@ catalog keeps only tools that work in Claude Code and Cursor (rulings 3, 5 and 6
 Items marked (verify) are facts from the alfred-code record or from memory, unchecked against today's vendor docs. Step
 1 checks each one and records the source.
 
-| Row | Kind | Original name | Routes | Package or endpoint at the last known pin |
+| Row | Kind | Original name | Routes | Package or endpoint as the brief gave it (today's pins: `catalog/tools.json`; what changed: `docs/sources.md`, 'Catalog changes after step 1' and the 'Pins' sections) |
 |---|---|---|---|---|
 | serena | MCP | `serena` | local | `uvx --python 3.13 --from serena-agent@2.1.0 serena start-mcp-server --context <root>/serena-context.yml --enable-web-dashboard false --project-from-cwd --agent-interface tools` (the context file since 0.5.0) |
 | memory | MCP | `memory` | local | `uvx --python 3.13 --with numpy --from mcp-memory-service[sqlite]==12.1.1 memory server` |
@@ -70,6 +70,7 @@ Items marked (verify) are facts from the alfred-code record or from memory, unch
 | appium | MCP | `appium-mcp` | local | `npx -y appium-mcp@1.97.1` |
 | macos-control | MCP | `macos-desktop` | local, macOS only | `uvx --python 3.13 --from macos-mcp==0.4.6 macos-mcp serve` |
 | windows-control | MCP | `windows-desktop` | local, Windows only | `uvx --python 3.14 --from windows-mcp==0.8.8 windows-mcp serve --exclude-tools PowerShell,Registry,Process,FileSystem` |
+| sonarqube | MCP | `sonarqube` | remote | not in the brief: SonarQube Cloud's own hosted server, `https://api.sonarcloud.io/mcp` (or `https://api.sonarqube.us/mcp` for the US region), a key (`SONARQUBE_TOKEN`, a user token, `Bearer`) with `SONARQUBE_ORG` optional, read-only tools recommended; `docs/sources.md` 'SonarQube Cloud - the hosted MCP server' |
 
 A route's key mode sits in `authMode` (`token`, `oauth`, `optional-token`), and a hosted route that signs in with OAuth
 when no key is chosen carries `keyless: "oauth"`. No field is named like a credential unless it holds a `${VAR}`, a
