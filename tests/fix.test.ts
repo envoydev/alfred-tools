@@ -3075,3 +3075,11 @@ test('read-guard compares config dirs without case on win32 only, by the platfor
     }
     finally { w.clean(); }
 });
+
+test('a finding that lacks a field its fix reads stops the fix with the field named, never writes undefined into the entry', () =>
+{
+    const finding: Finding = { id: 'uvx-python', row: 'serena', name: 'serena', scope: 'local', found: 'no --python', proposal: {} };
+    const entry = { command: 'uvx', args: ['--from', 'serena-agent@2.1.0', 'serena', 'start-mcp-server'] };
+    assert.throws(() => F.uvxPythonFix(entry, finding, {} as FixCtx), /uvx-python on serena: the proposal has no python/);
+    assert.throws(() => C.fieldOf({ ...finding, scope: null }, 'scope'), /uvx-python on serena: the finding has no scope/);
+});

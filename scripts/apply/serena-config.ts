@@ -8,6 +8,7 @@ import path from 'node:path';
 import { replaceFile } from '../core/replace-file.ts';
 import { alfredSerenaHome } from '../entries/locations.ts';
 import { pathApiOf } from '../entries/platform.ts';
+import { scalarOf } from './yaml.ts';
 import type { ServerEntry } from '../core/types.ts';
 
 const CONFIG = 'serena_config.yml';
@@ -23,8 +24,10 @@ function linesOf(text: string): [string, string][]
     let match: RegExpExecArray | null;
     while ((match = linePattern.exec(text)) !== null)
     {
-        if (match[0] === '') break;
-        out.push([match[1]!, match[2]!]);
+        // both groups take part in every match
+        const [whole, body = '', ending = ''] = match;
+        if (whole === '') break;
+        out.push([body, ending]);
     }
     return out;
 }
@@ -33,17 +36,21 @@ function linesOf(text: string): [string, string][]
 function locate(lines: [string, string][]): { at: number; end: number; inline: string } | null
 {
     const at = lines.findIndex(([body]) => KEY.test(body));
-    if (at < 0) return null;
-    const value = KEY.exec(lines[at]![0])![1]!.replace(/\s+#.*$/, '').trim();
+    const keyLine = lines[at];
+    if (!keyLine) return null;
+    const [, raw = ''] = KEY.exec(keyLine[0]) ?? [];
+    const value = raw.replace(/\s+#.*$/, '').trim();
+    // a line inside the bounds the loops check
+    const bodyAt = (index: number): string => { const line = lines[index]; return line ? line[0] : ''; };
     let end = at + 1;
     if (value.startsWith('[') && !value.includes(']'))
     {
         // a flow list over several lines: up to the line that closes it
-        while (end < lines.length && !lines[end]![0].includes(']')) end += 1;
+        while (end < lines.length && !bodyAt(end).includes(']')) end += 1;
         end = Math.min(end + 1, lines.length);
     }
     else if (value === '')
-        while (end < lines.length && /^[ \t]*-([ \t]|$)/.test(lines[end]![0])) end += 1;
+        while (end < lines.length && /^[ \t]*-([ \t]|$)/.test(bodyAt(end))) end += 1;
     return { at, end, inline: value };
 }
 
@@ -75,7 +82,8 @@ export function emptyBaseModes(file: string): { changed: boolean; detail: string
     else
     {
         if (location.inline === '[]') return { changed: false, detail: `${file}: base_modes is [] already` };
-        const keyEol = lines[location.end - 1]![1] || lines[location.at]![1] || '';
+        const endingAt = (index: number): string => { const line = lines[index]; return line ? line[1] : ''; };
+        const keyEol = endingAt(location.end - 1) || endingAt(location.at);
         const head = lines.slice(0, location.at).map(([body, ending]) => body + ending).join('');
         const tail = lines.slice(location.end).map(([body, ending]) => body + ending).join('');
         next = `${head}base_modes: []${keyEol}${tail}`;
@@ -93,6 +101,8 @@ function replaceInPlace(file: string, next: string): void
 
 export const FOLDER_KEY = 'project_serena_folder_location';
 const FOLDER_LINE = new RegExp(`^${FOLDER_KEY}[ \\t]*:(.*?)(\\r?)$`);
+// The folder key's value on its line, quotes dropped.
+const folderOfLine = (body: string): string => { const [, raw = ''] = FOLDER_LINE.exec(body) ?? []; return scalarOf(raw); };
 
 // serena 2.1.0 puts each project's .serena folder under <home>/projects/<project folder name>. The value is single-quoted
 // YAML with / separators; a $ in the home would read as a placeholder, so it is refused.
@@ -101,17 +111,6 @@ export function folderValue(home: string): { value: string } | { error: string }
     if (home.includes('$')) return { error: `${home} holds a $ - serena would read it as a placeholder, so ${FOLDER_KEY} is not set` };
     const base = home.replace(/\\/g, '/').replace(/\/+$/, '');
     return { value: `'${base.replace(/'/g, "''")}/projects/$projectFolderName'` };
-}
-
-// The text of a YAML scalar on a key line, quotes and a trailing comment dropped.
-function scalarOf(raw: string): string
-{
-    const text = raw.trim();
-    const single = /^'((?:[^']|'')*)'(?:\s+#.*)?$/.exec(text);
-    if (single) return single[1]!.replace(/''/g, "'");
-    const double = /^"((?:[^"\\]|\\.)*)"(?:\s+#.*)?$/.exec(text);
-    if (double) return double[1]!.replace(/\\(.)/g, '$1');
-    return text.replace(/\s+#.*$/, '');
 }
 
 // -> 'absent' (no file, or no key) | 'same' (the value folderValue(home) writes) | 'other'
@@ -123,7 +122,7 @@ export function folderState(file: string, home: string): 'absent' | 'same' | 'ot
     if (!line) return 'absent';
     const wanted = folderValue(home);
     if ('error' in wanted) return 'other';
-    return scalarOf(FOLDER_LINE.exec(line[0])![1]!) === scalarOf(wanted.value) ? 'same' : 'other';
+    return folderOfLine(line[0]) === scalarOf(wanted.value) ? 'same' : 'other';
 }
 
 // The value the file holds for the folder key now, quotes dropped (a path, as folderValue writes one) - null when the file
@@ -132,7 +131,7 @@ export function folderCurrent(file: string): string | null
 {
     const text = readText(file);
     const line = text === null ? undefined : linesOf(text).find(([body]) => FOLDER_LINE.test(body));
-    return line ? scalarOf(FOLDER_LINE.exec(line[0])![1]!) : null;
+    return line ? folderOfLine(line[0]) : null;
 }
 
 // The key's value in place of the first one (or appended when the file has none); a missing file is not created. -> { changed, detail }

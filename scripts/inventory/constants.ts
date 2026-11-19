@@ -7,3 +7,10 @@ export const ALFRED_CODE_PLUGIN = 'alfred-code';
 export const WINDOWS_MCP_MARKETPLACE = 'envoydev';
 // The `unreadable` entry a marketplace list that failed or is not JSON leaves (update names it when it skips a plugin).
 export const MARKETPLACE_LIST_UNREAD = { scope: 'marketplaces', file: 'claude plugin marketplace list --json' } as const;
+// The `unreadable` entry a plugin list that failed or is not JSON leaves.
+export const PLUGIN_LIST_UNREAD = { scope: 'plugins', file: 'claude plugin list --json' } as const;
+// What an unreadable CLI list means for the run, by its entry's `scope` - a list, never a scope a server is written to.
+export const LIST_UNREAD_NOTES: ReadonlyMap<string, string> = new Map([
+    [PLUGIN_LIST_UNREAD.scope, 'the plugin list could not be read, so this run takes no plugin as installed.'],
+    [MARKETPLACE_LIST_UNREAD.scope, 'the marketplace list could not be read, so update offers no plugin update from it.'],
+]);

@@ -14,9 +14,10 @@ import { rootQuestion, rootsBlock } from './asks-roots.ts';
 import { homeDir } from '../core/account.ts';
 import { cursorFound } from '../cursor/cursor-mcp.ts';
 import { ownItems, ownQuestion } from '../inventory/existing.ts';
+import { isRegistration } from './files/shapes.ts';
+import { required } from './required.ts';
 import type { Catalog } from '../catalog/types.ts';
-import type { Current, Registration } from '../entries/types.ts';
-import type { Family } from '../roots/types.ts';
+import type { Current } from '../entries/types.ts';
 import type { InvRegistration, Inventory } from '../inventory/types.ts';
 import type { AskCtx, AskOptions, Asked, Picks, Questions } from './types.ts';
 
@@ -53,29 +54,32 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
     for (const key of (picks && picks.targets) || [])
     {
         // a root folder: D2's question, the root in use recommended (spec D7)
-        const rootMatch = /^root:(project|global)$/.exec(key);
-        if (rootMatch)
+        const rootFamily = roots.FAMILIES.find((family) => key === `root:${family}`);
+        if (rootFamily)
         {
-            const used = rootInUse(inventory, rootMatch[1] as Family, { ...context, catalog });
-            out.targets[key] = used ? { kind: 'root', family: rootMatch[1]!, current: { path: used.path }, root: rootQuestion(inventory, rootMatch[1] as Family, { ...context, catalog }) } : { error: `no ${rootMatch[1]} root is in use here` };
+            const used = rootInUse(inventory, rootFamily, { ...context, catalog });
+            out.targets[key] = used ? { kind: 'root', family: rootFamily, current: { path: used.path }, root: rootQuestion(inventory, rootFamily, { ...context, catalog }) } : { error: `no ${rootFamily} root is in use here` };
             continue;
         }
         // a server left on its own: one question, keep it so or hand it over (spec D6)
-        if (own.has(key))
+        const ownItem = own.get(key);
+        if (ownItem)
         {
-            const ownItem = own.get(key)!;
             out.targets[key] = { row: ownItem.rowId, kind: 'own', current: { name: ownItem.name || ownItem.server || ownItem.connector, scope: ownItem.scope || null, route: null }, own: ownQuestion(ownItem) };
             continue;
         }
         const target = targetOf(inventory, key);
-        const row = target && target.item.rowId && !target.item.alfredRetired ? catalog.byId.get(target.item.rowId) : null;
-        if (!row) { out.targets[key] = { error: `'${key}' is not a catalog tool installed here` }; continue; }
-        const current = target!.kind === 'mcp' ? currentOf(row, target!.item as Registration) : { scope: target!.item.scope } as Partial<Current>;
-        const listed = target!.kind === 'mcp' ? listedOf(inventory, target!.item as InvRegistration) : null;
+        const item = target?.item;
+        const row = item && item.rowId && !item.alfredRetired ? catalog.byId.get(item.rowId) : null;
+        if (!target || !item || !row) { out.targets[key] = { error: `'${key}' is not a catalog tool installed here` }; continue; }
+        // an `mcp:` key names a registration, a `plugin:` key a plugin row
+        const registration = isRegistration(item) ? item : null;
+        const current: Partial<Current> = registration ? currentOf(row, registration) : { scope: item.scope };
+        const listed = registration ? listedOf(inventory, registration) : null;
         out.targets[key] = {
-            row: row.id, kind: target!.kind, current: { name: (target!.item as InvRegistration).name || (target!.item as { id?: string }).id, scope: target!.item.scope, route: current.route || null, ...(target!.kind === 'mcp' ? { clients: listed ? listed.clients : ['claude'] } : {}) },
-            route: target!.kind === 'mcp' ? routeQuestion(row, current.route) : null,
-            ...(target!.kind === 'mcp' ? { clients: targetClientsQuestion(key, (target!.item as InvRegistration).name, listed ? listed.clients : ['claude']) } : {}),
+            row: row.id, kind: target.kind, current: { name: isRegistration(item) ? item.name : item.id, scope: item.scope, route: current.route || null, ...(registration ? { clients: listed ? listed.clients : ['claude'] } : {}) },
+            route: registration ? routeQuestion(row, current.route) : null,
+            ...(registration ? { clients: targetClientsQuestion(key, registration.name, listed ? listed.clients : ['claude']) } : {}),
             ...toolAsk(row, inventory, { route: routes[key], scope: scopes[key], name: names[key], current, context: context, catalog }),
         };
     }
@@ -93,7 +97,7 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
         if (!row || row.kind !== 'mcp') continue;
         const routeId = routes[id] || row.recommendedRoute;
         if (!row.routes[routeId]) continue;
-        const scope = scopes[id] || scopeOrder(row, inventory, { route: routeId, context: context, copyOf: installedOf(inventory, id) })[0]!;
+        const scope = scopes[id] || required(scopeOrder(row, inventory, { route: routeId, context: context, copyOf: installedOf(inventory, id) })[0], `${id}: its ${routeId} route offers no scope`);
         const keyNameAsk = keyNameQuestion(row, routeId, scope, context);
         if (keyNameAsk) out.keyNames[id] = keyNameAsk;
         const urlQuestions = urlNameQuestions(row, routeId, scope, context);
@@ -105,12 +109,13 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
     {
         if (own.has(key)) continue;
         const target = targetOf(inventory, key);
-        const row = target && target.kind === 'mcp' && target.item.rowId && !target.item.alfredRetired ? catalog.byId.get(target.item.rowId) : null;
-        if (!row) continue;
-        const current = currentOf(row, target!.item as Registration);
-        const routeId = (routes[key] || current.route)!;
-        const route = row.routes[routeId];
-        if (!route) continue;
+        const registration = target && isRegistration(target.item) ? target.item : null;
+        const row = registration && registration.rowId && !registration.alfredRetired ? catalog.byId.get(registration.rowId) : null;
+        if (!registration || !row) continue;
+        const current = currentOf(row, registration);
+        const routeId = routes[key] || current.route;
+        const route = routeId ? row.routes[routeId] : undefined;
+        if (!routeId || !route) continue;
         const scope = scopes[key] || current.scope;
         const same = routeId === current.route;
         // the name it uses: the helper's argument; for a stdio key, the name whose value equals the key it holds in the
@@ -118,7 +123,7 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
         let name: string | null = same && route.helper ? current.keyName : null;
         if (same && !route.helper && route.tokenVar)
         {
-            const held = heldKey(live((target!.item as InvRegistration).name, target!.item.scope) || {}, route);
+            const held = heldKey(live(registration.name, registration.scope) || {}, route);
             const keyState = keyStateOf(row, routeId, context, null, scope);
             name = held && keyState ? keys.nameOfValue(keyState.files, held) : null;
         }
@@ -126,7 +131,7 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
         if (keyNameAsk) out.keyNames[key] = keyNameAsk;
         const urlQuestions = urlNameQuestions(row, routeId, scope, context, { current: same ? current.urlNames : null, keyName: name });
         if (urlQuestions.length) out.urlNames[key] = urlBlock(urlQuestions);
-        const settings = settingsQuestion(row, routeId, { entry: same ? (target!.item as InvRegistration).entry : null });
+        const settings = settingsQuestion(row, routeId, { entry: same ? registration.entry : null });
         if (settings) out.settings[key] = settings;
     }
     return out;

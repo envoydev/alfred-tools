@@ -10,7 +10,7 @@ import * as keys from '../keys/keys.ts';
 import * as kept from '../core/kept.ts';
 import * as roots from '../roots/roots.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
-import * as C from './common.ts';
+import * as common from './common.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { InvRegistration } from '../inventory/types.ts';
 import type { Finding, FixCtx } from './types.ts';
@@ -22,7 +22,8 @@ function foreignScript(command: string): { file: string; first: string | undefin
 {
     const argv = helperArgv(command);
     const at = argv.findIndex((argument) => SCRIPT_FILE.test(argument));
-    return at < 0 ? null : { file: argv[at]!, first: argv[at + 1] };
+    const file = argv[at];
+    return file === undefined ? null : { file, first: argv[at + 1] };
 }
 
 // The key's name: the foreign helper's first argument when it is a name a key file of the chain defines and is not shaped
@@ -50,9 +51,9 @@ export function helperForeignDetect(context: FixCtx): Finding[]
 {
     const out: Finding[] = [];
     const resolvedRoots = roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog }).roots;
-    for (const registration of C.registrationsOf(context, 'helper-foreign'))
+    for (const registration of common.registrationsOf(context, 'helper-foreign'))
     {
-        const route = C.routeOf(context, registration);
+        const route = common.routeOf(context, registration);
         const command = registration.entry.headersHelper;
         if (registration.route !== 'remote' || !route || !route.helper || typeof command !== 'string' || helperParts(command)) continue;
         const script = foreignScript(command);
@@ -64,8 +65,8 @@ export function helperForeignDetect(context: FixCtx): Finding[]
         const afterNote = [`${path.basename(script.file)} is no longer used - ${registration.name} runs mcp-headers.js now; the old file is left where it is`, ...(apps.mixed ? [mixedNote([registration.name])] : [])].join('\n');
         const extra = { route: registration.route, roots: resolvedRoots, keyName, cursor: apps.cursor, afterNote, ...(apps.clients ? { clients: apps.clients } : {}) };
         out.push(keys.valueIn(chain, keyName)
-            ? C.finding('helper-foreign', registration, what, extra)
-            : C.finding('helper-foreign', registration, what, { ...extra, blocked: `fill ${keyName} in ${chain[0]}, then run /alfred-tools:fix` }));
+            ? common.finding('helper-foreign', registration, what, extra)
+            : common.finding('helper-foreign', registration, what, { ...extra, blocked: `fill ${keyName} in ${chain[0]}, then run /alfred-tools:fix` }));
     }
     return out;
 }
@@ -75,6 +76,6 @@ export function helperForeignDetect(context: FixCtx): Finding[]
 // and bridge files before it.
 export function helperForeignFix(entry: ServerEntry, finding: Finding, context: FixCtx): ServerEntry
 {
-    const route = C.rowOf(context, finding.row!)!.routes[finding.route!]!;
-    return { ...C.clone(entry), headersHelper: helperFor(route, finding.scope!, { project: context.inventory.project, platform: context.platform, home: context.home, roots: finding.roots }, finding.keyName) };
+    const route = common.findingRoute(context, finding);
+    return { ...common.clone(entry), headersHelper: helperFor(route, common.fieldOf(finding, 'scope'), { project: context.inventory.project, platform: context.platform, home: context.home, roots: finding.roots }, finding.keyName) };
 }

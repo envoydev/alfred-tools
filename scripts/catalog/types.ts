@@ -221,27 +221,13 @@ export interface Choice
     held: Aged[];
 }
 export type FetchFn = (url: string, init: { headers: Record<string, string>; signal: AbortSignal }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
-// The two documents the registries answer, the part read here.
-export interface NpmDoc
-{
-    versions?: Record<string, { deprecated?: unknown } | undefined>;
-    time?: Record<string, string | undefined>;
-}
-export interface PypiFile
-{
-    yanked?: boolean;
-    upload_time_iso_8601?: string;
-    upload_time: string;
-}
-export interface PypiDoc
-{
-    releases?: Record<string, PypiFile[] | null>;
-}
 // What refresh-pins looks a package up with: the registry, or a stand-in in a test.
 export interface RegistryReader
 {
     versionsOf(registry: string, name: string): Promise<Release[]>;
 }
+// One package's lookup, cached per registry and name: its releases, or the error the registry gave.
+export type RegistryLookup = { releases: Release[]; error?: undefined } | { error: Error; releases?: undefined };
 export interface PinChange
 {
     row: string;
@@ -259,6 +245,17 @@ export interface Refresh
     errors: string[];
 }
 
-// alfred-code's files, the part read here.
-export type RetiredRow = { id?: string; name?: string; retiredIn?: string };
-export type AlfredFiles = { plugins: RetiredRow[] | Record<string, RetiredRow>; retired: { mcps?: string[] }; mcpServers: Record<string, unknown> };
+// alfred-code's files, the part read here: meta/retired-plugins.json's rows (a list, or an object keyed by id), the
+// names meta/stack-manifest.json retires, and the server names stack/mcp/original-mcps.json keeps.
+export interface RetiredRow
+{
+    id?: string | undefined;
+    name?: string | undefined;
+    retiredIn?: string | undefined;
+}
+export interface AlfredFiles
+{
+    rows: RetiredRow[];
+    retiredMcps: string[];
+    originalNames: string[];
+}

@@ -12,6 +12,7 @@ import { spawnSync } from 'node:child_process';
 import * as account from '../core/account.ts';
 import { ALFRED_DATA, FILES, FORMER_ROOT_NAME, ROOT_NAME } from '../core/constants.ts';
 import { replaceFile } from '../core/replace-file.ts';
+import { errorCode, isRecord } from '../core/guards.ts';
 import { rootOfEntry, alfredData } from '../entries/locations.ts';
 import { pathFor } from '../entries/platform.ts';
 import { helperParts, bridgeParts, helperNameOf } from '../entries/entry.ts';
@@ -21,7 +22,7 @@ import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Machine, Roots } from '../entries/types.ts';
-import type { Family, IgnoreGap, InUse, InventoryView, MapRead, PendingMove, RecordEntry, Resolved, RootAnswer, RootOption, RootReg, RootsCtx, RootsMap, ShippedKind, ShippedState } from './types.ts';
+import type { Family, IgnoreGap, InUse, InventoryView, MapRead, PendingMove, RecordEntry, Resolved, RootAnswer, RootOption, RootReg, RootsCtx, RootsMap, ShippedKind, ShippedState, StandardRoot } from './types.ts';
 
 // A root folder's names: their home is core/constants.ts, which entries/ and keys/ can import (this file imports both).
 export { FILES, FORMER_ROOT_NAME, ROOT_NAME };
@@ -105,16 +106,19 @@ export function readMap(dataDir: string | null | undefined): MapRead
     const file = path.join(dataDir, FILES.map);
     let text: string;
     try { text = fs.readFileSync(file, 'utf8'); }
-    catch (caught) { const error = caught as NodeJS.ErrnoException; return error.code === 'ENOENT' ? emptyMap() : { ...emptyMap(), note: `${file} cannot be read (${error.code}) - read as empty`, state: 'unreadable' }; }
-    let doc: { version?: unknown; projects?: unknown; global?: unknown } | null;
-    try { doc = JSON.parse(text) as typeof doc; }
+    catch (caught) { const code = errorCode(caught); return code === 'ENOENT' ? emptyMap() : { ...emptyMap(), note: `${file} cannot be read (${code}) - read as empty`, state: 'unreadable' }; }
+    let doc: unknown;
+    try { doc = JSON.parse(text); }
     catch { return { ...emptyMap(), note: `${file} is not JSON - read as empty`, state: 'bad' }; }
-    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return { ...emptyMap(), note: `${file} is not a roots map - read as empty`, state: 'bad' };
-    if (doc.version !== MAP_VERSION) return { ...emptyMap(), note: `${versionNote(file, doc.version, MAP_VERSION)} - read as empty`, state: newerOrBad(doc.version, MAP_VERSION) };
+    if (!isRecord(doc)) return { ...emptyMap(), note: `${file} is not a roots map - read as empty`, state: 'bad' };
+    const version = doc['version'];
+    if (version !== MAP_VERSION) return { ...emptyMap(), note: `${versionNote(file, version, MAP_VERSION)} - read as empty`, state: newerOrBad(version, MAP_VERSION) };
     const projects: Record<string, string> = {};
-    if (doc.projects && typeof doc.projects === 'object' && !Array.isArray(doc.projects))
-        for (const [projectPath, value] of Object.entries(doc.projects)) if (typeof value === 'string' && value) projects[projectPath] = value;
-    return { version: MAP_VERSION, global: typeof doc.global === 'string' && doc.global ? doc.global : null, projects };
+    const mapped = doc['projects'];
+    if (isRecord(mapped))
+        for (const [projectPath, value] of Object.entries(mapped)) if (typeof value === 'string' && value) projects[projectPath] = value;
+    const global = doc['global'];
+    return { version: MAP_VERSION, global: typeof global === 'string' && global ? global : null, projects };
 }
 
 // The map written whole, through a temporary file beside it.
@@ -147,7 +151,7 @@ export function withRoot(map: RootsMap | null | undefined, family: string, proje
 // ---- the root in use ------------------------------------------------------------------------------------------------
 
 // The family's standard folders, in option order before alfred-code's set-up decides: [{ id, root }]
-export function standard(family: string, context: Machine): { id: string; root: string }[]
+export function standard(family: string, context: Machine): [StandardRoot, StandardRoot]
 {
     const pathApi = pathFor(context.platform);
     if (family === 'global') return [{ id: 'alfred-tools', root: pathApi.join(context.home, ROOT_NAME) }, { id: 'home-alfred', root: pathApi.join(context.home, ALFRED_DATA) }];
@@ -205,7 +209,7 @@ export function registrationRoots(inventory: InventoryView, family: Family, cont
     const catalog = catalogOf(context);
     for (const registration of managedRegistrations)
     {
-        const parent = dataParentOf(catalog.byId.get(registration.rowId!), registration.entry, context);
+        const parent = dataParentOf(registration.rowId ? catalog.byId.get(registration.rowId) : null, registration.entry, context);
         if (parent && (known.includes(parent) || Object.values(FILES).some((fileName) => fileName !== FILES.map && exists(pathApi.join(parent, fileName))))) out.push(parent);
     }
     return [...new Set(out)];
@@ -235,8 +239,8 @@ const NAMED_GLOBAL_TAIL = "a project-scope helper does not read keys here - keep
 export function options(inventory: InventoryView, family: Family, context: RootsCtx): RootOption[]
 {
     const exists = existsOf(context);
-    const [alfred, projectAlfredTools] = standard('project', context) as [{ id: string; root: string }, { id: string; root: string }];
-    const [homeAlfredTools, homeAlfred] = standard('global', context) as [{ id: string; root: string }, { id: string; root: string }];
+    const [alfred, projectAlfredTools] = standard('project', context);
+    const [homeAlfredTools, homeAlfred] = standard('global', context);
     const list: RootOption[] = family === 'global'
         ? [
             { ...homeAlfredTools, label: '~/.alfred-tools', description: `${homeAlfredTools.root} - one folder for every project on this machine` },
@@ -250,8 +254,8 @@ export function options(inventory: InventoryView, family: Family, context: Roots
         ];
     const used = inUse(inventory, family, context);
     if (!used) return list;
-    const at = list.findIndex((option) => option.root === used.path);
-    if (at >= 0) return [list[at]!, ...list.filter((_, i) => i !== at)];
+    const usedOption = list.find((option) => option.root === used.path);
+    if (usedOption) return [usedOption, ...list.filter((option) => option !== usedOption)];
     const where = family === 'global' ? 'the keys and data for every project' : "this project's keys and data";
     const tail = family === 'global' && !standard('global', context).some((standardRoot) => standardRoot.root === used.path) ? ` - ${NAMED_GLOBAL_TAIL}` : '';
     return [{ id: 'in-use', root: used.path, label: 'The folder in use', description: `${used.path} - where ${where} are now${tail}` }, ...list].slice(0, 4);
@@ -275,7 +279,8 @@ export function resolveNamed(family: string, text: unknown, context: Machine): {
     const parts = trimmed.split(/[\\/]+/).filter((part) => part && part !== '.');
     if (parts.includes('..')) return { error: `the project root '${trimmed}' must lie inside the project - no '..'` };
     if (!parts.length) return { error: `the project root '${trimmed}' must lie inside the project, not be the project itself` };
-    if (['.git', '.claude'].includes(parts[0]!.toLowerCase())) return { error: `the project root '${trimmed}' cannot be under ${parts[0]} - .git and .claude are not roots` };
+    const [first = ''] = parts;
+    if (['.git', '.claude'].includes(first.toLowerCase())) return { error: `the project root '${trimmed}' cannot be under ${first} - .git and .claude are not roots` };
     return { root: pathApi.join(context.project, ...parts) };
 }
 
@@ -290,7 +295,9 @@ export function resolveRoots(inventory: InventoryView, answers: Partial<Record<F
     {
         const answer = (answers && answers[family]) || null;
         const rootOptions = options(inventory, family, context);
-        if (!answer || !answer.id) { out[family] = rootOptions[0]!.root; continue; }
+        // options always ends on 'A folder you name': the first is there
+        const [recommended] = rootOptions;
+        if (!answer || !answer.id) { out[family] = recommended ? recommended.root : null; continue; }
         if (answer.id === 'named')
         {
             const named = resolveNamed(family, answer.path, context);
@@ -336,7 +343,7 @@ export function pointsIntoRoot(registration: RootReg, inventory: InventoryView, 
     const parent = dataParentOf(registration.rowId ? catalogOf(context).byId.get(registration.rowId) : null, registration.entry, context);
     if (!parent) return null;
     const map = (inventory.roots && inventory.roots.map) || emptyMap();
-    const known = [...standard('project', context), ...standard('global', context)].map((standardRoot) => standardRoot.root).concat([map.global, ...Object.values(map.projects || {})].filter(Boolean) as string[]);
+    const known = [...standard('project', context), ...standard('global', context)].map((standardRoot) => standardRoot.root).concat([map.global, ...Object.values(map.projects || {})].filter((root): root is string => Boolean(root)));
     const exists = existsOf(context);
     return known.includes(parent) || [FILES.secrets, FILES.helper, FILES.record, FILES.list].some((fileName) => exists(pathApi.join(parent, fileName))) ? parent : null;
 }
@@ -420,7 +427,8 @@ export function shippedState(kind: ShippedKind, file: string, exists: (filePath:
     let text: string;
     try { text = fs.readFileSync(file, 'utf8'); }
     catch { return { state: 'absent', number: null }; }
-    const match = SHIPPED_LINE[kind].exec(text.split('\n')[0]!);
+    const [firstLine = ''] = text.split('\n');
+    const match = SHIPPED_LINE[kind].exec(firstLine);
     if (!match) return { state: 'edited', number: null };
     const number = Number(match[2]);
     const version = shippedVersion(kind);

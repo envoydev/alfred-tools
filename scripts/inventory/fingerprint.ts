@@ -4,7 +4,7 @@ import { bridgeParts } from '../entries/entry.ts';
 import { signInParts } from '../entries/sign-in.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Catalog, Fingerprint } from '../catalog/types.ts';
-import type { CatalogMatch } from './types.ts';
+import type { CatalogMatch, InvRegistration } from './types.ts';
 
 // `cmd /c npx ...` and `cmd.exe /d /s /c npx ...` are the Windows spelling of `npx ...`: look through the wrapper.
 export function launchTokens(entry: ServerEntry): { command: string; args: string[] }
@@ -30,10 +30,10 @@ export function bareName(token: string): string
 
 const flagValue = (args: string[], flag: string): string | undefined =>
 {
-    for (let i = 0; i < args.length; i++)
+    for (const [i, argument] of args.entries())
     {
-        if (args[i] === flag) return args[i + 1];
-        if (args[i]!.startsWith(`${flag}=`)) return args[i]!.slice(flag.length + 1);
+        if (argument === flag) return args[i + 1];
+        if (argument.startsWith(`${flag}=`)) return argument.slice(flag.length + 1);
     }
     return undefined;
 };
@@ -43,7 +43,7 @@ export function matchesFingerprint(entry: ServerEntry, fingerprint: Fingerprint)
     // a bridge (0.4.0): `node <root>/mcp-bridge.js <template> ...`, matched by the file's exact name and the template's host
     // and path - never by the URL branch below, which would take every hosted URL for a fingerprint with no host
     const bridge = bridgeParts(entry);
-    if (fingerprint.bridge) return Boolean(bridge) && bridge!.template.replace(/^https?:\/\//i, '').toLowerCase().startsWith(fingerprint.bridge);
+    if (fingerprint.bridge) return bridge !== null && bridge.template.replace(/^https?:\/\//i, '').toLowerCase().startsWith(fingerprint.bridge);
     if (bridge) return false;
     const byUrl = (url: unknown) =>
     {
@@ -82,3 +82,25 @@ export function catalogMatch(entry: ServerEntry | null | undefined, catalog: Cat
     }
     return null;
 }
+
+// ---- what a registration launches -------------------------------------------------------------------------------
+
+// The executable a registration launches, looking through a `cmd /c` wrapper.
+export const launcher = (entry: ServerEntry): string => path.basename(launchTokens(entry).command).replace(/\.(exe|cmd)$/i, '');
+export const launchArgs = (entry: ServerEntry): string[] => launchTokens(entry).args;
+
+// The version a launch pins for a package: '@playwright/mcp@0.0.83' -> '0.0.83', '--from serena-agent@2.1.0' -> '2.1.0',
+// 'mcp-memory-service[sqlite]==12.1.1' -> '12.1.1'. null when the launch names the package with no version.
+export function pinnedVersion(entry: ServerEntry, packageSpec: string): string | null
+{
+    for (const argument of launchArgs(entry).filter((token) => !token.startsWith('-')))
+    {
+        if (bareName(argument) !== packageSpec) continue;
+        const [, version] = /(?:==|@)([^@=\s]+)$/.exec(argument.slice(packageSpec.length)) ?? [];
+        return version ?? null;
+    }
+    return null;
+}
+
+// A registration this plugin manages: not the user's own, not an alfred-code leftover, not one left on its own (spec D6).
+export const isManaged = (registration: InvRegistration): boolean => !registration.own && !registration.alfredRetired && registration.choice !== 'own';

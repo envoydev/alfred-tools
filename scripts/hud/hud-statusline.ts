@@ -13,11 +13,10 @@ import { configDir as accountDir } from '../core/account.ts';
 import { parseJson } from '../core/json-file.ts';
 import { replaceFile } from '../core/replace-file.ts';
 import { pathFor } from '../entries/platform.ts';
+import { isRecord } from '../core/guards.ts';
+import { BUN_SOURCE, DEFAULT_WINDOWS_ROOT, GIT_BASH_SHIM, HUD_NAME, LAUNCHER_FILE, NODE_SOURCE, PROGRAM_FILES_BASH, SKIPPED_GIT_FOLDERS } from './constants.ts';
 import type { Env } from '../core/types.ts';
 import type { Classified, Exists, Expected, ExpectedInput, ShapeVars } from './types.ts';
-
-
-const HUD_NAME = 'claude-hud';
 
 // The Node shape for a bash-run status line (setup.md:199): the marketplace-aware cache glob, the
 // newest version by `sort -V`, COLUMNS exported, `exec` with no second `bash -c` layer.
@@ -35,14 +34,18 @@ const LAUNCHER_POSIX_RE = /^'((?:[^']|'\\'')+)'( --env-file \/dev\/null)? '((?:[
 const LAUNCHER_GITBASH = 'exec "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/statusline.cmd"';
 const unquote = (word: string): string => word.split("'\\''").join("'");
 
-export const fill = (template: string, vars: ShapeVars): string => template.replace(/\{(RUNTIME_PATH|SOURCE|CMD_PATH|WRAPPER_PATH)\}/g, (match, placeholder) => (placeholder in vars ? vars[placeholder as keyof ShapeVars]! : match));
+export function fill(template: string, vars: ShapeVars): string
+{
+    const values = new Map(Object.entries(vars));
+    return template.replace(/\{(RUNTIME_PATH|SOURCE|CMD_PATH|WRAPPER_PATH)\}/g, (match, placeholder: string) => values.get(placeholder) ?? match);
+}
 const escapeRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // A shape as a matcher: the placeholders become captures, everything else literal.
 function shapeRe(template: string, source: string): RegExp
 {
-    const holes: Record<string, string> = { RUNTIME_PATH: '([^"]+)', SOURCE: escapeRe(source || ''), CMD_PATH: '([^"]*cmd\\.exe)', WRAPPER_PATH: '([^"]+)' };
+    const holes = new Map([['RUNTIME_PATH', '([^"]+)'], ['SOURCE', escapeRe(source || '')], ['CMD_PATH', '([^"]*cmd\\.exe)'], ['WRAPPER_PATH', '([^"]+)']]);
     // Windows paths compare without case; the bash shapes byte for byte.
-    return new RegExp(`^${escapeRe(template).replace(/\\\{(RUNTIME_PATH|SOURCE|CMD_PATH|WRAPPER_PATH)\\\}/g, (_match, placeholder) => holes[placeholder]!)}$`, template === CMD_SHAPE ? 'i' : '');
+    return new RegExp(`^${escapeRe(template).replace(/\\\{(RUNTIME_PATH|SOURCE|CMD_PATH|WRAPPER_PATH)\\\}/g, (match, placeholder: string) => holes.get(placeholder) ?? match)}$`, template === CMD_SHAPE ? 'i' : '');
 }
 
 // setup.md:478-485 - the label a statusLine that is not claude-hud's is reported under.
@@ -57,7 +60,7 @@ function sourceLabel(command: string): string
 // The absolute cmd.exe (setup.md:375-376): SystemRoot's System32, else the bare name.
 function cmdPath(env: Env, exists: Exists): string
 {
-    const root = env.SystemRoot || env.SYSTEMROOT || env.windir || 'C:\\Windows';
+    const root = env.SystemRoot || env.SYSTEMROOT || env.windir || DEFAULT_WINDOWS_ROOT;
     const absolutePath = path.win32.join(root, 'System32', 'cmd.exe');
     return exists(absolutePath) ? absolutePath : 'cmd.exe';
 }
@@ -81,7 +84,7 @@ export function gitBash(env: Env, exists: Exists, cwd: string = process.cwd()): 
     if (env.MSYSTEM || /^(msys|cygwin)/.test(env.OSTYPE || '')) return true;
     const pinned = env.CLAUDE_CODE_GIT_BASH_PATH;
     if (pinned && /^(bash|sh)(\.exe)?$/i.test(path.win32.basename(pinned)) && exists(pinned)) return true;
-    if (['C:\\Program Files\\Git\\bin\\bash.exe', 'C:\\Program Files (x86)\\Git\\bin\\bash.exe'].some((bashPath) => exists(bashPath))) return true;
+    if (PROGRAM_FILES_BASH.some((bashPath) => exists(bashPath))) return true;
     const gitPath = pathDirs(env, 'win32').map((directory) => path.win32.join(directory, 'git.exe')).find((candidate) => exists(candidate) && !projectGit(candidate, cwd));
     if (!gitPath) return false;
     // cmd\git.exe or bin\git.exe sits one level under the install, mingw64\bin\git.exe two.
@@ -97,7 +100,7 @@ function projectGit(gitPath: string, cwd: string): boolean
     const dir = norm(path.win32.dirname(gitPath));
     const launch = norm(cwd);
     if (dir === launch) return true;
-    return dir.startsWith(`${launch}\\`) && dir.split('\\').some((segment) => ['node_modules', '.venv', 'env'].includes(segment));
+    return dir.startsWith(`${launch}\\`) && dir.split('\\').some((segment) => SKIPPED_GIT_FOLDERS.includes(segment));
 }
 
 // What this platform's line should be: the bash form (POSIX, or Windows with Git Bash - forward slashes,
@@ -109,13 +112,13 @@ export function expected({ platform, configDir, runtime, env, exists, bash }: Ex
     if (platform !== 'win32' || bash)
     {
         const node = platform === 'win32' ? runtime.replace(/\\/g, '/') : runtime;
-        return { shell: 'bash', command: fill(SORT_V, { RUNTIME_PATH: node, SOURCE: 'dist/index.js' }), launcher: null, hudDir };
+        return { shell: 'bash', command: fill(SORT_V, { RUNTIME_PATH: node, SOURCE: NODE_SOURCE }), launcher: null, hudDir };
     }
-    const wrapper = path.win32.join(configDir, 'plugins', HUD_NAME, 'statusline.mjs');
+    const wrapper = path.win32.join(configDir, 'plugins', HUD_NAME, LAUNCHER_FILE);
     return {
         shell: 'cmd',
         command: fill(CMD_SHAPE, { CMD_PATH: cmdPath(env, exists), RUNTIME_PATH: runtime, WRAPPER_PATH: wrapper }),
-        launcher: { file: path.join(configDir, 'plugins', HUD_NAME, 'statusline.mjs'), wrapper },
+        launcher: { file: path.join(configDir, 'plugins', HUD_NAME, LAUNCHER_FILE), wrapper },
         hudDir,
     };
 }
@@ -135,33 +138,40 @@ export function classify(statusLine: unknown, { platform, want, exists }: { plat
 {
     if (statusLine !== undefined && (statusLine === null || typeof statusLine !== 'object' || Array.isArray(statusLine)))
         return { state: 'foreign', label: 'custom' };
-    const command = statusLine && typeof (statusLine as { command?: unknown }).command === 'string' ? (statusLine as { command: string }).command : '';
+    const command = isRecord(statusLine) && typeof statusLine['command'] === 'string' ? statusLine['command'] : '';
     if (!command.trim()) return { state: 'absent' };
     if (!command.includes(HUD_NAME)) return { state: 'foreign', label: sourceLabel(command) };
     const win = platform === 'win32';
     // Windows takes node only (setup.md:128, :153), never the awk form (setup.md:194), and only the
     // form of the shell that will run it: a bash line cannot run without Git Bash, a cmd line under it.
-    const shapes: [string, string][] = !win ? [[SORT_V, 'dist/index.js'], [AWK_NODE, 'dist/index.js'], [AWK_BUN, 'src/index.ts']]
-        : want.shell === 'bash' ? [[SORT_V, 'dist/index.js']] : [[CMD_SHAPE, '']];
+    const shapes: [string, string][] = !win ? [[SORT_V, NODE_SOURCE], [AWK_NODE, NODE_SOURCE], [AWK_BUN, BUN_SOURCE]]
+        : want.shell === 'bash' ? [[SORT_V, NODE_SOURCE]] : [[CMD_SHAPE, '']];
     // claude-hud 0.11's launcher lines: this account's own launcher copy, on disk, and (POSIX) a runtime that is.
     const hudDir = want.hudDir || '';
     if (hudDir && !win)
     {
-        const match = LAUNCHER_POSIX_RE.exec(command);
-        if (match && exists(unquote(match[1]!)) && unquote(match[3]!) === path.join(hudDir, 'statusline.mjs') && exists(unquote(match[3]!))) return { state: 'current' };
+        // both quoted words are required parts of the pattern, so a match holds them
+        const [, runtimeWord = '', , launcherWord = ''] = LAUNCHER_POSIX_RE.exec(command) ?? [];
+        if (runtimeWord && exists(unquote(runtimeWord)) && unquote(launcherWord) === path.join(hudDir, LAUNCHER_FILE) && exists(unquote(launcherWord))) return { state: 'current' };
     }
     if (hudDir && win && want.shell === 'bash' && command === LAUNCHER_GITBASH
-        && exists(path.join(hudDir, 'statusline.cmd')) && exists(path.join(hudDir, 'statusline.mjs'))) return { state: 'current' };
+        && exists(path.join(hudDir, GIT_BASH_SHIM)) && exists(path.join(hudDir, LAUNCHER_FILE))) return { state: 'current' };
     for (const [shape, source] of shapes)
     {
         const match = shapeRe(shape, source).exec(command);
         if (!match) continue;
+        // each placeholder is a required capture, so a match holds the runtime (and, in the cmd shape, the wrapper)
         if (shape === CMD_SHAPE)
         {
-            const [, , runtime, wrapper] = match;
-            if (exists(runtime!) && wrapper!.toLowerCase() === want.launcher!.wrapper.toLowerCase() && exists(want.launcher!.file)) return { state: 'current' };
+            const [, , runtime = '', wrapper = ''] = match;
+            const { launcher } = want;
+            if (launcher && exists(runtime) && wrapper.toLowerCase() === launcher.wrapper.toLowerCase() && exists(launcher.file)) return { state: 'current' };
         }
-        else if (win ? winRuntimeExists(match[1]!, exists) : exists(match[1]!)) return { state: 'current' };
+        else
+        {
+            const [, runtime = ''] = match;
+            if (win ? winRuntimeExists(runtime, exists) : exists(runtime)) return { state: 'current' };
+        }
     }
     return { state: 'stale' };
 }
@@ -180,13 +190,13 @@ export function removeHudStatusLine(configDir: string, { platform = process.plat
     let text: string;
     try { text = fs.readFileSync(file, 'utf8'); }
     catch { return { removed: false, detail: `${file} is not there - no statusLine to remove` }; }
-    let doc: { statusLine?: unknown; [key: string]: unknown } | null;
-    try { doc = parseJson(text) as { statusLine?: unknown; [key: string]: unknown } | null; } catch { doc = null; }
-    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return { removed: false, detail: `${file} is not a JSON object - its statusLine is left` };
-    if (doc.statusLine === undefined) return { removed: false, detail: `${file} has no statusLine` };
+    let doc: unknown;
+    try { doc = parseJson(text); } catch { doc = null; }
+    if (!isRecord(doc)) return { removed: false, detail: `${file} is not a JSON object - its statusLine is left` };
+    if (doc['statusLine'] === undefined) return { removed: false, detail: `${file} has no statusLine` };
     const bash = platform === 'win32' && gitBash(env, exists, cwd);
     const want = expected({ platform, configDir, runtime: platform === 'win32' ? 'node.exe' : 'node', env, exists, bash });
-    const { state, label } = classify(doc.statusLine, { platform, want, exists });
+    const { state, label } = classify(doc['statusLine'], { platform, want, exists });
     if (state !== 'current' && state !== 'stale') return { removed: false, detail: `the statusLine in ${file} is not claude-hud's (${label || state}) - left as it is` };
     const { statusLine, ...rest } = doc;
     let mode = 0o600;

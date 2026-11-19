@@ -7,6 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ALFRED_DATA } from '../core/constants.ts';
+import { errorCode, isRecord } from '../core/guards.ts';
+import { isInside } from '../entries/platform.ts';
 import type { Env } from '../core/types.ts';
 import type { LineEntry, RawRecord, RecordRead, Role, Workspace, WorkspaceJson, WorkspaceRecord } from './types.ts';
 
@@ -14,7 +16,6 @@ const JSON_NAME = 'workspace.json';
 const LEGACY_NAME = 'workspace';
 const PARENT_RE = /^\.\.(\/\.\.)*$/;
 const isRole = (value: unknown): value is Role => value === 'root' || value === 'standalone';
-const isPlainObject = (value: unknown): boolean => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isPath = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
 
 // One line of the old file: the keyword, whitespace, then the value with its inner whitespace kept (alfred-code's
@@ -23,8 +24,9 @@ function parseLine(raw: string): LineEntry
 {
     const line = raw.trim();
     if (line === '' || line.startsWith('#')) return { kind: 'skip' };
-    const [word] = line.split(/\s+/);
-    const value = line.slice(word!.length).replace(/^\s+/, '');
+    // a line that is not blank has a first word
+    const [word = ''] = line.split(/\s+/);
+    const value = line.slice(word.length).replace(/^\s+/, '');
     if (word === 'parent' && value === 'none') return { kind: 'parent-none' };
     if (word === 'parent' && PARENT_RE.test(value)) return { kind: 'parent', value };
     if (word === 'role' && isRole(value)) return { kind: 'role', value };
@@ -67,7 +69,7 @@ function fromObject(workspaceJson: WorkspaceJson): RawRecord
 const readText = (file: string): { text?: string; missing?: boolean; error?: string | undefined } =>
 {
     try { return { text: fs.readFileSync(file, 'utf8') }; }
-    catch (caught) { const error = caught as NodeJS.ErrnoException; return error.code === 'ENOENT' || error.code === 'ENOTDIR' ? { missing: true } : { error: error.code }; }
+    catch (caught) { const code = errorCode(caught); return code === 'ENOENT' || code === 'ENOTDIR' ? { missing: true } : { error: code }; }
 };
 
 // A record holding both reads parent, as alfred-code's reader does.
@@ -82,14 +84,16 @@ export function readRecord(folder: string): RecordRead | null
     const json = readText(jsonFile);
     const legacy = readText(legacyFile);
     if (json.error) return { error: `cannot be read (${json.error})`, file: jsonFile };
-    if (!json.missing)
+    if (json.text !== undefined)
     {
-        const body = json.text!.replace(/^﻿/, '');
+        const body = json.text.replace(/^﻿/, '');
         let parsed: WorkspaceJson = {};
         if (body.trim() !== '')
         {
-            try { parsed = JSON.parse(body) as WorkspaceJson; } catch { return { error: 'not JSON', file: jsonFile }; }
-            if (!isPlainObject(parsed)) return { error: 'not JSON', file: jsonFile };
+            let doc: unknown;
+            try { doc = JSON.parse(body); } catch { return { error: 'not JSON', file: jsonFile }; }
+            if (!isRecord(doc)) return { error: 'not JSON', file: jsonFile };
+            parsed = doc;
         }
         const record = fromObject(parsed);
         if (legacy.text !== undefined)
@@ -102,12 +106,12 @@ export function readRecord(folder: string): RecordRead | null
         return shape(finish(record));
     }
     if (legacy.missing) return null;
-    if (legacy.error) return { error: `cannot be read (${legacy.error})`, file: legacyFile };
-    return shape(finish(parseLegacy(legacy.text!)));
+    if (legacy.error || legacy.text === undefined) return { error: `cannot be read (${legacy.error})`, file: legacyFile };
+    return shape(finish(parseLegacy(legacy.text)));
 }
 
 const NONE = (notes: string[] = []): Workspace => ({ root: null, members: [], ancestors: [], notes });
-const inside = (child: string, root: string): boolean => { const relativePath = path.relative(root, child); return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath); };
+const inside = (child: string, root: string): boolean => isInside(path, root, child, { orSame: false });
 const at = (folder: string, relativePath: string): string => path.resolve(folder, relativePath.replace(/\\/g, '/'));
 // alfred-code's own rule (stack/hooks/docs.js dataRoot): an absolute ALFRED_CODE_DATA_PATH moves its data folder away
 const movedData = (env: Env | null | undefined): boolean => /^(?:\/|[A-Za-z]:[\\/])/.test(String((env || {}).ALFRED_CODE_DATA_PATH || '').trim());
@@ -130,7 +134,7 @@ export function workspaceOf(project: string, env: Env = process.env): Workspace
     // up: parent by parent to the folder whose role is root
     const chain = [];
     const seen = new Set();
-    let root: string | null = null;
+    let found: string | null = null;
     for (let folder = start; ;)
     {
         if (seen.has(folder)) return NONE();
@@ -139,10 +143,13 @@ export function workspaceOf(project: string, env: Env = process.env): Workspace
         if (!record) return NONE();
         if (record.error) return NONE([`${record.file} is not JSON - read as no workspace`]);
         if (record.parent) { chain.push(folder); folder = at(folder, record.parent); continue; }
-        if (record.role === 'root') { root = folder; break; }
+        if (record.role === 'root') { found = folder; break; }
         if (record.role === 'standalone') return NONE([`${folder} is standalone`]);
         return NONE();
     }
+    // the loop leaves only by its break, with the root found
+    const root = found;
+    if (root === null) return NONE();
 
     // down: each child its parent lists whose own record names that parent, and that no ignoredChildren above names
     const notes: string[] = [];
@@ -157,7 +164,7 @@ export function workspaceOf(project: string, env: Env = process.env): Workspace
         {
             const child = at(folder, childPath);
             if (visited.has(child)) { notes.push(`${child} is listed twice in the workspace - read once`); continue; }
-            if (!inside(child, root!)) { notes.push(`${child} is listed as a child of ${folder} but lies outside the workspace root ${root} - not a member`); continue; }
+            if (!inside(child, root)) { notes.push(`${child} is listed as a child of ${folder} but lies outside the workspace root ${root} - not a member`); continue; }
             visited.add(child);
             if (ignores.some((ignoredFolder) => child === ignoredFolder || inside(child, ignoredFolder))) continue;
             if (!fs.existsSync(child)) { notes.push(`${child} is listed as a child of ${folder} but is missing - skipped`); continue; }
@@ -167,9 +174,9 @@ export function workspaceOf(project: string, env: Env = process.env): Workspace
             walk(child, ignores);
         }
     };
-    walk(root!, []);
+    walk(root, []);
     if (start !== root && !members.includes(start)) return NONE();
-    const ancestors = chain.slice(1).concat(start === root ? [] : [root!]);
+    const ancestors = chain.slice(1).concat(start === root ? [] : [root]);
     return { root, members, ancestors, notes };
 }
 

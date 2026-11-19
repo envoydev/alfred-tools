@@ -20,10 +20,10 @@ import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import * as workspace from '../roots/workspace.ts';
 import { deepEqual } from '../core/json-file.ts';
 import * as serenaConfig from '../apply/serena-config.ts';
-import { isManaged } from './common.ts';
+import { fieldOf, isManaged } from './common.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRow } from '../catalog/types.ts';
-import type { ListServer, OldRecord } from '../mcps-list/types.ts';
+import type { ListServer } from '../mcps-list/types.ts';
 import type { CursorWritePlanStep, ListCtx, ListWriteStep, McpAddStep, McpReplaceStep, PlannedServer, PlanStep, SerenaBaseModesStep, SerenaConfigInitStep, SerenaProjectFolderStep } from '../plan/types.ts';
 import type { DriftWhere, Finding, FixCtx } from './types.ts';
 
@@ -48,7 +48,8 @@ export function listImportDetect(context: FixCtx): Finding[]
         // a list or record this plugin cannot read, or one a newer plugin wrote, is left as it is
         if (list && list.note) continue;
         const servers = importUnlisted(context.inventory, family, context.catalog, { roots: resolvedRoots, platform: context.platform });
-        const file = list ? list.file : resolvedRoots[family] ? pathApi.join(resolvedRoots[family]!, roots.FILES.list) : null;
+        const familyRoot = resolvedRoots[family];
+        const file = list ? list.file : familyRoot ? pathApi.join(familyRoot, roots.FILES.list) : null;
         if (!file) continue;
         const beside = pathApi.join(pathApi.dirname(file), roots.FILES.record);
         const record = list && list.old ? list.old : fs.existsSync(beside) ? beside : null;
@@ -72,17 +73,18 @@ export function listImportSteps(finding: Finding, context: FixCtx): PlanStep[]
         steps.push({ op: 'root-ignore', path: root, why: `the new root ${root}: its .gitignore keeps the key file, the list and the data out of git` });
     const read = lists.readList(finding.name);
     const own = read && !read.state ? read.own : [];
-    const old = finding.record ? roots.ownOnly((lists.readOldRecord(finding.record) || {} as Partial<OldRecord>).servers) : [];
+    const record = finding.record ? lists.readOldRecord(finding.record) : null;
+    const old = finding.record ? roots.ownOnly(record ? record.servers : undefined) : [];
     const have = new Set(own.map(roots.recordKey));
     const keep = [...own, ...old.filter((entry) => !have.has(roots.recordKey(entry)))];
     // a server brought for Cursor whose helper is this plugin's gets Cursor's bridge copy, so the bridge is in the root
-    const twoForms = finding.servers!.filter((server) => (server.clients || []).includes('cursor') && helperParts(server.entry.headersHelper));
+    const twoForms = fieldOf(finding, 'servers').filter((server) => (server.clients || []).includes('cursor') && helperParts(server.entry.headersHelper));
     const bridge = pathApi.join(root, roots.FILES.bridge);
     if (twoForms.length && ['absent', 'lower'].includes(roots.shippedState('bridge', bridge).state))
         steps.push({ op: 'write-bridge', path: root, why: `${root}: mcp-bridge.js, which fills a hosted URL from .mcps-secrets each time the server starts` });
     const write: ListWriteStep = {
-        op: 'list-write', file: finding.name, family: finding.family!,
-        upserts: finding.servers!.map((server) => ({ server: twoForms.includes(server) ? { ...server, form: 'two' } : server, after: null, cursorFile: null })), drops: [],
+        op: 'list-write', file: finding.name, family: fieldOf(finding, 'family'),
+        upserts: fieldOf(finding, 'servers').map((server) => ({ server: twoForms.includes(server) ? { ...server, form: 'two' } : server, after: null, cursorFile: null })), drops: [],
         own: finding.record ? { entries: [], keep, live: null } : null,
         why: `${finding.name}: the servers alfred-tools manages, as read, and the ones left on their own`,
     };
@@ -90,7 +92,7 @@ export function listImportSteps(finding: Finding, context: FixCtx): PlanStep[]
     if (finding.record) steps.push({ op: 'retire-record', file: finding.record, why: `${finding.record}: the 0.4.x record - its entries are in ${finding.name} now` });
     const map = (context.inventory.roots && context.inventory.roots.map) || null;
     const mapped = !map ? null : finding.family === 'global' ? map.global : (map.projects || {})[roots.mapKey(context.inventory.project)];
-    if (mapped !== root) steps.push({ op: 'record-root', family: finding.family!, project: context.inventory.project, root, why: `the ${finding.family} root ${root}: written to the roots map, so the commands find it again` });
+    if (mapped !== root) steps.push({ op: 'record-root', family: fieldOf(finding, 'family'), project: context.inventory.project, root, why: `the ${finding.family} root ${root}: written to the roots map, so the commands find it again` });
     return [...steps, ...cursorStepsOf(write, context)];
 }
 
@@ -101,7 +103,7 @@ function cursorStepsOf(write: ListWriteStep, context: FixCtx): CursorWritePlanSt
 {
     if (!write.upserts.some((upsert) => (upsert.server.clients || []).includes('cursor'))) return [];
     const tctx: ListCtx = { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env, catalog: context.catalog, roots: rootsOf(context), uses: [] };
-    const out = { steps: [write] as PlanStep[], notes: [] as string[], errors: [] as string[] };
+    const out: { steps: PlanStep[]; notes: string[]; errors: string[] } = { steps: [write], notes: [], errors: [] };
     const planned = cursorSteps(context.inventory, tctx, out, {});
     return out.errors.length ? [] : planned;
 }
@@ -115,7 +117,7 @@ export function readGuardDetect(context: FixCtx): Finding[]
 {
     const pathApi = pathOf(context);
     const resolvedRoots = rootsOf(context);
-    const seen = [...new Set([resolvedRoots.project, resolvedRoots.global].filter(Boolean) as string[])];
+    const seen = [...new Set([resolvedRoots.project, resolvedRoots.global].filter((root): root is string => Boolean(root)))];
     const why: string[] = [];
     const want: string[] = [];
     const has = (name: string) => seen.find((root) => fs.existsSync(pathApi.join(root, name)));
@@ -138,7 +140,7 @@ export function readGuardDetect(context: FixCtx): Finding[]
     return out;
 }
 
-export const readGuardSteps = (finding: Finding) => [denyReadStep(finding.name, finding.rules!)];
+export const readGuardSteps = (finding: Finding) => [denyReadStep(finding.name, fieldOf(finding, 'rules'))];
 
 // serena-base-modes (0.5.0, D7): a managed serena's home, other than an alfred-code 2.x one, whose serena_config.yml
 // lists base modes. Read by serena-config.ts, which reads that key alone and never the file's other lines.
@@ -160,7 +162,7 @@ export function serenaBaseModesDetect(context: FixCtx): Finding[]
     return out;
 }
 
-export const serenaBaseModesSteps = (finding: Finding): SerenaBaseModesStep[] => [{ op: 'serena-base-modes', file: finding.file!, shared: finding.shared, why: `${finding.file}: base_modes: [], so serena's manual names only the tools it has` }];
+export const serenaBaseModesSteps = (finding: Finding): SerenaBaseModesStep[] => [{ op: 'serena-base-modes', file: fieldOf(finding, 'file'), shared: finding.shared, why: `${finding.file}: base_modes: [], so serena's manual names only the tools it has` }];
 
 // serena-project-folder (0.6.0, Part B): a managed serena's home, other than an alfred-code 2.x one and one holding a $, whose
 // serena_config.yml lacks project_serena_folder_location or holds another value - or is not there yet. The steps write the
@@ -185,8 +187,8 @@ export function serenaProjectFolderDetect(context: FixCtx): Finding[]
 
 export const serenaProjectFolderSteps = (finding: Finding): (SerenaConfigInitStep | SerenaProjectFolderStep)[] =>
 {
-    const file = finding.file!;
-    const home = finding.path!;
+    const file = fieldOf(finding, 'file');
+    const home = fieldOf(finding, 'path');
     const init: SerenaConfigInitStep[] = serenaConfig.folderState(file, home) === 'absent' && !fs.existsSync(file) ? [{ op: 'serena-config-init', file, home, why: `${file}: written with its project folders under ${home}/projects` }] : [];
     return [...init, { op: 'serena-project-folder', file, home, why: `${file}: ${serenaConfig.FOLDER_KEY} under ${home}/projects, so serena keeps each project's .serena folder there` }];
 };
@@ -203,7 +205,7 @@ const usableList = (context: FixCtx, family: 'project' | 'global') => { const li
 // Does a copy hold a key-shaped string outside its route's key field? Tested here, never returned.
 function keyGuardOf(copy: ServerEntry, row: CatalogRow | null | undefined, routeId: string | null | undefined): boolean
 {
-    const route = row && row.routes ? row.routes[routeId!] : null;
+    const route = row && row.routes && routeId ? row.routes[routeId] : null;
     const field = new Set(keys.tokenFields(copy, route).map((tokenField) => tokenField.at.join('.')));
     let hit = false;
     const walk = (node: unknown, at: string[]) =>
@@ -228,7 +230,7 @@ function driftOf(server: ListServer, app: string, change: string, { list, family
 // Keeping it would blank the other app's working key, so only Restore and Leave are offered.
 function keyEmptyOf(copy: ServerEntry, want: ServerEntry, row: CatalogRow | null | undefined, routeId: string | null | undefined): boolean
 {
-    const route = row && row.routes ? row.routes[routeId!] : null;
+    const route = row && row.routes && routeId ? row.routes[routeId] : null;
     const fields = keys.tokenFields(copy, route);
     return fields.length > 0 && fields.every((tokenField) =>
     {
@@ -248,7 +250,7 @@ export function clientDriftDetect(context: FixCtx): Finding[]
     const same = (left: unknown, right: unknown) => deepEqual(left, right);
     const compare = (copy: ServerEntry | undefined, want: ServerEntry, server: ListServer, app: string, where: DriftWhere) =>
     {
-        const row = catalog.byId.get(server.row!);
+        const row = server.row ? catalog.byId.get(server.row) : undefined;
         if (copy === undefined) return out.push(driftOf(server, app, 'missing', where));
         if (same(kept.maskCredentials(copy, row), kept.maskCredentials(want, row))) return undefined;
         return out.push(driftOf(server, app, 'differs', { ...where, keyGuard: keyGuardOf(copy, row, server.route), keyEmpty: keyEmptyOf(copy, want, row, server.route), rowGone: !cursorMcp.matchesRow(copy, row) }));
@@ -268,11 +270,13 @@ export function clientDriftDetect(context: FixCtx): Finding[]
         const file = cursorMcp.fileFor(family, cctx);
         const read = cursorMcp.readCursor(file);
         if (read.state !== 'ok' && read.state !== 'absent') continue;
-        const have = read.doc!.mcpServers;
+        const have = read.servers;
         for (const [name, managed] of cursorMcp.managedSet([{ file: list.file, scopes: SCOPES[family], servers }]))
         {
+            // managedSet names only the servers it was given
             const server = servers.find((candidate) => candidate.name === name && candidate.scope === managed.scope);
-            compare(Object.hasOwn(have, name) ? have[name] : undefined, managed.entry, server!, 'cursor', { ...where, file });
+            if (!server) continue;
+            compare(Object.hasOwn(have, name) ? have[name] : undefined, managed.entry, server, 'cursor', { ...where, file });
         }
     }
     // a workspace member's copies of the folders above's project servers (D4a): compared with the folder above's entry
@@ -294,8 +298,9 @@ export function clientDriftDetect(context: FixCtx): Finding[]
                     if (seen.has(name)) continue;
                     seen.add(name);
                     const server = ancestorList.servers.find((candidate) => candidate.name === name && candidate.scope === managed.scope);
+                    if (!server) continue;
                     const before = out.length;
-                    compare(Object.hasOwn(read.doc!.mcpServers, name) ? read.doc!.mcpServers[name] : undefined, managed.entry, server!, 'cursor', { list: ancestorList.file, family: 'project', file, inherited: up });
+                    compare(Object.hasOwn(read.servers, name) ? read.servers[name] : undefined, managed.entry, server, 'cursor', { list: ancestorList.file, family: 'project', file, inherited: up });
                     // an inherited copy is the folder above's to change: Restore or Leave only
                     for (const finding of out.slice(before)) { finding.keyGuard = false; finding.rowGone = false; }
                 }
@@ -309,34 +314,37 @@ export function clientDriftDetect(context: FixCtx): Finding[]
 // The steps of one answered finding. answer: keep | restore | leave | drop.
 export function clientDriftSteps(finding: Finding, context: FixCtx, input: Record<string, string> = {}): PlanStep[]
 {
-    const answer = input[finding.driftKey!];
+    const answer = input[fieldOf(finding, 'driftKey')];
     const catalog = context.catalog;
-    const row = catalog.byId.get(finding.row!);
-    const read = lists.readList(finding.list!);
+    const row = catalog.byId.get(fieldOf(finding, 'row'));
+    const read = lists.readList(fieldOf(finding, 'list'));
     const listServer = read && !read.state ? read.servers.find((candidate) => candidate.name === finding.name && candidate.scope === finding.scope) : null;
     if (!listServer || answer === 'leave') return [];
     const key = `mcp:${finding.name}~${finding.scope}`;
-    const why = `${finding.name} (${finding.scope}): ${answer === 'keep' ? `the change in ${APP_LABELS[finding.app!]} kept` : answer === 'drop' ? `${APP_LABELS[finding.app!]} taken off its list entry` : `${APP_LABELS[finding.app!]}'s copy restored from the list`}`;
-    const listStep = (server: PlannedServer | null): ListWriteStep => ({ op: 'list-write', file: finding.list!, family: finding.family!, upserts: server ? [{ server, after: null, cursorFile: null }] : [], drops: server ? [] : [{ key, after: null }], own: null, why: `${finding.list}: ${why}` });
+    const why = `${finding.name} (${finding.scope}): ${answer === 'keep' ? `the change in ${APP_LABELS[fieldOf(finding, 'app')]} kept` : answer === 'drop' ? `${APP_LABELS[fieldOf(finding, 'app')]} taken off its list entry` : `${APP_LABELS[fieldOf(finding, 'app')]}'s copy restored from the list`}`;
+    const listStep = (server: PlannedServer | null): ListWriteStep => ({ op: 'list-write', file: fieldOf(finding, 'list'), family: fieldOf(finding, 'family'), upserts: server ? [{ server, after: null, cursorFile: null }] : [], drops: server ? [] : [{ key, after: null }], own: null, why: `${finding.list}: ${why}` });
     // Cursor's copy of this one name, the file's other entries as they are
-    const cursorStep = (): CursorWritePlanStep => ({ op: 'cursor-write', file: finding.file || cursorMcp.fileFor(finding.family!, cursorCtx(context)), family: finding.family!, lists: [{ file: finding.list!, scopes: finding.inherited ? ['project'] : SCOPES[finding.family as keyof typeof SCOPES] }], before: [finding.name], only: [finding.name], skip: [], replace: [], why: `${finding.file || 'Cursor'}: ${why}` });
+    const cursorStep = (): CursorWritePlanStep => ({ op: 'cursor-write', file: finding.file || cursorMcp.fileFor(fieldOf(finding, 'family'), cursorCtx(context)), family: fieldOf(finding, 'family'), lists: [{ file: fieldOf(finding, 'list'), scopes: finding.inherited ? ['project'] : fieldOf(finding, 'family') === 'global' ? SCOPES.global : SCOPES.project }], before: [finding.name], only: [finding.name], skip: [], replace: [], why: `${finding.file || 'Cursor'}: ${why}` });
     const registration = (context.inventory.registrations || []).find((candidate) => candidate.name === finding.name && candidate.scope === finding.scope && candidate.scope !== 'inherited');
     const claudeStep = (entry: ServerEntry): McpReplaceStep | McpAddStep => (registration
-        ? { op: 'mcp-replace', name: finding.name, scope: finding.scope!, old: registration.entry, entry, row: finding.row!, route: finding.route!, why }
-        : { op: 'mcp-add', name: finding.name, scope: finding.scope!, entry, row: finding.row!, route: finding.route!, why });
-    const cursorCopy = () => { const cursorRead = cursorMcp.readCursor(finding.file!); return cursorRead.state === 'ok' ? cursorRead.doc!.mcpServers[finding.name] : undefined; };
+        ? { op: 'mcp-replace', name: finding.name, scope: fieldOf(finding, 'scope'), old: registration.entry, entry, row: fieldOf(finding, 'row'), route: fieldOf(finding, 'route'), why }
+        : { op: 'mcp-add', name: finding.name, scope: fieldOf(finding, 'scope'), entry, row: fieldOf(finding, 'row'), route: fieldOf(finding, 'route'), why });
+    const cursorCopy = () => { const cursorRead = cursorMcp.readCursor(fieldOf(finding, 'file')); return cursorRead.state === 'ok' ? cursorRead.servers[finding.name] : undefined; };
     if (finding.inherited) return answer === 'restore' ? [cursorStep()] : [];
     if (answer === 'restore')
     {
         if (finding.app === 'cursor') return [cursorStep()];
         // the list holds each key value as the marker: from the registration as read, else from the key files
         let entry = listServer.entry;
-        if (kept.holdsKept(entry) && registration) { const restored = kept.restore(entry, registration.entry, row); if (!restored.error) entry = restored.entry!; }
-        if (kept.holdsKept(entry) && listServer.key && row && row.routes[listServer.route!] && row.routes[listServer.route!]!.tokenVar)
+        if (kept.holdsKept(entry) && registration) { const restored = kept.restore(entry, registration.entry, row); if (restored.error === undefined) entry = restored.entry; }
+        const routeId = listServer.route;
+        const route = row && routeId ? row.routes[routeId] : undefined;
+        const tokenVar = route && route.tokenVar;
+        if (kept.holdsKept(entry) && listServer.key && row && routeId && tokenVar)
         {
             const resolvedRoots = roots.resolveRoots(context.inventory, null, { project: context.inventory.project, home: context.home, platform: context.platform, catalog }).roots;
-            const at = keys.valueIn(keys.stdioChain({ scope: finding.scope!, projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global, platform: context.platform }), listServer.key);
-            if (at) entry = keys.fillKeys(entry, row, listServer.route!, finding.scope!, { [row.routes[listServer.route!]!.tokenVar!]: at.value });
+            const at = keys.valueIn(keys.stdioChain({ scope: fieldOf(finding, 'scope'), projectRoot: resolvedRoots.project, globalRoot: resolvedRoots.global, platform: context.platform }), listServer.key);
+            if (at) entry = keys.fillKeys(entry, row, routeId, fieldOf(finding, 'scope'), { [tokenVar]: at.value });
         }
         if (kept.holdsKept(entry)) throw new Error(`${finding.name} (${finding.scope}): the list's entry holds a key ${listServer.key ? `named ${listServer.key} ` : ''}that is filled nowhere - fill it, then run fix again`);
         return [claudeStep(entry)];
@@ -350,15 +358,25 @@ export function clientDriftSteps(finding: Finding, context: FixCtx, input: Recor
     if (finding.rowGone) return [listStep(null)];
     if (finding.app === 'claude')
     {
-        const server = { ...listServer, entry: kept.maskCredentials(registration!.entry, row) };
-        if (listServer.cursorEntry) server.cursorEntry = cursorMcp.bridgeFormOf(registration!.entry, catalog, listServer.cursorEntry) || listServer.cursorEntry;
+        // Keep takes Claude Code's entry as read: the drift was found on it
+        if (!registration) throw new Error(`${finding.name} (${finding.scope}): no registration to keep - run fix again`);
+        const server = { ...listServer, entry: kept.maskCredentials(registration.entry, row) };
+        if (listServer.cursorEntry) server.cursorEntry = cursorMcp.bridgeFormOf(registration.entry, catalog, listServer.cursorEntry) || listServer.cursorEntry;
         return [listStep(server), ...((listServer.clients || []).includes('cursor') ? [cursorStep()] : [])];
     }
     const copy = cursorCopy();
-    if (listServer.cursorEntry) return [listStep({ ...listServer, cursorEntry: kept.maskCredentials(copy!, row) })];
+    if (listServer.cursorEntry)
+    {
+        // a copy gone since it was read leaves the list's entry with no Cursor copy, as it did
+        const server: PlannedServer = { ...listServer };
+        if (copy) server.cursorEntry = kept.maskCredentials(copy, row);
+        else delete server.cursorEntry;
+        return [listStep(server)];
+    }
     // a one-form entry: Claude Code takes Cursor's copy, its key fields from the registration as read
+    if (!copy) throw new Error(`${finding.name} (${finding.scope}): Cursor's copy is not in ${finding.file} any more - run fix again`);
     const back = registration ? kept.restore(kept.maskCredentials(copy, row), registration.entry, row) : { error: 'none' };
-    return [claudeStep(back.error ? copy! : back.entry!), listStep({ ...listServer, entry: kept.maskCredentials(copy!, row) })];
+    return [claudeStep(back.error === undefined ? back.entry : copy), listStep({ ...listServer, entry: kept.maskCredentials(copy, row) })];
 }
 
 // cursor-file (advice): a Cursor file alfred-tools will not write, with what to do.

@@ -6,17 +6,15 @@ import type { ListServer } from '../mcps-list/types.ts';
 // Cursor's <folder>/.cursor/mcp.json: Cursor's own file, its key read by name.
 export interface CursorDoc
 {
-    mcpServers: ServerMap; // Cursor's - do not rename
+    mcpServers: Record<string, unknown>; // Cursor's - do not rename; each entry as the file holds it
     [key: string]: unknown;
 }
-export interface CursorRead
-{
-    state: 'absent' | 'ok' | 'symlink' | 'bad' | 'shape';
-    doc: CursorDoc | null;
-    lineEnd: string;
-    error?: string | undefined;
-    text?: string;
-}
+// A file read: its document and its servers of the shape Claude Code writes, where it has them (`ok`, or `absent` -
+// none yet), else why not. An entry of another shape is in `doc` only: the user's own is carried through unchanged.
+export type CursorRead =
+    | { state: 'ok'; doc: CursorDoc; servers: ServerMap; lineEnd: string; text: string }
+    | { state: 'absent'; doc: CursorDoc; servers: ServerMap; lineEnd: string }
+    | { state: 'symlink' | 'bad' | 'shape'; doc: null; lineEnd: string; error?: string | undefined };
 
 // A server a list sets up for Cursor: its entry for Cursor, its scope and list, and the row, route and key it holds.
 export interface Managed

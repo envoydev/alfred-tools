@@ -38,11 +38,7 @@ export interface McpsList
 }
 export type ReadState = 'unreadable' | 'bad' | 'newer';
 // The list as read: empty with a note and why when the file could not be taken.
-export interface ListRead extends McpsList
-{
-    note?: string;
-    state?: ReadState;
-}
+export type ListRead = McpsList & ({ note?: undefined; state?: undefined } | { note: string; state: ReadState });
 
 // <root>/<roots.FILES.record>, the 0.2.0-0.4.x record (stored - do not rename).
 export interface OldRecord
@@ -95,13 +91,4 @@ export interface FileOps
     read?: (file: string, encoding: 'utf8') => string;
     write?: (file: string, text: string) => void;
     rename?: (from: string, to: string) => void;
-}
-
-// A list or record file as parsed, before it is checked.
-export interface RawDoc
-{
-    version?: unknown;
-    servers?: unknown;
-    own?: unknown;
-    cursorOffer?: unknown;
 }

@@ -66,11 +66,18 @@ function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: str
         const out: string[] = [];
         for (let i = 0; i < args.length; i++)
         {
-            if (args[i]!.startsWith('-')) { out.push(args[i]!); if (UVX_VALUE.has(args[i]!)) out.push(args[++i]!); continue; }
-            out.push(args[i]!, '--help');
-            break;
+            const argument = args[i];
+            if (argument === undefined) break;
+            if (!argument.startsWith('-')) { out.push(argument, '--help'); break; }
+            out.push(argument);
+            if (!UVX_VALUE.has(argument)) continue;
+            // an option that takes a value keeps it; one written last has none to keep
+            const value = args[++i];
+            if (value !== undefined) out.push(value);
         }
         what = out[out.indexOf('--from') + 1] || out[out.length - 2];
+        // a uvx launch with no arguments names nothing to fetch
+        if (what === undefined) return null;
         argv = ['uvx', ...out];
     }
     else if (/^docker(\.exe)?$/i.test(cmd || ''))
@@ -81,6 +88,6 @@ function fetchOf(name: string, entry: ServerEntry | null | undefined, rowId: str
     }
     else return null;
     if (viaCmd) argv = [entry.command, '/c', ...argv];
-    return { op: 'fetch', name, row: rowId, what: what!, argv, env: entry.env || {}, why: `${rowId || name}: fetch ${what} so the first start answers in time` };
+    return { op: 'fetch', name, row: rowId, what, argv, env: entry.env || {}, why: `${rowId || name}: fetch ${what} so the first start answers in time` };
 }
 

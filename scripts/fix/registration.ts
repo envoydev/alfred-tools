@@ -9,17 +9,23 @@ import { pythonRequest, isWindowsArm, pathFor } from '../entries/platform.ts';
 import { validWindowsSerenaHome, serenaWindowsHome, serenaSpaceFree } from '../entries/locations.ts';
 import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
-import * as C from './common.ts';
+import * as common from './common.ts';
 import { ONE_VAR } from './constants.ts';
 import { windowsMcpServers, fromHere } from '../inventory/inventory.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import type { Env, ServerEntry } from '../core/types.ts';
 import type { CatalogRoute } from '../catalog/types.ts';
-import type { Root } from '../entries/types.ts';
 import type { InvRegistration, WindowsMcp } from '../inventory/types.ts';
 import type { Finding, FixCtx, MachineProbe } from './types.ts';
 
-const eachReg = (context: FixCtx, id: string, toFinding: (registration: InvRegistration, route: CatalogRoute) => Finding | null): Finding[] => C.registrationsOf(context, id).map((registration) => toFinding(registration, C.routeOf(context, registration)!)).filter(Boolean) as Finding[];
+// Each managed registration of a fix row with its catalog route, through `toFinding`: a registration this row covers has
+// matched one of the row's routes.
+const eachReg = (context: FixCtx, id: string, toFinding: (registration: InvRegistration, route: CatalogRoute) => Finding | null): Finding[] => common.registrationsOf(context, id).flatMap((registration) =>
+{
+    const route = common.routeOf(context, registration);
+    const found = route ? toFinding(registration, route) : null;
+    return found ? [found] : [];
+});
 
 // ---- serena-windows-home --------------------------------------------------------------------------------------------
 // SERENA_HOME absolute, in backslashes and space-free. A value that is only wrong in its slashes keeps its folder (so the
@@ -45,11 +51,11 @@ export function serenaWindowsHomeDetect(context: FixCtx): Finding[]
         const faults = [!path.win32.isAbsolute(value) && 'not absolute', value.includes('/') && 'forward slashes', /\s/.test(value) && 'a space'].filter(Boolean);
         const what = `SERENA_HOME is '${value}' (${faults.join(', ')})`;
         const same = windowsHomeOf(value, context);
-        if (validWindowsSerenaHome(same)) return C.finding('serena-windows-home', registration, what, { proposal: { SERENA_HOME: same }, note: `same folder, written absolute with backslashes: ${same}` });
+        if (validWindowsSerenaHome(same)) return common.finding('serena-windows-home', registration, what, { proposal: { SERENA_HOME: same }, note: `same folder, written absolute with backslashes: ${same}` });
         const fresh = serenaWindowsHome({ home: context.home });
-        if (fresh.root) return C.finding('serena-windows-home', registration, what, { proposal: { SERENA_HOME: (fresh.root as Extract<Root, { kind: 'abs' }>).path }, note: `a new home, ${(fresh.root as Extract<Root, { kind: 'abs' }>).path} - serena's data in '${value}' is not moved and its language servers download again (~327MB)` });
-        if (registration.scope === 'project') return C.finding('serena-windows-home', registration, what, { blocked: SPACED_PROJECT });
-        return C.finding('serena-windows-home', registration, what, { input: { id: 'serenaHome', prompt: fresh.needsInput } });
+        if (fresh.root) return common.finding('serena-windows-home', registration, what, { proposal: { SERENA_HOME: fresh.root.path }, note: `a new home, ${fresh.root.path} - serena's data in '${value}' is not moved and its language servers download again (~327MB)` });
+        if (registration.scope === 'project') return common.finding('serena-windows-home', registration, what, { blocked: SPACED_PROJECT });
+        return common.finding('serena-windows-home', registration, what, { input: { id: 'serenaHome', prompt: fresh.needsInput } });
     });
 }
 
@@ -61,9 +67,9 @@ function unsetSerenaHome(registration: InvRegistration, context: FixCtx): Findin
     const profile = context.home || '';
     if (!/\s/.test(profile)) return null;
     const what = `no SERENA_HOME: serena's default home, ${path.win32.join(profile, '.serena')}, has a space`;
-    if (registration.scope === 'project') return C.finding('serena-windows-home', registration, what, { blocked: SPACED_PROJECT });
-    const free = (serenaSpaceFree(context) as Extract<Root, { kind: 'abs' }>).path;
-    return C.finding('serena-windows-home', registration, what, { proposal: { SERENA_HOME: free }, note: `a new home, ${free} - serena's data in ${path.win32.join(profile, '.serena')} is not moved and its language servers download again (~327MB)` });
+    if (registration.scope === 'project') return common.finding('serena-windows-home', registration, what, { blocked: SPACED_PROJECT });
+    const free = serenaSpaceFree(context).path;
+    return common.finding('serena-windows-home', registration, what, { proposal: { SERENA_HOME: free }, note: `a new home, ${free} - serena's data in ${path.win32.join(profile, '.serena')} is not moved and its language servers download again (~327MB)` });
 }
 
 export function serenaWindowsHomeFix(entry: ServerEntry, finding: Finding, _context: FixCtx, input: Record<string, string> & { serenaHome?: string } = {}): ServerEntry
@@ -78,17 +84,17 @@ const pythonAt = (args: string[]) => args.findIndex((argument) => argument === '
 
 export function uvxPythonDetect(context: FixCtx): Finding[]
 {
-    return eachReg(context, 'uvx-python', (registration) =>
+    return eachReg(context, 'uvx-python', (registration, route) =>
     {
-        if (C.launcher(registration.entry) !== 'uvx' || pythonAt(C.launchArgs(registration.entry)) >= 0) return null;
-        const want = pythonRequest(C.routeOf(context, registration)!, context, context.rules);
-        return C.finding('uvx-python', registration, `no --python: uvx picks the newest CPython, which has no wheel for some dependencies`, { proposal: { python: want } });
+        if (common.launcher(registration.entry) !== 'uvx' || pythonAt(common.launchArgs(registration.entry)) >= 0) return null;
+        const want = pythonRequest(route, context, context.rules);
+        return common.finding('uvx-python', registration, `no --python: uvx picks the newest CPython, which has no wheel for some dependencies`, { proposal: { python: want } });
     });
 }
 
 export function uvxPythonFix(entry: ServerEntry, finding: Finding, _context: FixCtx): ServerEntry
 {
-    return { ...entry, args: ['--python', finding.proposal!.python!, ...entry.args!] };
+    return { ...entry, args: ['--python', common.proposalOf(finding, 'python'), ...(entry.args || [])] };
 }
 
 export function windowsArmPythonDetect(context: FixCtx): Finding[]
@@ -96,19 +102,19 @@ export function windowsArmPythonDetect(context: FixCtx): Finding[]
     if (!isWindowsArm(context)) return [];
     return eachReg(context, 'windows-arm-python', (registration) =>
     {
-        if (C.launcher(registration.entry) !== 'uvx') return null;
-        const args = C.launchArgs(registration.entry);
+        if (common.launcher(registration.entry) !== 'uvx') return null;
+        const args = common.launchArgs(registration.entry);
         const at = args.indexOf('--python');
         const minor = at >= 0 ? args[at + 1] : null;
         if (!minor || !/^\d+\.\d+$/.test(minor)) return null; // none (uvx-python's), or a build the user chose
-        return C.finding('windows-arm-python', registration, `--python ${minor} on Windows ARM64: several dependencies ship no ARM64 wheel`, { proposal: { python: context.rules.windowsArmPython.replace('{minor}', minor), from: minor } });
+        return common.finding('windows-arm-python', registration, `--python ${minor} on Windows ARM64: several dependencies ship no ARM64 wheel`, { proposal: { python: context.rules.windowsArmPython.replace('{minor}', minor), from: minor } });
     });
 }
 
 export function windowsArmPythonFix(entry: ServerEntry, finding: Finding): ServerEntry
 {
-    const args = [...entry.args!];
-    args[args.indexOf('--python') + 1] = finding.proposal!.python!;
+    const args = [...(entry.args || [])];
+    args[args.indexOf('--python') + 1] = common.proposalOf(finding, 'python');
     return { ...entry, args };
 }
 
@@ -119,7 +125,7 @@ export function windowsNpxCmdDetect(context: FixCtx): Finding[]
     return eachReg(context, 'windows-npx-cmd', (registration) =>
     {
         if (path.basename(String(registration.entry.command || '')).replace(/\.(exe|cmd)$/i, '') !== 'npx') return null;
-        return C.finding('windows-npx-cmd', registration, 'npx is launched directly on native Windows', { note: 'a precaution: Claude Code no longer documents the cmd /c wrapper and this build has not proved it on a Windows machine' });
+        return common.finding('windows-npx-cmd', registration, 'npx is launched directly on native Windows', { note: 'a precaution: Claude Code no longer documents the cmd /c wrapper and this build has not proved it on a Windows machine' });
     });
 }
 
@@ -136,18 +142,18 @@ export function playwrightWebmcpDetect(context: FixCtx): Finding[]
 {
     return eachReg(context, 'playwright-webmcp', (registration) =>
     {
-        if (C.launchArgs(registration.entry).includes('--no-webmcp')) return null;
-        const pin = C.pinnedVersion(registration.entry, '@playwright/mcp');
+        if (common.launchArgs(registration.entry).includes('--no-webmcp')) return null;
+        const pin = common.pinnedVersion(registration.entry, '@playwright/mcp');
         const documented = NO_WEBMCP_SINCE;
-        const older = pin && C.compareVersions(pin, documented) === -1;
-        return C.finding('playwright-webmcp', registration, 'page-registered WebMCP tools are not switched off (no --no-webmcp)',
+        const older = pin && common.compareVersions(pin, documented) === -1;
+        return common.finding('playwright-webmcp', registration, 'page-registered WebMCP tools are not switched off (no --no-webmcp)',
             older ? { blocked: `pinned @${pin} is older than ${documented}, the version whose README documents --no-webmcp - update it first (/alfred-tools:update), then fix` } : {});
     });
 }
 
 export function playwrightWebmcpFix(entry: ServerEntry): ServerEntry
 {
-    const args = [...entry.args!];
+    const args = [...(entry.args || [])];
     const at = args.indexOf('--browser');
     args.splice(at >= 0 ? at + 2 : args.length, 0, '--no-webmcp');
     return { ...entry, args };
@@ -195,14 +201,16 @@ export function appiumSdkEnvDetect(context: FixCtx): Finding[]
         const lookup = { ANDROID_HOME: missing.includes('ANDROID_HOME') ? androidSdk(context) : null, JAVA_HOME: missing.includes('JAVA_HOME') ? javaHome(context) : null };
         const proposal = Object.fromEntries(Object.entries(lookup).filter(([, value]) => value));
         const notFound = missing.filter((variableName) => !proposal[variableName]);
-        if (!Object.keys(proposal).length) return C.finding('appium-sdk-env', registration, what, { blocked: `${notFound.join(' and ')} not found on this machine - install the Android SDK / a JDK first` });
-        return C.finding('appium-sdk-env', registration, what, { proposal, note: notFound.length ? `${notFound.join(' and ')} not found on this machine and left unset` : undefined });
+        if (!Object.keys(proposal).length) return common.finding('appium-sdk-env', registration, what, { blocked: `${notFound.join(' and ')} not found on this machine - install the Android SDK / a JDK first` });
+        return common.finding('appium-sdk-env', registration, what, { proposal, note: notFound.length ? `${notFound.join(' and ')} not found on this machine and left unset` : undefined });
     });
 }
 
 export function appiumSdkEnvFix(entry: ServerEntry, finding: Finding): ServerEntry
 {
-    return { ...entry, env: { ...(entry.env || {}), ...(finding.proposal as Record<string, string>) } };
+    // the proposal holds the env pairs to set
+    const pairs = Object.entries(finding.proposal || {}).filter((pair): pair is [string, string] => typeof pair[1] === 'string');
+    return { ...entry, env: { ...(entry.env || {}), ...Object.fromEntries(pairs) } };
 }
 
 // ---- serena-telemetry -----------------------------------------------------------------------------------------------
@@ -210,7 +218,7 @@ export function appiumSdkEnvFix(entry: ServerEntry, finding: Finding): ServerEnt
 export function serenaTelemetryDetect(context: FixCtx): Finding[]
 {
     return eachReg(context, 'serena-telemetry', (registration) =>
-        (registration.entry.env || {}).SERENA_USAGE_REPORTING === undefined ? C.finding('serena-telemetry', registration, 'SERENA_USAGE_REPORTING is not set - serena sends a usage ping at every start') : null);
+        (registration.entry.env || {}).SERENA_USAGE_REPORTING === undefined ? common.finding('serena-telemetry', registration, 'SERENA_USAGE_REPORTING is not set - serena sends a usage ping at every start') : null);
 }
 
 export function serenaTelemetryFix(entry: ServerEntry): ServerEntry
@@ -230,13 +238,13 @@ export function serenaContextDetect(context: FixCtx): Finding[]
     {
         const root = resolvedRoots[roots.familyOf(registration.scope)];
         if (!root) return null;
-        const want = C.homeContextOf(registration.entry, context.platform, roots.FILES.serenaContext) || pathFor(context.platform).join(root, roots.FILES.serenaContext);
+        const want = common.homeContextOf(registration.entry, context.platform, roots.FILES.serenaContext) || pathFor(context.platform).join(root, roots.FILES.serenaContext);
         const args = registration.entry.args || [];
         const i = args.indexOf('--context');
         const now = i >= 0 ? args[i + 1] : null;
         if (now === want && fs.existsSync(want)) return null;
         const what = now === want ? `serena names the context ${want}, which is not there` : `serena runs with ${now ? `the context ${now}` : 'no --context'} - this plugin's ${want} gives it code navigation only, for Claude Code and Cursor`;
-        return C.finding('serena-context', registration, what, { want, roots: resolvedRoots });
+        return common.finding('serena-context', registration, what, { want, roots: resolvedRoots });
     });
 }
 
@@ -244,8 +252,8 @@ export function serenaContextFix(entry: ServerEntry, finding: Finding): ServerEn
 {
     const args = [...(entry.args || [])];
     const i = args.indexOf('--context');
-    if (i >= 0 && i + 1 < args.length) args[i + 1] = finding.want!;
-    else args.push('--context', finding.want!);
+    if (i >= 0 && i + 1 < args.length) args[i + 1] = common.fieldOf(finding, 'want');
+    else args.push('--context', common.fieldOf(finding, 'want'));
     return { ...entry, args };
 }
 
@@ -260,7 +268,8 @@ const PICK_NAME = "pick the key's name with /alfred-tools:configure";
 // The key inside a token field: the field's text less the route template's text around ${VAR}.
 function keyIn(value: unknown, template: string, tokenVar: string): string
 {
-    const [prefix, post = ''] = template.split(`\${${tokenVar}}`) as [string, string?];
+    // split always gives a first part
+    const [prefix = '', post = ''] = template.split(`\${${tokenVar}}`);
     const text = String(value);
     return text.length >= prefix.length + post.length && text.startsWith(prefix) && text.endsWith(post) ? text.slice(prefix.length, text.length - post.length) : text;
 }
@@ -276,22 +285,23 @@ export function tokenSyncDetect(context: FixCtx): Finding[]
     return eachReg(context, 'token-sync', (registration, route) =>
     {
         if (registration.route === 'remote' || !['local', 'user'].includes(registration.scope)) return null;
-        const fields = keys.tokenFields(registration.entry, route);
-        if (!fields.length) return null;
-        const tokenVar = route.tokenVar!;
-        const key = keyIn(keys.valueAt(registration.entry, fields[0]!.at), fields[0]!.template, tokenVar);
+        // tokenFields finds a field only for a route that names a token variable
+        const [field] = keys.tokenFields(registration.entry, route);
+        const tokenVar = route.tokenVar;
+        if (!field || !tokenVar) return null;
+        const key = keyIn(keys.valueAt(registration.entry, field.at), field.template, tokenVar);
         const chain = stdioChainOf(context, registration.scope);
         const extra = { route: registration.route, chain };
-        if (key === '') return C.finding('token-sync', registration, `the registration's ${tokenVar} is empty`, { ...extra, blocked: PICK_NAME });
-        const one = ONE_VAR.exec(key);
-        if (one)
+        if (key === '') return common.finding('token-sync', registration, `the registration's ${tokenVar} is empty`, { ...extra, blocked: PICK_NAME });
+        const [, variable] = ONE_VAR.exec(key) ?? [];
+        if (variable !== undefined)
         {
-            const at = keys.valueIn(chain, one[1]!);
-            return at ? C.finding('token-sync', registration, `the registration holds \${${one[1]}} while ${at.file} has the key`, { ...extra, keyName: one[1]! }) : null;
+            const at = keys.valueIn(chain, variable);
+            return at ? common.finding('token-sync', registration, `the registration holds \${${variable}} while ${at.file} has the key`, { ...extra, keyName: variable }) : null;
         }
         if (keys.nameOfValue(chain, key)) return cursorBehind(context, registration, route, chain, extra);
         const what = `the key in the registration matches no name in ${chain.join(', ')}`;
-        return C.finding('token-sync', registration, what, keys.valueIn(chain, tokenVar) ? { ...extra, keyName: tokenVar } : { ...extra, blocked: PICK_NAME });
+        return common.finding('token-sync', registration, what, keys.valueIn(chain, tokenVar) ? { ...extra, keyName: tokenVar } : { ...extra, blocked: PICK_NAME });
     });
 }
 
@@ -306,23 +316,25 @@ function cursorBehind(context: FixCtx, registration: InvRegistration, route: Cat
     if (!server || !server.key) return null;
     const file = cursorMcp.fileFor('global', context);
     const read = cursorMcp.readCursor(file);
-    const copy = read.state === 'ok' ? read.doc!.mcpServers[registration.name] : null;
-    const fields = copy ? keys.tokenFields(copy, route) : [];
+    const copy = read.state === 'ok' ? read.servers[registration.name] : null;
+    const [field] = copy ? keys.tokenFields(copy, route) : [];
     const at = keys.valueIn(chain, server.key);
-    if (!fields.length || !at) return null;
-    const held = keyIn(keys.valueAt(copy, fields[0]!.at), fields[0]!.template, route.tokenVar!);
+    if (!field || !at || !route.tokenVar) return null;
+    const held = keyIn(keys.valueAt(copy, field.at), field.template, route.tokenVar);
     if (held === at.value) return null;
-    return C.finding('token-sync', registration, `Cursor's copy in ${file} holds a key other than ${server.key} in ${at.file}`, { ...extra, keyName: server.key, cursorOnly: true });
+    return common.finding('token-sync', registration, `Cursor's copy in ${file} holds a key other than ${server.key} in ${at.file}`, { ...extra, keyName: server.key, cursorOnly: true });
 }
 
 export function tokenSyncFix(entry: ServerEntry, finding: Finding, context: FixCtx): ServerEntry
 {
     // Cursor's copy alone: Claude Code's registration stays as it is
     if (finding.cursorOnly) return entry;
-    const at = keys.valueIn(finding.chain!, finding.keyName!);
-    if (!at) throw new Error(`${finding.keyName} is filled in none of ${finding.chain!.join(', ')} any more - nothing written`);
-    const row = C.rowOf(context, finding.row!)!;
-    return keys.fillKeys(entry, row, finding.route!, finding.scope!, { [row.routes[finding.route!]!.tokenVar!]: at.value });
+    const at = keys.valueIn(common.fieldOf(finding, 'chain'), common.fieldOf(finding, 'keyName'));
+    if (!at) throw new Error(`${finding.keyName} is filled in none of ${common.fieldOf(finding, 'chain').join(', ')} any more - nothing written`);
+    const row = common.rowOf(context, common.fieldOf(finding, 'row'));
+    const { tokenVar } = common.findingRoute(context, finding);
+    if (!row || !tokenVar) throw new Error(`${finding.name}: catalog row ${finding.row} names no key for route ${finding.route} - nothing written`);
+    return keys.fillKeys(entry, row, common.fieldOf(finding, 'route'), common.fieldOf(finding, 'scope'), { [tokenVar]: at.value });
 }
 
 // ---- windows-mcp-one-per-desktop ------------------------------------------------------------------------------------
@@ -333,7 +345,7 @@ function windowsMcpDrop(server: WindowsMcp, context: FixCtx): string
 {
     if (server.kind === 'plugin') return `claude plugin disable ${server.name} --scope ${server.scope}`;
     const how = server.owner === 'catalog' ? '/alfred-tools:configure (Remove)' : `claude mcp remove ${server.name} -s ${server.scope === 'inherited' ? 'project' : server.scope}`;
-    return server.scope === 'inherited' ? `${how}, run in ${fromHere(context.inventory, server.from!)}` : how;
+    return server.scope === 'inherited' ? `${how}, run in ${server.from ? fromHere(context.inventory, server.from) : 'the parent folder'}` : how;
 }
 
 export function windowsMcpOneDetect(context: FixCtx): Finding[]
@@ -341,10 +353,11 @@ export function windowsMcpOneDetect(context: FixCtx): Finding[]
     const servers = windowsMcpServers(context.inventory);
     if (servers.length < 2) return [];
     const at = servers.find((server) => server.owner === 'catalog') || servers[0];
+    if (!at) return [];
     const list = servers.map((server) => `${server.name} (${server.scope})`).join(', ');
     const drop = servers.map((server) => `${server.name} (${server.scope}): ${windowsMcpDrop(server, context)}`).join('; ');
     // `row` set by hand: a server is not a registration row, and --only narrows by it
-    return [C.finding('windows-mcp-one-per-desktop', { ...at, rowId: 'windows-control' } as { rowId: string; name: string; scope: string }, `${servers.length} windows-mcp servers start in this project: ${list}`,
+    return [common.finding('windows-mcp-one-per-desktop', { rowId: 'windows-control', name: at.name, scope: at.scope }, `${servers.length} windows-mcp servers start in this project: ${list}`,
         { blocked: `keep one per Windows desktop - ${drop}; a stuck one recovers only in a new Claude Code session` })];
 }
 

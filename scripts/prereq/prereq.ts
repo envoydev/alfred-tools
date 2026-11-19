@@ -11,13 +11,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as catalogLib from '../catalog/catalog.ts';
+import { isTextList } from '../core/shapes.ts';
 import { androidSdk, javaHome } from '../fix/registration.ts';
 import { pathFor } from '../entries/platform.ts';
 import { parseJson } from '../core/json-file.ts';
-import { isRecord } from '../plan/record-resolve.ts';
+import { isAnswersFile } from '../plan/files/shapes.ts';
 import { AUDIT_DIR_PREFIX } from './constants.ts';
 import type { Catalog, CatalogPackage } from '../catalog/types.ts';
-import type { Answers } from '../plan/types.ts';
 import type { AuditResult, CheckResult, PrereqCheck, PrereqCtx, PrereqPick, PrereqReport, ToolCheck } from './types.ts';
 
 const versionOf = (text: unknown): string | null => (/(\d+\.\d+(?:\.\d+)?)/.exec(String(text || '')) || [])[1] || null;
@@ -60,14 +60,14 @@ function browser(context: PrereqCtx, which: string): CheckResult
 {
     const { env, machine: machine, platform } = context;
     const pathApi = pathFor(platform);
-    const names = which === 'chrome' ? { mac: 'Google Chrome', bins: ['google-chrome', 'google-chrome-stable'], win: ['Google', 'Chrome', 'chrome.exe'] } : { mac: 'Microsoft Edge', bins: ['microsoft-edge', 'microsoft-edge-stable'], win: ['Microsoft', 'Edge', 'msedge.exe'] };
+    const names = which === 'chrome' ? { mac: 'Google Chrome', bins: ['google-chrome', 'google-chrome-stable'], win: { vendor: 'Google', product: 'Chrome', exe: 'chrome.exe' } } : { mac: 'Microsoft Edge', bins: ['microsoft-edge', 'microsoft-edge-stable'], win: { vendor: 'Microsoft', product: 'Edge', exe: 'msedge.exe' } };
     let found: string | null | undefined = null;
     if (platform === 'darwin') found = [`/Applications/${names.mac}.app`, pathApi.join(context.home, 'Applications', `${names.mac}.app`)].find((appFolder) => machine.exists(appFolder));
     else if (platform === 'linux') { const binary = names.bins.map((binaryName) => machine.which(binaryName)).find(Boolean); found = binary || null; }
     else
     {
-        const roots = [env.ProgramFiles, env['ProgramFiles(x86)'], env.LOCALAPPDATA].filter(Boolean);
-        found = roots.map((programRoot) => pathApi.join(programRoot!, names.win[0]!, names.win[1]!, 'Application', names.win[2]!)).find((appFolder) => machine.exists(appFolder));
+        const roots = [env.ProgramFiles, env['ProgramFiles(x86)'], env.LOCALAPPDATA].filter((programRoot): programRoot is string => Boolean(programRoot));
+        found = roots.map((programRoot) => pathApi.join(programRoot, names.win.vendor, names.win.product, 'Application', names.win.exe)).find((appFolder) => machine.exists(appFolder));
     }
     const label = which === 'chrome' ? 'Google Chrome' : 'Microsoft Edge';
     return found ? { ok: true, found } : { ok: false, install: { url: which === 'chrome' ? 'https://www.google.com/chrome/' : 'https://www.microsoft.com/edge/download', note: `${label} is not installed; or name a browser binary at the browser ask` } };
@@ -86,8 +86,10 @@ function auditPrereqs(packageSpec: CatalogPackage, context: PrereqCtx): AuditRes
         if (!lock || lock.status !== 0) return { ok: false, note: `audit not run: npm install --package-lock-only failed: ${tail(lock)}` };
         // `npm audit` exits non-zero when it finds something; the JSON on stdout is the answer
         const auditRun = machine.run('npm', ['audit', '--json'], { cwd: dir });
+        const noResult: AuditResult = { ok: false, note: `audit not run: npm audit gave no result: ${tail(auditRun)}` };
+        if (!auditRun) return noResult;
         let vulnerabilities: { critical?: number; high?: number; moderate?: number; low?: number; total?: number };
-        try { vulnerabilities = JSON.parse(auditRun!.stdout).metadata.vulnerabilities; } catch { return { ok: false, note: `audit not run: npm audit gave no result: ${tail(auditRun)}` }; }
+        try { vulnerabilities = JSON.parse(auditRun.stdout).metadata.vulnerabilities; } catch { return noResult; }
         return { ok: true, counts: { critical: vulnerabilities.critical || 0, high: vulnerabilities.high || 0, moderate: vulnerabilities.moderate || 0, low: vulnerabilities.low || 0, total: vulnerabilities.total || 0 } };
     }
     finally { fs.rmSync(dir, { recursive: true, force: true }); }
@@ -101,7 +103,9 @@ export function checkPrereqs(picks: PrereqPick[], context: PrereqCtx, catalog: C
     {
         const row = catalog.byId.get(rowId);
         if (!row) continue;
-        const ids: string[] = row.kind === 'plugin' ? (row as { prereqs?: string[] }).prereqs || [] : (row.routes[route!] || {} as { prereqs?: string[] }).prereqs || [];
+        // a plugin row names its prerequisites itself (none in 0.5.0); an MCP row's route does
+        const pickedRoute = route ? row.routes[route] : undefined;
+        const ids: string[] = row.kind === 'plugin' ? ('prereqs' in row && isTextList(row.prereqs) ? row.prereqs : []) : (pickedRoute && pickedRoute.prereqs) || [];
         const needs = ids.map((id) =>
         {
             const prereqCheck = CHECKS[id];
@@ -112,7 +116,7 @@ export function checkPrereqs(picks: PrereqPick[], context: PrereqCtx, catalog: C
         });
         out.missing += needs.filter((need) => !need.ok).length;
         const tool: ToolCheck = { row: rowId, route: row.kind === 'plugin' ? null : route, needs };
-        const routeDefinition = row.kind === 'mcp' ? row.routes[route!] : null;
+        const routeDefinition = (row.kind === 'mcp' && pickedRoute) || null;
         if (withAudit && routeDefinition && routeDefinition.audit && routeDefinition.package && routeDefinition.package.registry === 'npm') tool.audit = { package: `${routeDefinition.package.name}@${routeDefinition.package.version}`, ...auditPrereqs(routeDefinition.package, context) };
         out.tools.push(tool);
     }
@@ -124,7 +128,7 @@ export function renderPrereqs(report: PrereqReport): string
     const lines: string[] = [];
     for (const tool of report.tools)
     {
-        if (tool.audit) lines.push(tool.audit.ok ? `${tool.row}: audit - ${tool.audit.package} has ${tool.audit.counts!.total} known vulnerabilities in its dependency tree (${tool.audit.counts!.critical} critical, ${tool.audit.counts!.high} high, ${tool.audit.counts!.moderate} moderate, ${tool.audit.counts!.low} low)` : `${tool.row}: audit - ${tool.audit.note}`);
+        if (tool.audit) lines.push(tool.audit.ok ? `${tool.row}: audit - ${tool.audit.package} has ${tool.audit.counts.total} known vulnerabilities in its dependency tree (${tool.audit.counts.critical} critical, ${tool.audit.counts.high} high, ${tool.audit.counts.moderate} moderate, ${tool.audit.counts.low} low)` : `${tool.row}: audit - ${tool.audit.note}`);
         if (!tool.needs.length) { lines.push(`${tool.row}${tool.route ? ` (${tool.route})` : ''}: nothing to check`); continue; }
         for (const need of tool.needs)
         {
@@ -141,25 +145,17 @@ export function renderPrereqs(report: PrereqReport): string
     return lines.join('\n');
 }
 
-// Whether a parsed answers file has the shape picksFrom reads: an object whose `picks` and `change`, where present, map
-// each id to null or an object whose `row` and `route`, where present, are strings.
-function isAnswersFile(value: unknown): value is Answers
-{
-    const isPick = (pick: unknown): boolean => pick === null || (isRecord(pick) && [pick['row'], pick['route']].every((field) => field === undefined || typeof field === 'string'));
-    const isPickMap = (map: unknown): boolean => map === undefined || (isRecord(map) && Object.values(map).every(isPick));
-    return isRecord(value) && isPickMap(value['picks']) && isPickMap(value['change']);
-}
-
 export function picksFrom(argv: string[], catalog: Catalog): PrereqPick[] | null
 {
+    const recommended = (id: string): string | undefined => { const row = catalog.byId.get(id); return row ? row.recommendedRoute : undefined; };
     const rows = argv.indexOf('--rows');
-    if (rows >= 0) return (argv[rows + 1] || '').split(',').filter(Boolean).map((id) => ({ row: id, route: (catalog.byId.get(id) || {} as { recommendedRoute?: string }).recommendedRoute }));
+    if (rows >= 0) return (argv[rows + 1] || '').split(',').filter(Boolean).map((id) => ({ row: id, route: recommended(id) }));
     const file = argv.find((argument) => !argument.startsWith('--'));
     if (!file) return null;
     const answers = parseJson(fs.readFileSync(file, 'utf8'));
     if (!isAnswersFile(answers)) throw new Error(`${file} is not an answers file - nothing checked`);
     // a configure change needs a check only when it moves to another route; the route it keeps is already running
-    const changed = Object.values(answers.change || {}).filter((change) => change && change.row && change.route).map((change) => ({ row: change!.row!, route: change!.route }));
-    return Object.entries(answers.picks || {}).map(([id, pick]) => ({ row: id, route: (pick && pick.route) || (catalog.byId.get(id) || {} as { recommendedRoute?: string }).recommendedRoute })).concat(changed);
+    const changed = Object.values(answers.change || {}).flatMap((change) => (change && change.row && change.route ? [{ row: change.row, route: change.route }] : []));
+    return Object.entries(answers.picks || {}).map(([id, pick]) => ({ row: id, route: (pick && pick.route) || recommended(id) })).concat(changed);
 }
 

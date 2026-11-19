@@ -15,7 +15,7 @@ export function signInNames(servers: ListServer[], catalog: Catalog): string[]
     {
         const row = server.row ? catalog.byId.get(server.row) : undefined;
         const route = row && server.route ? row.routes[server.route] : undefined;
-        return Boolean(route) && server.route === 'remote' && route!.keyless === 'oauth' && !server.key && !signInParts(server.entry);
+        return route !== undefined && server.route === 'remote' && route.keyless === 'oauth' && !server.key && !signInParts(server.entry);
     });
     return [...new Set(moving.map((server) => server.name))];
 }
@@ -26,9 +26,9 @@ export function signInNames(servers: ListServer[], catalog: Catalog): string[]
 export function signInMoves(oauth: OAuthLine[], names: string[], os: string): SignInMove[]
 {
     const pathApi = pathFor(os);
-    return oauth
-        .filter((line) => line.signin && line.root && names.includes(line.name))
-        .map((line) => ({ name: line.name, scope: line.scope, folder: pathApi.join(line.root!, roots.FILES.signIns), signedIn: false }));
+    return oauth.flatMap((line) => (line.signin && line.root && names.includes(line.name)
+        ? [{ name: line.name, scope: line.scope, folder: pathApi.join(line.root, roots.FILES.signIns), signedIn: false }]
+        : []));
 }
 
 export const signInLine = (move: SignInMove): string => `${move.name}: now the shared sign-in in ${move.folder}/ (Cursor added) - sign-in ${move.signedIn ? 'done' : 'not done yet'}`;

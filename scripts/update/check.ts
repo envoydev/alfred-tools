@@ -20,7 +20,7 @@ import path from 'node:path';
 import * as catalogLib from '../catalog/catalog.ts';
 import * as cli from '../core/claude-cli.ts';
 import * as registryLib from '../catalog/registry.ts';
-import { realMachine } from '../fix/common.ts';
+import { realMachine } from '../core/machine.ts';
 import { takenNames } from '../plan/cursor-steps.ts';
 import { changedOutside } from '../plan/repair-tail.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
@@ -35,7 +35,7 @@ import type { Env } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
 import type { RunCli } from '../apply/types.ts';
-import type { MachineProbe } from '../fix/types.ts';
+import type { MachineProbe } from '../core/types.ts';
 import type { Offer, Registry, UpdateCheck, UpdateCtx, UpgradeOffer } from './types.ts';
 
 // ---- check -----------------------------------------------------------------------------------------------------------
@@ -64,7 +64,7 @@ export async function checkUpdates(context: UpdateCtx): Promise<UpdateCheck>
     out.offers = out.offers.filter(stays);
     out.unchecked = out.unchecked.filter(stays);
     // a folder move or a re-point waits (spec D3): it is the only thing offered, and the rest is checked again after it
-    const asFinding = (offer: Offer) => ({ id: (offer as UpgradeOffer).fix, name: (offer as UpgradeOffer).name, scope: null, found: '' });
+    const asFinding = (offer: UpgradeOffer) => ({ id: offer.fix, name: offer.name, scope: null, found: '' });
     if (out.offers.some((offer) => offer.kind === 'upgrade' && rename.gates(asFinding(offer))))
     {
         out.offers = out.offers.filter((offer) => offer.kind === 'upgrade' && rename.passesGate(asFinding(offer)));
@@ -99,7 +99,7 @@ function cursorOffers(context: UpdateCtx, out: UpdateCheck): void
         const root = path.dirname(file);
         const upserts = servers.map((server) => ({ server: { ...server, clients: ['claude', 'cursor'] }, cursorFile: null }));
         const taken = takenNames(context.inventory, { ...cursorContext, catalog: context.catalog }, upserts);
-        out.cursorOffers.push({ id: `cursor-offer:${root}`, family, root, list: file, servers: servers.map((server) => ({ name: server.name, scope: server.scope })), taken, needs: brought.length ? pending!.id : null, signIns: signInNames(servers, context.catalog) });
+        out.cursorOffers.push({ id: `cursor-offer:${root}`, family, root, list: file, servers: servers.map((server) => ({ name: server.name, scope: server.scope })), taken, needs: pending && brought.length ? pending.id : null, signIns: signInNames(servers, context.catalog) });
     }
 }
 
@@ -109,7 +109,7 @@ export function ordered(picked: (Offer | string)[], catalog: Catalog): (Offer | 
 {
     const order = catalog.fixes.map((fixRow) => fixRow.id);
     const rank = (choice: Offer | string) => (typeof choice === 'string' || choice.kind !== 'upgrade' ? 3 : choice.fix === 'list-import' ? 0 : choice.fixKind === 'registration' ? 1 : 2);
-    const at = (choice: Offer | string) => (typeof choice === 'string' || choice.kind !== 'upgrade' ? 0 : order.indexOf(choice.fix!));
+    const at = (choice: Offer | string) => (typeof choice === 'string' || choice.kind !== 'upgrade' ? 0 : order.indexOf(choice.fix));
     return picked.map((choice, i) => ({ choice: choice, i })).sort((left, right) => rank(left.choice) - rank(right.choice) || at(left.choice) - at(right.choice) || left.i - right.i).map((entry) => entry.choice);
 }
 
@@ -146,7 +146,8 @@ export function renderUpdates(out: UpdateCheck): string
         lines.push('Plugins whose marketplace lists no version (`claude plugin update` is the check; each is offered on its own):');
         for (const offer of out.unchecked) lines.push(`  ${offer.label}  ${offer.from || '?'}`);
     }
-    for (const [title, list] of [['Held back', out.held], ['Skipped', out.skipped], ['Could not check', out.errors], ['Notes', out.notes]] as [string, string[]][])
+    const sections: [string, string[]][] = [['Held back', out.held], ['Skipped', out.skipped], ['Could not check', out.errors], ['Notes', out.notes]];
+    for (const [title, list] of sections)
         if (list.length) lines.push(`${title}:`, ...list.map((line) => `  ${line}`));
     const offered = out.cursorOffers || [];
     if (offered.length) lines.push('Cursor (asked with the updates):', ...offered.map((cursorOffer) => `  ${cursorOffer.servers.length} servers in ${cursorOffer.root} are set up for Claude Code only`));

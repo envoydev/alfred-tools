@@ -8,13 +8,14 @@ import * as account from '../core/account.ts';
 import * as roots from '../roots/roots.ts';
 import { ALL_SCOPES, MCP_JSON, RECOMMENDED_SUFFIX } from '../core/constants.ts';
 import { parseJson } from '../core/json-file.ts';
+import { isRecord, isServerEntry } from '../core/guards.ts';
 import { fingerprintKey } from '../catalog/catalog.ts';
 import { serverKey } from '../mcps-list/mcps-list.ts';
 import { catalogMatch } from './fingerprint.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Live, OwnEntry } from '../mcps-list/types.ts';
-import type { DeclaredServer, ExistingItem, Inventory, InvRegistration, PluginServer, ServersDoc } from './types.ts';
+import type { DeclaredServer, ExistingItem, Inventory, InvRegistration, PluginServer } from './types.ts';
 
 // the rows with a hosted route: the only ones a connector can be
 export const HOSTED_ROWS = ['context7', 'github', 'gitlab', 'atlassian', 'sentry'];
@@ -31,14 +32,14 @@ export function matchConnector(name: unknown): string | null
     return normalizedName ? HOSTED_ROWS.find((id) => normalizedName.startsWith(id)) || null : null;
 }
 
-const readJsonFile = (file: string): ServersDoc | null => { try { return parseJson(fs.readFileSync(file, 'utf8')) as ServersDoc | null; } catch { return null; } };
-const isEntry = (value: unknown): boolean => Boolean(value) && typeof value === 'object' && !Array.isArray(value) && (typeof (value as ServerEntry).command === 'string' || typeof (value as ServerEntry).url === 'string');
+const readJsonFile = (file: string): unknown => { try { return parseJson(fs.readFileSync(file, 'utf8')); } catch { return null; } };
+const isEntry = (value: unknown): value is ServerEntry => isServerEntry(value) && (typeof value.command === 'string' || typeof value.url === 'string');
 // a servers file: `{ mcpServers: { ... } }`, or the map itself at the top
-function serversIn(doc: ServersDoc | null): DeclaredServer[]
+function serversIn(doc: unknown): DeclaredServer[]
 {
-    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return [];
-    const map = doc.mcpServers && typeof doc.mcpServers === 'object' && !Array.isArray(doc.mcpServers) ? doc.mcpServers : doc;
-    return Object.entries(map).filter(([, value]) => isEntry(value)).map(([server, entry]) => ({ server, entry }));
+    if (!isRecord(doc)) return [];
+    const map = isRecord(doc['mcpServers']) ? doc['mcpServers'] : doc;
+    return Object.entries(map).flatMap(([server, entry]) => (isEntry(entry) ? [{ server, entry }] : []));
 }
 
 // The MCP servers a plugin provides, read from its install folder: its .mcp.json, then the manifest's mcpServers - inline,
@@ -48,13 +49,13 @@ export function pluginServers(installPath: unknown): DeclaredServer[]
     if (!installPath || typeof installPath !== 'string') return [];
     const out = serversIn(readJsonFile(path.join(installPath, MCP_JSON)));
     const manifest = readJsonFile(path.join(installPath, '.claude-plugin', 'plugin.json'));
-    const decl = manifest && manifest.mcpServers;
-    if (decl && typeof decl === 'object' && !Array.isArray(decl)) out.push(...serversIn({ mcpServers: decl }));
-    for (const serverPath of typeof decl === 'string' ? [decl] : Array.isArray(decl) ? decl.filter((item) => typeof item === 'string') : [])
+    const declared = isRecord(manifest) ? manifest['mcpServers'] : undefined;
+    if (isRecord(declared)) out.push(...serversIn({ mcpServers: declared }));
+    for (const serverPath of typeof declared === 'string' ? [declared] : Array.isArray(declared) ? declared.filter((item) => typeof item === 'string') : [])
     {
-        const rel = path.relative(installPath, path.resolve(installPath, serverPath));
-        if (!serverPath.startsWith('./') || !rel || rel.startsWith('..') || path.isAbsolute(rel) || rel === MCP_JSON) continue;
-        out.push(...serversIn(readJsonFile(path.join(installPath, rel))));
+        const relativePath = path.relative(installPath, path.resolve(installPath, serverPath));
+        if (!serverPath.startsWith('./') || !relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath) || relativePath === MCP_JSON) continue;
+        out.push(...serversIn(readJsonFile(path.join(installPath, relativePath))));
     }
     const seen = new Set<string>();
     return out.filter((server) => !seen.has(server.server) && seen.add(server.server));
@@ -67,7 +68,7 @@ export function fingerprintOf(entry: ServerEntry | null | undefined, catalog: Ca
     return match ? fingerprintKey(match.fingerprint) : null;
 }
 
-const labelOf = (catalog: Catalog, rowId: string | null) => (catalog.byId.get(rowId!) || { label: rowId }).label;
+const labelOf = (catalog: Catalog, rowId: string | null) => { const row = rowId === null ? undefined : catalog.byId.get(rowId); return row ? row.label : rowId; };
 // The key of a plugin's server, as itemOf reads it back.
 const pluginServerKey = (server: PluginServer): string => `plugin-mcp:${server.plugin}/${server.server}`;
 const regItem = (registration: InvRegistration, catalog: Catalog): ExistingItem => ({
@@ -96,31 +97,38 @@ export function items(inventory: Inventory, connectors: string[] | null | undefi
     return [
         ...(inventory.registrations || []).filter((registration) => asked(registration) && !roots.pointsIntoRoot(registration, inventory, context)).map((registration) => regItem(registration, catalog)),
         ...(inventory.pluginServers || []).filter((server) => server.rowId).map((server) => pluginItem(server, catalog)),
-        ...((connectors || []).map((connectorName) => connectorItem(connectorName, inventory, catalog)).filter(Boolean) as ExistingItem[]),
+        ...(connectors || []).map((connectorName) => connectorItem(connectorName, inventory, catalog)).filter((item) => item !== null),
     ];
 }
 
 // The item an answer's key names, whatever its choice, or null when no such server is here.
 export function itemOf(inventory: Inventory, key: string, catalog: Catalog): ExistingItem | null
 {
-    let match = /^mcp:(.+)~(project|local|user)$/.exec(key);
-    if (match)
+    const registrationKey = /^mcp:(.+)~(project|local|user)$/.exec(key);
+    if (registrationKey)
     {
-        const registration = (inventory.registrations || []).find((candidate) => candidate.name === match![1] && candidate.scope === match![2] && asked(candidate));
+        const [, name, scope] = registrationKey;
+        const registration = (inventory.registrations || []).find((candidate) => candidate.name === name && candidate.scope === scope && asked(candidate));
         return registration ? regItem(registration, catalog) : null;
     }
-    match = /^plugin-mcp:([^/]+)\/(.+)$/.exec(key);
-    if (match)
+    const pluginKey = /^plugin-mcp:([^/]+)\/(.+)$/.exec(key);
+    if (pluginKey)
     {
-        const server = (inventory.pluginServers || []).find((candidate) => candidate.plugin === match![1] && candidate.server === match![2] && candidate.rowId);
+        const [, plugin, serverName] = pluginKey;
+        const server = (inventory.pluginServers || []).find((candidate) => candidate.plugin === plugin && candidate.server === serverName && candidate.rowId);
         return server ? pluginItem(server, catalog) : null;
     }
-    match = /^connector:(.+)$/.exec(key);
-    return match ? connectorItem(match[1]!, inventory, catalog) : null;
+    const connectorName = /^connector:(.+)$/.exec(key)?.[1];
+    return connectorName === undefined ? null : connectorItem(connectorName, inventory, catalog);
 }
 
 // Who else provides a plugin's server or a connector, as the questions and notes name it.
-export const ownerOf = (item: ExistingItem): string => (item.kind === 'plugin' ? item.plugin!.split('@')[0]! : 'claude.ai');
+export function ownerOf(item: ExistingItem): string
+{
+    if (item.kind !== 'plugin') return 'claude.ai';
+    const [plugin = ''] = String(item.plugin).split('@');
+    return plugin;
+}
 const scopeWord = (scope: string | undefined) => (scope === 'user' ? 'global' : scope);
 
 // The record's entry for an answer (D6): names, scopes, fingerprints and choices only.
@@ -146,8 +154,8 @@ export function liveOf(inventory: Inventory, catalog: Catalog, connectors: strin
 export function offerRule(inventory: Inventory, catalog: Catalog, answers: Record<string, string> | null = {}): { own: Set<string | null>; add: Map<string | null, string> }
 {
     const byKey = new Map<string, string>();
-    for (const registration of (inventory.registrations || []).filter((candidate) => asked(candidate) && candidate.choice)) byKey.set(serverKey(registration), registration.choice!);
-    for (const server of (inventory.pluginServers || []).filter((candidate) => candidate.rowId && candidate.choice)) byKey.set(pluginServerKey(server), server.choice!);
+    for (const registration of (inventory.registrations || []).filter(asked)) if (registration.choice) byKey.set(serverKey(registration), registration.choice);
+    for (const server of (inventory.pluginServers || []).filter((candidate) => candidate.rowId)) if (server.choice) byKey.set(pluginServerKey(server), server.choice);
     for (const ownEntry of (inventory.lists && inventory.lists.global && inventory.lists.global.own) || []) if (typeof ownEntry.connector === 'string' && ownEntry.choice) byKey.set(`connector:${ownEntry.connector}`, ownEntry.choice);
     for (const [key, choice] of Object.entries(answers || {})) byKey.set(key, choice);
     const own = new Set<string | null>();
@@ -169,8 +177,9 @@ export function ownItems(inventory: Inventory, catalog: Catalog): ExistingItem[]
     return [
         ...(inventory.registrations || []).filter((registration) => asked(registration) && registration.choice === 'own').map((registration) => regItem(registration, catalog)),
         ...(inventory.pluginServers || []).filter((server) => server.rowId && server.choice === 'own').map((server) => pluginItem(server, catalog)),
-        ...(((inventory.lists && inventory.lists.global && inventory.lists.global.own) || []).filter((ownEntry) => typeof ownEntry.connector === 'string' && ownEntry.choice === 'own')
-            .map((ownEntry) => connectorItem(ownEntry.connector!, inventory, catalog)).filter(Boolean) as ExistingItem[]),
+        ...((inventory.lists && inventory.lists.global && inventory.lists.global.own) || [])
+            .flatMap((ownEntry) => (typeof ownEntry.connector === 'string' && ownEntry.choice === 'own' ? [connectorItem(ownEntry.connector, inventory, catalog)] : []))
+            .filter((item) => item !== null),
     ];
 }
 

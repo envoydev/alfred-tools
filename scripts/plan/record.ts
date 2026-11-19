@@ -4,9 +4,10 @@ import { ROUTE_WORD, capitalized, scopeOfLabel } from './asks-keys.ts';
 import { TOOLSETS_ASKED, TOOLSETS_HEADER } from './hosted-settings-constants.ts';
 import { DEFAULT_HOST_DESCRIPTION } from './asks-other-constants.ts';
 import { BACKTICKED_NAME, LABEL, PREFIX, SIDE, VALUE, WALK_QUESTION } from './record-constants.ts';
-import { isRecord, isTextList, resolveAnswer } from './record-resolve.ts';
-import type { Family } from '../roots/types.ts';
-import type { Answers, LocationAnswer, Picks, RecordedStep, RecordInput, RecordResult, Refusal, Resolved, Run, Question, Typed } from './types.ts';
+import { resolveAnswer } from './record-resolve.ts';
+import { isRecord, isTextList } from '../core/shapes.ts';
+import { isLocationAnswer } from './files/shapes.ts';
+import type { Answers, Picks, RecordedStep, RecordInput, RecordResult, Refusal, Resolved, Run, Question } from './types.ts';
 
 const KEYED = [PREFIX.route, PREFIX.scope, PREFIX.name, PREFIX.location, PREFIX.browser, PREFIX.host, PREFIX.token, PREFIX.keyName, PREFIX.urlName, PREFIX.settings, PREFIX.clients];
 
@@ -15,13 +16,18 @@ const sameSet = (left: string[], right: string[]) => left.length === right.lengt
 
 function put(root: object, path: string[], value: unknown): void
 {
-    let at = root as Record<string, unknown>;
+    const last = path.at(-1);
+    if (!isRecord(root) || last === undefined) return;
+    let at: Record<string, unknown> = root;
     for (const segment of path.slice(0, -1))
     {
-        if (!isRecord(at[segment])) at[segment] = {};
-        at = at[segment] as Record<string, unknown>;
+        const next = at[segment];
+        if (isRecord(next)) { at = next; continue; }
+        const made: Record<string, unknown> = {};
+        at[segment] = made;
+        at = made;
     }
-    at[path.at(-1)!] = value;
+    at[last] = value;
 }
 
 function putPick(run: Run, path: string[], value: unknown): void
@@ -61,7 +67,7 @@ function putKeyed(run: Run, path: string[], value: unknown, changes = true): voi
     putTop(run, path, value, changes);
 }
 
-const routeOfLabel = (label: string) => Object.keys(ROUTE_WORD).find((routeId) => capitalized(ROUTE_WORD[routeId]!) === label);
+const routeOfLabel = (label: string) => Object.entries(ROUTE_WORD).find(([, word]) => capitalized(word) === label)?.[0];
 
 function mapRoute(run: Run, key: string, resolved: Resolved): Refusal | void
 {
@@ -91,8 +97,8 @@ function mapLocation(run: Run, resolved: Resolved): Refusal | void
 {
     const typed = typeof resolved.typed === 'string' ? resolved.typed : undefined;
     const value = typed === undefined ? resolved.value : { side: SIDE.path, path: typed };
-    if (!isRecord(value) || typeof value['side'] !== 'string') return refuse(`'${resolved.label}' has no location entry`);
-    putEntry(run, ['location'], structuredClone(value) as unknown as LocationAnswer, value['side'] !== SIDE.keep);
+    if (!isLocationAnswer(value)) return refuse(`'${resolved.label}' has no location entry`);
+    putEntry(run, ['location'], structuredClone(value), value.side !== SIDE.keep);
 }
 
 function mapBrowser(run: Run, resolved: Resolved): void
@@ -101,10 +107,12 @@ function mapBrowser(run: Run, resolved: Resolved): void
     else if (resolved.label === LABEL.browserDefault && run.configure && resolved.index !== 0) putEntry(run, ['executablePath'], '');
 }
 
-function mapHost(run: Run, question: Question, resolved: Resolved): void
+function mapHost(run: Run, question: Question, resolved: Resolved): Refusal | void
 {
     if (resolved.label.startsWith(LABEL.keep)) return;
-    const described = question.options[resolved.index]!.description;
+    const option = question.options[resolved.index];
+    if (!option) return refuse(`'${resolved.label}' is not one of its options`);
+    const described = option.description;
     const host = resolved.label === LABEL.hostSelfManaged ? resolved.typed : described === DEFAULT_HOST_DESCRIPTION ? resolved.label : described;
     putEntry(run, ['params'], { host }, resolved.index !== 0);
 }
@@ -137,7 +145,7 @@ function mapSettings(run: Run, key: string, resolved: Resolved): Refusal | void
 {
     const { value } = resolved;
     if (value === VALUE.keep) return;
-    if (value === VALUE.change) { putKeyed(run, ['settings', key], resolved.typed as Typed); return; }
+    if (value === VALUE.change) { putKeyed(run, ['settings', key], resolved.typed); return; }
     if (!isRecord(value)) return refuse(`'${resolved.label}' has no settings entry`);
     const { [TOOLSETS_ASKED]: asked, ...fixed } = value;
     const settings: Record<string, unknown> = asked === true ? { ...fixed, [TOOLSETS_HEADER]: resolved.typed } : fixed;
@@ -147,9 +155,9 @@ function mapSettings(run: Run, key: string, resolved: Resolved): Refusal | void
 function mapRoot(run: Run, resolved: Resolved): Refusal | void
 {
     const { value } = resolved;
-    const family = isRecord(value) ? (value['family'] as Family) : undefined;
+    const family = isRecord(value) ? value['family'] : undefined;
     if (!isRecord(value) || (family !== 'project' && family !== 'global') || typeof value['id'] !== 'string') return refuse(`'${resolved.label}' has no root entry`);
-    const answer = value['id'] === VALUE.named ? { id: VALUE.named, path: resolved.typed as string } : { id: value['id'] };
+    const answer = value['id'] === VALUE.named ? { id: VALUE.named, path: resolved.typed } : { id: value['id'] };
     const changes = resolved.index !== 0;
     putPick(run, ['roots', family], answer);
     putTop(run, ['roots', family], answer, changes);
@@ -239,7 +247,8 @@ export function recordStep({ step, built, picks, answers, chosen }: RecordInput)
 
     for (const question of call)
     {
-        const resolved = resolveAnswer(question, (step.answers?.[question.id] ?? {}) as Record<string, unknown>, given[question.id]);
+        const map = step.answers?.[question.id];
+        const resolved = resolveAnswer(question, isRecord(map) ? map : {}, given[question.id]);
         if ('refused' in resolved) return resolved;
         const refused = mapOne(run, question, resolved);
         if (refused) return refuse(`${question.id}: ${refused.refused}`);
@@ -276,13 +285,15 @@ function removePath(root: object, path: string[]): void
 {
     const walk = (segments: string[]): unknown => segments.reduce<unknown>((at, segment) => (isRecord(at) ? at[segment] : undefined), root);
     const parentPath = path.slice(0, -1);
-    const last = path.at(-1)!;
+    const last = path.at(-1);
+    if (last === undefined) return;
     const parent = walk(parentPath);
     if (isRecord(parent)) { delete parent[last]; return; }
     if (!Array.isArray(parent)) return;
     const holder = walk(parentPath.slice(0, -1));
+    const holderKey = parentPath.at(-1);
     const kept = parent.filter((item) => item !== last);
-    if (kept.length === 0 && isRecord(holder)) delete holder[parentPath.at(-1)!];
+    if (kept.length === 0 && isRecord(holder) && holderKey !== undefined) delete holder[holderKey];
     else parent.splice(0, parent.length, ...kept);
 }
 
@@ -300,7 +311,7 @@ export function rewindPick(picks: Picks, answers: Answers, pick: string): Record
     {
         step.picks.forEach((path) => removePath(next.picks, path));
         step.answers.forEach((path) => removePath(next.answers, path));
-        delete next.picks.recorded![id];
+        if (next.picks.recorded) delete next.picks.recorded[id];
     }
     const dropped = new Set(steps.map(([id]) => id));
     next.picks.done = (next.picks.done ?? []).filter((id) => !dropped.has(id));
@@ -316,7 +327,8 @@ export function resolveSkipTarget(picks: Picks, named: string, rowOf: (target: s
 {
     if ((picks.rows ?? []).includes(named) || (picks.targets ?? []).includes(named)) return { pick: named };
     const sharing = (picks.targets ?? []).filter((target) => rowOf(target) === named);
-    if (sharing.length === 1) return { pick: sharing[0]! };
+    const [only] = sharing;
+    if (sharing.length === 1 && only !== undefined) return { pick: only };
     if (sharing.length > 1) return refuse(`'${named}' names ${sharing.length} targets (${sharing.join(', ')}): skip one by its key`);
     return refuse(`'${named}' is not a pick of this run`);
 }

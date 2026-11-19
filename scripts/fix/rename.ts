@@ -7,8 +7,9 @@ import path from 'node:path';
 import * as roots from '../roots/roots.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { deepEqual } from '../core/json-file.ts';
+import { errorCode, errorMessage } from '../core/guards.ts';
 import { pathFor } from '../entries/platform.ts';
-import * as C from './common.ts';
+import * as common from './common.ts';
 import * as kept from '../core/kept.ts';
 import { helperArgv } from '../entries/entry.ts';
 import type { ServerEntry } from '../core/types.ts';
@@ -57,7 +58,7 @@ function tokenStarts(text: string, end: number, commandLine: boolean): number[]
     let wordStart = 0;
     for (let at = 0; at < end; at++)
     {
-        const character = text[at]!;
+        const character = text.charAt(at);
         if (quote) { if (character === quote) quote = null; continue; }
         if (character === '\\' && (text[at + 1] === "'" || text[at + 1] === '"')) { at++; continue; }
         if (character === "'" || character === '"') { quote = character; continue; }
@@ -94,12 +95,12 @@ function repointText(text: string, moved: MovedRoot[], machine: Machine, command
 export function repointEntry(entry: ServerEntry, moved: MovedRoot[], machine: Machine): ServerEntry
 {
     if (!moved.length) return entry;
-    const one = (value: unknown, commandLine = false) => (typeof value === 'string' ? repointText(value, moved, machine, commandLine) : value);
+    const one = (value: string, commandLine = false): string => repointText(value, moved, machine, commandLine);
     const out: ServerEntry = { ...entry };
-    if (typeof entry.command === 'string') out.command = one(entry.command) as string;
-    if (Array.isArray(entry.args)) out.args = entry.args.map((argument) => one(argument) as string);
-    if (entry.env) out.env = Object.fromEntries(Object.entries(entry.env).map(([key, value]) => [key, one(value) as string]));
-    if (typeof entry.headersHelper === 'string') out.headersHelper = one(entry.headersHelper, true) as string;
+    if (typeof entry.command === 'string') out.command = one(entry.command);
+    if (Array.isArray(entry.args)) out.args = entry.args.map((argument) => (typeof argument === 'string' ? one(argument) : argument));
+    if (entry.env) out.env = Object.fromEntries(Object.entries(entry.env).map(([key, value]) => [key, typeof value === 'string' ? one(value) : value]));
+    if (typeof entry.headersHelper === 'string') out.headersHelper = one(entry.headersHelper, true);
     return out;
 }
 
@@ -110,8 +111,8 @@ export function rootRepointDetect(context: FixCtx): Finding[]
     const moved = movedRoots(context);
     if (!moved.length) return [];
     const machine = machineOf(context);
-    const stale = (entry: ServerEntry | null | undefined) => Boolean(entry) && !deepEqual(repointEntry(entry!, moved, machine), entry);
-    const managed = C.registrationsOf(context, 'root-repoint');
+    const stale = (entry: ServerEntry | null | undefined) => entry !== null && entry !== undefined && !deepEqual(repointEntry(entry, moved, machine), entry);
+    const managed = common.registrationsOf(context, 'root-repoint');
     const out: Finding[] = [];
     const seen = new Set<string>();
     for (const family of roots.FAMILIES)
@@ -120,7 +121,7 @@ export function rootRepointDetect(context: FixCtx): Finding[]
         const servers = list && !list.note && !list.old ? list.servers || [] : [];
         const cursorFile = cursorMcp.fileFor(family, { platform: context.platform, project: context.inventory.project, home: context.home, env: context.env || {} });
         const read = cursorMcp.readCursor(cursorFile);
-        const copies = read.state === 'ok' ? read.doc!.mcpServers : {};
+        const copies = read.state === 'ok' ? read.servers : {};
         const names = [...managed.filter((registration) => roots.familyOf(registration.scope) === family), ...servers];
         for (const { name, scope } of names)
         {
@@ -134,19 +135,22 @@ export function rootRepointDetect(context: FixCtx): Finding[]
             const copy = server && (server.clients || []).includes('cursor') ? copies[name] : undefined;
             // a copy that differs from its list beyond the moved path was changed by hand: the tail would hold it, so
             // it is named, never offered - client-drift settles the copy
-            const row = server ? context.catalog.byId.get(server.row!) : undefined;
+            const row = server && server.row ? context.catalog.byId.get(server.row) : undefined;
             const masked = (entry: ServerEntry) => kept.maskCredentials(repointEntry(entry, moved, machine), row);
             const handEdited = Boolean(copy && stale(copy) && server && !deepEqual(masked(copy), masked(server.cursorEntry || server.entry)));
-            const where = [registration && stale(registration.entry) && "Claude Code's entry", server && (stale(server.entry) || stale(server.cursorEntry)) && `the list ${list!.file}`, stale(copy) && !handEdited && "Cursor's copy"].filter(Boolean) as string[];
-            if (!where.length && handEdited)
+            const where = [registration && stale(registration.entry) && "Claude Code's entry", server && list && (stale(server.entry) || stale(server.cursorEntry)) && `the list ${list.file}`, stale(copy) && !handEdited && "Cursor's copy"].filter((part): part is string => typeof part === 'string');
+            // the folder a stale entry names: one of the moved roots, as stale found
+            if (!where.length && handEdited && copy)
             {
-                const from = moved.find((candidate) => !deepEqual(repointEntry(copy!, [candidate], machine), copy))!;
-                out.push({ ...C.finding('root-repoint', registration || { rowId: server!.row, name, scope }, `Cursor's copy of ${name} names ${from.from} - the folder moved to ${from.to}`, { tailOnly: true }), blocked: `Cursor's copy of ${name} in ${cursorFile} was changed by hand and names ${from.from} - change it to ${from.to} there, or run /alfred-tools:fix to settle the copy` });
+                const from = moved.find((candidate) => !deepEqual(repointEntry(copy, [candidate], machine), copy));
+                if (!from) continue;
+                out.push({ ...common.finding('root-repoint', registration || { rowId: server ? server.row : null, name, scope }, `Cursor's copy of ${name} names ${from.from} - the folder moved to ${from.to}`, { tailOnly: true }), blocked: `Cursor's copy of ${name} in ${cursorFile} was changed by hand and names ${from.from} - change it to ${from.to} there, or run /alfred-tools:fix to settle the copy` });
                 continue;
             }
             if (!where.length) continue;
-            const root = moved.find((candidate) => [registration?.entry, server?.entry, server?.cursorEntry, copy].some((entry) => entry && stale(entry) && !deepEqual(repointEntry(entry, [candidate], machine), entry)))!;
-            out.push(C.finding('root-repoint', registration || { rowId: server!.row, name, scope }, `${where.join(', ')} name${where.length > 1 ? '' : 's'} ${root.from} - the folder moved to ${root.to}`, registration && stale(registration.entry) ? {} : { tailOnly: true }));
+            const root = moved.find((candidate) => [registration?.entry, server?.entry, server?.cursorEntry, copy].some((entry) => entry && stale(entry) && !deepEqual(repointEntry(entry, [candidate], machine), entry)));
+            if (!root) continue;
+            out.push(common.finding('root-repoint', registration || { rowId: server ? server.row : null, name, scope }, `${where.join(', ')} name${where.length > 1 ? '' : 's'} ${root.from} - the folder moved to ${root.to}`, registration && stale(registration.entry) ? {} : { tailOnly: true }));
         }
     }
     return out;
@@ -163,11 +167,12 @@ export function rootRepointFix(entry: ServerEntry, _finding: Finding, context: F
 // Windows 11: a Node handle, a handle without delete sharing and a working folder inside it alike), and a session
 // started fresh starts the same servers again - so the advice names them and stops them first.
 const OPEN_CODES = ['EPERM', 'EBUSY', 'EACCES'];
-function notMoved(from: string, error: NodeJS.ErrnoException, holders: string[], platform: string): string
+function notMoved(from: string, caught: unknown, holders: string[], platform: string): string
 {
-    if (platform !== 'win32' || !OPEN_CODES.includes(error.code || '')) return `${from} not moved: ${error.message}`;
+    const code = errorCode(caught);
+    if (platform !== 'win32' || !OPEN_CODES.includes(code || '')) return `${from} not moved: ${errorMessage(caught)}`;
     const stop = holders.length ? `in /mcp disable ${holders.join(', ')} (${holders.length > 1 ? 'servers that keep' : 'a server that keeps'} files in it), ` : '';
-    return `${from} not moved: a file in it is open (${error.code}) - ${stop}close Claude Code and Cursor, start Claude Code again, run /alfred-tools:update${holders.length ? ', then enable them in /mcp' : ''}`;
+    return `${from} not moved: a file in it is open (${code}) - ${stop}close Claude Code and Cursor, start Claude Code again, run /alfred-tools:update${holders.length ? ', then enable them in /mcp' : ''}`;
 }
 
 // One finding per folder still under the former name (spec D3), keyed by its families. A registration that resolves into
@@ -179,9 +184,9 @@ export function rootMoveDetect(context: FixCtx): Finding[]
     for (const move of roots.pendingMoves({ project: context.inventory.project, home: context.home, platform: context.platform }))
     {
         const one = [{ from: move.from, to: move.to }];
-        const names = (entry: ServerEntry | null | undefined) => Boolean(entry) && !deepEqual(repointEntry(entry!, one, machine), entry);
+        const names = (entry: ServerEntry | null | undefined) => entry !== null && entry !== undefined && !deepEqual(repointEntry(entry, one, machine), entry);
         const regs = (context.inventory.registrations || []).filter((registration) => registration.scope !== 'inherited' && names(registration.entry));
-        const managed = C.registrationsOf(context, 'root-move');
+        const managed = common.registrationsOf(context, 'root-move');
         const mine = regs.filter((registration) => managed.includes(registration));
         const unmanaged = regs.filter((registration) => !managed.includes(registration)).map((registration) => `${registration.name} (${registration.scope}) names ${firstPath(registration.entry, move.from, machine)} - not re-pointed, yours to change`);
         // the stdio servers naming the folder: each may hold a file in it while it runs
@@ -208,19 +213,19 @@ export function rootMoveDetect(context: FixCtx): Finding[]
 }
 
 // True when this run is the plugin under its former id - its data folder is named after it (A1).
-export const runsAsFormer = (data: string | null | undefined): boolean => Boolean(data) && path.basename(data!).startsWith(roots.FORMER_DATA_PREFIX);
+export const runsAsFormer = (data: string | null | undefined): boolean => typeof data === 'string' && data !== '' && path.basename(data).startsWith(roots.FORMER_DATA_PREFIX);
 
 // The roots map the former plugin kept (spec D4), while this plugin's data folder has none: { from, to } files, and
 // `note` when it cannot be read as a map; else null.
 export function mapToCarry(data: string | null | undefined): { from: string; to: string; note?: string } | null
 {
     const sibling = roots.dataSibling(data);
-    if (!sibling) return null;
+    if (!sibling || !data) return null;
     const from = path.join(sibling, roots.FILES.map);
-    const to = path.join(data!, roots.FILES.map);
+    const to = path.join(data, roots.FILES.map);
     if (!fs.existsSync(from) || fs.existsSync(to)) return null;
     const map = roots.readMap(sibling);
-    return map.state ? { from, to, note: map.note! } : { from, to };
+    return map.state ? { from, to, note: map.note } : { from, to };
 }
 
 // True when a managed registration still names a moved root: install and configure wait for update's re-point (D3).
@@ -233,8 +238,8 @@ export function repointWaits(registrations: InvRegistration[], machine: Machine)
 // A map's roots that sit in a moved folder, pointed at the new one; the input is left as it was.
 function repointMap(map: RootsMap, moved: MovedRoot[], machine: Machine): RootsMap
 {
-    const one = (root: string | null): string | null => (root ? repointText(root, moved, machine, false) : root);
-    return { version: map.version, global: one(map.global), projects: Object.fromEntries(Object.entries(map.projects).map(([key, root]) => [key, one(root)!])) };
+    const one = (root: string): string => (root ? repointText(root, moved, machine, false) : root);
+    return { version: map.version, global: map.global === null ? null : one(map.global), projects: Object.fromEntries(Object.entries(map.projects).map(([key, root]) => [key, one(root)])) };
 }
 
 // <data>/roots.json re-pointed at the moved folders; a map read with a note (newer, bad, unreadable) is never written.
@@ -266,13 +271,13 @@ export function rootMoveFix(finding: Finding, context: FixCtx): MachineFixResult
 {
     if (finding.name === 'data')
     {
-        const map = roots.readMap(path.dirname(finding.moveFrom!));
+        const map = roots.readMap(path.dirname(common.fieldOf(finding, 'moveFrom')));
         if (map.state) return { ok: false, detail: `${map.note} - not copied; delete it or fix it, then run /alfred-tools:fix` };
-        roots.writeMap(path.dirname(finding.moveTo!), repointMap(map, movedRoots(context), machineOf(context)));
+        roots.writeMap(path.dirname(common.fieldOf(finding, 'moveTo')), repointMap(map, movedRoots(context), machineOf(context)));
         return { ok: true, detail: `copied the roots map ${finding.moveFrom} to ${finding.moveTo}` };
     }
-    const from = finding.moveFrom!;
-    const to = finding.moveTo!;
+    const from = common.fieldOf(finding, 'moveFrom');
+    const to = common.fieldOf(finding, 'moveTo');
     // the same folder named twice (a project that is the home, written in another case): the first rename did it
     if (!fs.existsSync(from) && isDir(to)) return { ok: true, detail: `${from} already moved to ${to}` };
     try
@@ -283,7 +288,7 @@ export function rootMoveFix(finding: Finding, context: FixCtx): MachineFixResult
         if (beside && !beside.length) fs.rmdirSync(to);
         fs.renameSync(from, to);
     }
-    catch (caught) { return { ok: false, detail: notMoved(from, caught as NodeJS.ErrnoException, finding.holders || [], context.platform) }; }
+    catch (caught) { return { ok: false, detail: notMoved(from, caught, finding.holders || [], context.platform) }; }
     const done = !fs.existsSync(from) && fs.existsSync(to);
     return { ok: done, detail: done ? `renamed ${from} to ${to}` : `${from} is still there after the rename` };
 }

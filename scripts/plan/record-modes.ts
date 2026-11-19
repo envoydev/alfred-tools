@@ -10,10 +10,12 @@ import { rewindQuestion } from './asks-other.ts';
 import { SCOPE_LABEL } from './asks-keys.ts';
 import { recordStep, resolveSkipTarget, rewindPick, skipPick } from './record.ts';
 import { EXIT_CODE, REFUSAL, WALK_PICK_LABEL } from './record-constants.ts';
-import { isRecord } from './record-resolve.ts';
+import { isRecord } from '../core/shapes.ts';
+import { isInventoryFile } from '../inventory/table.ts';
+import { isAnswersFile, isPicksFile, isStepFile } from './files/shapes.ts';
 import { walkOutput } from './walk-output.ts';
 import type { Inventory } from '../inventory/types.ts';
-import type { Answers, FileRead, Picks, PlanArgs, RecordResult, StepFile, WalkOutput } from './types.ts';
+import type { Answers, FileRead, Picks, PlanArgs, RecordResult, WalkOutput } from './types.ts';
 
 const refuse = (line: string): number => { console.error(`plan.ts: ${line}`); return EXIT_CODE.refused; };
 
@@ -21,8 +23,8 @@ const refuse = (line: string): number => { console.error(`plan.ts: ${line}`); re
 function sitInOneTempFolder(files: string[]): string[] | null
 {
     const targets = files.map(checkedTarget);
-    if (targets.some((target) => target === null)) return null;
-    const resolved = targets as string[];
+    const resolved = targets.filter((target) => target !== null);
+    if (resolved.length !== targets.length) return null;
     return new Set(resolved.map((target) => path.dirname(target))).size === 1 ? resolved : null;
 }
 
@@ -38,13 +40,12 @@ export function readObject(file: string, optional = false): FileRead
     return isRecord(value) ? { value } : { refused: `${file}: ${REFUSAL.notObject}` };
 }
 
-const isStepFile = (value: Record<string, unknown>): value is Record<string, unknown> & StepFile => typeof value['id'] === 'string' && isRecord(value['answers']);
-
 // the label of a pick in the which-pick ask: the walk's own two (as their questions' headers), a tool's catalog label, a
 // configure target's name and scope (two copies of one name differ by scope)
 function labelOfPick(pick: string, output: WalkOutput): string
 {
-    if (Object.hasOwn(WALK_PICK_LABEL, pick)) return WALK_PICK_LABEL[pick]!;
+    const walkLabel = Object.hasOwn(WALK_PICK_LABEL, pick) ? WALK_PICK_LABEL[pick] : undefined;
+    if (walkLabel !== undefined) return walkLabel;
     const row = catalogLib.load().byId.get(pick);
     if (row) return row.label;
     const current = output.targets[pick]?.current;
@@ -72,9 +73,8 @@ function printWalk(inventory: Inventory, picks: Picks, args: PlanArgs): number
 }
 
 // --skip: the pick as named, or the one configure target of a row id (the walk output has each target's row)
-function skipTarget(inventory: Inventory, picks: Picks, answers: Answers, args: PlanArgs, files: { picks: string; answers: string }): number
+function skipTarget(inventory: Inventory, picks: Picks, answers: Answers, args: PlanArgs, named: string, files: { picks: string; answers: string }): number
 {
-    const named = args.pick!;
     let rowOf: (target: string) => string | null | undefined = () => undefined;
     if (!(picks.rows ?? []).includes(named) && !(picks.targets ?? []).includes(named))
     {
@@ -91,19 +91,23 @@ export function runRecordMode(args: PlanArgs): number
 {
     const sitting = sitInOneTempFolder(args.files);
     if (sitting === null) return refuse(REFUSAL.folder);
-    const [inventoryFile, picksFile, answersFile, stepFile] = sitting as [string, string, string, string?];
+    const [inventoryFile, picksFile, answersFile, stepFile] = sitting;
+    if (inventoryFile === undefined || picksFile === undefined || answersFile === undefined) return refuse(REFUSAL.walkFiles);
     const inventoryRead = readObject(inventoryFile);
     if ('refused' in inventoryRead) return refuse(inventoryRead.refused);
     const picksRead = readObject(picksFile);
     if ('refused' in picksRead) return refuse(picksRead.refused);
     const answersRead = readObject(answersFile, true);
     if ('refused' in answersRead) return refuse(answersRead.refused);
-    const inventory = inventoryRead.value as unknown as Inventory;
-    const picks = picksRead.value as Picks;
-    const answers = answersRead.value as Answers;
+    const inventory = inventoryRead.value;
+    if (!isInventoryFile(inventory)) return refuse(`${inventoryFile}: ${REFUSAL.notInventory}`);
+    const picks = picksRead.value;
+    if (!isPicksFile(picks)) return refuse(`${picksFile}: ${REFUSAL.notPicks}`);
+    const answers = answersRead.value;
+    if (!isAnswersFile(answers)) return refuse(`${answersFile}: ${REFUSAL.notAnswers}`);
     const files = { picks: picksFile, answers: answersFile };
 
-    if (args.mode === 'skip') return skipTarget(inventory, picks, answers, args, files);
+    if (args.mode === 'skip') return args.pick === null ? refuse(REFUSAL.skipPick) : skipTarget(inventory, picks, answers, args, args.pick, files);
 
     // before anything is written: a folder under the former name waits to move, as for --questions
     const output = walkOutput(inventory, picks, args);
@@ -117,7 +121,8 @@ export function runRecordMode(args: PlanArgs): number
         return EXIT_CODE.ok;
     }
 
-    const chosen = readObject(stepFile!);
+    if (stepFile === undefined) return refuse(REFUSAL.recordFiles);
+    const chosen = readObject(stepFile);
     if ('refused' in chosen) return refuse(chosen.refused);
     if (!isStepFile(chosen.value)) return refuse(REFUSAL.stepShape);
     if (output.next.id === 'done') return refuse(REFUSAL.walkDone);

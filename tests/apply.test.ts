@@ -19,7 +19,7 @@ import { HELPER_VERSION as HV } from '../scripts/copied/mcp-headers.js';
 import { fetchStep } from '../scripts/entries/names.ts';
 import { BRIDGE_VERSION as BV } from '../scripts/copied/mcp-bridge.js';
 import { tmpdir } from 'node:os';
-import { rootIgnoreLines, rootIgnore, denyRead, listWrite, serenaConfigInit } from '../scripts/apply/file-steps.ts';
+import { rootIgnoreLines, rootIgnore, denyRead, listWrite, serenaConfigInit, moveRootFile } from '../scripts/apply/file-steps.ts';
 import { readList } from '../scripts/mcps-list/mcps-list.ts';
 import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
 import type { World } from './types.ts';
@@ -522,6 +522,56 @@ test('tmpdir sweeps only its own folders older than 24 hours', () => {
         assert.ok(fs.existsSync(other), 'another program\'s folder is left');
     }
     finally { w.clean(); }
+});
+
+test('move-root-file: renamed when the new root lacks it, the old copy removed when the new one holds the same bytes, else stopped with both named', () => {
+    const w = world();
+    try
+    {
+        const from = path.join(w.dir, 'old-root');
+        const to = path.join(w.dir, 'new-root');
+        fs.mkdirSync(from, { recursive: true });
+        assert.deepStrictEqual(moveRootFile(path.join(from, 'mcps.json'), path.join(to, 'mcps.json')), { ok: true, detail: `${path.join(from, 'mcps.json')}: not there - nothing to move` });
+        fs.writeFileSync(path.join(from, 'mcps.json'), '{"version":1}\n');
+        assert.strictEqual(moveRootFile(path.join(from, 'mcps.json'), path.join(to, 'mcps.json')).ok, true);
+        assert.deepStrictEqual([fs.existsSync(path.join(from, 'mcps.json')), fs.readFileSync(path.join(to, 'mcps.json'), 'utf8')], [false, '{"version":1}\n'], 'moved, the new root made');
+        fs.writeFileSync(path.join(from, 'mcps.json'), '{"version":1}\n');
+        assert.match(moveRootFile(path.join(from, 'mcps.json'), path.join(to, 'mcps.json')).detail, /holds the same as/);
+        assert.ok(!fs.existsSync(path.join(from, 'mcps.json')), 'the same bytes: the old copy goes');
+        fs.writeFileSync(path.join(from, 'mcps.json'), '{"version":2}\n');
+        const clash = moveRootFile(path.join(from, 'mcps.json'), path.join(to, 'mcps.json'));
+        assert.strictEqual(clash.ok, false);
+        assert.deepStrictEqual([fs.readFileSync(path.join(from, 'mcps.json'), 'utf8'), fs.readFileSync(path.join(to, 'mcps.json'), 'utf8')], ['{"version":2}\n', '{"version":1}\n'], 'nothing moved');
+        fs.mkdirSync(path.join(from, 'mcp-remote-v1'));
+        fs.writeFileSync(path.join(from, 'mcp-remote-v1', 'tokens.json'), 'x');
+        assert.strictEqual(moveRootFile(path.join(from, 'mcp-remote-v1'), path.join(to, 'mcp-remote-v1')).ok, true);
+        assert.strictEqual(fs.readFileSync(path.join(to, 'mcp-remote-v1', 'tokens.json'), 'utf8'), 'x', 'a folder moves whole');
+    }
+    finally { w.clean(); }
+});
+
+test('apply makes its temp folder as tmpdir.ts does: in the real temp folder, after sweeping this plugin\'s folders older than 24 hours', () =>
+{
+    const w = world();
+    // apply runs in this process: its os.tmpdir() is pointed at the world's own temp folder for the test
+    const saved = { TMPDIR: process.env.TMPDIR, TEMP: process.env.TEMP, TMP: process.env.TMP };
+    try
+    {
+        const t = tempOf(w);
+        Object.assign(process.env, { TMPDIR: t.root, TEMP: t.root, TMP: t.root });
+        const old = t.made();
+        const day = new Date(Date.now() - 25 * 3600 * 1000);
+        fs.utimesSync(old, day, day);
+        const report = apply({ project: w.project, steps: [{ op: 'ensure-dir', path: path.join(w.dir, 'made'), why: 'a folder' }] }, { env: w.env, log: () => {}, fetchFile: false });
+        assert.strictEqual(report.failed, null);
+        assert.ok(!fs.existsSync(old), 'its own folder older than 24 hours is swept');
+        assert.strictEqual(path.dirname(report.tmp ?? ''), fs.realpathSync.native(t.root));
+    }
+    finally
+    {
+        for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+        w.clean();
+    }
 });
 
 // ---- key files (D7): the key is written in by the target scope, from the file the scope reads ----------------------

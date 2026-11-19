@@ -17,7 +17,7 @@ export function questions(out: UpdateCheck)
     // Cursor's offer, one per root, and the names Cursor already has, asked right after 'Set them up for Cursor too'
     const cursor = { cursorOffers: (out.cursorOffers || []).map(cursorOfferAsk), cursorNameQuestions: (out.cursorOffers || []).flatMap((cursorOffer) => cursorOffer.taken.map((takenEntry) => cursorNameQuestion(takenEntry))) };
     if (!items.length) return { offer: null, pick: [], ...cursor };
-    const groups = [['catalog', 'Catalog plugins'], ['other', 'Other plugins'], ['mcp', 'MCP servers'], ['helper', 'Key helpers'], ['upgrade', 'New ways to pass data', 'Data passing']] as [string, string, string?][];
+    const groups: [string, string, string?][] = [['catalog', 'Catalog plugins'], ['other', 'Other plugins'], ['mcp', 'MCP servers'], ['helper', 'Key helpers'], ['upgrade', 'New ways to pass data', 'Data passing']];
     const pickQuestions: Question[] = [];
     for (const [groupKey, title, header] of groups)
     {
@@ -43,7 +43,8 @@ export function questions(out: UpdateCheck)
 function leftOutNote(names: string[]): string
 {
     const one = names.length === 1;
-    const joined = one ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names.at(-1)!}`;
+    const last = names.at(-1) ?? '';
+    const joined = one ? last : `${names.slice(0, -1).join(', ')} and ${last}`;
     return `${joined} ${one ? 'lists' : 'list'} no version - pick ${one ? 'it' : 'them'} under Pick which`;
 }
 

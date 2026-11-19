@@ -2,6 +2,7 @@
 import * as account from '../core/account.ts';
 import { deepEqual } from '../core/json-file.ts';
 import * as kept from '../core/kept.ts';
+import { isRecord } from '../core/guards.ts';
 import * as keys from '../keys/keys.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
@@ -37,7 +38,7 @@ function masked(text: string, entry: ServerEntry, row: CatalogRow | null): strin
     const walk = (node: unknown, keptNode: unknown): void =>
     {
         if (typeof node === 'string') { if (node !== keptNode && node) values.push(node, JSON.stringify(node).slice(1, -1)); return; }
-        if (node && typeof node === 'object') for (const key of Object.keys(node)) walk((node as Record<string, unknown>)[key], keptNode == null ? undefined : (keptNode as Record<string, unknown>)[key]);
+        if (Array.isArray(node) || isRecord(node)) for (const [key, child] of Object.entries(node)) walk(child, kept.valueAt(keptNode, [key]));
     };
     walk(entry, kept.maskCredentials(entry, row));
     return [...new Set(values)].sort((left, right) => right.length - left.length).reduce((maskedText, value) => maskedText.split(value).join(kept.MARKER), text);

@@ -5,13 +5,14 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import * as C from './common.ts';
+import * as common from './common.ts';
 import * as rename from './rename.ts';
 import { rootOfEntry } from '../entries/locations.ts';
 import { bridgeParts } from '../entries/entry.ts';
 import { fetchStep } from '../entries/names.ts';
 import { pathFor } from '../entries/platform.ts';
 import * as declines from '../core/declines.ts';
+import { errorMessage } from '../core/guards.ts';
 import { ALFRED_DATA } from '../core/constants.ts';
 import { GITIGNORE_ALL } from '../apply/constants.ts';
 import * as cli from '../core/claude-cli.ts';
@@ -28,7 +29,7 @@ import type { Finding, FixCtx, MachineFixResult, RunResult } from './types.ts';
 
 export function retiredPluginDetect(context: FixCtx): Finding[]
 {
-    const ids = C.fixOf(context, 'retired-plugin')!.ids || [];
+    const ids = common.fixRowOf(context, 'retired-plugin').ids || [];
     const declined = declines.read(context.data);
     const alfred = Boolean(context.inventory.alfredCodeEnabled);
     // run under the former name (its data folder says so), it never offers to uninstall itself
@@ -60,7 +61,7 @@ export function retiredPluginDetect(context: FixCtx): Finding[]
 export function retiredPluginFix(finding: Finding, context: FixCtx): MachineFixResult
 {
     const command = `claude plugin uninstall ${finding.name} --scope ${finding.scope}`;
-    const result = cli.runClaude(['plugin', 'uninstall', finding.name, '--scope', finding.scope!], { cwd: context.inventory.project, env: context.env });
+    const result = cli.runClaude(['plugin', 'uninstall', finding.name, '--scope', common.fieldOf(finding, 'scope')], { cwd: context.inventory.project, env: context.env });
     if (result.error || result.status !== 0) return { ok: false, detail: `${command} failed - ${String(`${result.stderr || ''}${result.stdout || ''}` || (result.error && result.error.message) || 'no output').trim().split('\n').slice(-1)[0]}` };
     const left = inventory.buildInventory({ project: context.inventory.project, env: context.env, data: context.data }).plugins;
     if (left.some((plugin) => plugin.id === finding.name && plugin.scope === finding.scope)) return { ok: false, detail: `${finding.name} is still listed at ${finding.scope} after ${command}` };
@@ -90,15 +91,16 @@ function ignoredByGit(context: FixCtx, rel: string): boolean | null
 export function dataFolderIgnoreDetect(context: FixCtx): Finding[]
 {
     const pathApi = pathFor(context.platform);
-    const tools = C.fixOf(context, 'data-folder-ignore')!.tool;
+    const tools = common.fixRowOf(context, 'data-folder-ignore').tool;
     const seen = new Set<string>();
     const out: Finding[] = [];
     for (const registration of context.inventory.registrations)
     {
-        if (!C.isManaged(registration) || !tools.includes(registration.rowId!)) continue;
+        if (!common.isManaged(registration) || registration.rowId === null || !tools.includes(registration.rowId)) continue;
         // starts here: a project-scope one not rejected, or a parent's not rejected and not shadowed by a nearer one
         if (registration.scope === 'inherited' ? registration.approval === 'rejected' || registration.shadowed : registration.scope !== 'project' || registration.approval === 'rejected') continue;
-        const row = C.rowOf(context, registration.rowId!)!;
+        const row = common.rowOf(context, registration.rowId);
+        if (!row) continue;
         const root = row.locations ? rootOfEntry(row, registration.entry) : null;
         if (!root || root.includes('${') || root.startsWith('~')) continue;
         if (path.posix.isAbsolute(root) || path.win32.isAbsolute(root))
@@ -163,15 +165,15 @@ function leftoverCopy(context: FixCtx, registration: InvRegistration, root: stri
 // Create the folder with a .gitignore holding `*`, as the plan's ensure-dir step does; a .gitignore already there is left.
 export function dataFolderIgnoreFix(finding: Finding, _context: FixCtx): MachineFixResult
 {
-    const file = path.join(finding.proposal!.path!, '.gitignore');
+    const file = path.join(common.proposalOf(finding, 'path'), '.gitignore');
     try
     {
         if (fs.existsSync(file)) return { ok: true, restart: false, detail: `${file} exists - left as it is` };
-        fs.mkdirSync(finding.proposal!.path!, { recursive: true });
+        fs.mkdirSync(common.proposalOf(finding, 'path'), { recursive: true });
         fs.writeFileSync(file, GITIGNORE_ALL);
         return { ok: true, restart: false, detail: `wrote ${file} holding *` };
     }
-    catch (caught) { const error = caught as NodeJS.ErrnoException; return { ok: false, detail: `could not write ${file}: ${error.message}` }; }
+    catch (caught) { return { ok: false, detail: `could not write ${file}: ${errorMessage(caught)}` }; }
 }
 
 // ---- npx-cache-entry ------------------------------------------------------------------------------------------------
@@ -203,18 +205,21 @@ const cacheVar = (env: object | null | undefined) => Object.entries(env || {}).f
 function npmCacheOf(context: FixCtx, registration: InvRegistration, memo: Map<string, string | null>): string | null
 {
     const own = cacheVar(registration.entry.env);
-    if (own) return C.expandVars(own[1], context.env);
+    if (own) return common.expandVars(own[1], context.env);
     const inEnv = cacheVar(context.env);
     if (inEnv) return inEnv[1];
-    if (!memo.has('cache')) memo.set('cache', cacheInForce(context.machine.run('npm', ['config', 'ls', '-l'], { cwd: context.inventory.project })));
-    return memo.get('cache')!;
+    const asked = memo.get('cache');
+    if (asked !== undefined) return asked;
+    const cache = cacheInForce(context.machine.run('npm', ['config', 'ls', '-l'], { cwd: context.inventory.project }));
+    memo.set('cache', cache);
+    return cache;
 }
 
 // Every server that starts in this folder, a parent folder's included: the npx cache is the machine's, so fix run in a
 // child folder repairs the parent's server too. One rejected here, or a parent's that a nearer server of its name
 // shadows, does not start here.
-const startsHere = (context: FixCtx, registration: InvRegistration) => C.isManaged(registration) && registration.approval !== 'rejected' && !(registration.scope === 'inherited' && registration.shadowed)
-    && C.fixOf(context, 'npx-cache-entry')!.tool.includes(registration.rowId!);
+const startsHere = (context: FixCtx, registration: InvRegistration) => common.isManaged(registration) && registration.approval !== 'rejected' && !(registration.scope === 'inherited' && registration.shadowed)
+    && registration.rowId !== null && common.fixRowOf(context, 'npx-cache-entry').tool.includes(registration.rowId);
 
 export function npxCacheEntryDetect(context: FixCtx): Finding[]
 {
@@ -225,7 +230,7 @@ export function npxCacheEntryDetect(context: FixCtx): Finding[]
     for (const registration of context.inventory.registrations)
     {
         // npx, or a bridge (0.4.0), which runs its pinned mcp-remote through npx
-        if (!startsHere(context, registration) || (C.launcher(registration.entry) !== 'npx' && !bridgeParts(registration.entry))) continue;
+        if (!startsHere(context, registration) || (common.launcher(registration.entry) !== 'npx' && !bridgeParts(registration.entry))) continue;
         const step = fetchStep(registration.name, registration.entry, registration.rowId);
         if (!step) continue;
         const cache = npmCacheOf(context, registration, memo);
@@ -234,7 +239,7 @@ export function npxCacheEntryDetect(context: FixCtx): Finding[]
         if (seen.has(folder) || !context.machine.exists(folder) || context.machine.exists(pathApi.join(folder, 'package.json'))) continue;
         seen.add(folder);
         // the finding carries no env: a key can sit in it, and --detect --json prints findings
-        out.push(C.finding('npx-cache-entry', registration, `npx's cache folder for ${step.what}, ${folder}, has no package.json - every start fails with ENOENT until it is removed`, { proposal: { path: folder, what: step.what } }));
+        out.push(common.finding('npx-cache-entry', registration, `npx's cache folder for ${step.what}, ${folder}, has no package.json - every start fails with ENOENT until it is removed`, { proposal: { path: folder, what: step.what } }));
     }
     return out;
 }
@@ -243,14 +248,14 @@ export function npxCacheEntryDetect(context: FixCtx): Finding[]
 export function npxCacheEntryFix(finding: Finding, context: FixCtx): MachineFixResult
 {
     const pathApi = pathFor(context.platform);
-    const folder = finding.proposal!.path!;
+    const folder = common.proposalOf(finding, 'path');
     if (!NPX_FOLDER.test(pathApi.basename(folder)) || pathApi.basename(pathApi.dirname(folder)) !== '_npx') return { ok: false, detail: `${folder} is not an npx cache folder - left as it is` };
     try { fs.rmSync(folder, { recursive: true, force: true }); }
-    catch (caught) { const error = caught as NodeJS.ErrnoException; return { ok: false, detail: `could not remove ${folder}: ${error.message}` }; }
+    catch (caught) { return { ok: false, detail: `could not remove ${folder}: ${errorMessage(caught)}` }; }
     const registration = context.inventory.registrations.find((candidate) => candidate.name === finding.name && candidate.scope === finding.scope && !candidate.shadowed);
     const step = registration ? fetchStep(registration.name, registration.entry, registration.rowId) : null;
     // a parent's server is read from the parent's .mcp.json and started here, as this folder's session starts it
     const where = registration && registration.scope === 'inherited' ? { scope: 'project', from: registration.from } : { scope: registration && registration.scope };
-    return { ok: true, detail: `removed ${folder} - npx installs ${finding.proposal!.what} into it again`, fetch: step ? { ...step, ...where } : null };
+    return { ok: true, detail: `removed ${folder} - npx installs ${common.fieldOf(finding, 'proposal').what} into it again`, fetch: step ? { ...step, ...where } : null };
 }
 

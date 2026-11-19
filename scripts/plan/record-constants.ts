@@ -22,6 +22,8 @@ export const PREFIX = {
 } as const;
 
 export const WALK_QUESTION = { settings: 'settings', clients: 'clients' } as const;
+// The settings question's answers, in the order of its two options: the recommended settings for all, then each tool.
+export const WALK_CHOICES = ['recommended', 'each'] as const;
 
 export const LABEL = {
     keep: 'Keep ',
@@ -43,6 +45,12 @@ export const REFUSAL = {
     folder: 'files must sit in one folder tmpdir.ts made',
     notJson: 'is not a JSON file this run wrote',
     notObject: 'is not a JSON object',
+    notInventory: 'is not an inventory file: no os or registrations',
+    notPicks: 'is not a picks file: a list or a map of it is not one',
+    notAnswers: 'is not an answers file: its picks or change are not a map of picks',
+    recordFiles: '--record takes an inventory, picks, answers and step file',
+    walkFiles: 'the walk takes an inventory, picks and answers file',
+    skipPick: '--skip takes a pick',
     stepShape: 'step.json must be { "id": <string>, "answers": <object> }',
     walkDone: 'the walk is done: there is no step to record',
     outFolder: '--out must name a file in a folder tmpdir.ts made',

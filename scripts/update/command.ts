@@ -3,13 +3,14 @@ import path from 'node:path';
 import * as inventory from '../inventory/inventory.ts';
 import * as cli from '../core/claude-cli.ts';
 import * as tmpdir from '../core/tmpdir.ts';
+import { errorMessage } from '../core/guards.ts';
 import { makeCtx, checkUpdates, renderUpdates } from './check.ts';
 import { questions } from './asks.ts';
 import { applyUpdates } from './apply.ts';
 import { EXIT_CODE } from './constants.ts';
 import type { Env } from '../core/types.ts';
 import type { RunCli } from '../apply/types.ts';
-import type { MachineProbe } from '../fix/types.ts';
+import type { MachineProbe } from '../core/types.ts';
 import type { Registry, UpdateArgs } from './types.ts';
 
 // ---- CLI -------------------------------------------------------------------------------------------------------------
@@ -17,14 +18,14 @@ import type { Registry, UpdateArgs } from './types.ts';
 export function parseArgs(argv: string[]): UpdateArgs
 {
     const args: UpdateArgs = { input: {} };
-    for (let i = 0; i < argv.length; i++)
+    // one iterator: a flag that takes a value takes the next word from it
+    const words = argv[Symbol.iterator]();
+    for (const argument of words)
     {
-        const argument = argv[i]!;
         if (['--check', '--questions', '--json', '--no-refresh'].includes(argument)) { args[argument.slice(2)] = true; continue; }
         if (!['--apply', '--project', '--tmp', '--data', '--input'].includes(argument)) throw new Error(`unknown argument '${argument}'`);
-        const flagValue = argv[i + 1];
+        const flagValue = words.next().value;
         if (flagValue === undefined || flagValue.startsWith('--')) throw new Error(`${argument} needs a value`);
-        i++;
         // fix.ts's rule: split on the first =, repeatable
         if (argument === '--input')
         {
@@ -44,10 +45,10 @@ export async function runUpdateCommand(argv: string[], { env = process.env, out 
 {
     let args: UpdateArgs;
     try { args = parseArgs(argv); }
-    catch (caught) { const error = caught as NodeJS.ErrnoException; out(`update: ${error.message}\nusage: node scripts/update.ts --check | --questions | --apply <id,id|all|none> [--input key=value] [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`); return EXIT_CODE.usage; }
+    catch (caught) { out(`update: ${errorMessage(caught)}\nusage: node scripts/update.ts --check | --questions | --apply <id,id|all|none> [--input key=value] [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`); return EXIT_CODE.usage; }
     const project = path.resolve(args.project || process.cwd());
     const projectInventory = inventory.buildInventory({ project, env, run: runCli || cli.runClaude, data: args.data || null });
-    if (!projectInventory.cli!.ok) { out('alfred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return EXIT_CODE.noCli; }
+    if (!projectInventory.cli || !projectInventory.cli.ok) { out('alfred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return EXIT_CODE.noCli; }
     const context = makeCtx({ inventory: projectInventory, project, env, machine, registry, now, runCli: runCli || cli.runClaude, refresh: !args['no-refresh'], data: args.data || null });
     const found = await checkUpdates(context);
     if (args.apply)

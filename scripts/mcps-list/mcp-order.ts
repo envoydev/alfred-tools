@@ -9,26 +9,31 @@ import fs from 'node:fs';
 import { pathApiOf } from '../entries/platform.ts';
 import { matchEntry } from '../inventory/inventory.ts';
 import { MCP_JSON } from '../core/constants.ts';
-import type { ServerMap } from '../core/types.ts';
+import { errorCode, errorMessage, isRecord, isServerEntry } from '../core/guards.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { InventoryView } from '../roots/types.ts';
-import type { FileOps, OrderStep, StepEnd, StepLike } from './types.ts';
+import type { FileOps, OrderStep, StepLike } from './types.ts';
 
 const LEFT = 'left as it is - /alfred-tools:fix (mcp-order) orders it';
 const ORDER_REASON = '.mcp.json: the catalog servers in your order, your own after them - no value changes';
 
-// The server names in their new order. `own`: the names left on their own, which sit with the user's own servers.
-export function sortedNames(servers: ServerMap | null | undefined, catalog: Catalog, own: Set<string> = new Set()): string[]
+// The server names in their new order. `own`: the names left on their own, which sit with the user's own servers, as does
+// a value not in the shape Claude Code writes.
+export function sortedNames(servers: Record<string, unknown> | null | undefined, catalog: Catalog, own: Set<string> = new Set()): string[]
 {
-    const names = Object.keys(servers || {});
+    const map = servers || {};
+    const names = Object.keys(map);
     const rank = new Map(names.map((name) =>
     {
-        const match = own.has(name) ? null : matchEntry(servers![name], catalog);
+        const entry = map[name];
+        const match = own.has(name) || !isServerEntry(entry) ? null : matchEntry(entry, catalog);
         return [name, match ? catalog.order.indexOf(match.rowId) : -1];
     }));
+    // every name has a rank; -1 is the user's own
+    const rankOf = (name: string): number => rank.get(name) ?? -1;
     // Array.prototype.sort is stable: two of one row keep their order
-    const managed = names.filter((name) => rank.get(name)! >= 0).sort((first, second) => rank.get(first)! - rank.get(second)!);
-    return [...managed, ...names.filter((name) => rank.get(name)! < 0)];
+    const managed = names.filter((name) => rankOf(name) >= 0).sort((first, second) => rankOf(first) - rankOf(second));
+    return [...managed, ...names.filter((name) => rankOf(name) < 0)];
 }
 
 // a value with its object keys sorted, as text: two objects equal once key order is ignored give the same text
@@ -37,7 +42,7 @@ function canon(value: unknown): string
     const sorted = (node: unknown): unknown =>
     {
         if (Array.isArray(node)) return node.map(sorted);
-        if (node && typeof node === 'object') return Object.fromEntries(Object.keys(node).sort().map((key) => [key, sorted((node as Record<string, unknown>)[key])]));
+        if (isRecord(node)) return Object.fromEntries(Object.keys(node).sort().map((key) => [key, sorted(node[key])]));
         return node;
     };
     return JSON.stringify(sorted(value));
@@ -46,28 +51,30 @@ function canon(value: unknown): string
 // -> { text, changed } | { error }
 export function reorderText(text: string, catalog: Catalog, own: Set<string> = new Set()): { text: string; changed: boolean; error?: undefined } | { error: string; text?: undefined; changed?: undefined }
 {
-    let doc: { mcpServers?: ServerMap; [key: string]: unknown };
+    let doc: unknown;
     // the parser's message quotes the text, which may hold a value: never repeated
     try { doc = JSON.parse(text); }
     catch { return { error: 'is not plain JSON (a BOM, a comment or a trailing comma, say)' }; }
-    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return { error: 'is not a JSON object' };
-    const servers = doc.mcpServers;
-    if (!servers || typeof servers !== 'object' || Array.isArray(servers)) return { text, changed: false };
+    if (!isRecord(doc)) return { error: 'is not a JSON object' };
+    const servers = doc['mcpServers'];
+    if (!isRecord(servers)) return { text, changed: false };
     const names = Object.keys(servers);
     const order = sortedNames(servers, catalog, own);
     if (order.every((name, i) => name === names[i])) return { text, changed: false };
     // Object.fromEntries defines each key as its own property, '__proto__' included
-    const next = Object.fromEntries(Object.entries(doc).map(([key, value]) => [key, key === 'mcpServers' ? Object.fromEntries(order.map((name) => [name, servers[name]])) : value]));
-    if (Object.keys(next['mcpServers'] as ServerMap).some((name, i) => name !== order[i])) return { error: 'has a server name JSON cannot place (an integer name)' };
+    const orderedServers = Object.fromEntries(order.map((name) => [name, servers[name]]));
+    const next = Object.fromEntries(Object.entries(doc).map(([key, value]) => [key, key === 'mcpServers' ? orderedServers : value]));
+    if (Object.keys(orderedServers).some((name, i) => name !== order[i])) return { error: 'has a server name JSON cannot place (an integer name)' };
     const indented = /\n([ \t]+)\S/.exec(text);
     const crlf = text.includes('\r\n');
     let out = JSON.stringify(next, null, indented ? indented[1] : 2);
     if (crlf) out = out.replace(/\n/g, '\r\n');
     if (/\n$/.test(text)) out += crlf ? '\r\n' : '\n';
-    let back: { mcpServers: ServerMap };
+    let back: unknown;
     try { back = JSON.parse(out); }
     catch { return { error: 'would not parse once ordered' }; }
-    const sameNames = Object.keys(back.mcpServers).length === names.length && names.every((name) => Object.hasOwn(back.mcpServers, name));
+    const backServers = isRecord(back) ? back['mcpServers'] : undefined;
+    const sameNames = isRecord(backServers) && Object.keys(backServers).length === names.length && names.every((name) => Object.hasOwn(backServers, name));
     if (!sameNames || canon(back) !== canon(doc)) return { error: 'would not hold the same servers once ordered' };
     return { text: out, changed: true };
 }
@@ -78,27 +85,26 @@ export function orderFile(file: string, catalog: Catalog, own: Set<string> = new
     const warn = (why: string) => ({ ok: true, changed: false, detail: `warning: ${file} ${why}; ${LEFT}` });
     let text: string;
     try { text = read(file, 'utf8'); }
-    catch (caught) { const error = caught as NodeJS.ErrnoException;  return error.code === 'ENOENT' || error.code === 'ENOTDIR' ? { ok: true, changed: false, detail: `${file}: not there - nothing to order` } : warn(`cannot be read (${error.code || error.message})`); }
+    catch (caught) { const code = errorCode(caught); return code === 'ENOENT' || code === 'ENOTDIR' ? { ok: true, changed: false, detail: `${file}: not there - nothing to order` } : warn(`cannot be read (${code || errorMessage(caught)})`); }
     const reordered = reorderText(text, catalog, own);
-    if (reordered.error) return warn(reordered.error);
+    if (reordered.error !== undefined) return warn(reordered.error);
     if (!reordered.changed) return { ok: true, changed: false, detail: `${file}: the servers are already in order` };
     // a .mcp.json that is a link: the file it points at is replaced, the link stays
     let target = file;
     try { target = fs.realpathSync(file); } catch { /* not on this disk (a test's stub): the path as given */ }
-    const tmp = `${target}.${process.pid}.tmp`;
+    const temporary = `${target}.${process.pid}.tmp`;
     try
     {
         let now: string | null = null;
         try { now = read(file, 'utf8'); } catch { /* gone since: not the text read */ }
         if (now !== text) return warn('changed while it was being ordered');
-        write(tmp, reordered.text!);
-        rename(tmp, target);
+        write(temporary, reordered.text);
+        rename(temporary, target);
     }
     catch (caught)
     {
-        const error = caught as NodeJS.ErrnoException;
-        try { fs.rmSync(tmp, { force: true }); } catch { /* nothing to remove */ }
-        return warn(`could not be written (${error.code || error.message})`);
+        try { fs.rmSync(temporary, { force: true }); } catch { /* nothing to remove */ }
+        return warn(`could not be written (${errorCode(caught) || errorMessage(caught)})`);
     }
     return { ok: true, changed: true, detail: `ordered ${file}: the catalog servers first, your own after them - no value changed` };
 }
@@ -106,11 +112,11 @@ export function orderFile(file: string, catalog: Catalog, own: Set<string> = new
 // The project-scope servers left on their own: recorded so, or answered so in this run.
 export function ownProjectNames(inventory: InventoryView, existing: Record<string, string> | null = {}): string[]
 {
-    const names = (inventory.registrations || []).filter((registration) => registration.scope === 'project' && registration.choice === 'own').map((registration) => registration.name!);
+    const names = (inventory.registrations || []).flatMap((registration) => (registration.scope === 'project' && registration.choice === 'own' && registration.name !== undefined ? [registration.name] : []));
     for (const [key, choice] of Object.entries(existing || {}))
     {
-        const match = /^mcp:(.+)~project$/.exec(key);
-        if (match && choice === 'own') names.push(match[1]!);
+        const [, name] = /^mcp:(.+)~project$/.exec(key) ?? [];
+        if (name !== undefined && choice === 'own') names.push(name);
     }
     return [...new Set(names)];
 }
@@ -118,9 +124,10 @@ export function ownProjectNames(inventory: InventoryView, existing: Record<strin
 // The steps with the order step last, when one of them writes a project-scope registration.
 export function withOrderStep<Step extends StepLike>(steps: Step[], project: string, own: string[] = []): (Step | OrderStep)[]
 {
-    const writes = steps.some((step) => (['mcp-add', 'mcp-replace'].includes(step.op as string) && step.scope === 'project') || (step.op === 'mcp-move' && step.to && (step.to as StepEnd).scope === 'project'));
+    const writes = steps.some((step) => (typeof step.op === 'string' && ['mcp-add', 'mcp-replace'].includes(step.op) && step.scope === 'project') || (step.op === 'mcp-move' && isRecord(step.to) && step.to['scope'] === 'project'));
     if (!writes) return steps;
     const pathApi = pathApiOf(project);
-    return [...steps, { op: 'order-mcp-json', file: pathApi.join(project, MCP_JSON), own, why: ORDER_REASON } as OrderStep];
+    const order: OrderStep = { op: 'order-mcp-json', file: pathApi.join(project, MCP_JSON), own, why: ORDER_REASON };
+    return [...steps, order];
 }
 

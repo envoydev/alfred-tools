@@ -2,7 +2,7 @@ import { pathApiOf } from '../entries/platform.ts';
 import { installedOf } from '../inventory/inventory.ts';
 import * as roots from '../roots/roots.ts';
 import { RECOMMENDED_SUFFIX } from './asks-keys.ts';
-import { PREFIX, WALK_QUESTION } from './record-constants.ts';
+import { PREFIX, WALK_CHOICES, WALK_QUESTION } from './record-constants.ts';
 import { rootInUse } from './asks-picks.ts';
 import { scopeOrder } from './asks-tool.ts';
 import { STATIC } from './asks-other.ts';
@@ -37,7 +37,8 @@ function pickOrder(catalog: Catalog, ids: string[]): string[]
 {
     const rank = new Map<string, number>();
     for (const group of catalog.groups) for (const row of catalog.tools.filter((candidate) => candidate.group === group.id)) rank.set(row.id, rank.size);
-    return ids.filter((id) => rank.has(id)).sort((leftId, rightId) => rank.get(leftId)! - rank.get(rightId)!);
+    const ranked = ids.flatMap((id) => { const at = rank.get(id); return at === undefined ? [] : [{ id, at }]; });
+    return ranked.sort((left, right) => left.at - right.at).map(({ id }) => id);
 }
 
 // One step of the walk: the questions about one tool to ask now, or { id: 'done' } (spec F1). Install: `settings`, then
@@ -57,25 +58,27 @@ export function nextQuestion(inventory: Inventory, picks: Picks | null | undefin
     const steps: WalkStep[] = [];
     const add = (id: string, tool: string | null, questions: (Question | null | undefined | false)[], answers: Record<string, unknown> = {}, set: { location: LocationAnswer } | null = null) =>
     {
-        const call = questions.filter(Boolean) as Question[];
+        const call = questions.filter((question): question is Question => Boolean(question));
         const kept = Object.fromEntries(Object.entries(answers).filter(([questionId]) => call.some((question) => question.id === questionId)));
         if (call.length || set) steps.push({ id, tool, call, answers: kept, ...(set ? { set } : {}) });
     };
     const keyStep = (toolId: string) =>
     {
-        const keyNameAsk = tokens[toolId] === false ? null : builtQuestions.keyNames![toolId];
-        const settingsAsk = builtQuestions.settings![toolId];
+        // allQuestions always gives both maps; a tool with no entry in one has nothing to ask there
+        const keyNameAsk = tokens[toolId] === false ? null : builtQuestions.keyNames?.[toolId];
+        const settingsAsk = builtQuestions.settings?.[toolId];
         const urlAsks = Object.values((builtQuestions.urlNames || {})[toolId] || {});
         add(`${toolId}:keys`, toolId, [keyNameAsk && keyNameAsk.question, ...urlAsks.map((urlAsk) => urlAsk.question), settingsAsk && settingsAsk.question], { ...(keyNameAsk ? { [keyNameAsk.question.id]: keyNameAsk.answers } : {}), ...Object.fromEntries(urlAsks.map((urlAsk) => [urlAsk.question.id, urlAsk.answers])), ...(settingsAsk ? { [settingsAsk.question.id]: settingsAsk.answers } : {}) });
     };
-    const located = (toolBlock: ToolBlock) => (toolBlock.first !== null && toolBlock.first !== undefined);
     const toolSteps = (toolBlock: ToolBlock, id: string, rootStep: (() => void) | null) =>
     {
+        const { first } = toolBlock;
+        const located = first !== null && first !== undefined;
         add(`${id}:route`, id, [toolBlock.route]);
-        if (located(toolBlock)) add(`${id}:first`, id, toolBlock.first!);
+        if (located) add(`${id}:first`, id, first);
         else add(`${id}:questions`, id, toolBlock.questions || []);
         if (rootStep) rootStep();
-        if (located(toolBlock))
+        if (located)
         {
             const locationAsk = (toolBlock.questions || []).find((question) => question.id.startsWith(PREFIX.location));
             add(`${id}:questions`, id, toolBlock.questions || [], locationAsk ? { [locationAsk.id]: toolBlock.answers } : {}, toolBlock.only ? { location: toolBlock.only } : null);
@@ -90,26 +93,31 @@ export function nextQuestion(inventory: Inventory, picks: Picks | null | undefin
         {
             // which apps, first after the picks (spec D3)
             if (builtQuestions.clients) add(WALK_QUESTION.clients, null, [builtQuestions.clients.question], { [WALK_QUESTION.clients]: builtQuestions.clients.answers });
-            const one = rows.length === 1 ? STATIC.settingsOne(catalog.byId.get(rows[0]!)!.label) : STATIC.settings;
-            add(WALK_QUESTION.settings, null, [one], { [WALK_QUESTION.settings]: { [one.options[0]!.label]: 'recommended', [one.options[1]!.label]: 'each' } });
-            if (picks.walk === 'recommended') return steps.find((step) => !done.has(step.id)) || { id: 'done' };
+            const [first] = rows;
+            const onlyRow = rows.length === 1 && first !== undefined ? catalog.byId.get(first) : undefined;
+            const one = onlyRow ? STATIC.settingsOne(onlyRow.label) : STATIC.settings;
+            // each option's answer, in WALK_CHOICES' order
+            const choices = one.options.flatMap((option, i) => { const choice = WALK_CHOICES[i]; return choice === undefined ? [] : [[option.label, choice]]; });
+            add(WALK_QUESTION.settings, null, [one], { [WALK_QUESTION.settings]: Object.fromEntries(choices) });
+            if (picks.walk === WALK_CHOICES[0]) return steps.find((step) => !done.has(step.id)) || { id: 'done' };
         }
         const asked = new Set(Object.keys(picks.roots || {}));
         for (const id of rows)
         {
-            const row = catalog.byId.get(id)!;
+            const row = catalog.byId.get(id);
             const toolBlock = builtQuestions.tools[id];
-            if (!toolBlock) continue;
+            if (!row || !toolBlock) continue;
             const routeId = (picks.routes || {})[id] || row.recommendedRoute;
             const rootStep = () =>
             {
                 if (!needsRoot(row, routeId)) return;
-                const scope = (picks.scopes || {})[id] || scopeOrder(row, inventory, { route: routeId, context: null, copyOf: installedOf(inventory, id) })[0]!;
+                const scope = (picks.scopes || {})[id] || scopeOrder(row, inventory, { route: routeId, context: null, copyOf: installedOf(inventory, id) })[0];
                 const family = roots.familyOf(scope);
                 if (asked.has(family)) return;
                 asked.add(family);
-                const rootAsk = builtQuestions.roots!.questions.find((candidate) => candidate.id === `${PREFIX.root}${family}`);
-                if (rootAsk) add(`root:${family}`, id, [rootAsk], { [rootAsk.id]: builtQuestions.roots!.answers[rootAsk.id] });
+                const rootAsks = builtQuestions.roots;
+                const rootAsk = rootAsks?.questions.find((candidate) => candidate.id === `${PREFIX.root}${family}`);
+                if (rootAsks && rootAsk) add(`root:${family}`, id, [rootAsk], { [rootAsk.id]: rootAsks.answers[rootAsk.id] });
             };
             toolSteps(toolBlock, id, rootStep);
         }
@@ -118,14 +126,23 @@ export function nextQuestion(inventory: Inventory, picks: Picks | null | undefin
     {
         const toolBlock = builtQuestions.targets[key];
         if (!toolBlock || toolBlock.error) continue;
-        if (toolBlock.kind === 'root') { add(key, key, [toolBlock.root!.question], { [toolBlock.root!.question.id]: toolBlock.root!.answers }); continue; }
-        if (toolBlock.kind === 'own') { add(`${key}:own`, key, [toolBlock.own!.question], { [toolBlock.own!.question.id]: toolBlock.own!.answers }); continue; }
+        if (toolBlock.kind === 'root' || toolBlock.kind === 'own')
+        {
+            const blockAsk = toolBlock.kind === 'root' ? toolBlock.root : toolBlock.own;
+            if (!blockAsk) throw new Error(`${key}: a ${toolBlock.kind} target is built with its question`);
+            add(toolBlock.kind === 'root' ? key : `${key}:own`, key, [blockAsk.question], { [blockAsk.question.id]: blockAsk.answers });
+            continue;
+        }
         if (toolBlock.kind === 'mcp')
         {
-            const family = roots.familyOf(toolBlock.current!.scope!);
-            const root = rootInUse(inventory, family, { home: options.home!, catalog });
+            const current = toolBlock.current;
+            if (!current) throw new Error(`${key}: a registration target is built with its current registration`);
+            const family = roots.familyOf(current.scope);
+            const root = rootInUse(inventory, family, { ...(options.home ? { home: options.home } : {}), catalog });
             const fallback = roots.resolveRoots(inventory, picks.roots, { project: inventory.project, platform: inventory.os, home: options.home || homeDir(process.env), catalog }).roots[family];
-            const ownAsk = ownStep({ key, name: toolBlock.current!.name, scope: toolBlock.current!.scope }, root ? root.path : fallback!);
+            const folder = root ? root.path : fallback;
+            if (folder === null || folder === undefined) throw new Error(`${key}: no ${family} root is in use or resolved for its list`);
+            const ownAsk = ownStep({ key, name: current.name, scope: current.scope }, folder);
             add(`${key}:own`, key, [ownAsk.question], { [ownAsk.question.id]: ownAsk.answers });
             if ((picks.existing || {})[key] === 'own') continue;
         }

@@ -43,7 +43,7 @@ export function renderPlan(plan: Plan): string
 {
     const lines: string[] = [];
     const pathApi = pathFor(plan.os);
-    if ((plan.outside || []).length) lines.push(...plan.outside!, '');
+    if (plan.outside?.length) lines.push(...plan.outside, '');
     if (plan.errors.length) lines.push('Cannot plan:', ...plan.errors.map((error) => `  ! ${error}`), '');
     if (!plan.steps.length && !plan.errors.length) lines.push('Nothing to do: every answer already matches what is installed - no claude call, no file written.');
     // which apps (spec D3): stated once, with the Cursor file each scope writes
@@ -78,7 +78,7 @@ export function renderPlan(plan: Plan): string
     if (plan.keys.length) lines.push('', ...plan.keys.map(keyLine));
     if ((plan.reconnect || []).length) lines.push('', ...plan.reconnect.map(reconnectLine));
     // the shared sign-in (D5) opens the browser at the first start in either app; the rest sign in through /mcp
-    for (const oauthEntry of plan.oauth.filter((candidate) => candidate.signin)) lines.push('', `OAuth: ${oauthEntry.name}: your browser opens to sign in the first time it starts, in Claude Code or Cursor; the sign-in is kept in ${pathApi.join(oauthEntry.root!, roots.FILES.signIns)}/ and serves both.`);
+    for (const oauthEntry of plan.oauth) if (oauthEntry.signin) lines.push('', `OAuth: ${oauthEntry.name}: your browser opens to sign in the first time it starts, in Claude Code or Cursor; the sign-in is kept in ${pathApi.join(oauthEntry.root, roots.FILES.signIns)}/ and serves both.`);
     const viaMcp = plan.oauth.filter((candidate) => !candidate.signin);
     if (viaMcp.length) lines.push('', `OAuth: run /mcp once in a session to log in to ${viaMcp.map((oauthEntry) => oauthEntry.name).join(', ')}.`);
     if (plan.dangerous.length) lines.push('', ...plan.dangerous.map((dangerous) => `Code-running tool on '${dangerous.name}': ${dangerous.tools.map((tool) => `${tool.tool} (${tool.why})`).join('; ')}. This plugin adds no guard.`));

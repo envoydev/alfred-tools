@@ -76,6 +76,55 @@ test('classify: absent, foreign with its label, current for a live runtime, stal
     assert.deepStrictEqual(c('a string'), { state: 'foreign', label: 'custom' });
 });
 
+test('classify: a statusLine that is not claude-hud\'s is named by what runs it', () =>
+{
+    const want = expected({ platform: 'darwin', configDir: '/acct', runtime: NODE, env: {}, exists: fs.existsSync, bash: false });
+    const label = (command: string) => classify({ type: 'command', command }, { platform: 'darwin', want, exists: fs.existsSync });
+    assert.deepStrictEqual(label('npx -y claude-pace@1.2.0'), { state: 'foreign', label: 'claude-pace' });
+    assert.deepStrictEqual(label('npx -y ccstatusline@latest'), { state: 'foreign', label: 'cc-statusline' });
+    assert.deepStrictEqual(label('bunx cc-statusline'), { state: 'foreign', label: 'cc-statusline' });
+    assert.deepStrictEqual(label('node ~/bin/bar.js'), { state: 'foreign', label: 'custom' });
+});
+
+test('classify: the awk shapes /claude-hud:setup writes on macOS and Linux - node and bun - are current with a live runtime', () =>
+{
+    const want = expected({ platform: 'linux', configDir: '/acct', runtime: NODE, env: {}, exists: fs.existsSync, bash: false });
+    const c = (command: string) => classify({ type: 'command', command }, { platform: 'linux', want, exists: fs.existsSync });
+    assert.deepStrictEqual(c(hud.fill(hud.SHAPES.awkNode, { RUNTIME_PATH: NODE, SOURCE: 'dist/index.js' })), { state: 'current' });
+    assert.deepStrictEqual(c(hud.fill(hud.SHAPES.awkBun, { RUNTIME_PATH: NODE, SOURCE: 'src/index.ts' })), { state: 'current' });
+    assert.deepStrictEqual(c(hud.fill(hud.SHAPES.awkNode, { RUNTIME_PATH: '/gone/node', SOURCE: 'dist/index.js' })), { state: 'stale' });
+    assert.deepStrictEqual(c(hud.fill(hud.SHAPES.awkBun, { RUNTIME_PATH: NODE, SOURCE: 'dist/index.js' })), { state: 'stale' }, 'bun runs the source, never the build');
+});
+
+test('classify: claude-hud 0.11\'s POSIX launcher line is current only with a live runtime and this account\'s launcher copy', () =>
+{
+    const configDir = account();
+    const hudDir = path.join(configDir, 'plugins', 'claude-hud');
+    const launcher = path.join(hudDir, 'statusline.mjs');
+    const want = expected({ platform: 'darwin', configDir, runtime: NODE, env: {}, exists: fs.existsSync, bash: false });
+    const c = (command: string) => classify({ type: 'command', command }, { platform: 'darwin', want, exists: fs.existsSync });
+    const line = `'${NODE}' '${launcher}'`;
+    assert.deepStrictEqual(c(line), { state: 'stale' }, 'no launcher copy on disk');
+    fs.mkdirSync(hudDir, { recursive: true });
+    fs.writeFileSync(launcher, '');
+    assert.deepStrictEqual(c(line), { state: 'current' });
+    assert.deepStrictEqual(c(`'${NODE}' --env-file /dev/null '${launcher}'`), { state: 'current' }, 'the bun form');
+    assert.deepStrictEqual(c(`'/gone/node' '${launcher}'`), { state: 'stale' });
+    assert.deepStrictEqual(c(`'${NODE}' '${path.join(TMP, 'other', 'claude-hud', 'statusline.mjs')}'`), { state: 'stale' }, 'a launcher that is not this account\'s');
+});
+
+test('classify: claude-hud 0.11\'s Git Bash line is current only with its statusline.cmd shim and launcher beside it', () =>
+{
+    const configDir = 'C:\\Users\\me\\.claude';
+    const hudDir = path.win32.join(configDir, 'plugins', 'claude-hud');
+    const line = 'exec "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/statusline.cmd"';
+    const both = winDisk(WIN_NODE, path.win32.join(hudDir, 'statusline.cmd'), path.win32.join(hudDir, 'statusline.mjs'));
+    const want = expected({ platform: 'win32', configDir, runtime: WIN_NODE, env: { ...WIN_ENV, OSTYPE: 'msys' }, exists: both, bash: true });
+    assert.deepStrictEqual(classify({ type: 'command', command: line }, { platform: 'win32', want, exists: both }), { state: 'current' });
+    const noShim = winDisk(WIN_NODE, path.win32.join(hudDir, 'statusline.mjs'));
+    assert.deepStrictEqual(classify({ type: 'command', command: line }, { platform: 'win32', want, exists: noShim }), { state: 'stale' });
+});
+
 test('Windows cmd line: current only with a live node AND this account\'s own launcher', () =>
 {
     const configDir = 'C:\\Users\\me\\.claude';

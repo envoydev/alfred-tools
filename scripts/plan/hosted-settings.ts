@@ -10,7 +10,7 @@ import { PREFIX, RECOMMENDED_SUFFIX, TOOLSET_SEPARATOR } from './record-constant
 // The settings a fresh install sends: each setting that has a default.
 export function defaultHostedSettings(route: CatalogRoute): Record<string, string>
 {
-    return Object.fromEntries((route.settings || []).filter((setting) => setting.default !== undefined).map((setting) => [setting.header, setting.default!]));
+    return Object.fromEntries((route.settings || []).flatMap((setting) => (setting.default === undefined ? [] : [[setting.header, setting.default]])));
 }
 
 // The fixed pairs a registration's helper command carries that this route knows as settings.
@@ -18,8 +18,8 @@ export function currentHostedSettings(route: CatalogRoute, entry: ServerEntry | 
 {
     const known = new Set((route.settings || []).map((setting) => setting.header));
     const pairs = (entry && helperParts(entry.headersHelper)?.pairs) || [];
-    const fixed = pairs.map(splitPair).filter((pair) => pair !== null && pair.kind === 'fixed' && known.has(pair.header));
-    return Object.fromEntries(fixed.map((pair) => [pair!.header, pair!.rest]));
+    const fixed = pairs.map(splitPair).flatMap((pair) => (pair !== null && pair.kind === 'fixed' && known.has(pair.header) ? [[pair.header, pair.rest]] : []));
+    return Object.fromEntries(fixed);
 }
 
 // The answer checked against the route's settings: names the route has, values from its `values`, toolsets as a
@@ -50,6 +50,14 @@ export function checkHostedSettings(route: CatalogRoute, given: Record<string, s
     return { settings };
 }
 
+// The read-only setting's default, which a route offering the tools question carries.
+function readOnlyDefault(route: CatalogRoute): string
+{
+    const value = route.settings?.find((setting) => setting.header === READ_ONLY_HEADER)?.default;
+    if (value === undefined) throw new Error(`a hosted route asked about its tools has no ${READ_ONLY_HEADER} default`);
+    return value;
+}
+
 // The tools question of a hosted route with settings. At install, read-only comes first and is recommended; at configure
 // the option that matches the registration's own pairs does (`entry`), and a registration that sends toolsets keeps them
 // in its answer, so nothing is asked again.
@@ -64,7 +72,7 @@ export function hostedSettingsQuestion(row: CatalogRow, route: CatalogRoute, ent
         description: option === matching && now && now[TOOLSETS_HEADER] !== undefined ? `toolsets: ${now[TOOLSETS_HEADER]}` : option.description,
         answer: ((): HostedSettingsAnswer =>
         {
-            const readOnly = option.readOnly ? { [READ_ONLY_HEADER]: route.settings!.find((setting) => setting.header === READ_ONLY_HEADER)!.default! } : {};
+            const readOnly = option.readOnly ? { [READ_ONLY_HEADER]: readOnlyDefault(route) } : {};
             if (!option.chosen) return readOnly;
             return option === matching && now && now[TOOLSETS_HEADER] !== undefined ? { ...readOnly, [TOOLSETS_HEADER]: now[TOOLSETS_HEADER] } : { ...readOnly, [TOOLSETS_ASKED]: true };
         })(),
@@ -79,7 +87,7 @@ export function hostedSettingsQuestion(row: CatalogRow, route: CatalogRoute, ent
 export function pairNames(entry: ServerEntry | null | undefined): string[]
 {
     const pairs = (entry && helperParts(entry.headersHelper)?.pairs) || [];
-    return pairs.map(splitPair).filter((pair) => pair !== null && pair.kind === 'name').map((pair) => pair!.rest);
+    return pairs.map(splitPair).flatMap((pair) => (pair !== null && pair.kind === 'name' ? [pair.rest] : []));
 }
 
 // One line per pair name that holds no value yet: it is optional - the header is sent once the name is filled.

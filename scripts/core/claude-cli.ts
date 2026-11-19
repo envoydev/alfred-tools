@@ -4,6 +4,7 @@
 import { spawnSync } from 'node:child_process';
 import { cmdArg } from './cmd-line.ts';
 import { CLI_MAX_BUFFER_BYTES, CLI_TIMEOUT_MS } from './constants.ts';
+import { errorCode } from './guards.ts';
 import type { CliOptions, CliResult } from './types.ts';
 
 export { argvQuote, cmdArg } from './cmd-line.ts';
@@ -13,7 +14,7 @@ export function runClaude(args: string[], { cwd, env, input, timeout = CLI_TIMEO
     const options = { encoding: 'utf8' as const, cwd, env: env || process.env, input, timeout, windowsHide: true, maxBuffer: CLI_MAX_BUFFER_BYTES };
     let result = spawnSync('claude', args, options);
     // npm's claude.cmd cannot be spawned directly on Windows (ENOENT or EINVAL): go through cmd.exe with quoted arguments.
-    if (process.platform === 'win32' && result.error && ((result.error as NodeJS.ErrnoException).code === 'ENOENT' || (result.error as NodeJS.ErrnoException).code === 'EINVAL'))
+    if (process.platform === 'win32' && result.error && ['ENOENT', 'EINVAL'].includes(errorCode(result.error) ?? ''))
         result = spawnSync(['claude', ...args.map(cmdArg)].join(' '), { ...options, shell: true });
     return { status: result.status, stdout: result.stdout || '', stderr: result.stderr || '', error: result.error || null, signal: result.signal };
 }

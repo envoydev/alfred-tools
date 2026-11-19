@@ -83,6 +83,17 @@ test('the user\'s own servers, alfred-code leftovers and unreadable files are na
     assert.match(text, /\/proj\/\.mcp\.json is malformed \(not valid JSON\): the project scope is unreadable here, and nothing will be written to it\./);
 });
 
+test('a CLI list that could not be read is named as a list under the table, never as a scope', () =>
+{
+    const text = renderTable(inv({ unreadable: [
+        { scope: 'plugins', file: 'claude plugin list --json', state: 'unreadable', error: 'the command failed' },
+        { scope: 'marketplaces', file: 'claude plugin marketplace list --json', state: 'malformed', error: 'not JSON' },
+    ] }), catalog);
+    assert.match(text, /claude plugin list --json is unreadable \(the command failed\): the plugin list could not be read, so this run takes no plugin as installed\./);
+    assert.match(text, /claude plugin marketplace list --json is malformed \(not JSON\): the marketplace list could not be read, so update offers no plugin update from it\./);
+    assert.doesNotMatch(text, /the (plugins|marketplaces) scope/);
+});
+
 test('main reads the inventory file; a missing file exits 2', () =>
 {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pt-table-'));

@@ -12,6 +12,8 @@ import * as roots from '../roots/roots.ts';
 import * as keys from '../keys/keys.ts';
 import * as kept from '../core/kept.ts';
 import { deepEqual, stripBom } from '../core/json-file.ts';
+import { errorCode, isRecord } from '../core/guards.ts';
+import { isListServer, isOwnEntry, isStepEnd } from './guards.ts';
 import { replaceFile } from '../core/replace-file.ts';
 import { pathFor } from '../entries/platform.ts';
 import type { Outcome, ServerEntry } from '../core/types.ts';
@@ -19,7 +21,7 @@ import type { CatalogRow } from '../catalog/types.ts';
 import type { TokenField } from '../keys/types.ts';
 import type { Registration } from '../entries/types.ts';
 import type { Family, InventoryView, RootsCtx } from '../roots/types.ts';
-import type { ListChanges, ListRead, ListServer, Live, McpsList, OldRecord, OwnEntry, RawDoc, ReadState, StepEnd, StepLike } from './types.ts';
+import type { ListChanges, ListRead, ListServer, Live, McpsList, OldRecord, OwnEntry, ReadState, StepLike } from './types.ts';
 
 export const LIST_VERSION = 1;
 
@@ -32,21 +34,24 @@ export function readList(file: string): ListRead | null
 {
     let text: string;
     try { text = fs.readFileSync(file, 'utf8'); }
-    catch (caught) { const err = caught as NodeJS.ErrnoException;  return err.code === 'ENOENT' || err.code === 'ENOTDIR' ? null : empty(file, `cannot be read (${err.code})`, 'unreadable'); }
-    let doc: RawDoc | null;
+    catch (caught) { const code = errorCode(caught); return code === 'ENOENT' || code === 'ENOTDIR' ? null : empty(file, `cannot be read (${code})`, 'unreadable'); }
+    let doc: unknown;
     // the former name's marker (spec D2) - it is JSON-safe, so the text is swapped before the parse
-    try { doc = JSON.parse(stripBom(text).replaceAll(kept.OLD_MARKER, kept.MARKER)) as RawDoc | null; }
+    try { doc = JSON.parse(stripBom(text).replaceAll(kept.OLD_MARKER, kept.MARKER)); }
     catch { return empty(file, 'is not JSON', 'bad'); }
-    if (doc && typeof doc === 'object' && doc.version !== LIST_VERSION && newerOrBad(doc.version) === 'newer')
-        return empty(file, `is version ${doc.version}, newer than this plugin's ${LIST_VERSION}`, 'newer');
-    if (!doc || typeof doc !== 'object' || doc.version !== LIST_VERSION || !Array.isArray(doc.servers))
-        return empty(file, `is version ${JSON.stringify(doc && doc.version)} or has no servers list`, 'bad');
+    const version = isRecord(doc) ? doc['version'] : undefined;
+    if (isRecord(doc) && version !== LIST_VERSION && newerOrBad(version) === 'newer')
+        return empty(file, `is version ${version}, newer than this plugin's ${LIST_VERSION}`, 'newer');
+    const servers = isRecord(doc) ? doc['servers'] : undefined;
+    if (!isRecord(doc) || version !== LIST_VERSION || !Array.isArray(servers))
+        return empty(file, `is version ${JSON.stringify(doc && version)} or has no servers list`, 'bad');
+    const own = doc['own'];
     const out: McpsList = {
         version: LIST_VERSION,
-        servers: (doc.servers as ListServer[]).filter((server) => server && typeof server === 'object' && typeof server.name === 'string' && typeof server.scope === 'string'),
-        own: Array.isArray(doc.own) ? (doc.own as OwnEntry[]).filter((ownEntry) => ownEntry && typeof ownEntry === 'object') : [],
+        servers: servers.filter(isListServer),
+        own: Array.isArray(own) ? own.filter(isOwnEntry) : [],
     };
-    if (doc.cursorOffer === 'declined') out.cursorOffer = 'declined';
+    if (doc['cursorOffer'] === 'declined') out.cursorOffer = 'declined';
     return out;
 }
 
@@ -66,7 +71,7 @@ export const serverKey = (server: { name: string; scope: string }): string => `m
 export function regKey(step: StepLike | null | undefined): string | null
 {
     if (!step || typeof step.op !== 'string' || !step.op.startsWith('mcp-')) return null;
-    if (step.op === 'mcp-move' && step.to) return serverKey(step.to as StepEnd);
+    if (step.op === 'mcp-move' && isStepEnd(step.to)) return serverKey(step.to);
     return typeof step.name === 'string' && typeof step.scope === 'string' ? serverKey({ name: step.name, scope: step.scope }) : null;
 }
 
@@ -93,13 +98,13 @@ export function mergeList(list: Omit<McpsList, 'version'> | null | undefined, { 
 export function writeList(file: string, doc: { version?: number | undefined; servers?: ListServer[] | undefined; own?: OwnEntry[] | undefined; cursorOffer?: string | undefined }, read: ListRead | null | undefined): Outcome
 {
     if (read && (read.state === 'newer' || read.state === 'unreadable'))
-        return { ok: true, detail: `${read.note!.replace(/ - read as empty$/, '')} - left as it is; ${read.state === 'newer' ? 'update alfred-tools' : 'check its permissions'}, then run the command again` };
+        return { ok: true, detail: `${read.note.replace(/ - read as empty$/, '')} - left as it is; ${read.state === 'newer' ? 'update alfred-tools' : 'check its permissions'}, then run the command again` };
     const servers = doc.servers || [];
     const own = doc.own || [];
     if (!servers.length && !own.length)
     {
         if (!read) return { ok: true, detail: `${file}: no server is listed - nothing to write` };
-        if (read.state) return { ok: true, detail: `${read.note!.replace(/ - read as empty$/, '')} - not this plugin's list, left as it is` };
+        if (read.state) return { ok: true, detail: `${read.note.replace(/ - read as empty$/, '')} - not this plugin's list, left as it is` };
         fs.rmSync(file, { force: true });
         return { ok: true, detail: `removed ${file} - no server is listed` };
     }
@@ -120,9 +125,10 @@ function valueOf(entry: ServerEntry, field: TokenField, tokenVar: string): strin
 {
     const value = keys.valueAt(entry, field.at);
     if (typeof value !== 'string') return null;
-    const [before, after] = field.template.split(`\${${tokenVar}}`);
-    if (after === undefined || !value.startsWith(before!) || !value.endsWith(after)) return null;
-    return value.slice(before!.length, value.length - after.length);
+    // split always gives a first part
+    const [before = '', after] = field.template.split(`\${${tokenVar}}`);
+    if (after === undefined || !value.startsWith(before) || !value.endsWith(after)) return null;
+    return value.slice(before.length, value.length - after.length);
 }
 
 // A list item from a registration as read: `entry` kept (every key value the kept marker), `key` the variable a stdio key
@@ -130,13 +136,15 @@ function valueOf(entry: ServerEntry, field: TokenField, tokenVar: string): strin
 // variable; null when the entry holds no key field.
 export function fromRegistration(registration: Registration, row: CatalogRow | null | undefined, clients: string[], files: string[] = []): ListServer
 {
-    const route = row && row.routes ? row.routes[registration.route!] : null;
+    const route = row && row.routes && registration.route ? row.routes[registration.route] : null;
     let key: string | null = null;
-    const fields = keys.tokenFields(registration.entry, route);
-    if (fields.length)
+    // tokenFields finds a field only for a route that names a token variable
+    const [field] = keys.tokenFields(registration.entry, route);
+    const tokenVar = route && route.tokenVar;
+    if (field && tokenVar)
     {
-        const value = valueOf(registration.entry, fields[0]!, route!.tokenVar!);
-        key = (value && keys.nameOfValue(files, value)) || route!.tokenVar!;
+        const value = valueOf(registration.entry, field, tokenVar);
+        key = (value && keys.nameOfValue(files, value)) || tokenVar;
     }
     return { name: registration.name, scope: registration.scope, row: row ? row.id : null, route: registration.route, clients: clients.slice(), entry: kept.maskCredentials(registration.entry, row), key };
 }
@@ -152,10 +160,11 @@ const versionNote = (file: string, version: unknown, current: number): string =>
 export function oldRecordFiles(inventory: InventoryView, family: Family, context: RootsCtx): string[]
 {
     const pathApi = pathFor(context.platform);
-    const map = ((inventory.roots && inventory.roots.map) || { projects: {} }) as { global?: string | null; projects: Record<string, string> };
-    const mapped = family === 'global' ? map.global : (Object.keys(map.projects || {}).length ? map.projects[roots.mapKey(context.project)] : null);
+    const map = inventory.roots && inventory.roots.map;
+    const projects = (map && map.projects) || {};
+    const mapped = family === 'global' ? map && map.global : (Object.keys(projects).length ? projects[roots.mapKey(context.project)] : null);
     const order = family === 'global' ? roots.standard('global', context) : [...roots.standard('project', context)].reverse();
-    const dirs = [mapped, ...order.map((standardRoot) => standardRoot.root), ...roots.registrationRoots(inventory, family, context)].filter(Boolean) as string[];
+    const dirs = [mapped, ...order.map((standardRoot) => standardRoot.root), ...roots.registrationRoots(inventory, family, context)].filter((dir): dir is string => Boolean(dir));
     return [...new Set(dirs)].map((dir) => pathApi.join(dir, roots.FILES.record));
 }
 
@@ -164,15 +173,17 @@ export function readOldRecord(file: string): OldRecord | null
 {
     let text: string;
     try { text = fs.readFileSync(file, 'utf8'); }
-    catch (caught) { const err = caught as NodeJS.ErrnoException;  return err.code === 'ENOENT' || err.code === 'ENOTDIR' ? null : { version: OLD_RECORD_VERSION, servers: [], note: `${file} cannot be read (${err.code}) - read as empty`, state: 'unreadable' }; }
-    let doc: RawDoc | null;
-    try { doc = JSON.parse(stripBom(text)) as RawDoc | null; }
+    catch (caught) { const code = errorCode(caught); return code === 'ENOENT' || code === 'ENOTDIR' ? null : { version: OLD_RECORD_VERSION, servers: [], note: `${file} cannot be read (${code}) - read as empty`, state: 'unreadable' }; }
+    let doc: unknown;
+    try { doc = JSON.parse(stripBom(text)); }
     catch { return { version: OLD_RECORD_VERSION, servers: [], note: `${file} is not JSON - read as empty`, state: 'bad' }; }
-    if (doc && typeof doc === 'object' && doc.version !== OLD_RECORD_VERSION && newerOrBad(doc.version) === 'newer')
-        return { version: OLD_RECORD_VERSION, servers: [], note: `${versionNote(file, doc.version, OLD_RECORD_VERSION)} - read as empty`, state: 'newer' };
-    if (!doc || typeof doc !== 'object' || doc.version !== OLD_RECORD_VERSION || !Array.isArray(doc.servers))
-        return { version: OLD_RECORD_VERSION, servers: [], note: `${file} is version ${JSON.stringify(doc && doc.version)} or has no servers list - read as empty`, state: 'bad' };
-    return { version: OLD_RECORD_VERSION, servers: (doc.servers as OwnEntry[]).filter((entry) => entry && typeof entry === 'object') };
+    const version = isRecord(doc) ? doc['version'] : undefined;
+    if (isRecord(doc) && version !== OLD_RECORD_VERSION && newerOrBad(version) === 'newer')
+        return { version: OLD_RECORD_VERSION, servers: [], note: `${versionNote(file, version, OLD_RECORD_VERSION)} - read as empty`, state: 'newer' };
+    const servers = isRecord(doc) ? doc['servers'] : undefined;
+    if (!isRecord(doc) || version !== OLD_RECORD_VERSION || !Array.isArray(servers))
+        return { version: OLD_RECORD_VERSION, servers: [], note: `${file} is version ${JSON.stringify(doc && version)} or has no servers list - read as empty`, state: 'bad' };
+    return { version: OLD_RECORD_VERSION, servers: servers.filter(isOwnEntry) };
 }
 
 // The own entries with this run's merged in (D6). An entry replaces the one with its key, in place; a new key is
@@ -188,7 +199,8 @@ function mergeOwn(record: { servers?: OwnEntry[] | undefined } | null | undefine
     {
         const key = roots.recordKey(entry);
         if (!key) continue;
-        if (at.has(key)) out[at.get(key)!] = entry;
+        const index = at.get(key);
+        if (index !== undefined) out[index] = entry;
         else { at.set(key, out.length); out.push(entry); }
     }
     const servers = (live && live.servers) || {};
@@ -197,8 +209,8 @@ function mergeOwn(record: { servers?: OwnEntry[] | undefined } | null | undefine
     {
         if (typeof entry.connector === 'string') return !connectors || connectors.includes(entry.connector);
         const key = roots.recordKey(entry);
-        if (!Object.hasOwn(servers, key!)) return false;
-        return servers[key!] === null || deepEqual(servers[key!], entry.fingerprint);
+        if (key === null || !Object.hasOwn(servers, key)) return false;
+        return servers[key] === null || deepEqual(servers[key], entry.fingerprint);
     });
     return { version: OLD_RECORD_VERSION, servers: kept };
 }

@@ -64,6 +64,12 @@ export interface AccountFile
     projects?: Record<string, AccountProject> | undefined; // stored - do not rename
     [key: string]: unknown;
 }
+// The account file's top level as readAccount checks it: each project entry is checked only where it is read.
+export interface AccountTop
+{
+    mcpServers?: ServerMap | undefined; // stored - do not rename
+    projects?: Record<string, unknown> | undefined; // stored - do not rename
+}
 
 // A JSON file read as a state, never a throw.
 export type FileState = 'ok' | 'missing' | 'empty' | 'malformed' | 'unreadable';
@@ -117,9 +123,24 @@ export interface Outcome
     detail: string;
 }
 
-// A stream's libuv handle, which Node's types do not declare.
-export type HandleOf = { _handle?: { setBlocking?: (blocking: boolean) => void } | null };
-
 // The catalog row a registration matched, for its location keys; null for the user's own.
 export type RowOf = CatalogRow | null | undefined;
 export type Path = (string | number)[];
+
+// A command the machine ran, as spawnSync reports it.
+export interface RunResult
+{
+    status: number | null;
+    stdout: string;
+    stderr: string;
+    error?: Error | undefined;
+}
+// The only way a detector or a check looks at the machine, so a test replaces it.
+export interface MachineProbe
+{
+    exists(file: string): boolean;
+    realpath(file: string): string | null;
+    which(name: string): string | null;
+    run(command: string, args: string[], options?: { cwd?: string; env?: Env }): RunResult | null;
+    nodeVersion: string;
+}

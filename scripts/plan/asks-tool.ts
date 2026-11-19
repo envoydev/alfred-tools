@@ -8,6 +8,7 @@ import * as existingServers from '../inventory/existing.ts';
 import * as roots from '../roots/roots.ts';
 import { LABEL, PREFIX } from './record-constants.ts';
 import { EDGE_DASHES, MAX_NAME_LENGTH, MAX_OPTIONS, NAME_UNSAFE_RUN, PROJECT_NAME_FALLBACK } from './constants.ts';
+import { required } from './required.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { Current } from '../entries/types.ts';
 import type { Installed, Inventory } from '../inventory/types.ts';
@@ -19,8 +20,10 @@ export function changeQuestions(inventory: Inventory, catalog: Catalog, context:
 {
     const describe = (row: CatalogRow, installed: Installed) =>
     {
-        const pin = pinOf(row, installed.route!, installed.entry!);
-        return `${ROUTE_WORD[installed.route!] || installed.route} route${pin ? `, pin ${pin}` : ''}`;
+        // a plugin row has no route or entry: no pin, and its route reads as the inventory gives it
+        const route = installed.route ?? null;
+        const pin = installed.entry ? pinOf(row, route, installed.entry) : null;
+        return `${(route !== null && ROUTE_WORD[route]) || installed.route} route${pin ? `, pin ${pin}` : ''}`;
     };
     const items = installedItems(inventory, catalog, describe);
     // the servers left on their own (spec D6, R3): a group of their own, whose pick keeps them so or hands them over
@@ -35,11 +38,15 @@ export function changeQuestions(inventory: Inventory, catalog: Catalog, context:
     for (const family of roots.FAMILIES)
     {
         const used = rootInUse(inventory, family, { ...context, catalog });
-        if (used) items.push({ group: rootGroup, label: ROOT_LABEL[family]!, description: `${used.path} - pick it to move ${ROOT_MOVES[family]} to another folder`, target: { kind: 'root', key: `root:${family}` } });
+        if (used) items.push({ group: rootGroup, label: ROOT_LABEL[family], description: `${used.path} - pick it to move ${ROOT_MOVES[family]} to another folder`, target: { kind: 'root', key: `root:${family}` } });
     }
     return {
         calls: packed(items, { id: 'change', question: 'which do you want to change?', none: 'change nothing' }),
-        keys: Object.fromEntries(items.map((item) => [item.label, item.target!.key || keyOf(item.target!.kind, item.target!.name!, item.target!.scope!)])),
+        keys: Object.fromEntries(items.map((item) =>
+        {
+            const target = required(item.target, `${item.label}: a configure pick is built with its target`);
+            return [item.label, target.key !== undefined ? target.key : keyOf(target.kind, target.name, target.scope)];
+        })),
     };
 }
 
@@ -53,7 +60,7 @@ export function routeQuestion(row: CatalogRow, current: string | null | undefine
     const text: Record<string, string> = { remote: 'run by the vendor - no local runtime needed', local: 'runs on this machine', bridge: 'the hosted server at a URL filled from .mcps-secrets each start - a small proxy runs here through npx' };
     return {
         id: `${PREFIX.route}${row.id}`, header: 'Route', multiSelect: false, question: ids.length > 2 ? `${row.label}: which route?` : `${row.label}: hosted or local?`,
-        options: order.map((routeId, i) => ({ label: `${capitalized(ROUTE_WORD[routeId]!)}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: text[routeId]! })),
+        options: order.map((routeId, i) => ({ label: `${capitalized(required(ROUTE_WORD[routeId], `the route '${routeId}' has no word in the asks`))}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: required(text[routeId], `the route '${routeId}' has no description in the asks`) })),
     };
 }
 
@@ -66,10 +73,11 @@ export function scopeOrder(row: CatalogRow, _inventory: Inventory | null, { rout
     const routeId = route || (current && current.route) || row.recommendedRoute;
     const all = scopesFor(row, routeId, context);
     const stranded = strandedScope(row, routeId, current, context);
-    const recommended = current && !stranded ? current.scope! : recommendedScope(row, routeId);
+    // a registration read with no scope recommends none: the offered scopes in their order
+    const recommended = current && !stranded ? current.scope : recommendedScope(row, routeId);
     const free = all.filter((scope) => !copyOf.some((copy) => copy.scope === scope));
     const scopes = free.length ? free : all;
-    const order = [recommended, ...SCOPE_ORDER.filter((scope) => scope !== recommended)].filter((scope) => scopes.includes(scope));
+    const order = [...(recommended === undefined ? [] : [recommended]), ...SCOPE_ORDER.filter((scope) => scope !== recommended)].filter((scope) => scopes.includes(scope));
     return stranded ? [...order, stranded] : order;
 }
 
@@ -105,7 +113,7 @@ export const perProjectName = (rowName: string, project: string | null | undefin
 // 'prefixed' - the per-project name; else the name itself.
 export function nameFor(row: CatalogRow, name: string | null | undefined, current: Partial<Current> | null | undefined, context: AskCtx | null | undefined): string
 {
-    if (!name || name === 'keep') return current ? current.name! : row.name;
+    if (!name || name === 'keep') return current ? required(current.name, `${row.id}: a registration to configure is read with its name`) : row.name;
     return name === 'prefixed' ? perProjectName(row.name, context?.project) : name;
 }
 
@@ -115,7 +123,7 @@ export function nameQuestion(row: CatalogRow, inventory: Inventory, { current = 
     const shadows = copyOf.find((copy) => copy.name === original);
     const options = current && current.name !== original
         ? [{ label: `${LABEL.keep}\`${current.name}\`${RECOMMENDED_SUFFIX}`, description: 'the name it has now' }, { label: `Use \`${original}\``, description: 'the original name' }]
-        : [{ label: `${LABEL.keep}\`${original}\`${RECOMMENDED_SUFFIX}`, description: shadows ? `the original name; in this project it is used instead of ${shadows.scope === 'inherited' ? `the one inherited from ${fromHere(inventory, shadows.from!)}` : 'the copy for every project'}` : 'the original name' }, { label: `Use \`${perProjectName(original, context?.project)}\``, description: 'a per-project name' }];
+        : [{ label: `${LABEL.keep}\`${original}\`${RECOMMENDED_SUFFIX}`, description: shadows ? `the original name; in this project it is used instead of ${shadows.scope === 'inherited' ? `the one inherited from ${fromHere(inventory, required(shadows.from, `${shadows.name}: an inherited server is read with its folder`))}` : 'the copy for every project'}` : 'the original name' }, { label: `Use \`${perProjectName(original, context?.project)}\``, description: 'a per-project name' }];
     return { id: `${PREFIX.name}${row.id}`, header: 'Name', multiSelect: false, question: `${row.label}: registration name?`, options };
 }
 

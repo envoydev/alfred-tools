@@ -11,6 +11,7 @@ import * as catalogLib from '../catalog/catalog.ts';
 import * as roots from '../roots/roots.ts';
 import * as keys from '../keys/keys.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
+import { required } from './required.ts';
 import type path from 'node:path';
 import type { Catalog } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
@@ -65,7 +66,15 @@ export function importUnlisted(inventory: Inventory, family: Family, catalog: Ca
             const answer = answers[key];
             return !listed.has(key) && (answer ? answer !== 'own' : registration.choice !== 'own');
         })
-        .map((registration) => lists.fromRegistration(registration, catalog.byId.get(registration.rowId!), clients, keys.stdioChain({ scope: registration.scope, projectRoot: rootFolders.project, globalRoot: rootFolders.global, platform })));
+        .map((registration) => lists.fromRegistration(registration, registration.rowId === null ? undefined : catalog.byId.get(registration.rowId), clients, keys.stdioChain({ scope: registration.scope, projectRoot: rootFolders.project, globalRoot: rootFolders.global, platform })));
+}
+
+// A listed server's fields but its entry, which a plan's upsert fills at apply; none for a server not listed yet.
+function withoutEntry(server: ListServer | null | undefined): Partial<Omit<ListServer, 'entry'>>
+{
+    if (!server) return {};
+    const { entry: _entry, ...rest } = server;
+    return rest;
 }
 
 const ownChanged = (foundEntry: FoundList | null, next: OwnEntry[]): boolean => (!foundEntry || foundEntry.state ? next.length > 0 : JSON.stringify(next) !== JSON.stringify(foundEntry.own));
@@ -79,26 +88,33 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
     const map = (inventory.roots && inventory.roots.map) || null;
     const mapped = map && map.projects ? map.projects[roots.mapKey(context.project)] : null;
     const inUse = inventory.roots && inventory.roots.project ? inventory.roots.project.path : null;
-    const mine = new Set(([mapped, inUse, context.roots && context.roots.project, ...roots.standard('project', context).map((standardRoot) => standardRoot.root)].filter(Boolean) as string[]).map(fileIn));
-    const targets: Record<string, string | null> = { project: null, global: null };
-    for (const family of Object.keys(targets)) if (context.roots && context.roots[family as Family]) targets[family] = fileIn(context.roots[family as Family]!);
+    const mine = new Set([mapped, inUse, context.roots && context.roots.project, ...roots.standard('project', context).map((standardRoot) => standardRoot.root)].filter((root): root is string => Boolean(root)).map(fileIn));
+    const targets: Record<Family, string | null> = { project: null, global: null };
+    for (const family of roots.FAMILIES)
+    {
+        const root = context.roots && context.roots[family];
+        if (root) targets[family] = fileIn(root);
+    }
     const current = (family: string) => (inventory.lists && inventory.lists[family] && !inventory.lists[family].note ? inventory.lists[family] : null);
 
     // every list file this run may touch, with the family it belongs to
-    const found = new Map<string, { list: FoundList | null; family: string }>();
-    const seen = (file: string | null | undefined, family: string) => { if (file && !found.has(file)) found.set(file, { list: foundList(inventory, file, pathApi), family }); };
-    for (const family of Object.keys(targets)) seen(targets[family], family);
+    const found = new Map<string, { list: FoundList | null; family: Family }>();
+    const seen = (file: string | null | undefined, family: Family) => { if (file && !found.has(file)) found.set(file, { list: foundList(inventory, file, pathApi), family }); };
+    for (const family of roots.FAMILIES) seen(targets[family], family);
     if (context.recordLive)
         for (const family of roots.FAMILIES)
         {
             seen(inventory.lists && inventory.lists[family] && inventory.lists[family].file, family);
-            for (const file of lists.listFiles(inventory, family as Family, context)) seen(file, family);
+            for (const file of lists.listFiles(inventory, family, context)) seen(file, family);
         }
     const plans = new Map<string, ListPlan>();
-    const at = (file: string, family: string): ListPlan =>
+    const at = (file: string, family: Family): ListPlan =>
     {
-        if (!plans.has(file)) plans.set(file, { family, upserts: [], drops: [], own: null });
-        return plans.get(file)!;
+        const known = plans.get(file);
+        if (known) return known;
+        const made: ListPlan = { family, upserts: [], drops: [], own: null };
+        plans.set(file, made);
+        return made;
     };
 
     // the registrations this plan writes or removes
@@ -120,10 +136,10 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
         const fromKey = lists.serverKey(from);
         const currentList = current(fromFam);
         const prior = currentList ? currentList.servers.find((candidate) => lists.serverKey(candidate) === fromKey) : null;
-        if (prior && (currentList!.file !== (targets[family] || currentList!.file) || fromKey !== after)) at(currentList!.file, fromFam).drops.push({ key: fromKey, after });
-        const file = targets[family] || (current(family) && current(family)!.file);
+        if (currentList && prior && (currentList.file !== (targets[family] || currentList.file) || fromKey !== after)) at(currentList.file, fromFam).drops.push({ key: fromKey, after });
+        const file = targets[family] || current(family)?.file;
         if (!file) continue;
-        const { entry: _entry, ...was } = (prior || {}) as Partial<ListServer>;
+        const was = withoutEntry(prior);
         const clients = (context.clientsFor && context.clientsFor.get(after)) || was.clients || ['claude'];
         const form = context.formFor ? context.formFor.get(after) : undefined;
         const server: PlannedServer = { ...was, name: to.name, scope: to.scope, row: step.row || was.row || null, route: step.route || was.route || null, clients, entry: null, key: was.key === undefined ? null : was.key, ...(form !== undefined ? { form } : {}) };
@@ -143,15 +159,15 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
         const family = roots.familyOf(scope);
         const currentList = current(family);
         const prior = currentList ? currentList.servers.find((candidate) => lists.serverKey(candidate) === key) : null;
-        const file = prior ? currentList!.file : targets[family] || (currentList && currentList.file);
+        const file = prior && currentList ? currentList.file : targets[family] || (currentList && currentList.file);
         if (!file) continue;
         let server: PlannedServer | null = prior ? { ...prior, clients } : null;
         if (!server)
         {
             const registration = (inventory.registrations || []).find((candidate) => candidate.name === name && candidate.scope === scope && candidate.rowId && !candidate.own);
             const catalog = context.catalog || catalogLib.load();
-            if (!registration) continue;
-            server = lists.fromRegistration(registration, catalog.byId.get(registration.rowId!), clients, keys.stdioChain({ scope, projectRoot: context.roots && context.roots.project, globalRoot: context.roots && context.roots.global, platform: context.platform }));
+            if (!registration || !registration.rowId) continue;
+            server = lists.fromRegistration(registration, catalog.byId.get(registration.rowId), clients, keys.stdioChain({ scope, projectRoot: context.roots && context.roots.project, globalRoot: context.roots && context.roots.global, platform: context.platform }));
         }
         if (form !== undefined) server.form = form;
         at(file, family).upserts.push({ server, after: null, cursorFile: null });
@@ -162,7 +178,8 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
     // family's list; a project entry in a list that is not this project's own stays where it is, named in a note
     if (context.recordLive)
     {
-        const entries = new Map<string, { ownEntry: OwnEntry; from: string | null }>();
+        // keyed by roots.recordKey, null for an entry it cannot key (one the answers name is always keyed)
+        const entries = new Map<string | null, { ownEntry: OwnEntry; from: string | null }>();
         const keep = new Map<string, OwnEntry[]>();
         for (const [file, { list: foundEntry }] of found)
         {
@@ -184,37 +201,45 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
             for (const ownEntry of (context.recordEntries && context.recordEntries[family]) || [])
             {
                 const key = roots.recordKey(ownEntry);
-                if (ownEntry.choice === 'own') entries.set(key!, { ownEntry: ownEntry, from: null });
-                else entries.delete(key!);
+                if (ownEntry.choice === 'own') entries.set(key, { ownEntry: ownEntry, from: null });
+                else entries.delete(key);
             }
         const planned = new Map([...found.keys()].map((file): [string, { entries: OwnEntry[]; keep: OwnEntry[] }] => [file, { entries: [], keep: keep.get(file) || [] }]));
         for (const { ownEntry: ownEntry, from } of entries.values())
         {
             // a family with no root this run (the roots answer's error is in the plan): the entry stays in its file
             const file = targets[roots.recordFamily(ownEntry)] || from;
-            if (file) planned.get(file)!.entries.push(ownEntry);
+            if (file) required(planned.get(file), `${file}: an own entry's list is not among the lists read`).entries.push(ownEntry);
         }
         for (const [file, want] of planned)
         {
             const own = { entries: want.entries, keep: want.keep, live: context.recordLive };
             const next = lists.ownOf(own);
-            const { list: foundEntry, family } = found.get(file)!;
+            const { list: foundEntry, family } = required(found.get(file), `${file}: not among the lists read`);
             if (ownChanged(foundEntry, next)) at(file, family).own = own;
-            if (plans.has(file)) plans.get(file)!.next = next;
+            const listPlan = plans.get(file);
+            if (listPlan) listPlan.next = next;
         }
     }
 
     // the first touch: a family this plan writes that has no list yet is imported as list-import does
     const retire: FileStep[] = [];
     const answers: Record<string, string | undefined> = {};
-    for (const family of roots.FAMILIES) for (const ownEntry of (context.recordEntries && context.recordEntries[family]) || []) answers[roots.recordKey(ownEntry)!] = ownEntry.choice;
+    for (const family of roots.FAMILIES)
+        for (const ownEntry of (context.recordEntries && context.recordEntries[family]) || [])
+        {
+            // an entry with no key matches no server's key
+            const key = roots.recordKey(ownEntry);
+            if (key !== null) answers[key] = ownEntry.choice;
+        }
     const taken = new Set([...regSteps.filter((step): step is RegistrationStep => REG_OPS.includes(step.op)).flatMap((step) => [lists.regKey(step), step.op === 'mcp-move' && step.from ? lists.serverKey(step.from) : null]), ...(context.clientsOnly || []).map((clientsChange) => clientsChange.key)].filter(Boolean));
     for (const family of roots.FAMILIES)
     {
         const familyList = inventory.lists && inventory.lists[family];
-        if (!targets[family] || !plans.has(targets[family]!) || (familyList && (!familyList.old || familyList.note))) continue;
-        const listPlan = plans.get(targets[family]!)!;
-        for (const server of importUnlisted(inventory, family as Family, context.catalog || catalogLib.load(), { answers, roots: context.roots || {}, platform: context.platform }))
+        const target = targets[family];
+        const listPlan = target ? plans.get(target) : undefined;
+        if (!target || !listPlan || (familyList && (!familyList.old || familyList.note))) continue;
+        for (const server of importUnlisted(inventory, family, context.catalog || catalogLib.load(), { answers, roots: context.roots || {}, platform: context.platform }))
             if (!taken.has(lists.serverKey(server))) listPlan.upserts.push({ server, after: null, cursorFile: null });
         if (familyList && familyList.old) retire.push({ op: 'retire-record', file: familyList.old, why: `${familyList.old}: the 0.4.x record - its entries are in ${targets[family]} now, so it is moved aside as ${roots.FILES.record}.0.4.bak` });
     }
@@ -228,7 +253,9 @@ export function listSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
         const left = ((foundEntry && foundEntry.servers) || []).filter((server) => !dropped.has(lists.serverKey(server)));
         const own = listPlan.next || (foundEntry && foundEntry.own) || [];
         const empty = !listPlan.upserts.length && !left.length && !own.length;
-        if (target && !empty) context.uses.push({ family: listPlan.family, root: context.roots![listPlan.family as Family]! });
+        // a list at its family's target sits in that family's root
+        const root = context.roots && context.roots[listPlan.family];
+        if (target && !empty && root) context.uses.push({ family: listPlan.family, root });
         steps.push({ op: 'list-write', file, family: listPlan.family, upserts: listPlan.upserts, drops: listPlan.drops, own: listPlan.own, ...(empty ? { empty: true } : {}), why: `${file}: the servers alfred-tools manages, and the ones you left on their own - configure, update and fix skip those. Remove an entry from its own list, or the file, to hand them back.` });
     }
     return [...steps, ...retire];

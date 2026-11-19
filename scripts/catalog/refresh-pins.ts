@@ -10,22 +10,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as catalogLib from './catalog.ts';
 import * as registryLib from './registry.ts';
+import { isToolsFile } from './shapes.ts';
 import type { Env } from '../core/types.ts';
-import type { Refresh, RegistryReader, Release, ToolsFile } from './types.ts';
+import type { Refresh, RegistryLookup, RegistryReader, ToolsFile } from './types.ts';
 
 const FILE = path.join(catalogLib.CATALOG_DIR, 'tools.json');
 
 // -> { next (the catalog object, moved), changes: [{ row, route, package, from, to, ageDays }], held: [], errors: [] }
 export async function refresh(tools: ToolsFile, { registry, now = Date.now() }: { registry: RegistryReader; now?: number | undefined }): Promise<Refresh>
 {
-    const next = JSON.parse(JSON.stringify(tools)) as ToolsFile;
+    const next = structuredClone(tools);
     const out: Refresh = { next, changes: [], held: [], errors: [] };
-    const cache = new Map<string, Promise<{ releases: Release[]; error?: undefined } | { error: Error; releases?: undefined }>>();
+    const cache = new Map<string, Promise<RegistryLookup>>();
     const versions = (registryName: string, name: string) =>
     {
         const key = `${registryName}:${name}`;
-        if (!cache.has(key)) cache.set(key, registry.versionsOf(registryName, name).then((releases) => ({ releases: releases }), (error: Error) => ({ error: error })));
-        return cache.get(key)!;
+        const known = cache.get(key);
+        if (known) return known;
+        const lookup: Promise<RegistryLookup> = registry.versionsOf(registryName, name).then((releases) => ({ releases: releases }), (error: Error) => ({ error: error }));
+        cache.set(key, lookup);
+        return lookup;
     };
     for (const row of next.tools)
         for (const [routeId, route] of Object.entries(row.routes || {}))
@@ -35,7 +39,7 @@ export async function refresh(tools: ToolsFile, { registry, now = Date.now() }: 
             const lookup = await versions(packageSpec.registry, packageSpec.name);
             const at = `${row.id}/${routeId}`;
             if (lookup.error) { out.errors.push(`${at}: ${packageSpec.registry} lookup for ${packageSpec.name} failed - ${lookup.error.message}`); continue; }
-            const pick = registryLib.choose(lookup.releases!, { registry: packageSpec.registry, now, current: packageSpec.version });
+            const pick = registryLib.choose(lookup.releases, { registry: packageSpec.registry, now, current: packageSpec.version });
             if (pick.held.length) out.held.push(`${at}: ${registryLib.heldLine(packageSpec.name, pick.held)}`);
             if (!pick.offer) continue;
             out.changes.push({ row: row.id, route: routeId, package: packageSpec.name, from: packageSpec.version, to: pick.offer.version, ageDays: pick.offer.ageDays });
@@ -73,7 +77,8 @@ export async function runRefreshPinsCommand(argv: string[], { out = (text: strin
     const unknown = argv.filter((argument) => argument !== '--write');
     if (unknown.length) { out(`refresh-pins: unknown argument '${unknown[0]}'\nusage: node scripts/refresh-pins.ts [--write]`); return 2; }
     const write = argv.includes('--write');
-    const tools = JSON.parse(fs.readFileSync(file, 'utf8')) as ToolsFile;
+    const tools: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!isToolsFile(tools)) { out(`refresh-pins: ${file} is not a tools.json of rows, rules, groups and order - nothing read`); return 2; }
     const result = await refresh(tools, { registry: registry || { versionsOf: (registryName: string, name: string) => registryLib.versionsOf(registryName, name, { env }) }, now });
     if (write && result.changes.length) fs.writeFileSync(file, serialize(result.next));
     out(renderPins(result, { write }));

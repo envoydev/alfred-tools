@@ -6,7 +6,7 @@ import { HELPER_VERSION } from '../copied/mcp-headers.js';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import { homeDir } from '../core/account.ts';
 import * as fixLib from '../fix/fix.ts';
-import { isManaged } from '../fix/common.ts';
+import { isManaged } from '../inventory/fingerprint.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { ShippedKind } from '../roots/types.ts';
 import type { Finding } from '../fix/types.ts';
@@ -20,15 +20,16 @@ export function helperOffers(context: UpdateCtx, out: UpdateCheck): void
 {
     const pathApi = pathFor(context.inventory.os);
     const rootContext = { project: context.project, home: homeDir(context.env), platform: context.inventory.os, catalog: context.catalog };
-    const dirs = new Set(roots.FAMILIES.map((family) => context.inventory.roots && context.inventory.roots[family] && context.inventory.roots[family].path).filter(Boolean) as string[]);
+    const familyRoots = context.inventory.roots;
+    const dirs = new Set(roots.FAMILIES.flatMap((family) => { const root = familyRoots && familyRoots[family]; return root && root.path ? [root.path] : []; }));
     const bridgeDirs = new Set<string>();
     const contextDirs = new Set<string>();
     for (const registration of context.inventory.registrations || [])
     {
         if (!registration.rowId || !isManaged(registration) || registration.scope === 'inherited') continue;
         // serena's context file (0.5.0, D7), where the entry names this plugin's
-        const at = contextArgAt(registration.entry);
-        if (at >= 0) contextDirs.add(pathApi.dirname(roots.absOf(registration.entry.args![at], rootContext)));
+        const contextArg = (registration.entry.args || [])[contextArgAt(registration.entry)];
+        if (contextArg !== undefined) contextDirs.add(pathApi.dirname(roots.absOf(contextArg, rootContext)));
         const named = roots.helperPathOf(registration.entry && registration.entry.headersHelper);
         if (named) dirs.add(pathApi.dirname(roots.absOf(named, rootContext)));
         // a bridge's folder holds its bridge and the helper it requires (0.4.0)
@@ -78,9 +79,9 @@ export function upgradeOffers(context: UpdateCtx, out: UpdateCheck): void
             continue;
         }
         const label = upgradeLabel(finding);
-        if (finding.blocked || finding.input)
+        const why = finding.blocked || (finding.input && `needs a folder from you (${finding.input.prompt})`);
+        if (why)
         {
-            const why = finding.blocked || `needs a folder from you (${finding.input!.prompt})`;
             out.notes.push(`${label}: ${finding.found} - not applied here: ${why}${/\/alfred-tools:fix/.test(why) ? '' : '; then run /alfred-tools:fix'}`);
             out.waiting += 1;
             continue;

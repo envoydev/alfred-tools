@@ -8,7 +8,9 @@ import { parsePairs } from '../copied/mcp-headers.js';
 import { pathFor, pythonRequest } from './platform.ts';
 import { alfredSerenaHome, applyRoot, familyOf, rootOf, rootOfEntry } from './locations.ts';
 import { FILES } from '../core/constants.ts';
+import { API_KEY_FLAG, BRIDGE_SLOT, EXECUTABLE_PATH_FLAG } from './constants.ts';
 import { signInParts } from './sign-in.ts';
+import { routeField, routeNamed } from '../catalog/rows.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow, CatalogRules } from '../catalog/types.ts';
 import type { BridgeParts, BuildAnswers, Current, HelperParts, Machine, Registration } from './types.ts';
@@ -17,32 +19,34 @@ import type { BridgeParts, BuildAnswers, Current, HelperParts, Machine, Registra
 export function currentOf(row: CatalogRow, registration: Registration): Current
 {
     const entry = registration.entry;
-    const flag = (flagName: string) => { const i = (entry.args || []).indexOf(flagName); return i >= 0 ? entry.args![i + 1] : undefined; };
+    const args = entry.args || [];
+    const flag = (flagName: string) => { const i = args.indexOf(flagName); return i >= 0 ? args[i + 1] : undefined; };
     const bridge = bridgeParts(entry);
     if (bridge)
     {
         // each catalog URL name, by position, to the name the template holds
         const route = Object.values(row.routes).find((candidate) => candidate.runtime === 'bridge');
         const held = templateNames(bridge.template) || [];
-        const urlNames = Object.fromEntries(((route && route.urlVars) || []).map((urlVar, i) => [urlVar.var, held[i] ? held[i]!.name : urlVar.var]));
+        const urlNames = Object.fromEntries(((route && route.urlVars) || []).map((urlVar, i) => [urlVar.var, held[i]?.name ?? urlVar.var]));
         return { name: registration.name, scope: registration.scope, route: registration.route, entry: entry, rootStr: null, executablePath: undefined, token: true, keyName: bridge.keyName, urlNames, host: null };
     }
+    // the shared sign-in form (D5) holds its URL as an argument
+    const signIn = entry.url ? null : signInParts(entry);
     return {
         name: registration.name, scope: registration.scope, route: registration.route, entry: entry,
         rootStr: row.locations ? rootOfEntry(row, entry) : null,
-        executablePath: flag('--executable-path'),
-        token: Boolean(entry.headersHelper || (entry.headers && entry.headers['Authorization']) || (entry.args || []).includes('--api-key')),
+        executablePath: flag(EXECUTABLE_PATH_FLAG),
+        token: Boolean(entry.headersHelper || (entry.headers && entry.headers['Authorization']) || args.includes(API_KEY_FLAG)),
         keyName: helperNameOf(entry.headersHelper),
-        // the shared sign-in form (D5) holds its URL as an argument
-        host: entry.url ? new URL(entry.url).hostname : signInParts(entry) ? new URL(signInParts(entry)!.url).hostname : null,
+        host: entry.url ? new URL(entry.url).hostname : signIn ? new URL(signIn.url).hostname : null,
     };
 }
 
 // ---- the entry ------------------------------------------------------------------------------------------------------
 
-export function subst(text: unknown, values: Record<string, string>): string
+export function subst(text: unknown, values: Record<string, string | undefined>): string
 {
-    return String(text).replace(/\{(\w+)\}/g, (match: string, placeholder: string) => (placeholder in values ? values[placeholder]! : match));
+    return String(text).replace(/\{(\w+)\}/g, (match: string, placeholder: string) => (placeholder in values ? String(values[placeholder]) : match));
 }
 
 // ---- the server's settings (spec D9) ---------------------------------------------------------------------------------
@@ -54,7 +58,7 @@ const APPIUM_SDK_ENV = ['ANDROID_HOME', 'JAVA_HOME'];
 // catalog's; the values install resolves (a data folder, an SDK home, the npm cut-off) and the key are not settings.
 export function settingsOf(row: CatalogRow, routeId: string, entry: ServerEntry | null = null): [string, string][]
 {
-    const route = row.routes[routeId]!;
+    const route = routeNamed(row, routeId);
     if (route.runtime === 'bridge') return [];
     const derived = new Set(((row.locations && row.locations.derived) || []).filter((derivedLocation) => derivedLocation.in === 'env').map((derivedLocation) => derivedLocation.key));
     const env = (entry ? entry.env : route.env) || {};
@@ -65,14 +69,16 @@ export function settingsOf(row: CatalogRow, routeId: string, entry: ServerEntry 
 // the image).
 export function mergeSettings(entry: ServerEntry, route: CatalogRoute, pairs: Record<string, string>): ServerEntry
 {
-    const out = JSON.parse(JSON.stringify(entry)) as ServerEntry;
+    const out = structuredClone(entry);
     out.env = { ...(out.env || {}), ...pairs };
-    if (out.command === 'docker' && Array.isArray(out.args) && route.image)
+    const args = out.args;
+    const image = route.image;
+    if (out.command === 'docker' && Array.isArray(args) && image)
     {
-        const at = out.args.findIndex((argument) => typeof argument === 'string' && argument.startsWith(`${route.image!.name}:`));
-        const passed = new Set(out.args.filter((_argument, i) => out.args![i - 1] === '-e'));
+        const at = args.findIndex((argument) => typeof argument === 'string' && argument.startsWith(`${image.name}:`));
+        const passed = new Set(args.filter((_argument, i) => args[i - 1] === '-e'));
         const add = Object.keys(pairs).filter((variableName) => !passed.has(variableName)).flatMap((variableName) => ['-e', variableName]);
-        if (at >= 0 && add.length) out.args.splice(at, 0, ...add);
+        if (at >= 0 && add.length) args.splice(at, 0, ...add);
     }
     return out;
 }
@@ -109,7 +115,7 @@ export function helperArgv(command: unknown): string[]
     const text = String(command);
     for (let i = 0; i < text.length; i++)
     {
-        const character = text[i]!;
+        const character = text.charAt(i);
         if (character === "'" || character === '"')
         {
             const end = text.indexOf(character, i + 1);
@@ -136,11 +142,12 @@ export function helperParts(command: unknown): HelperParts | null
     if (typeof command !== 'string') return null;
     const argv = helperArgv(command);
     const at = argv.findIndex((argument) => argument.endsWith(FILES.helper));
-    if (at < 0) return null;
+    const helperPath = argv[at];
+    if (at < 0 || helperPath === undefined) return null;
     const args = argv.slice(at + 1);
     const parsed = parsePairs(args.slice(2));
     const read = 'error' in parsed ? { root: args[2] !== undefined && args[2] !== '--header' ? args[2] : null, pairs: [] } : { root: parsed.root, pairs: parsed.pairs.map(pairText) };
-    return { path: argv[at]!, args, ...read };
+    return { path: helperPath, args, ...read };
 }
 
 // Where a registration at `scope` finds the helper: absolute at every scope, in the root of the scope's family (F7).
@@ -156,8 +163,8 @@ export const helperGlobalRoot = (scope: string, context: Machine): string | null
 // The key name a `headersHelper` passes, or null: the helper's arguments as this plugin writes them, `<NAME> <SCHEME>`.
 export function helperNameOf(command: unknown): string | null
 {
-    const helper = helperParts(command);
-    return helper && helper.args.length >= 2 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(helper.args[0]!) && /^[A-Za-z][\w-]*$/.test(helper.args[1]!) ? helper.args[0]! : null;
+    const [name, scheme] = helperParts(command)?.args ?? [];
+    return name !== undefined && scheme !== undefined && /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && /^[A-Za-z][\w-]*$/.test(scheme) ? name : null;
 }
 
 // A `--header` pair's text split at its first separator, as the helper's parser does: `NAME=VAR` is a name read from
@@ -178,14 +185,19 @@ function helperPairs(route: CatalogRoute, settings: Record<string, string> = {},
     const rank = (header: string) => { const i = order.indexOf(header); return i < 0 ? order.length : i; };
     const fixed = Object.entries(settings).sort(([first], [second]) => rank(first) - rank(second)).map(([header, value]) => `${header}:${value}`);
     if (asRead === null) return [...((route.helper && route.helper.headers) || []).map((header) => `${header.header}=${header.var}`), ...fixed];
-    const kept = asRead.filter((pair) => { const parts = splitPair(pair); return parts !== null && (parts.kind === 'name' || !order.includes(parts.header)); });
-    return [...kept.filter((pair) => splitPair(pair)!.kind === 'name'), ...kept.filter((pair) => splitPair(pair)!.kind === 'fixed'), ...fixed];
+    const kept = asRead.flatMap((pair) => { const parts = splitPair(pair); return parts !== null && (parts.kind === 'name' || !order.includes(parts.header)) ? [{ pair, kind: parts.kind }] : []; });
+    return [...kept.filter((held) => held.kind === 'name').map((held) => held.pair), ...kept.filter((held) => held.kind === 'fixed').map((held) => held.pair), ...fixed];
 }
 
 // The helper command a hosted keyed route gets at `scope`: the key's name (`keyName`, else the catalog's default), the
 // route's scheme, its header pairs and the `settings` the user chose. `asRead`: the pairs of the registration being
 // rewritten, which a change starts from.
-export const helperFor = (route: CatalogRoute, scope: string, context: Machine, keyName: string | null | undefined = null, settings: Record<string, string> = {}, asRead: string[] | null = null): string => helperCommand({ helperPath: helperPathFor(scope, context), name: keyName || route.helper!.var, scheme: route.helper!.scheme, globalRoot: helperGlobalRoot(scope, context), style: context.platform === 'win32' ? 'win32' : 'posix', pairs: helperPairs(route, settings, asRead) });
+export function helperFor(route: CatalogRoute, scope: string, context: Machine, keyName: string | null | undefined = null, settings: Record<string, string> = {}, asRead: string[] | null = null): string
+{
+    const helper = route.helper;
+    if (!helper) throw new Error('a route with no helper block gets no helper command');
+    return helperCommand({ helperPath: helperPathFor(scope, context), name: keyName || helper.var, scheme: helper.scheme, globalRoot: helperGlobalRoot(scope, context), style: context.platform === 'win32' ? 'win32' : 'posix', pairs: helperPairs(route, settings, asRead) });
+}
 
 // ---- the bridge (0.4.0) --------------------------------------------------------------------------------------------
 
@@ -219,8 +231,8 @@ export function contextArgAt(entry: ServerEntry | null | undefined): number
 export function applyContext(entry: ServerEntry, scope: string, context: Machine): ServerEntry
 {
     const at = contextArgAt(entry);
-    if (at < 0) return entry;
-    const args = [...entry.args!];
+    if (at < 0 || !entry.args) return entry;
+    const args = [...entry.args];
     args[at] = contextPathFor(scope, context, entry);
     return { ...entry, args };
 }
@@ -233,21 +245,36 @@ export function bridgeParts(entry: ServerEntry | null | undefined): BridgeParts 
     if (path.basename(entry.command.replace(/\\/g, '/')).replace(/\.exe$/i, '').toLowerCase() !== 'node') return null;
     const args = entry.args.map(String);
     const at = args.findIndex((argument) => argument.replace(/\\/g, '/').split('/').pop() === FILES.bridge);
-    if (at < 0 || !args[at + 1]) return null;
-    const [template, keyName = null, scheme = null, packageSpec = null, ...after] = args.slice(at + 1);
+    const bridgePath = args[at];
+    const template = args[at + 1];
+    if (at < 0 || bridgePath === undefined || !template) return null;
+    const [keyName = null, scheme = null, packageSpec = null, ...after] = args.slice(at + 2);
     const parsed = parsePairs(after);
     const read = 'error' in parsed ? { root: after[0] !== undefined && after[0] !== '--header' ? after[0] : null, pairs: [] } : { root: parsed.root, pairs: parsed.pairs.map(pairText) };
-    return { path: args[at]!, template: template!, keyName, scheme, packageSpec: packageSpec, globalRoot: read.root, pairs: read.pairs };
+    return { path: bridgePath, template, keyName, scheme, packageSpec: packageSpec, globalRoot: read.root, pairs: read.pairs };
+}
+
+// A bridge launch at `at` in `args` rewritten for a new path, template, key name and global root: the scheme, the pin
+// and what follows the root slot are kept as read.
+export function rebridgedArgs(args: readonly string[], at: number, parts: { path: string; template: string; keyName: string; globalRoot: string | null | undefined }): string[]
+{
+    return [
+        ...args.slice(0, at), parts.path, parts.template, parts.keyName,
+        ...args.slice(at + BRIDGE_SLOT.scheme, at + BRIDGE_SLOT.globalRoot), ...(parts.globalRoot ? [parts.globalRoot] : []),
+        ...args.slice(at + BRIDGE_SLOT.globalRoot + 1),
+    ];
 }
 
 // Arguments without their `--header <pair>` couples.
 export function withoutPairs(args: readonly string[]): string[]
 {
     const out: string[] = [];
-    for (let i = 0; i < args.length; i++)
+    let pairNext = false;
+    for (const argument of args)
     {
-        if (args[i] === '--header') i++;
-        else out.push(args[i]!);
+        if (pairNext) pairNext = false;
+        else if (argument === '--header') pairNext = true;
+        else out.push(argument);
     }
     return out;
 }
@@ -260,7 +287,7 @@ export const renameTemplate = (template: string, names: Record<string, string>):
 // sends a key gets `headersHelper` and no `headers`: the key stays in .mcps-secrets (spec D4).
 export function buildEntry(row: CatalogRow, routeId: string, answers: BuildAnswers, context: Machine, rules: CatalogRules): ServerEntry
 {
-    const route = row.routes[routeId]!;
+    const route = routeNamed(row, routeId);
     if (routeId === 'remote')
     {
         const entry: ServerEntry = { type: route.type, url: subst(route.url, answers.params || {}) };
@@ -271,53 +298,58 @@ export function buildEntry(row: CatalogRow, routeId: string, answers: BuildAnswe
     if (route.runtime === 'bridge')
     {
         // no shell reads this command line: a path with a space is one argument as it is
-        const packageSpec = route.package!;
+        const packageSpec = routeField(route.package, row.id, 'package');
+        const helper = routeField(route.helper, row.id, 'helper');
         const globalRoot = helperGlobalRoot(answers.scope, context);
         return {
             command: 'node',
-            args: [bridgePathFor(answers.scope, context), renameTemplate(route.url!, answers.urlNames || {}), answers.keyName || route.helper!.var, route.helper!.scheme, `${packageSpec.name}@${packageSpec.version}`, ...(globalRoot ? [globalRoot] : [])],
+            args: [bridgePathFor(answers.scope, context), renameTemplate(routeField(route.url, row.id, 'url'), answers.urlNames || {}), answers.keyName || helper.var, helper.scheme, `${packageSpec.name}@${packageSpec.version}`, ...(globalRoot ? [globalRoot] : [])],
             env: { npm_config_before: packageSpec.cutoff },
         };
     }
 
     let entry: ServerEntry | undefined;
     const extra: string[] = [];
+    const executablePath = answers.executablePath;
     for (const [key, spec] of Object.entries(route.optionalArgs || {}))
     {
-        if (key === 'executablePath' && answers.executablePath) extra.push(...spec!.map((argTemplate) => subst(argTemplate, { value: answers.executablePath! })));
-        if (key === 'token' && answers.token) extra.push(...spec!);
+        if (!spec) continue;
+        if (key === 'executablePath' && executablePath) extra.push(...spec.map((argTemplate) => subst(argTemplate, { value: executablePath })));
+        if (key === 'token' && answers.token) extra.push(...spec);
     }
     if (route.runtime === 'uvx')
     {
-        const packageSpec = route.package!;
+        const packageSpec = routeField(route.package, row.id, 'package');
         const args = ['--python', pythonRequest(route, context, rules), '--exclude-newer', packageSpec.cutoff];
         for (const withPackage of route.with || []) args.push('--with', withPackage);
-        const hasContext = route.run!.some((runArgument) => runArgument.includes('{contextFile}'));
-        const run = hasContext ? route.run!.map((runArgument) => subst(runArgument, { contextFile: contextPathFor(answers.scope, context) })) : route.run!;
+        const runArgs = routeField(route.run, row.id, 'run');
+        const hasContext = runArgs.some((runArgument) => runArgument.includes('{contextFile}'));
+        const run = hasContext ? runArgs.map((runArgument) => subst(runArgument, { contextFile: contextPathFor(answers.scope, context) })) : runArgs;
         args.push('--from', subst(packageSpec.fromSpec, { version: packageSpec.version }), ...run, ...extra);
         entry = { command: 'uvx', args };
         if (Object.keys(route.env || {}).length) entry.env = { ...route.env };
     }
     else if (route.runtime === 'npx')
     {
-        const packageSpec = route.package!;
-        const args = ['-y', `${packageSpec.name}@${packageSpec.version}`, ...route.run!, ...extra];
+        const packageSpec = routeField(route.package, row.id, 'package');
+        const args = ['-y', `${packageSpec.name}@${packageSpec.version}`, ...routeField(route.run, row.id, 'run'), ...extra];
         entry = context.platform === 'win32' && rules.windowsNpxCmd ? { command: 'cmd', args: ['/c', 'npx', ...args] } : { command: 'npx', args };
         entry.env = { ...(route.env || {}), npm_config_before: packageSpec.cutoff };
     }
     else if (route.runtime === 'docker')
     {
-        const useBinary = context.machine && context.machine.docker === false && route.fallback;
-        if (useBinary) entry = { command: route.fallback!.command, args: [...route.fallback!.args] };
+        const binary = context.machine && context.machine.docker === false ? route.fallback : undefined;
+        if (binary) entry = { command: binary.command, args: [...binary.args] };
         else
         {
             const passEnv = Object.keys(route.env || {}).flatMap((variableName) => ['-e', variableName]);
-            entry = { command: 'docker', args: ['run', '-i', '--rm', ...passEnv, `${route.image!.name}:${route.image!.tag}`, ...route.run!] };
+            const image = routeField(route.image, row.id, 'image');
+            entry = { command: 'docker', args: ['run', '-i', '--rm', ...passEnv, `${image.name}:${image.tag}`, ...routeField(route.run, row.id, 'run')] };
         }
         if (Object.keys(route.env || {}).length) entry.env = { ...route.env };
     }
     if (!entry) throw new Error(`${row.id}: no registration form for the '${String(route.runtime)}' runtime`);
-    if (row.locations && answers.rootStr !== undefined) entry = applyRoot(entry, row, answers.rootStr!, answers.scope, context);
+    if (row.locations && answers.rootStr !== undefined) entry = applyRoot(entry, row, answers.rootStr, answers.scope, context);
     // serena's home is set by now: its context file goes in it
     return applyContext(entry, answers.scope, context);
 }

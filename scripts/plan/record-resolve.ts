@@ -1,11 +1,8 @@
 // Which option an answer in step.json stands for, and the typed value it carries. Pure: values in, values out.
 import { LABEL, PREFIX, RECOMMENDED_SUFFIX, SIDE, TOOLSET_SEPARATOR, VALUE } from './record-constants.ts';
 import { TOOLSETS_ASKED } from './hosted-settings-constants.ts';
+import { isRecord, isTextList, isTextMap } from '../core/shapes.ts';
 import type { Question, Refusal, Resolved, Typed, TypedKind } from './types.ts';
-
-
-export const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
-export const isTextList = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === 'string');
 
 export const plainLabel = (label: string): string => (label.endsWith(RECOMMENDED_SUFFIX) ? label.slice(0, -RECOMMENDED_SUFFIX.length) : label);
 
@@ -42,7 +39,7 @@ function checkTyped(kind: TypedKind, typed: unknown): { typed: Typed } | { shape
         if (isTextList(typed)) return { typed: typed.join(TOOLSET_SEPARATOR) };
         return typeof typed === 'string' ? { typed } : { shape: 'a comma-separated string or a list of strings' };
     }
-    return isRecord(typed) && Object.values(typed).every((item) => typeof item === 'string') ? { typed: typed as Record<string, string> } : { shape: 'an object of NAME: value strings' };
+    return isTextMap(typed) ? { typed } : { shape: 'an object of NAME: value strings' };
 }
 
 const resolved = (label: string, index: number, value: unknown, hasValue: boolean, typed?: Typed, other?: string): Resolved => ({ label, index, value, hasValue, typed, other });
@@ -58,8 +55,8 @@ function resolveOther(question: Question, map: Record<string, unknown>, other: s
         const kind = typedKind(question.id, label, value, found);
         return kind === null ? [] : [{ label, index, value, found, kind }];
     });
-    if (takers.length !== 1) return { refused: `${question.id}: 'Other' is not taken here - ask again with one of the options` };
-    const taker = takers[0]!;
+    const [taker, ...others] = takers;
+    if (taker === undefined || others.length) return { refused: `${question.id}: 'Other' is not taken here - ask again with one of the options` };
     if (taker.kind === 'pairs') return { refused: `${question.id}: 'Other' cannot hold settings - give the label and the typed object` };
     const checked = checkTyped(taker.kind, other);
     if ('shape' in checked) return { refused: `${question.id}: the typed value must be ${checked.shape}` };

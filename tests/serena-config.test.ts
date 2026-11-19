@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as sc from '../scripts/apply/serena-config.ts';
-import { projectsOf } from '../scripts/apply/serena-projects.ts';
+import { inTreeLines, projectsOf } from '../scripts/apply/serena-projects.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import type { McpAddStep } from '../scripts/plan/types.ts';
 import type { Inventory } from '../scripts/inventory/types.ts';
@@ -161,8 +161,26 @@ test('projectsOf reads a block or flow list of scalars and nothing else', () => 
     assert.deepStrictEqual(projectsOf(path.join(tmp, 'none.yml')), []);
 });
 
+test('projectsOf reads a quoted path that holds a # as the path, as folderState reads its key', () => {
+    const file = path.join(tmp, 'projects-hash.yml');
+    fs.writeFileSync(file, "projects:\n  - '/a/team #1'\n  - \"/b/x #2\"  # trailing\n");
+    assert.deepStrictEqual(projectsOf(file), ['/a/team #1', '/b/x #2']);
+    fs.writeFileSync(file, "projects: ['/c/y #3']\n");
+    assert.deepStrictEqual(projectsOf(file), ['/c/y #3']);
+});
+
 test('configOf joins a POSIX home that holds a backslash pair the POSIX way, a drive or UNC home the Windows way', () => {
     assert.strictEqual(sc.configOf('/home/u/odd\\\\name'), '/home/u/odd\\\\name/serena_config.yml');
     assert.strictEqual(sc.configOf('C:\\serena-home'), 'C:\\serena-home\\serena_config.yml');
     assert.strictEqual(sc.configOf('\\\\server\\share\\serena'), '\\\\server\\share\\serena\\serena_config.yml');
+});
+
+test('inTreeLines names each listed project that still keeps its own .serena folder, with where it moves under the home', () => {
+    const kept = path.join(tmp, 'tree-kept');
+    const bare = path.join(tmp, 'tree-bare');
+    fs.mkdirSync(path.join(kept, '.serena'), { recursive: true });
+    fs.mkdirSync(bare);
+    const file = path.join(tmp, 'tree-projects.yml');
+    fs.writeFileSync(file, `projects:\n  - ${kept}\n  - ${bare}\n  - ${path.join(tmp, 'tree-gone')}\n`);
+    assert.deepStrictEqual(inTreeLines(file, '/h/serena/'), [`serena keeps using ${kept}/.serena until it is moved to /h/serena/projects/tree-kept`]);
 });

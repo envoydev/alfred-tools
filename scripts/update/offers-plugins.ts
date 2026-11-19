@@ -2,7 +2,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { bareName } from '../inventory/fingerprint.ts';
-import { clone, compareVersions, pinnedVersion } from '../fix/common.ts';
+import { clone } from '../core/json-file.ts';
+import { compareVersions } from '../core/versions.ts';
+import { pinnedVersion } from '../inventory/fingerprint.ts';
 import { MARKETPLACE_LIST_UNREAD } from '../inventory/constants.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { PluginOffer, UpdateCheck, UpdateCtx } from './types.ts';
@@ -64,7 +66,8 @@ export function pluginOffers(context: UpdateCtx, out: UpdateCheck): void
                 const result = context.runCli(['plugin', 'marketplace', 'update', plugin.marketplace], { cwd: context.project, env: context.env });
                 refreshed.set(plugin.marketplace, !result.error && result.status === 0 ? null : `marketplace ${plugin.marketplace} did not refresh (${`${result.stderr}${result.stdout}`.trim().split('\n').slice(-1)[0] || 'no output'}) - compared against its last clone`);
             }
-            if (refreshed.get(plugin.marketplace)) out.notes.push(refreshed.get(plugin.marketplace)!);
+            const note = refreshed.get(plugin.marketplace);
+            if (note) out.notes.push(note);
         }
         const market = context.inventory.marketplaces.find((marketplace) => marketplace.name === plugin.marketplace);
         const to = listedVersion(market && market.installLocation, plugin.plugin);

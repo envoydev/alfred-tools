@@ -13,6 +13,7 @@ import { readDotenv, valueIn as helperValueIn } from '../copied/mcp-headers.js';
 import { ALFRED_DATA, FILES, FORMER_ROOT_NAME, ROOT_NAME } from '../core/constants.ts';
 import { PLACEHOLDER, valueAt } from '../core/kept.ts';
 import { pathFor } from '../entries/platform.ts';
+import { isRecord, isServerEntry } from '../core/guards.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
 import type { FileNames, KeyChain, KeyHit, TokenField } from './types.ts';
@@ -29,7 +30,7 @@ export { readDotenv };
 // holds the row word (GITHUB, SENTRY, CONTEXT7) - a key kept under a name the catalog does not use; a webhook secret or a
 // client id is not one.
 const KEY_SHAPED = /(?:TOKEN|KEY|PAT)$/;
-const nearMiss = (candidate: string, name: string, word: string | null | undefined): boolean => candidate !== name && Boolean(word) && candidate.toUpperCase().includes(word!) && KEY_SHAPED.test(candidate.toUpperCase());
+const nearMiss = (candidate: string, name: string, word: string | null | undefined): boolean => candidate !== name && typeof word === 'string' && word !== '' && candidate.toUpperCase().includes(word) && KEY_SHAPED.test(candidate.toUpperCase());
 export const offeredName = (candidate: string, name: string, word: string | null | undefined): boolean => candidate === name || nearMiss(candidate, name, word);
 
 // The token fields a catalog route defines and an entry holds: [{ at: ['env', K] | ['headers', H] | ['args', i], template }]
@@ -38,12 +39,16 @@ export function tokenFields(entry: ServerEntry | null | undefined, route: Catalo
     if (!route || !route.tokenVar || !entry) return [];
     const ref = `\${${route.tokenVar}}`;
     const out: TokenField[] = [];
-    for (const key of ['env', 'headers'])
-        for (const [fieldName, template] of Object.entries((route as unknown as Record<string, Record<string, unknown> | undefined>)[key] || {}))
-            if (typeof template === 'string' && template.includes(ref) && entry[key] && Object.hasOwn(entry[key] as object, fieldName)) out.push({ at: [key, fieldName], template });
-    const tokenArgs = route.optionalArgs && route.optionalArgs['token'];
-    const i = tokenArgs && Array.isArray(entry.args) ? entry.args.indexOf(tokenArgs[0]!) : -1;
-    if (i >= 0 && i + 1 < entry.args!.length) out.push({ at: ['args', i + 1], template: tokenArgs![1]! });
+    // a route declares no headers today; one that carries them is read as the env is
+    const routeHeaders = 'headers' in route && isRecord(route.headers) ? route.headers : undefined;
+    const maps: ['env' | 'headers', Record<string, unknown> | undefined, Record<string, string> | undefined][] = [['env', route.env, entry.env], ['headers', routeHeaders, entry.headers]];
+    for (const [key, templates, held] of maps)
+        for (const [fieldName, template] of Object.entries(templates || {}))
+            if (typeof template === 'string' && template.includes(ref) && held && Object.hasOwn(held, fieldName)) out.push({ at: [key, fieldName], template });
+    const [tokenFlag, tokenTemplate] = (route.optionalArgs && route.optionalArgs['token']) || [];
+    const args = Array.isArray(entry.args) ? entry.args : [];
+    const i = tokenFlag === undefined ? -1 : args.indexOf(tokenFlag);
+    if (i >= 0 && i + 1 < args.length && tokenTemplate !== undefined) out.push({ at: ['args', i + 1], template: tokenTemplate });
     return out;
 }
 
@@ -56,15 +61,21 @@ export { PLACEHOLDER, valueAt };
 export function fillKeys(entry: ServerEntry, row: CatalogRow | null | undefined, routeId: string, scope: string, found: Record<string, string> = {}): ServerEntry
 {
     const route = row && row.routes ? row.routes[routeId] : null;
+    const tokenVar = route ? route.tokenVar : undefined;
     const fields = tokenFields(entry, route);
-    if (!fields.length) return entry;
-    const value = found[route!.tokenVar!];
+    // tokenFields finds none without a route and its tokenVar
+    if (!fields.length || tokenVar === undefined) return entry;
+    const value = found[tokenVar];
     if (scope !== 'project' && typeof value !== 'string') return entry;
-    const out = JSON.parse(JSON.stringify(entry)) as ServerEntry;
+    // a copy through JSON, as the entry is stored; one that does not come back as an entry is left as it is
+    const out: unknown = JSON.parse(JSON.stringify(entry));
+    if (!isServerEntry(out)) return entry;
     for (const field of fields)
     {
-        const parent = valueAt(out, field.at.slice(0, -1)) as Record<string | number, unknown>;
-        parent[field.at[field.at.length - 1]!] = scope === 'project' ? field.template : field.template.split(`\${${route!.tokenVar}}`).join(value);
+        const text = scope === 'project' ? field.template : field.template.split(`\${${tokenVar}}`).join(value);
+        const [where, at] = field.at;
+        if (where === 'args' && out.args) out.args[at] = text;
+        else if (where !== 'args' && out[where]) out[where][at] = text;
     }
     return out;
 }
@@ -90,14 +101,14 @@ export function hostedChain({ scope, projectRoot, globalRoot, globalNamed = fals
     const pathApi = pathApiOn(platform);
     const beside = scope === 'user' ? globalRoot : projectRoot;
     const named = scope === 'local' && globalNamed ? globalRoot : null;
-    return uniq(([beside, named, pathApi.join(home, ROOT_NAME), pathApi.join(home, ALFRED_DATA)].filter(Boolean) as string[]).map((dir) => secretsIn(dir, platform)));
+    return uniq([beside, named, pathApi.join(home, ROOT_NAME), pathApi.join(home, ALFRED_DATA)].filter((dir): dir is string => Boolean(dir)).map((dir) => secretsIn(dir, platform)));
 }
 
 // stdioChain({ scope, projectRoot, globalRoot, platform }) -> the files the apply reads a stdio key from: local scope the project
 // root's, then the global root's; user scope the global root's. Project scope takes no stdio key (spec D5).
 export function stdioChain({ scope, projectRoot, globalRoot, platform }: Omit<KeyChain, 'home'> & { home?: string | undefined }): string[]
 {
-    if (scope === 'local') return uniq(([projectRoot, globalRoot].filter(Boolean) as string[]).map((dir) => secretsIn(dir, platform)));
+    if (scope === 'local') return uniq([projectRoot, globalRoot].filter((dir): dir is string => Boolean(dir)).map((dir) => secretsIn(dir, platform)));
     if (scope === 'user') return globalRoot ? [secretsIn(globalRoot, platform)] : [];
     return [];
 }

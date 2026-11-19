@@ -10,14 +10,17 @@ export const andList = (items: string[]): string => (items.length < 2 ? items.jo
 
 export function makeCtx(inventory: Inventory, options: PlanOptions = {}): MadeCtx
 {
-    const context = {
-        platform: inventory.os, arch: inventory.arch, project: inventory.project, env: options.env || process.env,
-        home: options.home || account.homeDir(options.env || process.env), exists: options.exists, isDir: options.isDir, machine: options.machine || {},
-    } as MadeCtx;
-    // alfred-code set up in this project (its .alfred/.gitignore): its folder is recommended for the data (D3)
-    context.alfredHere = alfredData(context, inventory.alfredCodeEnabled);
-    // a live registration, read in this process for a key comparison (R1) - only from an account the caller's env names
-    context.readLive = options.readLive || liveReader(inventory.project, options.env);
-    return context;
+    const env = options.env || process.env;
+    const machine = {
+        platform: inventory.os, arch: inventory.arch, project: inventory.project, env,
+        home: options.home || account.homeDir(env), exists: options.exists, isDir: options.isDir, machine: options.machine || {},
+    };
+    return {
+        ...machine,
+        // alfred-code set up in this project (its .alfred/.gitignore): its folder is recommended for the data (D3)
+        alfredHere: alfredData(machine, inventory.alfredCodeEnabled),
+        // a live registration, read in this process for a key comparison (R1) - only from an account the caller's env names
+        readLive: options.readLive || liveReader(inventory.project, options.env),
+    };
 }
 

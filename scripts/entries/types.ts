@@ -5,6 +5,8 @@ import type { Catalog } from '../catalog/types.ts';
 
 // A root before it is written: under the project, under the account home, or an absolute path.
 export type Root = { kind: 'project'; rel: string } | { kind: 'home'; rel: string } | { kind: 'abs'; path: string };
+// A root written as an absolute path: serena's home on Windows is one.
+export type AbsRoot = Extract<Root, { kind: 'abs' }>;
 
 // The two scope families' root folders, once the plan or the questions resolved them.
 export interface Roots
@@ -58,11 +60,11 @@ export interface Current
 export interface BuildAnswers
 {
     scope: string;
-    rootStr?: string | null | undefined;
+    rootStr?: string | undefined;
     executablePath?: string | null | undefined;
     token?: boolean | undefined;
     keyName?: string | null | undefined;
-    params?: Record<string, string> | undefined;
+    params?: Record<string, string | undefined> | undefined;
     urlNames?: Record<string, string> | undefined;
     settings?: Record<string, string> | undefined;
 }

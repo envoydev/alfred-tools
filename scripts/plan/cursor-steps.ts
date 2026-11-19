@@ -10,25 +10,28 @@ import * as kept from '../core/kept.ts';
 import { deepEqual } from '../core/json-file.ts';
 import { foundList, REG_OPS } from './lists.ts';
 import type path from 'node:path';
-import type { ServerEntry } from '../core/types.ts';
+import type { ServerEntry, ServerMap } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Machine } from '../entries/types.ts';
 import type { Inventory } from '../inventory/types.ts';
 import type { ListServer } from '../mcps-list/types.ts';
-import type { ListSource, Managed } from '../cursor/types.ts';
-import type { Answers, CursorPlaceCtx, CursorWritePlanStep, Endpoint, FoundList, ListCtx, ListUpsert, ListWriteStep, PlannedServer, PlanOut, RegistrationStep, Taken } from './types.ts';
+import type { CursorRead, ListSource, Managed } from '../cursor/types.ts';
+import type { Answers, CursorPlaceCtx, CursorWritePlanStep, ListCtx, ListUpsert, ListWriteStep, PlannedServer, PlanOut, RegistrationStep, Taken } from './types.ts';
 
 // ---- Cursor's files (spec D2, D4, D4a) ------------------------------------------------------------------------------
 
 const forCursor = (server: { clients?: string[] | undefined }): boolean => (server.clients || []).includes('cursor');
 export const SCOPES = { project: ['local', 'project'], global: ['user'] };
+// A Cursor file's servers of the shape Claude Code writes when the file reads as one this plugin writes, else null.
+const serversOf = (read: CursorRead): ServerMap | null => (read.state === 'ok' ? read.servers : null);
 
 // A list's servers after a list-write step: its drops out, its upserts in, as apply's mergeList does.
 function afterWrite(servers: ListServer[], step: ListWriteStep | undefined): ListServer[]
 {
     if (!step) return servers;
     const drops = new Set((step.drops || []).map((drop) => drop.key));
-    const up = new Map((step.upserts || []).map((upsert): [string, ListServer] => [lists.serverKey(upsert.server), upsert.server as ListServer]));
+    // an entry the apply fills from the registration is {} here: only the name, scope and apps count for the managed set
+    const up = new Map((step.upserts || []).map((upsert): [string, ListServer] => [lists.serverKey(upsert.server), { ...upsert.server, entry: upsert.server.entry ?? {} }]));
     return [...servers.filter((server) => !drops.has(lists.serverKey(server)) && !up.has(lists.serverKey(server))), ...up.values()];
 }
 
@@ -38,20 +41,28 @@ function afterWrite(servers: ListServer[], step: ListWriteStep | undefined): Lis
 export function takenNames(inventory: Inventory, context: CursorPlaceCtx, upserts: { server: PlannedServer; cursorFile: string | null }[] | null | undefined): Taken[]
 {
     const catalog = context.catalog || catalogLib.load();
-    const reads = new Map<string, ReturnType<typeof cursorMcp.readCursor>>();
-    const docOf = (file: string) => { if (!reads.has(file)) reads.set(file, cursorMcp.readCursor(file)); return reads.get(file)!; };
+    const reads = new Map<string, CursorRead>();
+    const readOf = (file: string): CursorRead =>
+    {
+        const known = reads.get(file);
+        if (known) return known;
+        const read = cursorMcp.readCursor(file);
+        reads.set(file, read);
+        return read;
+    };
     const out: Taken[] = [];
     for (const upsert of upserts || [])
     {
         if (!forCursor(upsert.server)) continue;
         const family = roots.familyOf(upsert.server.scope);
         const file = upsert.cursorFile || cursorMcp.fileFor(family, context);
-        const read = docOf(file);
-        if (read.state !== 'ok' || !Object.hasOwn(read.doc!.mcpServers, upsert.server.name)) continue;
+        const have = serversOf(readOf(file));
+        const there = have ? have[upsert.server.name] : undefined;
+        if (!have || !Object.hasOwn(have, upsert.server.name) || there === undefined) continue;
         const familyList = inventory.lists && inventory.lists[family];
         if (familyList && !familyList.note && (familyList.servers || []).some((server) => server.name === upsert.server.name && forCursor(server))) continue;
         if (out.some((taken) => taken.file === file && taken.name === upsert.server.name)) continue;
-        out.push({ file, name: upsert.server.name, sameRow: cursorMcp.matchesRow(read.doc!.mcpServers[upsert.server.name]!, catalog.byId.get(upsert.server.row!)) });
+        out.push({ file, name: upsert.server.name, sameRow: cursorMcp.matchesRow(there, upsert.server.row === null ? undefined : catalog.byId.get(upsert.server.row)) });
     }
     return out;
 }
@@ -116,7 +127,8 @@ export function cursorSteps(inventory: Inventory, context: ListCtx, out: PlanOut
     const named = answers.cursorNames || {};
     const steps: CursorWritePlanStep[] = [];
     const workspaceRecord = inventory.workspace !== undefined ? inventory.workspace : (context.project ? workspace.workspaceOf(context.project, context.env || {}) : null);
-    const inWs = Boolean(workspaceRecord && workspaceRecord.root);
+    // a workspace (D4a): the record and its root, when it names one
+    const workspaceHere = workspaceRecord && workspaceRecord.root ? { record: workspaceRecord, root: workspaceRecord.root } : null;
     const strip = (upsert: ListUpsert) => { upsert.server = { ...upsert.server, clients: (upsert.server.clients || []).filter((client) => client !== 'cursor') }; };
     // a taken name in `file`: 'keep' runs `onKeep`, 'replace' is pushed to `replace`, no answer is a plan error
     const settle = (taken: Taken[], replace: string[], onKeep: (takenEntry: Taken) => void) =>
@@ -142,10 +154,11 @@ export function cursorSteps(inventory: Inventory, context: ListCtx, out: PlanOut
         if (!target) continue;
         const scopes = SCOPES[family];
         const beforeServers = current ? current.servers || [] : [];
-        const above: string[] = family === 'project' && inWs ? workspaceRecord!.ancestors : [];
-        const base = current && current.file === target ? beforeServers : (((foundList(inventory, target, pathApi) || {}) as Partial<FoundList>).servers || []);
+        const above: string[] = family === 'project' && workspaceHere ? workspaceHere.record.ancestors : [];
+        const base = current && current.file === target ? beforeServers : (foundList(inventory, target, pathApi)?.servers || []);
         const beforeSrc = sourcesOf(inventory, context, context.project, above, { own: { file: current && current.file, servers: beforeServers } });
-        const before = cursorMcp.managedSet(family === 'project' ? beforeSrc.sources : [{ file: (current && current.file) as string, scopes, servers: beforeServers }]);
+        // with no list yet there are no servers before, so the file a source names counts for nothing
+        const before = cursorMcp.managedSet(family === 'project' ? beforeSrc.sources : [{ file: current ? current.file : target, scopes, servers: beforeServers }]);
         const wasForCursor = new Set(beforeServers.filter(forCursor).map(lists.serverKey));
         const upserts = writes.flatMap((write) => write.upserts || []);
         const file = cursorMcp.fileFor(family, context);
@@ -181,8 +194,8 @@ export function cursorSteps(inventory: Inventory, context: ListCtx, out: PlanOut
         // the members below this folder, when its project scope changed for Cursor (D4a)
         const projectOnly = (servers: ListServer[]) => cursorMcp.managedSet([{ file: target, scopes: ['project'], servers }]);
         const projectTouched = upserts.some((upsert) => forCursor(upsert.server) && upsert.server.scope === 'project');
-        if (inWs && (projectTouched || !sameKeys(projectOnly(beforeServers), projectOnly(afterServers))))
-            for (const member of workspace.membersBelow(workspaceRecord!, context.project))
+        if (workspaceHere && (projectTouched || !sameKeys(projectOnly(beforeServers), projectOnly(afterServers))))
+            for (const member of workspace.membersBelow(workspaceHere.record, context.project))
             {
                 const memberFile = cursorMcp.fileFor('project', { ...context, project: member.folder });
                 const memberRefusal = cursorMcp.refusal(cursorMcp.readCursor(memberFile));
@@ -204,15 +217,15 @@ export function cursorSteps(inventory: Inventory, context: ListCtx, out: PlanOut
         if (!after.size) continue;
         if ([...after.values()].some((managed) => managed.scope === 'local') && roots.gitIgnores(file) === false)
             out.notes.push('.cursor/mcp.json now holds this machine\'s local servers; add it to .gitignore to keep them private');
-        if (inWs)
+        if (workspaceHere)
         {
             // a member that is a plain folder of the root's repo: Cursor's CLI reads the root's file there (D4a)
             const own = cursorMcp.managedSet([{ file: target, scopes, servers: afterServers }]);
-            const top = context.project !== workspaceRecord!.root && own.size ? workspace.gitTop(context.project) : null;
+            const top = context.project !== workspaceHere.root && own.size ? workspace.gitTop(context.project) : null;
             let rootReal: string | null = null;
-            try { rootReal = fs.realpathSync(workspaceRecord!.root!); } catch { /* none */ }
+            try { rootReal = fs.realpathSync(workspaceHere.root); } catch { /* none */ }
             if (top && top === rootReal)
-                out.notes.push(`${context.project} is a folder of ${workspaceRecord!.root}'s git repo; Cursor's CLI reads ${pathApi.join(workspaceRecord!.root!, '.cursor', 'mcp.json')} there, so these servers reach the editor opened at ${context.project} only. Install them at the root or at Global scope for the CLI`);
+                out.notes.push(`${context.project} is a folder of ${workspaceHere.root}'s git repo; Cursor's CLI reads ${pathApi.join(workspaceHere.root, '.cursor', 'mcp.json')} there, so these servers reach the editor opened at ${context.project} only. Install them at the root or at Global scope for the CLI`);
         }
         else if (outsideItsRepo(context.project, pathApi))
             out.notes.push(`Cursor reads .cursor/mcp.json only from the folder it opens (its git root for the CLI), never a parent's: open Cursor at ${context.project}, or install at Global scope for servers every folder needs`);
@@ -223,28 +236,28 @@ export function cursorSteps(inventory: Inventory, context: ListCtx, out: PlanOut
 }
 
 export const reapproveLine = (names: string[]): string => `Cursor asks you to approve ${names.join(', ')} again - it re-asks whenever an entry changes`;
-export const keepOf = (catalog: Catalog, value: ServerEntry, row: string | null): ServerEntry => kept.maskCredentials(value, catalog.byId.get(row!));
+export const keepOf = (catalog: Catalog, value: ServerEntry, row: string | null): ServerEntry => kept.maskCredentials(value, row === null ? undefined : catalog.byId.get(row));
 
 // The managed names a cursor-write leaves alone (spec D1, D9): each the file lacks (a hand removal) or holds with another
 // value than its list, compared after kept.maskCredentials. Named in the plan; the names this plan drops are not held.
 export function heldCopies(file: string, before: Map<string, Managed>, after: Map<string, Managed>, context: { catalog?: Catalog | undefined; normalizeCopy?: ((entry: ServerEntry) => ServerEntry) | undefined }, out: Pick<PlanOut, 'notes'>): string[]
 {
     const catalog = context.catalog || catalogLib.load();
-    const read = cursorMcp.readCursor(file);
-    if (read.state !== 'ok') return [];
-    const have = read.doc!.mcpServers;
+    const have = serversOf(cursorMcp.readCursor(file));
+    if (!have) return [];
     const hold: string[] = [];
     // a path difference the caller is about to settle (root-repoint's moved root) is not a hand edit
     const normalize = context.normalizeCopy || ((entry: ServerEntry) => entry);
     for (const [name, managed] of before)
     {
         if (!after.has(name)) continue;
-        if (!Object.hasOwn(have, name))
+        const copy = Object.hasOwn(have, name) ? have[name] : undefined;
+        if (copy === undefined)
         {
             hold.push(name);
             out.notes.push(`${name} is on the list for Cursor but not in ${file} - left; run /alfred-tools:fix`);
         }
-        else if (!deepEqual(keepOf(catalog, normalize(have[name]!), managed.row), keepOf(catalog, normalize(managed.entry), managed.row)))
+        else if (!deepEqual(keepOf(catalog, normalize(copy), managed.row), keepOf(catalog, normalize(managed.entry), managed.row)))
         {
             hold.push(name);
             out.notes.push(`${name}: Cursor's copy was changed by hand - left; run /alfred-tools:fix`);
@@ -259,25 +272,26 @@ export function heldCopies(file: string, before: Map<string, Managed>, after: Ma
 function changedCopies(file: string, before: Map<string, Managed>, after: Map<string, Managed>, hold: string[], upserts: ListUpsert[], context: ListCtx, out: PlanOut): string[]
 {
     const catalog = context.catalog || catalogLib.load();
-    const read = cursorMcp.readCursor(file);
-    if (read.state !== 'ok') return [];
-    const have = read.doc!.mcpServers;
-    const regOf = new Map((out.steps || []).filter((step): step is RegistrationStep => REG_OPS.includes(step.op)).map((step): [string | null, { entry?: ServerEntry; to?: Endpoint }] => [lists.regKey(step), step as { entry?: ServerEntry; to?: Endpoint }]));
+    const have = serversOf(cursorMcp.readCursor(file));
+    if (!have) return [];
+    // the entry each registration step writes (a remove writes none)
+    const regOf = new Map((out.steps || []).filter((step): step is RegistrationStep => REG_OPS.includes(step.op)).map((step): [string | null, ServerEntry | undefined] => [lists.regKey(step), step.op === 'mcp-remove' ? undefined : step.entry]));
     const names: string[] = [];
     for (const name of after.keys())
     {
-        if (!before.has(name) || hold.includes(name) || !Object.hasOwn(have, name)) continue;
+        const copy = Object.hasOwn(have, name) ? have[name] : undefined;
+        if (!before.has(name) || hold.includes(name) || copy === undefined) continue;
         const upsert = upserts.find((candidate) => candidate.server.name === name && forCursor(candidate.server));
         if (!upsert) continue;
         const row = upsert.server.row;
         let next: ServerEntry | null | undefined = upsert.server.entry ? (upsert.server.cursorEntry || upsert.server.entry) : null;
         if (!next && upsert.after && regOf.has(upsert.after))
         {
-            const entry = regOf.get(upsert.after)!.entry;
+            const entry = regOf.get(upsert.after);
             const two = upsert.server.form === 'two' || (upsert.server.form === undefined && upsert.server.cursorEntry);
             next = two ? cursorMcp.bridgeFormOf(entry, catalog, upsert.server.cursorEntry || null) || entry : entry;
         }
-        if (next && !deepEqual(keepOf(catalog, have[name]!, row), keepOf(catalog, next, row))) names.push(name);
+        if (next && !deepEqual(keepOf(catalog, copy, row), keepOf(catalog, next, row))) names.push(name);
     }
     return names;
 }

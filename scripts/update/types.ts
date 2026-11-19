@@ -5,7 +5,7 @@ import type { Catalog, Release } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
 import type { ListServer } from '../mcps-list/types.ts';
 import type { FetchJob, RunCli } from '../apply/types.ts';
-import type { MachineProbe } from '../fix/types.ts';
+import type { MachineProbe } from '../core/types.ts';
 import type { Taken } from '../plan/types.ts';
 
 // Where a package's releases are read: npm or PyPI, which a test replaces.
@@ -14,8 +14,7 @@ export interface Registry
     versionsOf(registry: string, name: string): Promise<Release[]>;
 }
 
-// What the check and the apply read; the apply adds what this run fetches, whether a restart is needed, the servers a
-// new way to pass data rewrote, and the names Cursor asks to approve again.
+// What the check and the apply read.
 export interface UpdateCtx
 {
     inventory: Inventory;
@@ -28,10 +27,15 @@ export interface UpdateCtx
     data: string | null;
     machine: MachineProbe;
     registry: Registry;
-    fetches?: FetchJob[];
-    restart?: boolean;
-    touched?: Set<string>;
-    reapprove?: string[];
+}
+// The apply's own run: what it fetches, whether a restart is needed, the servers a new way to pass data rewrote, and the
+// names Cursor asks to approve again.
+export interface ApplyCtx extends UpdateCtx
+{
+    fetches: FetchJob[];
+    restart: boolean;
+    touched: Set<string>;
+    reapprove: string[];
 }
 
 // What every offer carries, and the fields the check, the asks and the order read on any offer.

@@ -85,6 +85,31 @@ test('cursor-mcp puts catalog.order first, then the user\'s', () => {
     assert.deepStrictEqual(Object.keys(doc.mcpServers), [...want, 'zz', 'aa']);
 });
 
+test("cursor-mcp keeps a server the user wrote off Cursor's documented shape as it is, and writes the list's beside it", () => {
+    const d = fresh();
+    const lists = [{ file: listFile(d, [srv('serena', 'local', SERENA)]), scopes: ['local', 'project'] }];
+    const file = path.join(d, '.cursor', 'mcp.json');
+    const mine = { command: 'node', args: ['srv.js'], env: { PORT: 8080 } };
+    write(file, JSON.stringify({ mcpServers: { mine } }));
+    assert.strictEqual(C.readCursor(file).state, 'ok');
+    const r = C.cursorWrite(step(file, lists), ctx);
+    assert.strictEqual(r.ok, true, r.detail);
+    const servers = JSON.parse(fs.readFileSync(file, 'utf8')).mcpServers;
+    assert.strictEqual(JSON.stringify(servers.mine), JSON.stringify(mine), "the user's entry, byte for byte");
+    assert.deepStrictEqual(servers.serena, SERENA);
+});
+
+test('cursor-mcp refuses a file whose managed server is not in the shape Cursor reads, naming it and writing nothing', () => {
+    const d = fresh();
+    const lists = [{ file: listFile(d, [srv('serena', 'local', SERENA)]), scopes: ['local', 'project'] }];
+    const file = path.join(d, '.cursor', 'mcp.json');
+    write(file, '{"mcpServers":{"serena":{"command":"uvx","args":"serena"}}}');
+    const r = C.cursorWrite(step(file, lists), ctx);
+    assert.strictEqual(r.ok, false);
+    assert.match(r.detail, /: serena is not in the shape Cursor reads .* - correct or remove it there; left as it is$/);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), '{"mcpServers":{"serena":{"command":"uvx","args":"serena"}}}');
+});
+
 test('cursor-mcp refuses a symlink, non-JSON and a file without mcpServers, writing nothing', { skip: process.platform === 'win32' && 'NOT RUN: a symlink needs Developer Mode on Windows' }, () => {
     const d = fresh();
     const lists = [{ file: listFile(d, [srv('serena', 'local', SERENA)]), scopes: ['local', 'project'] }];

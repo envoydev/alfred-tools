@@ -1,13 +1,13 @@
 // What sign-in takes from the client's stderr, in memory: the sign-in link and the moment no browser opened. A line is read,
 // never kept or echoed; the only text that leaves is the https link the client itself named after its authorize marker.
-import { AUTHORIZE_MARKER, LINK_PROTOCOL, MAX_LINE_LENGTH, NO_BROWSER_MARKER, PID_PREFIX_PATTERN } from './constants.ts';
+import { AUTHORIZE_MARKER, LINK_PROTOCOL, MAX_LINE_LENGTH, NO_BROWSER_MARKER, PID_PREFIX_PATTERN, UNSAFE_LINK_CHARACTER } from './constants.ts';
 import type { AuthorizeWatch } from './types.ts';
 
 // -> the text itself, as the client wrote it, when it is one https URL and nothing else - no white space, no control
 // character a terminal would act on - else null
 export function httpsLinkOf(text: string): string | null
 {
-    if (/[\s\u0000-\u001f\u007f-\u009f]/.test(text)) return null;
+    if (UNSAFE_LINK_CHARACTER.test(text)) return null;
     try { return new URL(text).protocol === LINK_PROTOCOL ? text : null; }
     catch { return null; }
 }

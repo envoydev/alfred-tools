@@ -12,7 +12,7 @@ import * as roots from '../roots/roots.ts';
 import { ALFRED_DATA } from '../core/constants.ts';
 import { HELPER_VERSION } from '../copied/mcp-headers.js';
 import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
-import * as C from './common.ts';
+import * as common from './common.ts';
 import { ONE_VAR } from './constants.ts';
 import { ensureCommonjs, rootIgnoreLines, rootIgnore } from '../apply/file-steps.ts';
 import type { ServerEntry } from '../core/types.ts';
@@ -35,15 +35,16 @@ function authOf(entry: ServerEntry | null | undefined): { header: string; value:
 {
     const headers: Record<string, string> = (entry && entry.headers) || {};
     const header = Object.keys(headers).find((headerName) => headerName.toLowerCase() === 'authorization');
-    return header && typeof headers[header] === 'string' ? { header, value: headers[header]! } : null;
+    const value = header === undefined ? undefined : headers[header];
+    return header !== undefined && typeof value === 'string' ? { header, value } : null;
 }
 
 export function keyToHelperDetect(context: FixCtx): Finding[]
 {
     const out: Finding[] = [];
-    for (const registration of C.registrationsOf(context, 'key-to-helper'))
+    for (const registration of common.registrationsOf(context, 'key-to-helper'))
     {
-        const route = C.routeOf(context, registration);
+        const route = common.routeOf(context, registration);
         const auth = authOf(registration.entry);
         if (registration.route !== 'remote' || !route || !route.helper || !auth || registration.entry.headersHelper) continue;
         const resolvedRoots = rootsOf(context);
@@ -51,21 +52,21 @@ export function keyToHelperDetect(context: FixCtx): Finding[]
         const extra = { route: registration.route, roots: resolvedRoots };
         // the scheme word goes: the helper sends the route's own
         const token = auth.value.trim().replace(/^[A-Za-z][\w-]*\s+/, '');
-        const one = ONE_VAR.exec(token);
-        if (one)
+        // the one variable the token names, its group taking part in every match
+        const [, variable] = ONE_VAR.exec(token) ?? [];
+        if (variable !== undefined)
         {
-            const name = one[1]!;
-            const at = keys.valueIn(chain, name);
-            if (at) { out.push(C.finding('key-to-helper', registration, `the Authorization header holds \${${name}} - the key moves to mcp-headers.js, which reads ${name} from ${at.file}`, { ...extra, keyName: name })); continue; }
-            const old = keys.oldHolding(context.inventory.project, context.home, name);
-            out.push(C.finding('key-to-helper', registration, `the Authorization header holds \${${name}}`, { ...extra, blocked: `put ${name}'s value in ${chain[0]}, then run /alfred-tools:fix${old ? `; ${name} is in ${old}, which alfred-tools no longer reads` : ''}` }));
+            const at = keys.valueIn(chain, variable);
+            if (at) { out.push(common.finding('key-to-helper', registration, `the Authorization header holds \${${variable}} - the key moves to mcp-headers.js, which reads ${variable} from ${at.file}`, { ...extra, keyName: variable })); continue; }
+            const old = keys.oldHolding(context.inventory.project, context.home, variable);
+            out.push(common.finding('key-to-helper', registration, `the Authorization header holds \${${variable}}`, { ...extra, blocked: `put ${variable}'s value in ${chain[0]}, then run /alfred-tools:fix${old ? `; ${variable} is in ${old}, which alfred-tools no longer reads` : ''}` }));
             continue;
         }
-        if (token.includes('${')) { out.push(C.finding('key-to-helper', registration, 'the Authorization header mixes ${VAR} and text', { ...extra, blocked: 'make it one ${VAR} or the key by hand, then run /alfred-tools:fix' })); continue; }
+        if (token.includes('${')) { out.push(common.finding('key-to-helper', registration, 'the Authorization header mixes ${VAR} and text', { ...extra, blocked: 'make it one ${VAR} or the key by hand, then run /alfred-tools:fix' })); continue; }
         const name = keys.nameOfValue(chain, token);
         out.push(name
-            ? C.finding('key-to-helper', registration, `the Authorization header holds a key - it moves to mcp-headers.js, which reads it as ${name}`, { ...extra, keyName: name })
-            : C.finding('key-to-helper', registration, 'the Authorization header holds a key', { ...extra, blocked: `the key in this registration matches no name in ${chain.join(', ')}: put the working key there under a name, then run /alfred-tools:fix` }));
+            ? common.finding('key-to-helper', registration, `the Authorization header holds a key - it moves to mcp-headers.js, which reads it as ${name}`, { ...extra, keyName: name })
+            : common.finding('key-to-helper', registration, 'the Authorization header holds a key', { ...extra, blocked: `the key in this registration matches no name in ${chain.join(', ')}: put the working key there under a name, then run /alfred-tools:fix` }));
     }
     return out;
 }
@@ -73,12 +74,12 @@ export function keyToHelperDetect(context: FixCtx): Finding[]
 // The entry as read, with `headersHelper` and without the header. fix.ts writes the root's file steps before it (R9).
 export function keyToHelperFix(entry: ServerEntry, finding: Finding, context: FixCtx): ServerEntry
 {
-    const out = C.clone(entry);
+    const out = common.clone(entry);
     const auth = authOf(out);
-    if (auth) delete out.headers![auth.header];
+    if (auth && out.headers) delete out.headers[auth.header];
     if (out.headers && !Object.keys(out.headers).length) delete out.headers;
-    const route = C.rowOf(context, finding.row!)!.routes[finding.route!]!;
-    out.headersHelper = helperFor(route, finding.scope!, { project: context.inventory.project, platform: context.platform, home: context.home, roots: finding.roots }, finding.keyName);
+    const route = common.findingRoute(context, finding);
+    out.headersHelper = helperFor(route, common.fieldOf(finding, 'scope'), { project: context.inventory.project, platform: context.platform, home: context.home, roots: finding.roots }, finding.keyName);
     return out;
 }
 
@@ -93,18 +94,18 @@ function shippedFiles(context: FixCtx, fixId: string): ShippedFile[]
     const seen = new Map<string, ShippedFile>();
     const add = (file: string, kind: ShippedKind, registration: InvRegistration) => { if (!seen.has(file)) seen.set(file, { file, root: pathApi.dirname(file), kind, registration: registration }); };
     let familyRoots: Roots | null = null;
-    for (const registration of C.registrationsOf(context, fixId))
+    for (const registration of common.registrationsOf(context, fixId))
     {
         const named = roots.helperPathOf(registration.entry && registration.entry.headersHelper);
         if (named) add(roots.absOf(named, rootCtx(context)), 'helper', registration);
         // serena's context file (0.5.0, D7): the --context path a managed serena names
         // only the root's own or the home's: a path elsewhere is serena-context's to repoint, and a folder there may not be writable
-        const ctxAt = contextArgAt(registration.entry);
-        if (ctxAt >= 0)
+        const contextArg = (registration.entry.args || [])[contextArgAt(registration.entry)];
+        if (contextArg !== undefined)
         {
-            const file = roots.absOf(registration.entry.args![ctxAt], rootCtx(context));
+            const file = roots.absOf(contextArg, rootCtx(context));
             const root = (familyRoots || (familyRoots = rootsOf(context)))[roots.familyOf(registration.scope)];
-            if ((root && file === pathApi.join(root, roots.FILES.serenaContext)) || file === C.homeContextOf(registration.entry, context.platform, roots.FILES.serenaContext)) add(file, 'serenaContext', registration);
+            if ((root && file === pathApi.join(root, roots.FILES.serenaContext)) || file === common.homeContextOf(registration.entry, context.platform, roots.FILES.serenaContext)) add(file, 'serenaContext', registration);
         }
         const bridge = bridgeParts(registration.entry);
         if (!bridge) continue;
@@ -117,7 +118,7 @@ function shippedFiles(context: FixCtx, fixId: string): ShippedFile[]
 
 // `bridged`: found through a bridge registration, which did not start without the file - so its fix needs a new start,
 // where a hosted server's helper runs at each connect (review)
-const helperFinding = (fixId: string, shippedFile: ShippedFile, what: string, extra: Partial<Finding> = {}): Finding => ({ ...C.finding(fixId, shippedFile.registration, what, extra), name: shippedFile.file, path: shippedFile.file, shipped: shippedFile.kind, bridged: Boolean(bridgeParts(shippedFile.registration.entry)) || shippedFile.kind === 'serenaContext' });
+const helperFinding = (fixId: string, shippedFile: ShippedFile, what: string, extra: Partial<Finding> = {}): Finding => ({ ...common.finding(fixId, shippedFile.registration, what, extra), name: shippedFile.file, path: shippedFile.file, shipped: shippedFile.kind, bridged: Boolean(bridgeParts(shippedFile.registration.entry)) || shippedFile.kind === 'serenaContext' });
 const nameOf = (shippedFile: ShippedFile) => roots.FILES[shippedFile.kind];
 // the file this finding writes: 'helper', 'bridge' or 'serenaContext' (a finding from before 0.4.0 carries none: a helper)
 const kindOf = (finding: Finding): ShippedKind => (finding.shipped === 'bridge' || finding.shipped === 'serenaContext' ? finding.shipped : 'helper');
@@ -138,9 +139,9 @@ export function helperMissingDetect(context: FixCtx): Finding[]
 export function helperMissingFix(finding: Finding): MachineFixResult
 {
     const kind = kindOf(finding);
-    fs.mkdirSync(path.dirname(finding.path!), { recursive: true });
-    fs.writeFileSync(finding.path!, roots.shippedSource(kind));
-    return withCommonjs(path.dirname(finding.path!), { ok: roots.shippedState(kind, finding.path!).state === 'same', detail: `wrote ${finding.path!} (${SHIPPED[kind].word} ${SHIPPED[kind].version})`, restart: Boolean(finding.bridged) }, kind);
+    fs.mkdirSync(path.dirname(common.fieldOf(finding, 'path')), { recursive: true });
+    fs.writeFileSync(common.fieldOf(finding, 'path'), roots.shippedSource(kind));
+    return withCommonjs(path.dirname(common.fieldOf(finding, 'path')), { ok: roots.shippedState(kind, common.fieldOf(finding, 'path')).state === 'same', detail: `wrote ${common.fieldOf(finding, 'path')} (${SHIPPED[kind].word} ${SHIPPED[kind].version})`, restart: Boolean(finding.bridged) }, kind);
 }
 
 export function helperStaleDetect(context: FixCtx): Finding[]
@@ -163,9 +164,9 @@ export function helperStaleFix(finding: Finding): MachineFixResult
 {
     const kind = kindOf(finding);
     const { word, version } = SHIPPED[kind];
-    if (roots.shippedState(kind, finding.path!).state === 'higher') return { ok: false, detail: `${finding.path!} is newer than this plugin - left; update alfred-tools`, restart: false };
-    fs.writeFileSync(finding.path!, roots.shippedSource(kind));
-    return withCommonjs(path.dirname(finding.path!), { ok: roots.shippedState(kind, finding.path!).state === 'same', detail: `rewrote ${finding.path!} (${word} ${finding.from === undefined ? 'edited' : finding.from} -> ${version})`, restart: Boolean(finding.bridged) }, kind);
+    if (roots.shippedState(kind, common.fieldOf(finding, 'path')).state === 'higher') return { ok: false, detail: `${common.fieldOf(finding, 'path')} is newer than this plugin - left; update alfred-tools`, restart: false };
+    fs.writeFileSync(common.fieldOf(finding, 'path'), roots.shippedSource(kind));
+    return withCommonjs(path.dirname(common.fieldOf(finding, 'path')), { ok: roots.shippedState(kind, common.fieldOf(finding, 'path')).state === 'same', detail: `rewrote ${common.fieldOf(finding, 'path')} (${word} ${finding.from === undefined ? 'edited' : finding.from} -> ${version})`, restart: Boolean(finding.bridged) }, kind);
 }
 
 // ---- root-ignore ----------------------------------------------------------------------------------------------------
@@ -209,12 +210,12 @@ export function rootIgnoreDetect(context: FixCtx): Finding[]
 
 export function rootIgnoreFix(finding: Finding): MachineFixResult
 {
-    const result = rootIgnore(finding.path!);
+    const result = rootIgnore(common.fieldOf(finding, 'path'));
     const still = [
-        finding.fixes!.secrets && roots.gitIgnores(path.join(finding.path!, roots.FILES.secrets)) === false && `git would still commit ${path.join(finding.path!, roots.FILES.secrets)}`,
-        finding.fixes!.helper && roots.gitIgnores(path.join(finding.path!, roots.FILES.helper)) === true && `git still ignores ${path.join(finding.path!, roots.FILES.helper)}`,
-        finding.fixes!.signIns && roots.gitIgnores(path.join(finding.path!, roots.FILES.signIns, roots.SIGN_IN_PROBE)) === false && `git would still commit ${path.join(finding.path!, roots.FILES.signIns)}/`,
-        ...(finding.fixes!.unignore || []).filter((file) => roots.gitIgnores(path.join(finding.path!, file)) === true).map((file) => `git still ignores ${path.join(finding.path!, file)}`),
+        common.fieldOf(finding, 'fixes').secrets && roots.gitIgnores(path.join(common.fieldOf(finding, 'path'), roots.FILES.secrets)) === false && `git would still commit ${path.join(common.fieldOf(finding, 'path'), roots.FILES.secrets)}`,
+        common.fieldOf(finding, 'fixes').helper && roots.gitIgnores(path.join(common.fieldOf(finding, 'path'), roots.FILES.helper)) === true && `git still ignores ${path.join(common.fieldOf(finding, 'path'), roots.FILES.helper)}`,
+        common.fieldOf(finding, 'fixes').signIns && roots.gitIgnores(path.join(common.fieldOf(finding, 'path'), roots.FILES.signIns, roots.SIGN_IN_PROBE)) === false && `git would still commit ${path.join(common.fieldOf(finding, 'path'), roots.FILES.signIns)}/`,
+        ...(common.fieldOf(finding, 'fixes').unignore || []).filter((file) => roots.gitIgnores(path.join(common.fieldOf(finding, 'path'), file)) === true).map((file) => `git still ignores ${path.join(common.fieldOf(finding, 'path'), file)}`),
     ].filter(Boolean);
     return { ok: !still.length, detail: still.length ? `${result.detail}; ${still.join('; ')}` : result.detail, restart: false };
 }

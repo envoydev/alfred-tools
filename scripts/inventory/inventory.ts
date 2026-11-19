@@ -14,18 +14,19 @@ import * as kept from '../core/kept.ts';
 import { ALL_SCOPES, MCP_JSON } from '../core/constants.ts';
 import * as roots from '../roots/roots.ts';
 import { pathFor } from '../entries/platform.ts';
-import { ALFRED_CODE_PLUGIN, INVENTORY_VERSION, MARKETPLACE_LIST_UNREAD, WINDOWS_MCP_MARKETPLACE } from './constants.ts';
+import { ALFRED_CODE_PLUGIN, INVENTORY_VERSION, MARKETPLACE_LIST_UNREAD, PLUGIN_LIST_UNREAD, WINDOWS_MCP_MARKETPLACE } from './constants.ts';
+import { isMarketplaceListRow, isMcpJsonDoc, isPluginListRow, isSettingsDoc } from './guards.ts';
 import { catalogMatch } from './fingerprint.ts';
 import * as existing from './existing.ts';
 import { workspaceOf } from '../roots/workspace.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
-import type { Account, Env, FileState, ServerEntry, ServerMap } from '../core/types.ts';
+import type { Account, AccountProject, CliResult, Env, FileState, ServerEntry, ServerMap } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Family, InventoryView, RootsCtx } from '../roots/types.ts';
 import type { CursorOf } from '../cursor/types.ts';
 import type { OwnEntry } from '../mcps-list/types.ts';
-import type { Approval, ApprovalCtx, BuildOptions, Installed, InvList, InvRegistration, Inventory, MarketplaceListRow, McpJsonDoc, PluginListRow, PluginRow, SettingsDoc, Shadow, WindowsMcp } from './types.ts';
+import type { Approval, ApprovalCtx, BuildOptions, Installed, InvList, InvRegistration, Inventory, PluginListRow, PluginRow, SettingsDoc, Shadow, Unreadable, WindowsMcp } from './types.ts';
 
 const { readState } = account;
 
@@ -66,26 +67,30 @@ export function ancestorMcpFiles(project: string): { dir: string; file: string }
     return out;
 }
 
-// The settings files a session started in `proj` reads, nearest first: the trust root's settings.local.json (the git
+// The settings files a session started in `projectDir` reads, nearest first: the trust root's settings.local.json (the git
 // root, else the folder), this folder's settings.local.json, then its settings.json - a parent folder's settings.json
 // never counts (MEASURED: M7 for approvals, P4 and P5 for enabledPlugins). -> [file]
-function hereSettings(proj: string): string[]
+function hereSettings(projectDir: string): string[]
 {
-    const root = account.localRoot(proj);
-    return [...new Set([path.join(root, '.claude', 'settings.local.json'), path.join(proj, '.claude', 'settings.local.json'), path.join(proj, '.claude', 'settings.json')])];
+    const root = account.localRoot(projectDir);
+    return [...new Set([path.join(root, '.claude', 'settings.local.json'), path.join(projectDir, '.claude', 'settings.local.json'), path.join(projectDir, '.claude', 'settings.json')])];
 }
 
 // What decides a parent's server here: the user settings, this folder's settings files, and its account entry and
 // trust, all keyed on the trust root (the git root, else the folder).
-function approvalContext(proj: string, env: Env, acct: Account, platform: string): ApprovalCtx
+function approvalContext(projectDir: string, env: Env, accountRead: Account, platform: string): ApprovalCtx
 {
-    const root = account.localRoot(proj);
-    const entry = (account.projectEntry(acct.projects || {}, root, platform) || {}) as Account['projects'][string];
-    return { user: readState<SettingsDoc>(settingsOf('user', proj, env)).doc, folder: hereSettings(proj).map((file) => readState<SettingsDoc>(file).doc), entry, trusted: entry.hasTrustDialogAccepted === true };
+    const root = account.localRoot(projectDir);
+    const entry: AccountProject = account.projectEntry(accountRead.projects || {}, root, platform) || {};
+    return { user: readState(settingsOf('user', projectDir, env), isSettingsDoc).doc, folder: hereSettings(projectDir).map((file) => readState(file, isSettingsDoc).doc), entry, trusted: entry.hasTrustDialogAccepted === true };
 }
 
-const names = (doc: SettingsDoc | null, key: string, name: string): boolean => Boolean(doc) && Array.isArray(doc![key]) && (doc![key] as unknown[]).includes(name);
-const approves = (doc: SettingsDoc | null, name: string): boolean => Boolean(doc) && (doc!.enableAllProjectMcpServers === true || names(doc, 'enabledMcpjsonServers', name));
+function names(doc: SettingsDoc | null, key: string, name: string): boolean
+{
+    const listed = doc ? doc[key] : undefined;
+    return Array.isArray(listed) && listed.includes(name);
+}
+const approves = (doc: SettingsDoc | null, name: string): boolean => doc !== null && (doc.enableAllProjectMcpServers === true || names(doc, 'enabledMcpjsonServers', name));
 
 // approved | pending | rejected, as `claude mcp list` says it here (MEASURED, M7; the MCP docs' 'Project server approvals
 // and workspace trust'): a disabledMcpjsonServers entry anywhere rejects; the user settings approve in any folder; this
@@ -100,18 +105,18 @@ function approvalOf(name: string, context: ApprovalCtx): Approval
 function pluginRows(listJson: PluginListRow[], project: string, env: Env, catalog: Catalog): PluginRow[]
 {
     const rows: PluginRow[] = [];
-    const here = [...hereSettings(project), settingsOf('user', project, env)].map((file) => readState<SettingsDoc>(file).doc);
+    const here = [...hereSettings(project), settingsOf('user', project, env)].map((file) => readState(file, isSettingsDoc).doc);
     const flagIn = (doc: SettingsDoc | null, id: string) => (doc && doc.enabledPlugins ? doc.enabledPlugins[id] : undefined);
     for (const listRow of Array.isArray(listJson) ? listJson : [])
     {
-        const [name, marketplace = ''] = String(listRow.id).split('@');
+        const [name = '', marketplace = ''] = String(listRow.id).split('@');
         const scoped = listRow.scope === 'project' || listRow.scope === 'local';
         if (scoped && listRow.projectPath && account.projectKey(listRow.projectPath) !== account.projectKey(project)) continue; // another project's
         let enabled = listRow.enabled;
         let enabledFrom: PluginRow['enabledFrom'] = 'list';
         if (ALL_SCOPES.includes(listRow.scope))
         {
-            const flag = flagIn(readState<SettingsDoc>(settingsOf(listRow.scope, project, env)).doc, listRow.id);
+            const flag = flagIn(readState(settingsOf(listRow.scope, project, env), isSettingsDoc).doc, listRow.id);
             if (typeof flag === 'boolean') { enabled = flag; enabledFrom = 'settings'; }
         }
         // Two readings, kept apart: `enabled` is the install scope's own, which configure and update act on (an `enable`
@@ -120,31 +125,43 @@ function pluginRows(listJson: PluginListRow[], project: string, env: Env, catalo
         // P1-P6). Only the windows-mcp count reads it.
         const flagHere = here.map((doc) => flagIn(doc, listRow.id)).find((value) => typeof value === 'boolean');
         const enabledHere = typeof flagHere === 'boolean' ? flagHere : enabled;
-        const row = catalog.tools.find((tool) => tool.kind === 'plugin' && tool.plugin === name && tool.marketplace!.name === marketplace);
+        const row = catalog.tools.find((tool) => tool.kind === 'plugin' && tool.plugin === name && tool.marketplace?.name === marketplace);
         rows.push({
-            id: listRow.id, plugin: name!, marketplace, scope: listRow.scope, version: listRow.version, enabled, enabledFrom, enabledHere,
-            errors: listRow.errors || [], rowId: row ? row.id : null, alfredRetired: catalog.reserved.has(name!),
+            id: listRow.id, plugin: name, marketplace, scope: listRow.scope, version: listRow.version, enabled, enabledFrom, enabledHere,
+            errors: listRow.errors || [], rowId: row ? row.id : null, alfredRetired: catalog.reserved.has(name),
         });
     }
     return rows;
 }
 
+// A `claude ... list --json` as rows, or the unreadable entry that names it: a list that failed or is not JSON is never
+// read as an empty one (nothing installed, no marketplace registered).
+function cliList(result: CliResult, list: { scope: string; file: string }): { rows: unknown[]; unreadable: Unreadable | null }
+{
+    let rows: unknown = null;
+    try { rows = result.status === 0 ? JSON.parse(result.stdout || '[]') : null; }
+    catch { /* not JSON: named below */ }
+    if (Array.isArray(rows)) return { rows, unreadable: null };
+    return { rows: [], unreadable: { ...list, state: result.status === 0 ? 'malformed' : 'unreadable', error: result.status === 0 ? 'not JSON' : 'the command failed' } };
+}
+
 export function buildInventory({ project, env = process.env, platform = process.platform, arch = process.arch, catalog = catalogLib.load(), run = cli.runClaude, data = null }: BuildOptions): Inventory
 {
-    const proj = path.resolve(project);
+    const projectDir = path.resolve(project);
     const out: Inventory = {
-        version: INVENTORY_VERSION, project: proj, os: platform, arch, cli: null, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false,
+        version: INVENTORY_VERSION, project: projectDir, os: platform, arch, cli: null, unreadable: [], registrations: [], plugins: [], pluginServers: [], marketplaces: [], alfredCodeEnabled: false,
         sources: {},
     };
 
-    const mcpJsonState = readState<McpJsonDoc>(path.join(proj, MCP_JSON));
-    const acct = account.readAccount(env, proj, platform);
-    out.sources = { project: { file: mcpJsonState.file, state: mcpJsonState.state }, account: { file: acct.file, state: acct.state }, local: { file: acct.file, state: acct.state }, user: { file: acct.file, state: acct.state } };
-    for (const [scope, source] of [['project', mcpJsonState], ['local', acct], ['user', acct]] as [string, { file: string; state: FileState; error: string | null }][])
+    const mcpJsonState = readState(path.join(projectDir, MCP_JSON), isMcpJsonDoc);
+    const accountRead = account.readAccount(env, projectDir, platform);
+    out.sources = { project: { file: mcpJsonState.file, state: mcpJsonState.state }, account: { file: accountRead.file, state: accountRead.state }, local: { file: accountRead.file, state: accountRead.state }, user: { file: accountRead.file, state: accountRead.state } };
+    const sources: [string, { file: string; state: FileState; error: string | null }][] = [['project', mcpJsonState], ['local', accountRead], ['user', accountRead]];
+    for (const [scope, source] of sources)
         if (source.state === 'malformed' || source.state === 'unreadable') out.unreadable.push({ scope, file: source.file, state: source.state, error: source.error });
 
-    const approval = approvalContext(proj, env, acct, platform);
-    const scopes = [['project', (mcpJsonState.doc && mcpJsonState.doc.mcpServers) || {}], ['local', acct.local], ['user', acct.user]] as [string, ServerMap][];
+    const approval = approvalContext(projectDir, env, accountRead, platform);
+    const scopes: [string, ServerMap][] = [['project', (mcpJsonState.doc && mcpJsonState.doc.mcpServers) || {}], ['local', accountRead.local], ['user', accountRead.user]];
     for (const [scope, servers] of scopes)
     {
         if (!servers || typeof servers !== 'object') continue;
@@ -164,12 +181,12 @@ export function buildInventory({ project, env = process.env, platform = process.
     }
 
     // the parents' servers, nearest first; `shadowed` names what Claude Code uses in their place
-    const wins = new Map<string, Shadow>(Object.keys(acct.local || {}).map((name): [string, Shadow] => [name, { scope: 'local', from: null }]));
-    for (const name of Object.keys((mcpJsonState.doc && mcpJsonState.doc.mcpServers) || {})) if (!wins.has(name)) wins.set(name, { scope: 'project', from: proj });
+    const wins = new Map<string, Shadow>(Object.keys(accountRead.local || {}).map((name): [string, Shadow] => [name, { scope: 'local', from: null }]));
+    for (const name of Object.keys((mcpJsonState.doc && mcpJsonState.doc.mcpServers) || {})) if (!wins.has(name)) wins.set(name, { scope: 'project', from: projectDir });
     out.sources.inherited = [];
-    for (const { dir, file } of ancestorMcpFiles(proj))
+    for (const { dir, file } of ancestorMcpFiles(projectDir))
     {
-        const inheritedState = readState<McpJsonDoc>(file);
+        const inheritedState = readState(file, isMcpJsonDoc);
         out.sources.inherited.push({ file, state: inheritedState.state });
         if (inheritedState.state === 'malformed' || inheritedState.state === 'unreadable') { out.unreadable.push({ scope: 'inherited', file, state: inheritedState.state, error: inheritedState.error }); continue; }
         const servers = inheritedState.doc && inheritedState.doc.mcpServers && typeof inheritedState.doc.mcpServers === 'object' ? inheritedState.doc.mcpServers : {};
@@ -186,16 +203,16 @@ export function buildInventory({ project, env = process.env, platform = process.
 
     // trust, and the root folders (spec D2): the roots map in the plugin's data folder, and the root each family uses now
     out.trusted = approval.trusted;
-    const rootCtx = { project: proj, home: account.homeDir(env), platform, catalog };
+    const rootCtx = { project: projectDir, home: account.homeDir(env), platform, catalog };
     out.roots = { map: roots.readMap(data) };
     out.roots.project = roots.inUse(out, 'project', rootCtx);
     out.roots.global = roots.inUse(out, 'global', rootCtx);
     // the answers about servers already set up (spec D6): each family's list (0.5.0; the 0.4.x record while it has none),
     // and each registration's choice - null when never answered or when its launch changed since
     out.lists = { project: listOf(out, 'project', rootCtx), global: listOf(out, 'global', rootCtx) };
-    out.cursor = cursorFiles(out, { platform, env, project: proj }, catalog);
+    out.cursor = cursorFiles(out.lists, { platform, env, project: projectDir }, catalog);
     // the workspace alfred-code records (spec D4a): the folders whose Cursor files take this folder's project servers
-    out.workspace = workspaceOf(proj, env);
+    out.workspace = workspaceOf(projectDir, env);
     const entryFingerprint = (entry: ServerEntry) => existing.fingerprintOf(entry, catalog);
     for (const registration of out.registrations)
     {
@@ -203,17 +220,17 @@ export function buildInventory({ project, env = process.env, platform = process.
         registration.choice = choiceIn(familyList, (ownEntry) => ownEntry.name === registration.name && ownEntry.scope === registration.scope, entryFingerprint(registration.entry), ['own', 'manage']);
     }
 
-    const version = cli.available({ env, cwd: proj });
+    const version = cli.available({ env, cwd: projectDir });
     out.cli = version ? { ok: true, version } : { ok: false, version: null };
     if (!version) return out;
 
-    const list = run(['plugin', 'list', '--json'], { cwd: proj, env });
-    let listJson: PluginListRow[] = [];
-    try { listJson = JSON.parse(list.stdout || '[]') as PluginListRow[]; } catch { out.unreadable.push({ scope: 'plugins', file: 'claude plugin list --json', state: 'malformed', error: 'not JSON' }); }
-    out.plugins = pluginRows(listJson, proj, env, catalog);
+    const pluginList = cliList(run(['plugin', 'list', '--json'], { cwd: projectDir, env }), PLUGIN_LIST_UNREAD);
+    if (pluginList.unreadable) out.unreadable.push(pluginList.unreadable);
+    const listJson = pluginList.rows.filter(isPluginListRow);
+    out.plugins = pluginRows(listJson, projectDir, env, catalog);
     out.alfredCodeEnabled = out.plugins.some((pluginRow) => pluginRow.plugin === ALFRED_CODE_PLUGIN && pluginRow.enabled);
     // each MCP server a plugin that loads here provides, read from its install folder and matched as a registration is
-    const installPath = new Map((Array.isArray(listJson) ? listJson : []).map((listRow): [string, string | undefined] => [`${listRow.id}~${listRow.scope}`, listRow.installPath]));
+    const installPath = new Map(listJson.map((listRow): [string, string | undefined] => [`${listRow.id}~${listRow.scope}`, listRow.installPath]));
     for (const pluginRow of out.plugins.filter((candidate) => candidate.enabledHere))
         for (const server of existing.pluginServers(installPath.get(`${pluginRow.id}~${pluginRow.scope}`)))
         {
@@ -222,13 +239,9 @@ export function buildInventory({ project, env = process.env, platform = process.
             out.pluginServers.push({ plugin: pluginRow.id, server: server.server, entry: server.entry, rowId: match ? match.rowId : null, route: match ? match.route : null, choice });
         }
 
-    const marketplaceResult = run(['plugin', 'marketplace', 'list', '--json'], { cwd: proj, env });
-    let marketplaceRows: unknown = null;
-    try { marketplaceRows = marketplaceResult.status === 0 ? JSON.parse(marketplaceResult.stdout || '[]') : null; }
-    catch { /* not JSON: named below */ }
-    out.marketplaces = Array.isArray(marketplaceRows) ? (marketplaceRows as MarketplaceListRow[]).map((marketplace) => ({ name: marketplace.name, source: marketplace.repo || marketplace.url || marketplace.path || '', installLocation: marketplace.installLocation || '' })) : [];
-    // a list that failed or is not JSON is named, never read as 'no marketplace registered'
-    if (!Array.isArray(marketplaceRows)) out.unreadable.push({ ...MARKETPLACE_LIST_UNREAD, state: marketplaceResult.status === 0 ? 'malformed' : 'unreadable', error: marketplaceResult.status === 0 ? 'not JSON' : 'the command failed' });
+    const marketplaceList = cliList(run(['plugin', 'marketplace', 'list', '--json'], { cwd: projectDir, env }), MARKETPLACE_LIST_UNREAD);
+    out.marketplaces = marketplaceList.rows.filter(isMarketplaceListRow).map((marketplace) => ({ name: marketplace.name, source: marketplace.repo || marketplace.url || marketplace.path || '', installLocation: marketplace.installLocation || '' }));
+    if (marketplaceList.unreadable) out.unreadable.push(marketplaceList.unreadable);
     return out;
 }
 
@@ -253,16 +266,12 @@ function listOf(inventory: InventoryView, family: Family, context: RootsCtx): In
 
 // Cursor's two files (spec D2): the project's for project and local scope, the home's for user scope. Each lists every
 // name it holds, and the entries of the names its family's list marks for Cursor, kept.
-function cursorFiles(inventory: Inventory, context: { platform: string; env: Env; project: string }, catalog: Catalog): { project: CursorOf; global: CursorOf }
+function cursorFiles(familyLists: { project: InvList | null; global: InvList | null }, context: { platform: string; env: Env; project: string }, catalog: Catalog): { project: CursorOf; global: CursorOf }
 {
-    const marked = (family: string) =>
-    {
-        const list = inventory.lists![family];
-        return list && !list.note ? (list.servers || []).filter((server) => (server.clients || []).includes('cursor')) : [];
-    };
+    const marked = (list: InvList | null) => (list && !list.note ? (list.servers || []).filter((server) => (server.clients || []).includes('cursor')) : []);
     return {
-        project: cursorMcp.cursorOf(cursorMcp.fileFor('project', context), marked('project'), catalog),
-        global: cursorMcp.cursorOf(cursorMcp.fileFor('global', context), marked('global'), catalog),
+        project: cursorMcp.cursorOf(cursorMcp.fileFor('project', context), marked(familyLists.project), catalog),
+        global: cursorMcp.cursorOf(cursorMcp.fileFor('global', context), marked(familyLists.global), catalog),
     };
 }
 
@@ -270,7 +279,7 @@ function cursorFiles(inventory: Inventory, context: { platform: string; env: Env
 function choiceIn(list: InvList | null | undefined, match: (ownEntry: OwnEntry) => boolean, fingerprint: string | null, allowed: string[]): string | null
 {
     const ownEntry = list ? (list.own || []).find(match) : null;
-    return ownEntry && ownEntry.fingerprint === fingerprint && allowed.includes(ownEntry.choice as string) ? ownEntry.choice! : null;
+    return ownEntry && ownEntry.fingerprint === fingerprint && ownEntry.choice !== undefined && allowed.includes(ownEntry.choice) ? ownEntry.choice : null;
 }
 
 // The inventory as a file or a print holds it: every credential value as kept.ts's marker, so no command line names a
@@ -304,16 +313,18 @@ export function installedOf(inventory: Inventory, rowId: string): Installed[]
 // marketplace dropped says so only in `errors` (plugin-cli-evidence S13, S25).
 // -> [{ name, scope, kind, owner: 'catalog' | 'alfred-code', from }]
 const WINDOWS_MCP_PLUGINS = ['windows-control', 'windows-desktop'];
-const NEAREST: Record<string, number> = { local: 0, project: 1, inherited: 2, user: 3 };
+const NEAREST = new Map([['local', 0], ['project', 1], ['inherited', 2], ['user', 3]]);
+// a scope's place, nearest first; a scope outside the four sorts last
+const nearness = (scope: string): number => NEAREST.get(scope) ?? NEAREST.size;
 export function windowsMcpServers(inventory: { registrations: InvRegistration[]; plugins?: PluginRow[] }): WindowsMcp[]
 {
     const starts = inventory.registrations.filter((registration) => (registration.scope === 'inherited' ? registration.approval === 'approved' && !registration.shadowed : registration.scope !== 'project' || !registration.approval || registration.approval === 'approved'));
     const wins = new Map<string, InvRegistration>();
-    for (const registration of starts.slice().sort((left, right) => NEAREST[left.scope]! - NEAREST[right.scope]!)) if (!wins.has(registration.name)) wins.set(registration.name, registration);
+    for (const registration of starts.slice().sort((left, right) => nearness(left.scope) - nearness(right.scope))) if (!wins.has(registration.name)) wins.set(registration.name, registration);
     // one plugin id is one server, however many scopes hold an install row for it (S28): the nearest row names it
     const loads = (inventory.plugins || []).filter((pluginRow) => (pluginRow.enabledHere ?? pluginRow.enabled) && !(pluginRow.errors || []).length && pluginRow.marketplace === WINDOWS_MCP_MARKETPLACE && WINDOWS_MCP_PLUGINS.includes(pluginRow.plugin));
     const nearest = new Map<string, PluginRow>();
-    for (const pluginRow of loads.slice().sort((left, right) => NEAREST[left.scope]! - NEAREST[right.scope]!)) if (!nearest.has(pluginRow.id)) nearest.set(pluginRow.id, pluginRow);
+    for (const pluginRow of loads.slice().sort((left, right) => nearness(left.scope) - nearness(right.scope))) if (!nearest.has(pluginRow.id)) nearest.set(pluginRow.id, pluginRow);
     return [
         ...[...wins.values()].filter((registration) => registration.rowId === 'windows-control' || (registration.alfredRetired && registration.name === 'windows-control'))
             .map((registration): WindowsMcp => ({ name: registration.name, scope: registration.scope, kind: 'mcp', owner: registration.alfredRetired ? 'alfred-code' : 'catalog', from: registration.from || null })),
@@ -332,9 +343,10 @@ export function targetOf(inventory: Inventory, key: string | null | undefined): 
 {
     const match = /^(mcp|plugin):(.+)~(local|project|user)$/.exec(key || '');
     if (!match) return null;
-    const item = match[1] === 'mcp'
-        ? inventory.registrations.find((registration) => registration.name === match[2] && registration.scope === match[3])
-        : inventory.plugins.find((pluginRow) => pluginRow.id === match[2] && pluginRow.scope === match[3]);
-    return item ? { kind: match[1]!, item } : null;
+    const [, kind = '', name, scope] = match;
+    const item = kind === 'mcp'
+        ? inventory.registrations.find((registration) => registration.name === name && registration.scope === scope)
+        : inventory.plugins.find((pluginRow) => pluginRow.id === name && pluginRow.scope === scope);
+    return item ? { kind, item } : null;
 }
 

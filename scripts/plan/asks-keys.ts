@@ -1,7 +1,8 @@
 // The key questions: which key a hosted route reads, and the name it is kept under.
-import { pathFor } from '../entries/platform.ts';
+import { isInside, pathFor } from '../entries/platform.ts';
 import { rootOf } from '../entries/locations.ts';
 import { settingsOf } from '../entries/entry.ts';
+import { routeField } from '../catalog/rows.ts';
 import { hostedSettingsQuestion } from './hosted-settings.ts';
 import * as keys from '../keys/keys.ts';
 import { readRegistration } from '../core/account.ts';
@@ -18,7 +19,7 @@ export { RECOMMENDED_SUFFIX };
 // state and sends Claude to fetch and re-ask (docs/sources.md, 'alfred-code hooks over the commands').
 export const ROUTE_WORD: Record<string, string> = { remote: 'hosted', local: 'local', bridge: 'bridge' };
 // A word with its first letter in capitals: a route's word as its option label shows it, which record.ts reads back.
-export const capitalized = (word: string): string => `${word[0]!.toUpperCase()}${word.slice(1)}`;
+export const capitalized = (word: string): string => `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
 export const HEADER: Record<string, string> = { code: 'Code', docs: 'Docs, forges', browsers: 'Browsers', machine: 'Machine', own: 'On their own', roots: 'Root folders' };
 export const SCOPE_TEXT: Record<string, string> = {
     local: 'this project, only you (~/.claude.json, under this project)',
@@ -64,7 +65,7 @@ export function keyStateOf(row: CatalogRow, routeId: string, context: AskCtx | n
         : keys.stdioChain({ scope, projectRoot, globalRoot, platform: context.platform });
     const readHome = Object.hasOwn(context, 'keyHome') ? Boolean(context.keyHome) : true;
     const pathApi = pathFor(context.platform);
-    const inProject = (filePath: string) => { const relativePath = pathApi.relative(context.project, filePath); return Boolean(relativePath) && !relativePath.startsWith('..') && !pathApi.isAbsolute(relativePath); };
+    const inProject = (filePath: string) => isInside(pathApi, context.project, filePath, { orSame: false });
     const word = rowWord(row);
     const offered = (list: string[]) =>
     {
@@ -78,6 +79,15 @@ export function keyStateOf(row: CatalogRow, routeId: string, context: AskCtx | n
     const old = offered(keys.oldFiles(context.project, context.home)).filter((nameAt) => !names.some((filled) => filled.name === nameAt.name));
     return { variable, kind, scope, files, names, found, old };
 }
+
+// A name question's options, the first recommended: each name of `order` with its description (the builders set one
+// for every name they order).
+const nameOptions = (order: string[], descriptions: Map<string, string>) => order.map((name, i) =>
+{
+    const description = descriptions.get(name);
+    if (description === undefined) throw new Error(`the name ${name} is offered with no description`);
+    return { label: `${name}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description, value: name };
+});
 
 // D9: which name holds a tool's key in .mcps-secrets. Options: the catalog's name, up to two other names found holding
 // the row id (in the chain, then in a file 0.1.x read), and 'A name you choose', asked next. Recommended: `current` (the
@@ -95,7 +105,7 @@ export function keyNameQuestion(row: CatalogRow, routeId: string, scope: string,
     if (!descriptions.has(recommended)) descriptions.set(recommended, 'the name it uses now');
     const others = [...keyState.names, ...keyState.old].map((nameAt) => nameAt.name).filter((name) => name !== keyState.variable && name !== recommended).slice(0, 2);
     const order = [recommended, ...[keyState.variable, ...others].filter((name) => name !== recommended)].slice(0, 3);
-    const options = [...order.map((name, i) => ({ label: `${name}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: descriptions.get(name)!, value: name })), { label: 'A name you choose', description: 'a name of yours, asked next - its value goes in .mcps-secrets, never in the chat', value: 'named' }];
+    const options = [...nameOptions(order, descriptions), { label: 'A name you choose', description: 'a name of yours, asked next - its value goes in .mcps-secrets, never in the chat', value: 'named' }];
     return {
         question: { id: `${PREFIX.keyName}${row.id}`, header: 'Key name', multiSelect: false, question: `Which name holds ${row.label}'s key in .mcps-secrets?`, options: options.map(({ label, description }) => ({ label, description })) },
         answers: Object.fromEntries(options.map((option) => [option.label, option.value])),
@@ -114,7 +124,7 @@ export function urlNameQuestions(row: CatalogRow, routeId: string, scope: string
     if (!route || route.runtime !== 'bridge' || !context) return [];
     const keyState = keyStateOf(row, routeId, context, null, scope);
     const word = rowWord(row);
-    const key = keyName || route.helper!.var;
+    const key = keyName || routeField(route.helper, row.id, 'helper').var;
     const catalogNames = new Set((route.urlVars || []).map((urlVar) => urlVar.var));
     const found: NameAt[] = [];
     for (const { file, names } of keys.filledNames(keyState ? keyState.files : []))
@@ -132,8 +142,8 @@ export function urlNameQuestions(row: CatalogRow, routeId: string, scope: string
         if (!descriptions.has(recommended)) descriptions.set(recommended, 'the name it uses now');
         taken.add(recommended);
         const other = free.map((nameAt) => nameAt.name).find((name) => name !== recommended && name !== urlVar.var);
-        const order = [recommended, ...[urlVar.var, other].filter((name) => name && name !== recommended)].slice(0, 3) as string[];
-        const options = [...order.map((name, i) => ({ label: `${name}${i === 0 ? RECOMMENDED_SUFFIX : ''}`, description: descriptions.get(name)!, value: name })), { label: 'A name you choose', description: 'a name of yours, asked next - its value goes in .mcps-secrets', value: 'named' }];
+        const order = [recommended, ...[urlVar.var, other].filter((name): name is string => Boolean(name) && name !== recommended)].slice(0, 3);
+        const options = [...nameOptions(order, descriptions), { label: 'A name you choose', description: 'a name of yours, asked next - its value goes in .mcps-secrets', value: 'named' }];
         return {
             var: urlVar.var,
             question: { id: `${PREFIX.urlName}${row.id}-${urlVar.var}`, header: 'URL name', multiSelect: false, question: `Which name holds ${row.label}'s ${urlVar.label} in .mcps-secrets?`, options: options.map(({ label, description }) => ({ label, description })) },

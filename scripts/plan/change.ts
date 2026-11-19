@@ -1,6 +1,6 @@
 // One configure change: an installed registration by its key, and a root folder's change.
 import fs from 'node:fs';
-import { pathFor } from '../entries/platform.ts';
+import { isInside, pathFor } from '../entries/platform.ts';
 import { logicalRoot, formatRoot } from '../entries/locations.ts';
 import { currentOf, helperParts, contextArgAt } from '../entries/entry.ts';
 import * as serenaConfig from '../apply/serena-config.ts';
@@ -9,12 +9,14 @@ import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
 import * as existing from '../inventory/existing.ts';
 import { keyOf, targetOf } from '../inventory/inventory.ts';
-import { isManaged } from '../fix/common.ts';
+import { isManaged } from '../inventory/fingerprint.ts';
 import { planMcp } from './pick.ts';
 import { SCOPES } from './cursor-steps.ts';
+import { isRegistration } from './files/shapes.ts';
+import { required } from './required.ts';
 import type { Catalog } from '../catalog/types.ts';
-import type { Inventory, InvList, InvRegistration, PluginRow } from '../inventory/types.ts';
-import type { Family } from '../roots/types.ts';
+import type { Inventory } from '../inventory/types.ts';
+import type { OwnEntry } from '../mcps-list/types.ts';
 import type { Answers, PickAnswer, Plan, PlanCtx, RemoveAnswer, RootMove } from './types.ts';
 
 // ---- one configure change: an installed registration, by its key ----------------------------------------------------
@@ -23,12 +25,14 @@ export function planChange(key: string, pick: PickAnswer, inventory: Inventory, 
 {
     const target = targetOf(inventory, key);
     if (!target) return out.errors.push(`change: nothing is installed as '${key}' (a key is mcp:<name>~<scope>)`);
-    if (target.kind !== 'mcp') return out.errors.push(`change: '${key}' is a plugin - the catalog lists none since 0.5.0, so it is not changed here`);
-    if (!target.item.rowId) return out.errors.push(`change: '${(target.item as InvRegistration).name || (target.item as PluginRow).id}' is your own (it matches no catalog row) - left alone`);
-    if (target.item.alfredRetired) return out.errors.push(`change: '${(target.item as InvRegistration).name || (target.item as PluginRow).id}' is alfred-code's (retired) - left alone`);
-    const row = catalog.byId.get(target.item.rowId);
+    // an `mcp:` key names a registration
+    if (target.kind !== 'mcp' || !isRegistration(target.item)) return out.errors.push(`change: '${key}' is a plugin - the catalog lists none since 0.5.0, so it is not changed here`);
+    const registration = target.item;
+    if (!registration.rowId) return out.errors.push(`change: '${registration.name}' is your own (it matches no catalog row) - left alone`);
+    if (registration.alfredRetired) return out.errors.push(`change: '${registration.name}' is alfred-code's (retired) - left alone`);
+    const row = required(catalog.byId.get(registration.rowId), `change: '${registration.name}' names the catalog row '${registration.rowId}', which the catalog lacks`);
     const { row: _row, ...answers } = pick;
-    return planMcp(row!, { ...answers, target: { name: (target.item as InvRegistration).name, scope: target.item.scope } }, inventory, context, catalog, out);
+    return planMcp(row, { ...answers, target: { name: registration.name, scope: registration.scope } }, inventory, context, catalog, out);
 }
 
 // configure's 'Change the root' (spec D7, R3): each managed registration of the family is re-added as read, its data
@@ -37,15 +41,16 @@ export function planChange(key: string, pick: PickAnswer, inventory: Inventory, 
 export function planRootChange(answers: Answers, inventory: Inventory, context: PlanCtx, catalog: Catalog, out: Plan): void
 {
     const pathApi = pathFor(context.platform);
-    for (const family of answers.rootChange || [])
+    for (const answered of answers.rootChange || [])
     {
-        if (!roots.FAMILIES.some((candidate) => candidate === family)) { out.errors.push(`rootChange: '${family}' is not a root family - project or global`); continue; }
-        const next = context.roots && context.roots[family as Family];
+        const family = roots.FAMILIES.find((candidate) => candidate === answered);
+        if (!family) { out.errors.push(`rootChange: '${answered}' is not a root family - project or global`); continue; }
+        const next = context.roots && context.roots[family];
         if (!next) continue; // the roots answer's error is already in the plan
-        const used = inventory.roots && Object.hasOwn(inventory.roots, family) ? inventory.roots[family as Family] : roots.inUse(inventory, family as Family, { ...context, catalog });
+        const used = inventory.roots && Object.hasOwn(inventory.roots, family) ? inventory.roots[family] : roots.inUse(inventory, family, { ...context, catalog });
         if (!used) { out.unchanged.push(`rootChange: no ${family} root is in use here - nothing to move`); continue; }
         if (used.path === next) { out.unchanged.push(`rootChange: the ${family} root is already ${next}`); continue; }
-        const inOld = (filePath: string): boolean => { const relativePath = pathApi.relative(used.path, filePath); return relativePath === '' || (!relativePath.startsWith('..') && !pathApi.isAbsolute(relativePath)); };
+        const inOld = (filePath: string): boolean => isInside(pathApi, used.path, filePath, { orSame: true });
         // the root's own files move with it (D1): the list, serena's context and mcp-remote's sign-in folder - each that is
         // there, renamed whole, before any registration names the new root
         const exists = context.exists || ((filePath: string) => fs.existsSync(filePath));
@@ -68,15 +73,15 @@ export function planRootChange(answers: Answers, inventory: Inventory, context: 
         context.uses.push({ family, root: next });
         for (const registration of inventory.registrations.filter((candidate) => candidate.rowId && isManaged(candidate) && scopes.includes(candidate.scope)))
         {
-            const row = catalog.byId.get(registration.rowId!);
+            const row = registration.rowId ? catalog.byId.get(registration.rowId) : undefined;
             // a target changed in this run is planned there, into the new root as well
             if (!row || row.kind !== 'mcp' || context.changing.has(keyOf('mcp', registration.name, registration.scope))) continue;
             const current = currentOf(row, registration);
             const dataAbs = row.locations && current.rootStr ? formatRoot(logicalRoot(current.rootStr, context), 'local', context).value : null;
-            const moves = Boolean(dataAbs) && inOld(dataAbs!);
+            const moves = dataAbs ? inOld(dataAbs) : false;
             planMcp(row, { target: { name: registration.name, scope: registration.scope }, ...(moves ? { location: { side: family === 'global' ? 'account' : 'project' } } : {}) }, inventory, context, catalog, out);
             // the name its key goes under: the helper's argument, else the name holding the key it holds, else the catalog's
-            const route = row.routes[current.route!];
+            const route = current.route ? row.routes[current.route] : undefined;
             let name = route && route.helper ? current.keyName : null;
             if (route && !route.helper && route.tokenVar && keys.tokenFields(registration.entry, route).length)
             {
@@ -95,7 +100,7 @@ export function planRootChange(answers: Answers, inventory: Inventory, context: 
             for (const registration of inventory.registrations.filter((candidate) => candidate.rowId && isManaged(candidate) && candidate.scope === 'local'))
             {
                 const parts = helperParts(registration.entry && registration.entry.headersHelper);
-                const row = catalog.byId.get(registration.rowId!);
+                const row = registration.rowId ? catalog.byId.get(registration.rowId) : undefined;
                 if (!row || !parts || !parts.root || context.changing.has(keyOf('mcp', registration.name, registration.scope))) continue;
                 if (pathApi.resolve(roots.absOf(parts.root, context)) !== pathApi.resolve(used.path)) continue;
                 planMcp(row, { target: { name: registration.name, scope: registration.scope } }, inventory, context, catalog, out);
@@ -109,24 +114,31 @@ export function planRootChange(answers: Answers, inventory: Inventory, context: 
 export function movedLists(inventory: Inventory, moves: RootMove[] | null | undefined): Inventory
 {
     const listMoves = (moves || []).filter((move) => move.name === roots.FILES.list);
-    if (!listMoves.length) return inventory;
-    const next = { ...inventory, lists: { ...inventory.lists } } as Inventory;
-    for (const move of listMoves) next.lists![move.family] = { ...inventory.lists![move.family], file: move.to } as InvList;
-    return next;
+    const lists = inventory.lists;
+    // a list move is planned only for a list the inventory holds (planRootChange)
+    if (!listMoves.length || !lists) return inventory;
+    const moved = { ...lists };
+    for (const move of listMoves)
+    {
+        const list = lists[move.family];
+        if (list) moved[move.family] = { ...list, file: move.to };
+    }
+    return { ...inventory, lists: moved };
 }
 
 // The answers about the servers already set up (spec D6, F4), from configure: 'own' puts the server in its family's
 // list's own, 'manage' or 'add' takes it out (plan/lists.ts). What is here now, so a list drops a server gone since.
 export function planExisting(answers: Answers, inventory: Inventory, context: PlanCtx, catalog: Catalog, out: Plan, connectors: string[] | null): void
 {
-    context.recordEntries = { project: [], global: [] };
+    const recordEntries: Record<string, OwnEntry[]> = { project: [], global: [] };
+    context.recordEntries = recordEntries;
     for (const [key, choice] of Object.entries(answers.existing || {}))
     {
         const item = existing.itemOf(inventory, key, catalog);
         if (!item) { out.errors.push(`existing: '${key}' is not a server found here`); continue; }
         const allowed = existing.CHOICES[item.kind];
         if (!allowed.includes(choice)) { out.errors.push(`existing: '${choice}' is not an answer for ${key} - ${allowed.join(' or ')}`); continue; }
-        context.recordEntries[item.family]!.push(existing.recordEntry(item, choice));
+        required(recordEntries[item.family], `existing: '${key}' is in no root family`).push(existing.recordEntry(item, choice));
     }
     context.recordLive = existing.liveOf(inventory, catalog, connectors);
 }
@@ -138,7 +150,7 @@ export function planRemove(removeAnswer: RemoveAnswer, inventory: Inventory, _ca
     if (!registration) return out.errors.push(`remove: no registration '${removeAnswer.name}' at ${removeAnswer.scope} scope`);
     if (registration.own) return out.errors.push(`remove: '${removeAnswer.name}' is your own server (it matches no catalog row) - left alone`);
     if (registration.alfredRetired) return out.errors.push(`remove: '${removeAnswer.name}' is alfred-code's (retired) - left alone`);
-    out.steps.push({ op: 'mcp-remove', name: removeAnswer.name!, scope: removeAnswer.scope, old: registration.entry, row: registration.rowId, why: `remove '${removeAnswer.name}' (${registration.rowId}) at ${removeAnswer.scope} scope` });
+    out.steps.push({ op: 'mcp-remove', name: registration.name, scope: removeAnswer.scope, old: registration.entry, row: registration.rowId, why: `remove '${removeAnswer.name}' (${registration.rowId}) at ${removeAnswer.scope} scope` });
     return undefined;
 }
 

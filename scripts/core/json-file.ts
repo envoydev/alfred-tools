@@ -3,7 +3,7 @@
 // `catch { return {} }` reader turns into 'the file is empty'. One leading BOM is stripped; anything else wrong with the
 // text - a BOM plus garbage included - still throws, so it still counts as unreadable.
 // Ported from alfred-code scripts/install/json-file.js; blockingStdio is alfred-code stack/hooks/hook-prelude.js's.
-import type { HandleOf } from './types.ts';
+import { isRecord } from './guards.ts';
 
 export const stripBom = (text: string): string => (typeof text === 'string' && text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text);
 
@@ -17,8 +17,9 @@ export function blockingStdio(streams: NodeJS.WriteStream[] = [process.stdout, p
     {
         try
         {
-            const handle = stream ? (stream as unknown as HandleOf)._handle : null;
-            if (handle && typeof handle.setBlocking === 'function') handle.setBlocking(true);
+            // a stream's libuv handle, which Node's types do not declare
+            const handle: unknown = stream && '_handle' in stream ? stream._handle : null;
+            if (isRecord(handle) && typeof handle['setBlocking'] === 'function') handle['setBlocking'](true);
         }
         catch { /* a stream that cannot block keeps Node's default */ }
     }
@@ -28,8 +29,11 @@ export function blockingStdio(streams: NodeJS.WriteStream[] = [process.stdout, p
 function sortKeys(value: unknown): unknown
 {
     if (Array.isArray(value)) return value.map(sortKeys);
-    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortKeys((value as Record<string, unknown>)[key])]));
+    if (isRecord(value)) return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortKeys(value[key])]));
     return value;
 }
+// A JSON value copied through its text: no object of the copy is shared with the original.
+export const clone = <Value>(value: Value): Value => JSON.parse(JSON.stringify(value));
+
 export const deepEqual = (left: unknown, right: unknown): boolean => JSON.stringify(sortKeys(left)) === JSON.stringify(sortKeys(right));
 

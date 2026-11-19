@@ -1,7 +1,7 @@
 // The shapes of the prerequisite checks: what a check reads, what it finds, and the report --json prints (stored - do not
 // rename: the commands read it).
 import type { Env } from '../core/types.ts';
-import type { MachineProbe } from '../fix/types.ts';
+import type { MachineProbe } from '../core/types.ts';
 
 // What a check reads: the platform, the shell's variables, the home and the machine.
 export interface PrereqCtx
@@ -42,12 +42,10 @@ export interface AuditCounts
     low: number; // stored - do not rename
     total: number; // stored - do not rename
 }
-export interface AuditResult
-{
-    ok: boolean; // stored - do not rename
-    counts?: AuditCounts; // stored - do not rename
-    note?: string; // stored - do not rename
-}
+// The audit's answer: the counts when it ran, else why not.
+export type AuditResult =
+    | { ok: true; counts: AuditCounts; note?: undefined } // stored - do not rename
+    | { ok: false; note: string; counts?: undefined }; // stored - do not rename
 export interface Need
 {
     id: string; // stored - do not rename

@@ -13,10 +13,13 @@ export interface RootsMap
     projects: Record<string, string>; // stored - do not rename
 }
 // The map as read: empty with a note and why when the file could not be taken.
-export interface MapRead extends RootsMap
+export type MapRead = RootsMap & ({ note?: undefined; state?: undefined } | { note: string; state: 'unreadable' | 'bad' | 'newer' });
+
+// A standard root folder: its option id and the folder.
+export interface StandardRoot
 {
-    note?: string;
-    state?: 'unreadable' | 'bad' | 'newer';
+    id: string;
+    root: string;
 }
 
 // A root question's option: an id, the folder (none for 'A folder you name'), and its words.

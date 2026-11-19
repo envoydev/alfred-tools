@@ -302,6 +302,61 @@ test('a marketplace list that fails or is not JSON is named as unreadable, never
     }
 });
 
+test('a plugin list that fails or is not JSON is named as unreadable, never read as no plugin installed', () => {
+    const answer = (status: number, stdout: string) => ({ status, stdout, stderr: '', error: null, signal: null });
+    for (const [listed, state] of [[answer(1, ''), 'unreadable'], [answer(0, 'Error: unknown option --json'), 'malformed']] as const)
+    {
+        const w = world();
+        try
+        {
+            const i = build(w, { run: (args: string[]) => (args[1] === 'list' ? listed : answer(0, '[]')) });
+            assert.deepStrictEqual(i.plugins, []);
+            assert.deepStrictEqual(i.unreadable.map((u) => [u.scope, u.file, u.state]), [['plugins', 'claude plugin list --json', state]]);
+        }
+        finally { w.clean(); }
+    }
+});
+
+test('the CLI form names a CLI list it could not read as a list, never as a scope', () => {
+    const w = world();
+    try
+    {
+        const failing = { ...w.env, FAKE_CLAUDE_FAIL: 'plugin list --json,plugin marketplace list --json' };
+        const r = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'scripts', 'inventory.ts'), '--project', w.project], { encoding: 'utf8', env: failing });
+        assert.strictEqual(r.status, 0, r.stderr);
+        assert.match(r.stderr, /claude plugin list --json is unreadable \(the command failed\) - the plugin list could not be read, so this run takes no plugin as installed\./);
+        assert.match(r.stderr, /claude plugin marketplace list --json is unreadable \(the command failed\) - the marketplace list could not be read, so update offers no plugin update from it\./);
+        assert.doesNotMatch(r.stderr, /the (plugins|marketplaces) scope/);
+    }
+    finally { w.clean(); }
+});
+
+test('an account file whose server is not the shape Claude Code writes makes the local and user scopes unreadable', () => {
+    const w = world();
+    try
+    {
+        writeJson(account.accountFile(w.env), { mcpServers: { odd: { command: 'node', args: 'srv.js' } }, projects: {} });
+        const i = build(w);
+        assert.deepStrictEqual(i.unreadable.map((u) => [u.scope, u.state, u.error]).sort(), [['local', 'malformed', 'a field holds a value of the wrong type'], ['user', 'malformed', 'a field holds a value of the wrong type']]);
+        assert.deepStrictEqual(i.registrations, []);
+    }
+    finally { w.clean(); }
+});
+
+test("another project's entry in the account file, of a shape this plugin does not read, leaves this project's local scope read", () => {
+    const w = world();
+    try
+    {
+        writeJson(account.accountFile(w.env), { projects: { '/somewhere/else': { mcpServers: { odd: { command: 'node', env: { PORT: 8080 } } } }, [accountKey(w.project)]: { mcpServers: { serena: SERENA } } } });
+        const i = build(w);
+        assert.deepStrictEqual(i.unreadable, []);
+        assert.deepStrictEqual(i.registrations.map((r) => [r.name, r.scope]), [['serena', 'local']]);
+        writeJson(account.accountFile(w.env), { projects: { [accountKey(w.project)]: { mcpServers: { odd: { command: 'node', env: { PORT: 8080 } } } } } });
+        assert.deepStrictEqual(build(w).unreadable.map((u) => [u.scope, u.state]).sort(), [['local', 'malformed'], ['user', 'malformed']], "this project's own entry of the wrong shape is still unreadable");
+    }
+    finally { w.clean(); }
+});
+
 test('the CLI form writes the JSON file and prints one line; a missing claude stops with one line', () => {
     const w = world();
     const tmp = makeTempDir();

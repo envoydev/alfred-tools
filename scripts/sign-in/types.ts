@@ -51,6 +51,16 @@ export interface CommandOptions
     log?: ((...lines: string[]) => void) | undefined;
 }
 
+// The command's reads and prints, its options' or this process's (effects.ts commandIo).
+export interface CommandIo
+{
+    env: Env;
+    run: SignInRun;
+    project: string;
+    log: (...lines: string[]) => void;
+    warn: (line: string) => void;
+}
+
 // What the interrupt handlers are put on: the process, or a test's emitter.
 export interface SignalTarget
 {

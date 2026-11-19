@@ -1,97 +1,73 @@
 // Shared pieces of the fix detectors. A detector is `detect(ctx) -> findings[]`; a registration fix is
 // `fix(entry, finding, ctx, input) -> entry` (a pure edit of the entry AS READ, so the user's pin, cut-off and added
 // args or env survive); a machine fix is `fix(finding, ctx) -> { ok, detail }` and changes the machine.
-import fs from 'node:fs';
-import path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { launchTokens, bareName } from '../inventory/fingerprint.ts';
-import * as E from '../entries/locations.ts';
+import { isManaged } from '../inventory/fingerprint.ts';
+import * as locations from '../entries/locations.ts';
 import * as serenaConfig from '../apply/serena-config.ts';
 import { pathFor } from '../entries/platform.ts';
 import type { Env, ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow, FixRow } from '../catalog/types.ts';
 import type { InvRegistration } from '../inventory/types.ts';
-import type { Finding, FixCtx, MachineProbe } from './types.ts';
+import type { Finding, FixCtx, Proposal } from './types.ts';
+
+// What every command shares lives with its owner; fix's detectors and tests reach it here too.
+export { clone } from '../core/json-file.ts';
+export { realMachine } from '../core/machine.ts';
+export { isManaged, launchArgs, launcher, pinnedVersion } from '../inventory/fingerprint.ts';
 
 export const fixOf = (context: Pick<FixCtx, 'catalog'>, id: string): FixRow | undefined => context.catalog.fixes.find((fixRow) => fixRow.id === id);
 export const rowOf = (context: Pick<FixCtx, 'catalog'>, id: string): CatalogRow | undefined => context.catalog.byId.get(id);
 
-// A registration this plugin manages: not the user's own, not an alfred-code leftover, not one left on its own (spec D6).
-export const isManaged = (registration: InvRegistration): boolean => !registration.own && !registration.alfredRetired && registration.choice !== 'own';
-
 // The registrations a fix row covers: matched to one of its tools by what they launch, not the user's own, not an
 // alfred-code leftover, not one left on its own (spec D6), and not inherited from a parent folder (fixed by running fix
 // there).
-export const registrationsOf = (context: Pick<FixCtx, 'catalog' | 'inventory'>, fixId: string): InvRegistration[] => context.inventory.registrations.filter((registration) => isManaged(registration) && registration.scope !== 'inherited' && fixOf(context, fixId)!.tool.includes(registration.rowId!));
-export const routeOf = (context: Pick<FixCtx, 'catalog'>, registration: { rowId: string | null; route: string | null }): CatalogRoute | undefined => rowOf(context, registration.rowId!)!.routes[registration.route!];
-
-// The executable a registration launches, looking through a `cmd /c` wrapper.
-export const launcher = (entry: ServerEntry): string => path.basename(launchTokens(entry).command).replace(/\.(exe|cmd)$/i, '');
-export const launchArgs = (entry: ServerEntry): string[] => launchTokens(entry).args;
+export function registrationsOf(context: Pick<FixCtx, 'catalog' | 'inventory'>, fixId: string): InvRegistration[]
+{
+    const fixRow = fixRowOf(context, fixId);
+    return context.inventory.registrations.filter((registration) => isManaged(registration) && registration.scope !== 'inherited' && registration.rowId !== null && fixRow.tool.includes(registration.rowId));
+}
+export function routeOf(context: Pick<FixCtx, 'catalog'>, registration: { rowId: string | null; route: string | null }): CatalogRoute | undefined
+{
+    const row = registration.rowId ? rowOf(context, registration.rowId) : undefined;
+    return row && registration.route ? row.routes[registration.route] : undefined;
+}
 
 // A committed value read against an environment, as Claude Code expands .mcp.json from the one it starts with
 // (entries/locations.ts expandVars). -> the expanded text, or null when a ${NAME} with no fallback is unset (`firstUnset` names it).
-export const expandVars = (text: unknown, env: Env): string | null => { const expanded = E.expandVars(text, env); return expanded.unset.length ? null : expanded.value; };
-export const firstUnset = (text: unknown, env: Env): string | null => E.expandVars(text, env).unset[0] || null;
+export const expandVars = (text: unknown, env: Env): string | null => { const expanded = locations.expandVars(text, env); return expanded.unset.length ? null : expanded.value; };
+export const firstUnset = (text: unknown, env: Env): string | null => locations.expandVars(text, env).unset[0] || null;
+
+// A field a fix row's detector always sets on its findings, read by the fix that needs it: a finding without it is a
+// detector's mistake, named, never an undefined that reaches a path, a command or a file.
+export const fieldOf = <Key extends keyof Finding>(finding: Finding, key: Key): NonNullable<Finding[Key]> => need(finding, key, `${finding.id} on ${finding.name}: the finding`);
+// A field of a finding's proposal, the same way.
+export const proposalOf = <Key extends keyof Proposal>(finding: Finding, key: Key): NonNullable<Proposal[Key]> => need(fieldOf(finding, 'proposal'), key, `${finding.id} on ${finding.name}: the proposal`);
+// The catalog route a finding names, the same way.
+export function findingRoute(context: Pick<FixCtx, 'catalog'>, finding: Finding): CatalogRoute
+{
+    const row = rowOf(context, fieldOf(finding, 'row'));
+    const route = row ? row.routes[fieldOf(finding, 'route')] : undefined;
+    if (!route) throw new Error(`${finding.id} on ${finding.name}: no route ${finding.route} in catalog row ${finding.row}`);
+    return route;
+}
+// A fix row of the catalog by its id: the detectors and fixes name only rows catalog/fixes.json holds.
+export function fixRowOf(context: Pick<FixCtx, 'catalog'>, id: string): FixRow
+{
+    const fixRow = fixOf(context, id);
+    if (!fixRow) throw new Error(`no fix row ${id} in catalog/fixes.json`);
+    return fixRow;
+}
+// A value that must be there, or an error naming what lacks it.
+function need<Holder, Key extends keyof Holder>(holder: Holder, key: Key, what: string): NonNullable<Holder[Key]>
+{
+    const value = holder[key];
+    if (value === undefined || value === null) throw new Error(`${what} has no ${String(key)}`);
+    return value;
+}
 
 export const finding = (fixId: string, registration: { rowId: string | null; name: string; scope: string }, what: string, extra: Partial<Finding> = {}): Finding => ({ id: fixId, row: registration.rowId, name: registration.name, scope: registration.scope, found: what, ...extra });
-export const clone = <Value>(value: Value): Value => JSON.parse(JSON.stringify(value));
 
-// '0.0.83' vs '0.0.9': numeric, part by part. Anything that is not dotted numbers (a dist-tag) compares as unknown (null).
-export function compareVersions(left: string, right: string): number | null
-{
-    const parts = (version: string) => (/^\d+(\.\d+)*$/.test(version) ? version.split('.').map(Number) : null);
-    const [leftParts, rightParts] = [parts(left), parts(right)];
-    if (!leftParts || !rightParts) return null;
-    for (let i = 0; i < Math.max(leftParts.length, rightParts.length); i++)
-    {
-        const difference = (leftParts[i] || 0) - (rightParts[i] || 0);
-        if (difference) return difference < 0 ? -1 : 1;
-    }
-    return 0;
-}
-
-// The version a launch pins for a package: '@playwright/mcp@0.0.83' -> '0.0.83', '--from serena-agent@2.1.0' -> '2.1.0',
-// 'mcp-memory-service[sqlite]==12.1.1' -> '12.1.1'. null when the launch names the package with no version.
-export function pinnedVersion(entry: ServerEntry, packageSpec: string): string | null
-{
-    for (const argument of launchArgs(entry).filter((token) => !token.startsWith('-')))
-    {
-        if (bareName(argument) !== packageSpec) continue;
-        const match = /(?:==|@)([^@=\s]+)$/.exec(argument.slice(packageSpec.length));
-        return match ? match[1]! : null;
-    }
-    return null;
-}
-
-// ---- the machine ---------------------------------------------------------------------------------------------------
-
-function onPath(name: string, env: Env, platform: string): string | null
-{
-    const key = Object.keys(env).find((variableName) => variableName.toUpperCase() === 'PATH');
-    const win = platform === 'win32';
-    const names = win ? [name, `${name}.exe`, `${name}.cmd`, `${name}.bat`] : [name];
-    for (const dir of String((key && env[key]) || '').split(win ? ';' : ':').filter(Boolean))
-        for (const candidate of names)
-        {
-            const file = pathFor(platform).join(dir, candidate);
-            try { if (fs.statSync(file).isFile()) return file; } catch { /* next */ }
-        }
-    return null;
-}
-
-export function realMachine({ env = process.env, platform = process.platform }: { env?: Env; platform?: string } = {}): MachineProbe
-{
-    return {
-        exists: (file: string) => fs.existsSync(file),
-        realpath: (file: string) => { try { return fs.realpathSync(file); } catch { return null; } },
-        which: (name: string) => onPath(name, env, platform),
-        // npm and npx are .cmd shims on Windows; a shell is what runs them
-        // `options.cwd` and `options.env` (merged over the machine's) are for the audit, which runs in a temp folder
-        run: (cmd: string, args: string[], options: { cwd?: string; env?: Env } = {}) => spawnSync(cmd, args, { encoding: 'utf8', env: { ...env, ...(options.env || {}) }, cwd: options.cwd, shell: platform === 'win32' && /^(npm|npx)$/.test(cmd), windowsHide: true }),
-        nodeVersion: process.versions.node,
-    };
-}
+export { compareVersions } from '../core/versions.ts';
 
 
 // serena's context file in its home: <SERENA_HOME>/<fileName>, for a home the plugin may keep files in. null for no

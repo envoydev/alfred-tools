@@ -11,8 +11,8 @@ import type { AskCtx, Asked, Picks, Question } from './types.ts';
 // ---- the root questions (spec D2) ----------------------------------------------------------------------------------
 // One question per scope family a pick or a recorded answer needs, never per tool. 'A folder you name' is asked next, in
 // one plain line.
-const ROOT_HEADER: Record<string, string> = { project: 'Project root', global: 'Global root' };
-const ROOT_TEXT: Record<string, string> = {
+const ROOT_HEADER: Record<Family, string> = { project: 'Project root', global: 'Global root' };
+const ROOT_TEXT: Record<Family, string> = {
     project: "Which folder holds this project's keys, key helper and tool data (project and local scope)?",
     global: 'Which folder holds the keys, key helper and tool data for every project (global scope)?',
 };
@@ -37,7 +37,7 @@ function rootFamilies(inventory: Inventory, picks: Picks | null | undefined, cat
         if (!row) continue;
         const routeId = routes[id] || row.recommendedRoute;
         if (!needsRoot(row, routeId)) continue;
-        const scope = scopes[id] || scopeOrder(row, inventory, { route: routeId, context: context, copyOf: installedOf(inventory, id) })[0]!;
+        const scope = scopes[id] || scopeOrder(row, inventory, { route: routeId, context: context, copyOf: installedOf(inventory, id) })[0];
         out.add(roots.familyOf(scope));
     }
     return roots.FAMILIES.filter((family) => out.has(family));
@@ -47,8 +47,14 @@ function rootFamilies(inventory: Inventory, picks: Picks | null | undefined, cat
 export function rootQuestion(inventory: Inventory, family: Family, context: AskCtx): Asked<{ family: Family; id: string; root: string | null }>
 {
     const options = roots.options(inventory, family, context).map((option, i) => ({ ...option, label: `${option.label}${i === 0 ? RECOMMENDED_SUFFIX : ''}` }));
+    // roots.options describes every option it gives
+    const described = options.map((option) =>
+    {
+        if (option.description === undefined) throw new Error(`the ${family} root option '${option.label}' has no description`);
+        return { label: option.label, description: option.description };
+    });
     return {
-        question: { id: `${PREFIX.root}${family}`, header: ROOT_HEADER[family]!, multiSelect: false, question: ROOT_TEXT[family]!, options: options.map((option) => ({ label: option.label, description: option.description! })) },
+        question: { id: `${PREFIX.root}${family}`, header: ROOT_HEADER[family], multiSelect: false, question: ROOT_TEXT[family], options: described },
         answers: Object.fromEntries(options.map((option) => [option.label, { family, id: option.id, root: option.root }])),
     };
 }

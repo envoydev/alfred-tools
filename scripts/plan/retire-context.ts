@@ -9,8 +9,8 @@ import type { PlanStep, RetireCtx, RetireShippedStep, Rewrite } from './types.ts
 const rootContext = (context: RetireCtx) => ({ project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog });
 const contextFileOf = (entry: ServerEntry | null | undefined, context: RetireCtx): string | null =>
 {
-    const at = contextArgAt(entry);
-    return at >= 0 ? roots.absOf(entry!.args![at], rootContext(context)) : null;
+    const file = entry?.args?.[contextArgAt(entry)];
+    return file === undefined ? null : roots.absOf(file, rootContext(context));
 };
 const nameScopeKey = (name: string, scope: string) => `${name}\u0000${scope}`;
 

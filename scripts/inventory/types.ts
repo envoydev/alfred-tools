@@ -248,4 +248,3 @@ export interface BuildOptions
 }
 
 // A servers file or a plugin manifest as parsed: the mcpServers map, or the map itself at the top.
-export type ServersDoc = { mcpServers?: unknown; [key: string]: unknown };

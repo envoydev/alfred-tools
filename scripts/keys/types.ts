@@ -14,7 +14,7 @@ export interface KeyChain
 // A token field a catalog route defines and an entry holds: where it is, and the route's form for it.
 export interface TokenField
 {
-    at: (string | number)[];
+    at: ['env' | 'headers', string] | ['args', number];
     template: string;
 }
 

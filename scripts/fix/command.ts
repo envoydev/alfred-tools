@@ -2,6 +2,7 @@
 import path from 'node:path';
 import * as inventory from '../inventory/inventory.ts';
 import * as tmpdir from '../core/tmpdir.ts';
+import { errorMessage } from '../core/guards.ts';
 import { makeCtx, applyFixes, detectAll, questions, renderFixes } from './fix.ts';
 import type { Env } from '../core/types.ts';
 import type { FixArgs, MachineProbe } from './types.ts';
@@ -11,19 +12,19 @@ import type { FixArgs, MachineProbe } from './types.ts';
 function parseArgs(argv: string[]): FixArgs
 {
     const args: FixArgs = { input: {} };
-    const value = (i: number, flag: string) =>
+    // one iterator: a flag that takes a value takes the next word from it
+    const words = argv[Symbol.iterator]();
+    const value = (flag: string) =>
     {
-        const flagValue = argv[i + 1];
+        const flagValue = words.next().value;
         if (flagValue === undefined || flagValue === '' || flagValue.startsWith('--')) throw new Error(`${flag} needs a value`);
         return flagValue;
     };
-    for (let i = 0; i < argv.length; i++)
+    for (const argument of words)
     {
-        const argument = argv[i]!;
         if (['--detect', '--questions', '--json'].includes(argument)) { args[argument.slice(2)] = true; continue; }
         if (!['--apply', '--only', '--input', '--project', '--tmp', '--data'].includes(argument)) throw new Error(`unknown argument '${argument}'`);
-        const flagValue = value(i, argument);
-        i++;
+        const flagValue = value(argument);
         if (argument === '--input')
         {
             const separatorIndex = flagValue.indexOf('=');
@@ -45,11 +46,11 @@ export function runFixCommand(argv: string[], { env = process.env, out = (line: 
 {
     let args: FixArgs;
     try { args = parseArgs(argv); }
-    catch (caught) { const error = caught as NodeJS.ErrnoException; out(`fix: ${error.message}\nusage: node scripts/fix.ts --detect | --questions | --apply <id,id|all> [--only <x>] [--input key=value] [--project <dir>] [--data <dir>]`); return 2; }
+    catch (caught) { out(`fix: ${errorMessage(caught)}\nusage: node scripts/fix.ts --detect | --questions | --apply <id,id|all> [--only <x>] [--input key=value] [--project <dir>] [--data <dir>]`); return 2; }
     const project = path.resolve(args.project || process.cwd());
     const data = args.data || null;
     const projectInventory = inventory.buildInventory({ project, env, data });
-    if (!projectInventory.cli!.ok) { out('alfred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
+    if (!projectInventory.cli || !projectInventory.cli.ok) { out('alfred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return 3; }
     const context = makeCtx({ inventory: projectInventory, env, machine, data });
     if (args.apply)
     {

@@ -8,8 +8,9 @@ import * as existing from '../inventory/existing.ts';
 import { readObject, runRecordMode } from './record-modes.ts';
 import { EXIT_CODE, REFUSAL } from './record-constants.ts';
 import { walkOutput, withRootsMap } from './walk-output.ts';
-import type { Inventory } from '../inventory/types.ts';
-import type { Answers, Picks, PlanArgs, PlanMode } from './types.ts';
+import { isInventoryFile } from '../inventory/table.ts';
+import { isAnswersFile, isPicksFile } from './files/shapes.ts';
+import type { PlanArgs, PlanMode } from './types.ts';
 
 // The arguments, by flag: a mode flag first or not at all, then its files, and the value flags anywhere after them. An
 // unknown flag, or a flag without its value, is an error - never read as a file. --record takes four files (inventory,
@@ -17,17 +18,21 @@ import type { Answers, Picks, PlanArgs, PlanMode } from './types.ts';
 const MODE_FLAGS: Record<string, PlanMode> = { '--questions': 'questions', '--record': 'record', '--rewind': 'rewind', '--skip': 'skip' };
 const VALUE_FLAGS: Record<string, 'data' | 'connectors' | 'out'> = { '--data': 'data', '--connectors': 'connectors', '--out': 'out' };
 const WALK_FILES = 3;
+const flagIn = <Value>(flags: Record<string, Value>, argument: string | undefined): Value | undefined => (argument !== undefined && Object.hasOwn(flags, argument) ? flags[argument] : undefined);
 function parseArgs(argv: string[]): PlanArgs
 {
-    const mode = Object.hasOwn(MODE_FLAGS, argv[0]!) ? MODE_FLAGS[argv[0]!]! : 'plan';
+    const mode = flagIn(MODE_FLAGS, argv[0]) ?? 'plan';
     const out: PlanArgs = { mode, files: [], pick: null, data: null, connectors: null, out: null, error: null };
-    for (let i = mode === 'plan' ? 0 : 1; i < argv.length; i++)
+    // one iterator: a value flag takes the argument after it from the same walk
+    const rest = argv.slice(mode === 'plan' ? 0 : 1)[Symbol.iterator]();
+    for (const argument of rest)
     {
-        const argument = argv[i]!;
-        if (Object.hasOwn(VALUE_FLAGS, argument))
+        const field = flagIn(VALUE_FLAGS, argument);
+        if (field !== undefined)
         {
-            if (i + 1 >= argv.length) return { ...out, error: `${argument} needs a value` };
-            out[VALUE_FLAGS[argument]!] = argv[++i]!;
+            const value = rest.next();
+            if (value.done) return { ...out, error: `${argument} needs a value` };
+            out[field] = value.value;
         }
         else if (argument.startsWith('--')) return { ...out, error: `unknown flag '${argument}'` };
         else out.files.push(argument);
@@ -39,7 +44,7 @@ function parseArgs(argv: string[]): PlanArgs
     }
     else if (mode === 'record')
     {
-        if (out.files.length !== WALK_FILES + 1) return { ...out, error: '--record takes an inventory, picks, answers and step file' };
+        if (out.files.length !== WALK_FILES + 1) return { ...out, error: REFUSAL.recordFiles };
     }
     else if (out.files.length > 2) return { ...out, error: `one inventory file and one ${mode === 'questions' ? 'picks' : 'answers'} file, not ${out.files.length} files` };
     return out;
@@ -68,16 +73,21 @@ export function runPlanCommand(argv: string[]): number
     if ('refused' in inventoryRead) { console.error(`plan.ts: ${inventoryRead.refused}`); return EXIT_CODE.refused; }
     const secondRead = second ? readObject(second) : { value: null };
     if ('refused' in secondRead) { console.error(`plan.ts: ${secondRead.refused}`); return EXIT_CODE.refused; }
-    const inventory = inventoryRead.value as unknown as Inventory;
+    const inventory = inventoryRead.value;
+    if (!isInventoryFile(inventory)) { console.error(`plan.ts: ${invFile}: ${REFUSAL.notInventory}`); return EXIT_CODE.refused; }
     withRootsMap(inventory, args.data);
     if (args.mode === 'questions')
     {
-        const output = walkOutput(inventory, secondRead.value as Picks | null, args);
+        const picks = secondRead.value;
+        if (picks !== null && !isPicksFile(picks)) { console.error(`plan.ts: ${second}: ${REFUSAL.notPicks}`); return EXIT_CODE.refused; }
+        const output = walkOutput(inventory, picks, args);
         if ('waits' in output) { console.error(output.waits); return EXIT_CODE.stopped; }
         console.log(JSON.stringify(output, null, 2));
         return EXIT_CODE.ok;
     }
-    const madePlan = plan(inventory, secondRead.value as Answers, { env: process.env, connectors: args.connectors !== null ? existing.parseConnectors(args.connectors) : null });
+    const answers = secondRead.value;
+    if (!isAnswersFile(answers)) { console.error(`plan.ts: ${second}: ${REFUSAL.notAnswers}`); return EXIT_CODE.refused; }
+    const madePlan = plan(inventory, answers, { env: process.env, connectors: args.connectors !== null ? existing.parseConnectors(args.connectors) : null });
     if (outFile) writeJsonNoFollow(outFile, madePlan);
     console.log(renderPlan(madePlan));
     return madePlan.errors.length ? EXIT_CODE.stopped : EXIT_CODE.ok;

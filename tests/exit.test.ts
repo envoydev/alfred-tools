@@ -20,6 +20,6 @@ test('a command that rejects ends on one line naming the script and exit 1, not 
 
 test('each async entry ends through exitWhenSettled, named for its script', () =>
 {
-    for (const [entry, command] of [['refresh-pins', 'runRefreshPinsCommand'], ['sign-in', 'runSignInCommand'], ['update', 'runUpdateCommand']])
+    for (const [entry, command] of [['fetch', 'runFetchCommand'], ['refresh-pins', 'runRefreshPinsCommand'], ['sign-in', 'runSignInCommand'], ['update', 'runUpdateCommand']])
         assert.ok(fs.readFileSync(path.join(SCRIPTS, `${entry}.ts`), 'utf8').includes(`exitWhenSettled(${command}(process.argv.slice(2)), '${entry}');`), entry);
 });

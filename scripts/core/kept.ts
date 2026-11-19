@@ -10,6 +10,7 @@
 // else: a known token shape, a PEM private key, a connection string's `Password=` and a URL's userinfo password. Never
 // masked: a value of nothing but ${NAME} / ${NAME:-default} placeholders after at most one scheme word (`Bearer
 // ${CONTEXT7_API_KEY}`), and a catalog row's location keys, which configure reads.
+import { isRecord } from './guards.ts';
 import type { Path, RowOf, ServerEntry } from './types.ts';
 
 export const MARKER = '${ALFRED_TOOLS_KEPT}';
@@ -79,21 +80,26 @@ function keepNode(node: unknown, key: string, whole: boolean): unknown
 // registration matched, for its location keys; null for the user's own.
 export function maskCredentials<Entry>(entry: Entry, row?: RowOf): Entry
 {
-    if (!entry || typeof entry !== 'object') return entry;
+    // structuredClone keeps the caller's type; the copy's values are then replaced in place
+    const out = structuredClone(entry);
+    if (Array.isArray(out)) { out.forEach((value: unknown, i) => { out[i] = keepNode(value, String(i), false); }); return out; }
+    if (!isRecord(out)) return out;
+    const fields: Record<string, unknown> = out;
     const locations = locationKeys(row);
-    const out: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(entry))
+    for (const [key, value] of Object.entries(fields))
     {
-        if (key === 'args' && Array.isArray(value)) out['args'] = keepArgs(value, false, locations.arg);
-        else if (key === 'headers' && value && typeof value === 'object' && !Array.isArray(value)) out['headers'] = Object.fromEntries(Object.entries(value).map(([headerName, headerValue]) => [headerName, keepNode(headerValue, headerName, true)]));
-        else if (key === 'env' && value && typeof value === 'object' && !Array.isArray(value)) out['env'] = Object.fromEntries(Object.entries(value).map(([variableName, variableValue]) => [variableName, locations.env.has(variableName) ? variableValue : keepNode(variableValue, variableName, false)]));
-        else out[key] = keepNode(value, key, false);
+        if (key === 'args' && Array.isArray(value)) fields[key] = keepArgs(value, false, locations.arg);
+        else if (key === 'headers' && isRecord(value)) fields[key] = Object.fromEntries(Object.entries(value).map(([headerName, headerValue]) => [headerName, keepNode(headerValue, headerName, true)]));
+        else if (key === 'env' && isRecord(value)) fields[key] = Object.fromEntries(Object.entries(value).map(([variableName, variableValue]) => [variableName, locations.env.has(variableName) ? variableValue : keepNode(variableValue, variableName, false)]));
+        else fields[key] = keepNode(value, key, false);
     }
-    return out as Entry;
+    return out;
 }
 
+// The child of a JSON array or object at one segment of a path; undefined for anything else.
+const childAt = (node: unknown, segment: string | number): unknown => (Array.isArray(node) ? node[Number(segment)] : isRecord(node) ? node[String(segment)] : undefined);
 // The value at a path of keys and indexes in a JSON value, or undefined where the path leaves it.
-export const valueAt = (node: unknown, path: Path): unknown => path.reduce<unknown>((current, segment) => (current == null ? undefined : (current as Record<string | number, unknown>)[segment]), node);
+export const valueAt = (node: unknown, path: Path): unknown => path.reduce<unknown>(childAt, node);
 
 // restore(entry, source, row) -> { entry } | { error }. Each string holding MARKER takes the string at the same place in
 // `source` (the registration as it is now) whose kept text equals it; an arg takes the first unused source arg whose
@@ -104,7 +110,8 @@ export function restore<Entry>(entry: Entry, source: ServerEntry | null | undefi
     const sourceArgs = source && Array.isArray(source.args) ? source.args : [];
     const used = new Set<number>();
     let error: string | null = null;
-    const walk = (node: unknown, path: Path): unknown =>
+    // the string at `path`, or its source value where it holds MARKER; a list or object below has its children filled
+    const fill = (node: unknown, path: Path): unknown =>
     {
         if (typeof node === 'string')
         {
@@ -119,11 +126,17 @@ export function restore<Entry>(entry: Entry, source: ServerEntry | null | undefi
             if (valueAt(kept, path) !== node) { error = error || `${path.join('.')} holds a kept value the registration no longer has`; return node; }
             return valueAt(source, path);
         }
-        if (Array.isArray(node)) return node.map((item, i) => walk(item, [...path, i]));
-        if (!node || typeof node !== 'object') return node;
-        return Object.fromEntries(Object.entries(node).map(([key, value]) => [key, walk(value, [...path, key])]));
+        fillChildren(node, path);
+        return node;
     };
-    const out = walk(entry, []) as Entry;
+    const fillChildren = (node: unknown, path: Path): void =>
+    {
+        if (Array.isArray(node)) node.forEach((item: unknown, i) => { node[i] = fill(item, [...path, i]); });
+        else if (isRecord(node)) for (const [key, value] of Object.entries(node)) node[key] = fill(value, [...path, key]);
+    };
+    // structuredClone keeps the caller's type; the copy's strings are then filled in place (an entry is an object)
+    const out = structuredClone(entry);
+    fillChildren(out, []);
     return error ? { error } : { entry: out };
 }
 
@@ -138,7 +151,7 @@ export function credentialPaths(entry: unknown, row?: RowOf): string[]
     const walk = (node: unknown, kept: unknown, path: string[]): void =>
     {
         if (typeof node === 'string') { if (node !== kept || node.includes(MARKER)) out.push(path.join('.')); return; }
-        if (node && typeof node === 'object') for (const key of Object.keys(node)) walk((node as Record<string, unknown>)[key], kept == null ? undefined : (kept as Record<string, unknown>)[key], [...path, key]);
+        if (node && typeof node === 'object') for (const key of Object.keys(node)) walk(childAt(node, key), childAt(kept, key), [...path, key]);
     };
     walk(entry, masked, []);
     return out;

@@ -1,7 +1,7 @@
 // The roots a plan writes into and the file steps they need: each root's .gitignore, the helpers, the key names, the
 // lists and the roots map.
 import fs from 'node:fs';
-import { pathFor } from '../entries/platform.ts';
+import { isInside, pathFor } from '../entries/platform.ts';
 import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
 import { ALFRED_DATA } from '../core/constants.ts';
@@ -18,16 +18,26 @@ import type { EnsureKeyNameStep, ListCtx, PathStep, PlanOut, PlanStep, RecordRoo
 export function useRoots(context: { platform: string; roots?: Roots | null | undefined; uses: ListCtx['uses'] }, scope: string, { helper, bridge, serenaContext, keyFile, keyName, keyNames, data }: RootUses): void
 {
     const pathApi = pathFor(context.platform);
-    const rootFolders = (context.roots || {}) as Roots;
-    const inside = (root: string | null | undefined, filePath: string | null | undefined): boolean => { if (!root || !filePath) return false; const relativePath = pathApi.relative(root, filePath); return relativePath === '' || (!relativePath.startsWith('..') && !pathApi.isAbsolute(relativePath)); };
-    const familyOf = (filePath: string | null | undefined): Family | null => roots.FAMILIES.find((candidateFamily) => inside(rootFolders[candidateFamily], filePath)) || null;
+    const rootOf = (family: Family): string | undefined => context.roots?.[family] || undefined;
+    // the family whose root holds `filePath`, with that root
+    const holder = (filePath: string | null | undefined): { family: Family; root: string } | null =>
+    {
+        for (const candidateFamily of roots.FAMILIES)
+        {
+            const root = rootOf(candidateFamily);
+            if (root && filePath && isInside(pathApi, root, filePath, { orSame: true })) return { family: candidateFamily, root };
+        }
+        return null;
+    };
     const family = roots.familyOf(scope);
-    if (helper && rootFolders[family]) context.uses.push({ family, root: rootFolders[family]!, helper: true, bridge: Boolean(bridge), committed: scope === 'project' });
-    if (serenaContext && rootFolders[family]) context.uses.push({ family, root: rootFolders[family]!, serenaContext, committed: scope === 'project' });
-    const keyFamily = familyOf(keyFile);
-    if (keyFamily) context.uses.push({ family: keyFamily, root: rootFolders[keyFamily]!, key: { file: keyFile!, name: keyName!, names: keyNames || [keyName!] } });
-    const dataFamily = familyOf(data);
-    if (dataFamily) context.uses.push({ family: dataFamily, root: rootFolders[dataFamily]! });
+    const root = rootOf(family);
+    if (helper && root) context.uses.push({ family, root, helper: true, bridge: Boolean(bridge), committed: scope === 'project' });
+    if (serenaContext && root) context.uses.push({ family, root, serenaContext, committed: scope === 'project' });
+    const keyHolder = holder(keyFile);
+    // a key file comes with its key name (RootUses): one without it uses no root for a key
+    if (keyHolder && keyFile && typeof keyName === 'string') context.uses.push({ ...keyHolder, key: { file: keyFile, name: keyName, names: keyNames || [keyName] } });
+    const dataHolder = holder(data);
+    if (dataHolder) context.uses.push(dataHolder);
 }
 
 // The file steps of the roots the plan writes into, in D8's order - each root's .gitignore, the helpers, the key names -
@@ -63,7 +73,7 @@ export function fileSteps(inventory: Inventory, context: ListCtx, out: Pick<Plan
             ignore.push({ op: 'root-ignore', path: rootWrite.root, why: `the new root ${rootWrite.root}: its .gitignore keeps the key file, the record and the data out of git` });
         // a key file git would commit gets no name; an ignored helper matters only to a project-scope server, whose
         // committed .mcp.json names it - the key file beside it is still ignored, so its names are written
-        const gap = existed ? roots.ignoreGap(rootWrite.root, rootWrite.family, { writes: [rootWrite.bridge && roots.FILES.bridge, rootWrite.serenaContext.has(rootWrite.root) && roots.FILES.serenaContext].filter(Boolean) as string[] }) : null;
+        const gap = existed ? roots.ignoreGap(rootWrite.root, rootWrite.family, { writes: [...(rootWrite.bridge ? [roots.FILES.bridge] : []), ...(rootWrite.serenaContext.has(rootWrite.root) ? [roots.FILES.serenaContext] : [])] }) : null;
         // a root of this plugin's own files whose .gitignore predates a line GITIGNORE has now (0.5.0: the bridge and
         // serena's context): rootIgnore appends only the lines it lacks
         if (existed && pathApi.basename(rootWrite.root) !== ALFRED_DATA)

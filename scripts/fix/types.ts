@@ -1,6 +1,6 @@
 // The shapes of the fix engine: the context a detector reads, the machine it looks through, a finding and what each kind
 // of fix returns. A finding crosses the --json and --questions boundary (stored - do not rename).
-import type { Env, ServerEntry } from '../core/types.ts';
+import type { Env, MachineProbe, ServerEntry } from '../core/types.ts';
 import type { Catalog, CatalogRules } from '../catalog/types.ts';
 import type { Roots } from '../entries/types.ts';
 import type { Inventory, InvRegistration } from '../inventory/types.ts';
@@ -10,24 +10,8 @@ import type { FetchJob, JobStep } from '../apply/types.ts';
 import type { PlanStep, Question } from '../plan/types.ts';
 import type { Log, RunCli } from '../apply/types.ts';
 
-// A command the machine ran, as spawnSync reports it.
-export interface RunResult
-{
-    status: number | null;
-    stdout: string;
-    stderr: string;
-    error?: Error | undefined;
-}
-// The only way a detector looks at the machine, so a test replaces it.
-export interface MachineProbe
-{
-    exists(file: string): boolean;
-    realpath(file: string): string | null;
-    which(name: string): string | null;
-    run(command: string, args: string[], options?: { cwd?: string; env?: Env }): RunResult | null;
-    nodeVersion: string;
-}
-
+// The machine probe lives in core/types.ts, beside the other shapes every command reads.
+export type { MachineProbe, RunResult } from '../core/types.ts';
 // What a detector, a fix and a steps function read.
 export interface FixCtx
 {

@@ -17,9 +17,10 @@
 // registration that changed since it was read stops the step. No file under <tmp> and no printed line holds a live value:
 // rollback.json is kept, and a restore line shows the marker in place of the key.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import * as cli from '../core/claude-cli.ts';
+import { errorMessage } from '../core/guards.ts';
+import { makeTempDir } from '../core/tmpdir.ts';
 import * as inventory from '../inventory/inventory.ts';
 import { fetchJob, serverStatus, writeJob, nextLines } from './fetch.ts';
 import { reconnectLine } from '../plan/render.ts';
@@ -33,13 +34,12 @@ import { rootIgnore, writeHelper, writeShipped, moveRootFile, ensureKeyName, lis
 import { emptyBaseModes, setProjectFolder } from './serena-config.ts';
 import { inTreeLines } from './serena-projects.ts';
 import { GITIGNORE_ALL } from './constants.ts';
-import type { Endpoint, McpAddStep, McpMoveStep, McpReplaceStep, PlanStep, Reconnect } from '../plan/types.ts';
-import type { ApplyCtx, ApplyOptions, ApplyPlan, ApplyReport, StepResult, Status } from './types.ts';
+import type { Endpoint, PlanStep, Reconnect } from '../plan/types.ts';
+import type { ApplyCtx, ApplyOptions, ApplyPlan, ApplyReport, Call, StepResult, Status } from './types.ts';
 
-// One operation. -> { ok, detail, unchanged? }
-function runStep(step: PlanStep, context: ApplyCtx): StepResult
+// One operation, `call` the run's CLI runner. -> { ok, detail, unchanged? }
+function runStep(step: PlanStep, context: ApplyCtx, call: Call): StepResult
 {
-    const call = context.call!;
     switch (step.op)
     {
         case 'ensure-dir': {
@@ -103,21 +103,22 @@ export function apply(plan: ApplyPlan, { env = process.env, tmp, runCli = cli.ru
         log('Nothing to apply: every answer already matches what is installed. No claude call was made.');
         return report;
     }
-    const context: ApplyCtx = { project, env, tmp: tmp || fs.mkdtempSync(path.join(os.tmpdir(), 'alfred-tools-')), runCli, catalog: catalogLib.load(), alfredEnabled: Boolean(plan.alfredCodeEnabled), data };
-    context.call = makeRunner(context);
+    const context: ApplyCtx = { project, env, tmp: tmp || makeTempDir(), runCli, catalog: catalogLib.load(), alfredEnabled: Boolean(plan.alfredCodeEnabled), data };
+    const call = makeRunner(context);
+    context.call = call;
     context.report = report;
     report.tmp = context.tmp;
-    for (let i = 0; i < plan.steps.length; i++)
+    for (const [i, step] of plan.steps.entries())
     {
-        const step = plan.steps[i]!;
         if (step.op === 'fetch') { report.toFetch.push(step); log(`${i + 1}. later  ${step.why} (fetch.ts, after the read-back)`); continue; }
         const ready = restoreStep(step, context);
-        const filled = ready.error ? null : fillStep(ready.step!, context);
+        const filled = ready.error === undefined ? fillStep(ready.step, context) : null;
         // a step that throws (a .cursor that is a file, a read-only target) is a failed step, so the failure path below
-        // still takes Cursor off the list entries it never reached (spec D1)
+        // still takes Cursor off the list entries it never reached (spec D1); a step with nothing filled is one
+        // restoreStep refused, with its error
         let stepResult: StepResult;
-        try { stepResult = ready.error ? { ok: false, detail: ready.error } : runStep(filled!.step, context); }
-        catch (caught) { const error = caught as NodeJS.ErrnoException; stepResult = { ok: false, detail: `${step.op}: ${error.message}` }; }
+        try { stepResult = filled ? runStep(filled.step, context, call) : { ok: false, detail: ready.error ?? '' }; }
+        catch (caught) { stepResult = { ok: false, detail: `${step.op}: ${errorMessage(caught)}` }; }
         log(`${i + 1}. ${stepResult.ok ? 'ok    ' : 'FAILED'} ${stepResult.detail}`);
         if (filled && filled.note) { report.keys.push(filled.note); log(`   key: ${filled.note}`); }
         if (stepResult.ok)
@@ -151,9 +152,14 @@ export function apply(plan: ApplyPlan, { env = process.env, tmp, runCli = cli.ru
     // what was written and read back: with a package to fetch, fetch.ts fetches it and then asks the CLI for the status;
     // with none (a hosted URL, a rename, a move), the status is asked here
     const done = new Set(report.applied.map((appliedStep) => appliedStep.i));
-    const written = plan.steps.filter((planStep, i) => done.has(i + 1) && ['mcp-add', 'mcp-replace', 'mcp-move'].includes(planStep.op)).map((planStep): Endpoint => (planStep as McpMoveStep).to || { name: (planStep as McpAddStep).name, scope: (planStep as McpAddStep).scope });
+    const written = plan.steps.flatMap((planStep, i): Endpoint[] =>
+    {
+        if (!done.has(i + 1)) return [];
+        if (planStep.op === 'mcp-move') return [planStep.to];
+        return planStep.op === 'mcp-add' || planStep.op === 'mcp-replace' ? [{ name: planStep.name, scope: planStep.scope }] : [];
+    });
     // a bridge whose key or URL names are not filled yet exits at its start: its status would only say so (0.4.0 Ruling 11)
-    const unfilled = new Set(plan.steps.filter((planStep) => (planStep as McpReplaceStep).filled === false).map((planStep) => ((planStep as McpMoveStep).to ? (planStep as McpMoveStep).to.name : (planStep as McpReplaceStep).name)));
+    const unfilled = new Set(plan.steps.flatMap((planStep) => ('filled' in planStep && planStep.filled === false ? [planStep.op === 'mcp-move' ? planStep.to.name : planStep.name] : [])));
     const fresh = written.map((endpoint) => endpoint.name).filter((name) => !unfilled.has(name));
     const scopeOf = new Map(written.map((endpoint) => [endpoint.name, endpoint.scope]));
     // a hosted keyed server fetches nothing: its status is asked now, so a refused key is named here (spec F3)

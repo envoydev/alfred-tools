@@ -1,11 +1,12 @@
 // Location roots: a logical root, where it is written, and the entry's location arguments and env.
 import fs from 'node:fs';
 import path from 'node:path';
-import { slashes, pathFor } from './platform.ts';
+import { isInside, slashes, pathFor } from './platform.ts';
 import { ALFRED_DATA, ROOT_NAME } from '../core/constants.ts';
+import { locationsOf } from '../catalog/rows.ts';
 import type { Env, ServerEntry } from '../core/types.ts';
 import type { CatalogRow } from '../catalog/types.ts';
-import type { DefaultRoot, Machine, Root } from './types.ts';
+import type { AbsRoot, DefaultRoot, Machine, Root } from './types.ts';
 
 // ---- location roots -------------------------------------------------------------------------------------------------
 // A root is logical until it is written: { kind: 'project', rel } (under the project), { kind: 'home', rel } (under the
@@ -27,10 +28,8 @@ export function logicalRoot(text: string, context: Machine): Root
     const root = parseRoot(text, context);
     if (root.kind !== 'abs') return root;
     const pathApi = pathFor(context.platform);
-    const relativePath = pathApi.relative(context.project, root.path);
-    if (relativePath && !relativePath.startsWith('..') && !pathApi.isAbsolute(relativePath)) return { kind: 'project', rel: slashes(relativePath) };
-    const homeRel = pathApi.relative(context.home, root.path);
-    if (homeRel && !homeRel.startsWith('..') && !pathApi.isAbsolute(homeRel)) return { kind: 'home', rel: slashes(homeRel) };
+    if (isInside(pathApi, context.project, root.path, { orSame: false })) return { kind: 'project', rel: slashes(pathApi.relative(context.project, root.path)) };
+    if (isInside(pathApi, context.home, root.path, { orSame: false })) return { kind: 'home', rel: slashes(pathApi.relative(context.home, root.path)) };
     return root;
 }
 
@@ -42,7 +41,8 @@ export function expandVars(text: unknown, env: Env): { value: string; unset: str
     const unset: string[] = [];
     const value = String(text).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (match: string, name: string, fallback: string | undefined) =>
     {
-        if (typeof env[name] === 'string') return env[name]!;
+        const set = env[name];
+        if (typeof set === 'string') return set;
         if (fallback !== undefined) return fallback;
         unset.push(name);
         return match;
@@ -69,7 +69,7 @@ function withSub(rootStr: string, sub: string, _scope: string, context: Machine)
 }
 
 // serena on Windows: SERENA_HOME absolute, in backslashes and space-free (fix row serena-windows-home).
-export function serenaWindowsHome(context: Pick<Machine, 'home'>): DefaultRoot
+export function serenaWindowsHome(context: Pick<Machine, 'home'>): { root: AbsRoot; needsInput?: undefined } | { needsInput: string; root?: undefined }
 {
     const profile = context.home || '';
     if (profile && !/\s/.test(profile)) return { root: { kind: 'abs', path: path.win32.join(profile, '.serena') } };
@@ -78,7 +78,7 @@ export function serenaWindowsHome(context: Pick<Machine, 'home'>): DefaultRoot
 
 // A profile path with a space leaves serena no home under it: the space-free folder offered and taken by default in its
 // place, on the system drive.
-export function serenaSpaceFree(context: Pick<Machine, 'env'>): Root
+export function serenaSpaceFree(context: Pick<Machine, 'env'>): AbsRoot
 {
     const drive = (context.env && context.env.SystemDrive) || '';
     return { kind: 'abs', path: `${/^[A-Za-z]:$/.test(drive) ? drive : 'C:'}\\serena-home` };
@@ -101,7 +101,7 @@ export function alfredSerenaHome(home: string): boolean
 // answer of its own. serena on Windows overrides both.
 export function defaultRoot(row: CatalogRow, name: string, context: Machine): DefaultRoot
 {
-    const locations = row.locations!;
+    const locations = locationsOf(row);
     if (locations.windowsAbsolute && context.platform === 'win32') return serenaWindowsHome(context);
     const out: { root: Root; alfred?: Root } = { root: otherPlace(row, name, locations.defaultSide, context) };
     const old = alfredRoot(row, context);
@@ -151,14 +151,15 @@ export function alfredNameProblem(name: string, context: Machine): string | null
 export function rootOf(family: string, context: Machine): string
 {
     const pathApi = pathFor(context.platform);
-    const set = context.roots && context.roots[family as 'project' | 'global'];
+    const roots = context.roots;
+    const set = !roots ? undefined : family === 'global' ? roots.global : family === 'project' ? roots.project : undefined;
     if (set) return set;
     return family === 'global' ? pathApi.join(context.home, ROOT_NAME) : pathApi.join(context.project, ROOT_NAME);
 }
 
 // The scope family whose root holds a scope's files: user scope is the global root's, project and local scope the project
 // root's.
-export const familyOf = (scope: string): 'project' | 'global' => (scope === 'user' ? 'global' : 'project');
+export const familyOf = (scope: string | null | undefined): 'project' | 'global' => (scope === 'user' ? 'global' : 'project');
 
 // The location side recommended for a row at a scope (spec D2, F6): the data folder sits in the root of the scope's
 // family - 'project' (the project root) at project and local scope, 'account' (the global root) at global scope. serena
@@ -167,7 +168,7 @@ export const familyOf = (scope: string): 'project' | 'global' => (scope === 'use
 export function recommendedSide(row: CatalogRow, scope: string, context: Machine): string
 {
     const side = scope === 'user' ? 'account' : 'project';
-    if (row.locations!.windowsAbsolute && context.platform === 'win32') return validWindowsSerenaHome(rootOf(side === 'account' ? 'global' : 'project', context)) ? side : 'default';
+    if (locationsOf(row).windowsAbsolute && context.platform === 'win32') return validWindowsSerenaHome(rootOf(side === 'account' ? 'global' : 'project', context)) ? side : 'default';
     return side;
 }
 
@@ -181,7 +182,8 @@ export function otherPlace(_row: CatalogRow, name: string, side: string, context
 // The root an installed entry carries, in written form, from the row's first derived key.
 export function rootOfEntry(row: CatalogRow, entry: ServerEntry): string | null
 {
-    const derivedLocation = row.locations!.derived[0]!;
+    const [derivedLocation] = locationsOf(row).derived;
+    if (!derivedLocation) throw new Error(`${row.id}: the catalog derives no path from its data folder`);
     let value: string | undefined;
     if (derivedLocation.in === 'env') value = (entry.env || {})[derivedLocation.key];
     else
@@ -200,19 +202,22 @@ export function rootOfEntry(row: CatalogRow, entry: ServerEntry): string | null
 // Write the location root into an entry (fresh build or an edit of an installed one): every derived key.
 export function applyRoot(entry: ServerEntry, row: CatalogRow, rootStr: string, scope: string, context: Machine): ServerEntry
 {
-    const out: ServerEntry = { ...entry, env: { ...(entry.env || {}) } };
-    if (entry.args) out.args = [...entry.args];
-    for (const derivedLocation of row.locations!.derived)
+    const env: Record<string, string> = { ...(entry.env || {}) };
+    const args = entry.args ? [...entry.args] : undefined;
+    for (const derivedLocation of locationsOf(row).derived)
     {
         const value = withSub(rootStr, derivedLocation.sub, scope, context);
-        if (derivedLocation.in === 'env') out.env![derivedLocation.key] = value;
+        if (derivedLocation.in === 'env') env[derivedLocation.key] = value;
         else
         {
-            const i = out.args!.indexOf(derivedLocation.key);
-            if (i >= 0) out.args![i + 1] = value; else out.args!.push(derivedLocation.key, value);
+            if (!args) throw new Error(`${row.id}: ${derivedLocation.key} is an argument, and the entry has none`);
+            const i = args.indexOf(derivedLocation.key);
+            if (i >= 0) args[i + 1] = value; else args.push(derivedLocation.key, value);
         }
     }
-    if (!Object.keys(out.env!).length) delete out.env;
+    const out: ServerEntry = { ...entry, env };
+    if (args) out.args = args;
+    if (!Object.keys(env).length) delete out.env;
     return out;
 }
 

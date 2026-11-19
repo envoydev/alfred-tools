@@ -9,13 +9,14 @@ import * as keys from '../keys/keys.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { deepEqual, stripBom } from '../core/json-file.ts';
-import { CONFIG_DIR_NAME, INSTALLED_PLUGINS_FILE, PLUGIN_KEY_PREFIXES, SETTINGS_FILE } from './read-guard-constants.ts';
+import { isRecord } from '../core/shapes.ts';
+import { CONFIG_DIR_NAME, INSTALLED_PLUGINS_FILE, PLUGINS_DIR, PLUGIN_KEY_PREFIXES, SETTINGS_FILE } from './read-guard-constants.ts';
 import { REG_OPS, listSteps } from './lists.ts';
 import { cursorSteps, SCOPES, heldCopies, keepOf } from './cursor-steps.ts';
 import type { Env, ServerEntry } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
-import type { CursorWritePlanStep, DenyReadStep, FileStep, ListCtx, ListWriteStep, McpAddStep, PlanOut, PlanStep, RegistrationStep, RepairCtx } from './types.ts';
+import type { CursorWritePlanStep, DenyReadStep, FileStep, ListCtx, ListWriteStep, PlanOut, PlanStep, RegistrationStep, RepairCtx } from './types.ts';
 
 // ---- a repair's tail (spec D1, D9) -------------------------------------------------------------------------------------
 
@@ -40,7 +41,7 @@ export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: P
         const prior = familyList ? (familyList.servers || []).find((server) => lists.serverKey(server) === key) : null;
         // a two-form entry keeps two forms; so does one `bridgeFor` names - an adopted server whose helper just became this
         // plugin's, so its Cursor copy is built as the bridge (helper-foreign). No other repair changes a copy's form.
-        if ((prior && prior.cursorEntry) || (bridgeFor && bridgeFor.has(key!))) formFor.set(key!, 'two');
+        if (key !== null && ((prior && prior.cursorEntry) || (bridgeFor && bridgeFor.has(key)))) formFor.set(key, 'two');
     }
     const listContext: ListCtx = { platform: context.platform, project: context.project || inventory.project, home: context.home, env: context.env || {}, catalog, roots: null, uses: [], formFor, clientsFor, exists: context.exists, normalizeCopy: normalize };
     const out: PlanOut = { steps: [], notes, errors: [] };
@@ -48,7 +49,7 @@ export function repairTail(inventory: Inventory, context: RepairCtx, regSteps: P
     // the key's name, from the key files of the roots in use
     const rootPaths = { project: inventory.roots && inventory.roots.project ? inventory.roots.project.path : null, global: inventory.roots && inventory.roots.global ? inventory.roots.global.path : null };
     for (const listStep of listWrites)
-        for (const upsert of (listStep as ListWriteStep).upserts || [])
+        for (const upsert of (listStep.op === 'list-write' && listStep.upserts) || [])
             if (!upsert.keyFiles)
             {
                 const files = keys.stdioChain({ scope: upsert.server.scope, projectRoot: rootPaths.project, globalRoot: rootPaths.global, platform: context.platform });
@@ -128,11 +129,13 @@ export function readGuardOf(context: { platform: string; home: string; env?: Env
     let deny: string[] = [];
     if (text !== null)
     {
-        let doc: { permissions?: { deny?: string[] } } | null = null;
+        let doc: unknown = null;
         try { doc = JSON.parse(stripBom(text)); } catch { /* below */ }
-        const isObject = (value: unknown): value is object => (value && typeof value === 'object' && !Array.isArray(value)) as boolean;
-        if (!isObject(doc) || (doc.permissions !== undefined && !isObject(doc.permissions)) || (doc.permissions && doc.permissions.deny !== undefined && !Array.isArray(doc.permissions.deny))) return { file, bad: true };
-        deny = (doc.permissions && doc.permissions.deny) || [];
+        const permissions = isRecord(doc) ? doc['permissions'] : undefined;
+        const listed = isRecord(permissions) ? permissions['deny'] : undefined;
+        if (!isRecord(doc) || (permissions !== undefined && !isRecord(permissions)) || (listed !== undefined && !Array.isArray(listed))) return { file, bad: true };
+        // a rule that is not a string matches none of `want`
+        deny = Array.isArray(listed) ? listed.filter((rule) => typeof rule === 'string') : [];
     }
     return { file, rules: want.filter((rule) => !deny.includes(rule)) };
 }
@@ -163,9 +166,9 @@ export function configDirsWithPlugin(home: string, current: string, platform: st
         if (key === currentKey || listed.has(key)) continue;
         try
         {
-            const doc = JSON.parse(stripBom(fs.readFileSync(path.join(dir, 'plugins', INSTALLED_PLUGINS_FILE), 'utf8'))) as { plugins?: unknown } | null;
-            const plugins = doc && typeof doc === 'object' ? doc.plugins : null;
-            if (plugins && typeof plugins === 'object' && !Array.isArray(plugins) && Object.keys(plugins).some((pluginKey) => PLUGIN_KEY_PREFIXES.some((prefix) => pluginKey.startsWith(prefix)))) { found.push(dir); listed.add(key); }
+            const doc: unknown = JSON.parse(stripBom(fs.readFileSync(path.join(dir, PLUGINS_DIR, INSTALLED_PLUGINS_FILE), 'utf8')));
+            const plugins = isRecord(doc) ? doc['plugins'] : null;
+            if (isRecord(plugins) && Object.keys(plugins).some((pluginKey) => PLUGIN_KEY_PREFIXES.some((prefix) => pluginKey.startsWith(prefix)))) { found.push(dir); listed.add(key); }
         }
         catch { /* no record, or not JSON: skipped */ }
     }
@@ -183,10 +186,9 @@ export function denyReadStep(file: string, rules: string[]): DenyReadStep
 // that is not a JSON object is a note: the rest of the plan is still written. -> [deny-read step]
 export function denyReadSteps(steps: PlanStep[], context: { platform: string; home: string; env?: Env | undefined }, out: Pick<PlanOut, 'notes'>): DenyReadStep[]
 {
-    const want = [
-        steps.some((step) => ['mcp-add', 'mcp-replace', 'mcp-move'].includes(step.op) && signInParts((step as McpAddStep).entry)) && roots.READ_GUARD.signIns,
-        steps.some((step) => step.op === 'ensure-key-name') && roots.READ_GUARD.secrets,
-    ].filter(Boolean) as string[];
+    const writesSignIn = steps.some((step) => (step.op === 'mcp-add' || step.op === 'mcp-replace' || step.op === 'mcp-move') && signInParts(step.entry));
+    const writesKeyName = steps.some((step) => step.op === 'ensure-key-name');
+    const want = [...(writesSignIn ? [roots.READ_GUARD.signIns] : []), ...(writesKeyName ? [roots.READ_GUARD.secrets] : [])];
     if (!want.length) return [];
     const readGuard = readGuardOf(context, want);
     if (readGuard.bad)

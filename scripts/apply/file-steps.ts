@@ -3,7 +3,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { stripBom } from '../core/json-file.ts';
+import { isRecord } from '../core/shapes.ts';
 import { replaceFile } from '../core/replace-file.ts';
+import { ALFRED_DATA } from '../core/constants.ts';
+import { errorCode, errorMessage } from '../core/guards.ts';
 import * as keys from '../keys/keys.ts';
 import * as catalogLib from '../catalog/catalog.ts';
 import * as roots from '../roots/roots.ts';
@@ -52,7 +55,7 @@ export function rootIgnoreLines(root: string): { file: string; text: string | nu
 // user's own files, only the key file and the record - never `*`, so their files stay visible to git. Never under .alfred.
 export function rootIgnore(root: string): StepResult
 {
-    if (path.basename(root) === '.alfred') return { ok: true, detail: `${root} is alfred-code's - its own .gitignore covers it; nothing written` };
+    if (path.basename(root) === ALFRED_DATA) return { ok: true, detail: `${root} is alfred-code's - its own .gitignore covers it; nothing written` };
     const { file, text, want, lack } = rootIgnoreLines(root);
     if (text === null)
     {
@@ -161,10 +164,10 @@ export function ensureKeyName(file: string, names: string[]): StepResult
 
 // A record or map read as empty that a write must not replace: a later version's, or one that cannot be opened.
 // -> null | { ok, detail }
-function keepAsIs(read: { state?: string | undefined; note?: string | undefined } | null | undefined): StepResult | null
+function keepAsIs(read: { state?: undefined; note?: undefined } | { state: string; note: string } | null | undefined): StepResult | null
 {
     if (!read || (read.state !== 'newer' && read.state !== 'unreadable')) return null;
-    const what = read.note!.replace(/ - read as empty$/, '');
+    const what = read.note.replace(/ - read as empty$/, '');
     return { ok: true, detail: `${what} - left as it is; ${read.state === 'newer' ? 'update alfred-tools' : 'check its permissions'}, then run the command again` };
 }
 
@@ -215,13 +218,17 @@ export function listWrite(step: ListWriteStep, context: ApplyCtx, { failure = fa
         const forCursor = (server.clients || []).includes('cursor');
         if (form === 'two' && forCursor)
         {
-            const prior = server.cursorEntry || ((((base && base.servers) || []).find((listServer) => lists.serverKey(listServer) === lists.serverKey(server)) || {}) as Partial<ListServer>).cursorEntry || null;
+            const listed = ((base && base.servers) || []).find((listServer) => lists.serverKey(listServer) === lists.serverKey(server));
+            const prior = server.cursorEntry || (listed && listed.cursorEntry) || null;
             const copy = cursorMcp.bridgeFormOf(server.entry, context.catalog || catalogLib.load(), prior);
             if (copy) server.cursorEntry = copy;
             else delete server.cursorEntry;
         }
         else if (form !== undefined || !forCursor) delete server.cursorEntry;
-        upserts.push(server as ListServer);
+        // the plan leaves an entry empty only for a server filled from its registration above
+        const { entry } = server;
+        if (entry === null) continue;
+        upserts.push({ ...server, entry });
     }
     const drops = (step.drops || []).filter((drop) => !drop.after || applied.has(drop.after)).map((drop) => drop.key);
     const doc = lists.mergeList(base, { upserts, drops, own: step.own ? lists.ownOf(step.own) : undefined, cursorOffer: step.cursorOffer });
@@ -234,12 +241,12 @@ export function listWrite(step: ListWriteStep, context: ApplyCtx, { failure = fa
 export function denyRead(file: string, rules: string[]): StepResult
 {
     let text: string | null = null;
-    try { text = fs.readFileSync(file, 'utf8'); } catch (caught) { const err = caught as NodeJS.ErrnoException; if (err.code !== 'ENOENT') return { ok: false, detail: `${file} cannot be read (${err.code}) - left as it is` }; }
+    try { text = fs.readFileSync(file, 'utf8'); } catch (caught) { const code = errorCode(caught); if (code !== 'ENOENT') return { ok: false, detail: `${file} cannot be read (${code}) - left as it is` }; }
     let doc: { permissions?: { deny?: string[] } } | null = {};
     if (text !== null)
     {
         try { doc = JSON.parse(stripBom(text)); } catch { doc = null; }
-        const isObject = (value: unknown): value is object => (value && typeof value === 'object' && !Array.isArray(value)) as boolean;
+        const isObject = isRecord;
         if (!isObject(doc) || (doc.permissions !== undefined && !isObject(doc.permissions)) || (doc.permissions && doc.permissions.deny !== undefined && !Array.isArray(doc.permissions.deny)))
             return { ok: false, detail: `${file} is not a settings object alfred-tools can read - left as it is; add ${rules.join(' and ')} to permissions.deny yourself` };
     }
@@ -266,8 +273,7 @@ export function moveRootFile(from: string, to: string): StepResult
         try { fs.renameSync(from, to); }
         catch (caught)
         {
-            const err = caught as NodeJS.ErrnoException;
-            if (err.code !== 'EXDEV') throw err;
+            if (errorCode(caught) !== 'EXDEV') throw caught;
             fs.cpSync(from, to, { recursive: true });
             fs.rmSync(from, { recursive: true, force: true });
         }
@@ -314,7 +320,7 @@ export function failureLists(plan: ApplyPlan, report: ApplyReport, context: Appl
     {
         let result: StepResult;
         try { result = listWrite(step, { ...context, report }, { failure: true }); }
-        catch (caught) { const err = caught as NodeJS.ErrnoException; result = { ok: false, detail: `${step.file}: ${err.message}` }; }
+        catch (caught) { result = { ok: false, detail: `${step.file}: ${errorMessage(caught)}` }; }
         log(`   list: ${result.detail}`);
         out.push(result);
     }

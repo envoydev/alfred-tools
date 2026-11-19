@@ -4,6 +4,7 @@ import * as roots from '../roots/roots.ts';
 import { HEADER, capitalized } from './asks-keys.ts';
 import * as existingServers from '../inventory/existing.ts';
 import { MAX_OPTIONS, MAX_QUESTIONS } from './constants.ts';
+import { required } from './required.ts';
 import { homeDir } from '../core/account.ts';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { Family, InUse } from '../roots/types.ts';
@@ -37,21 +38,24 @@ export function packed(items: PickItem[], { id, question, none }: { id: string; 
     }
     for (let i = 0; i < parts.length; i++)
     {
-        if (parts[i]!.length !== 1) continue;
+        const part = parts[i];
+        if (!part || part.length !== 1) continue;
         const previous = parts[i - 1];
         const next = parts[i + 1];
-        if (previous && previous.length < MAX_OPTIONS) { previous.push(...parts.splice(i, 1)[0]!); i--; }
-        else if (next && next.length < MAX_OPTIONS) { next.unshift(...parts.splice(i, 1)[0]!); i--; }
-        else if (previous) parts[i]!.unshift(previous.pop()!);
-        else if (next) parts[i]!.push(next.shift()!);
+        // a neighbour with room takes the lone item; else the lone question takes one item of a full neighbour
+        if (previous && previous.length < MAX_OPTIONS) { previous.push(...part); parts.splice(i, 1); i--; }
+        else if (next && next.length < MAX_OPTIONS) { next.unshift(...part); parts.splice(i, 1); i--; }
+        else if (previous) part.unshift(...previous.splice(-1, 1));
+        else if (next) part.push(...next.splice(0, 1));
     }
     const out = parts.map((part, partIndex): Question =>
     {
-        const one = part.every((item) => item.group === part[0]!.group) ? part[0]!.group : null;
+        const [lead] = part;
+        const one = lead && part.every((item) => item.group === lead.group) ? lead.group : null;
         const options = part.map((item) => ({ label: item.label, description: item.description }));
         if (options.length === 1) options.push({ label: 'None of these', description: none });
         return {
-            id: `${id}-${partIndex}`, header: one ? HEADER[one.id]! : 'Tools', multiSelect: true,
+            id: `${id}-${partIndex}`, header: one ? required(HEADER[one.id], `the group '${one.id}' has no header`) : 'Tools', multiSelect: true,
             question: one ? `${one.label}: ${question}` : capitalized(question), options,
         };
     });
@@ -75,7 +79,7 @@ export function alsoProvided(inventory: Inventory, rowId: string, connectors: st
     const out: { owner: string; tag: string }[] = [];
     if ((connectors || []).some((connector) => existingServers.matchConnector(connector) === rowId)) out.push({ owner: 'claude.ai', tag: 'also connected through claude.ai' });
     const enabled = new Set((inventory.plugins || []).filter((plugin) => plugin.enabledHere ?? plugin.enabled).map((plugin) => plugin.id));
-    const owners = (inventory.pluginServers || []).filter((server) => server.rowId === rowId && enabled.has(server.plugin)).map((server) => server.plugin.split('@')[0]!);
+    const owners = (inventory.pluginServers || []).filter((server) => server.rowId === rowId && enabled.has(server.plugin)).map((server) => server.plugin.split('@', 1).join(''));
     for (const owner of new Set(owners)) out.push({ owner, tag: `also provided by the ${owner} plugin` });
     return out;
 }
@@ -93,14 +97,16 @@ export function pickQuestions(inventory: Inventory, catalog: Catalog, existing: 
             const have = installedOf(inventory, row.id);
             const inherited = have.filter((installed) => installed.scope === 'inherited');
             const user = have.filter((installed) => installed.scope === 'user');
-            const tags = inherited.map((installed) => `inherited from ${fromHere(inventory, installed.from!)} as ${installed.name}, ${installed.approval}`);
+            const fromOf = (installed: Installed) => fromHere(inventory, required(installed.from, `${installed.name}: an inherited server is read with its folder`));
+            const tags = inherited.map((installed) => `inherited from ${fromOf(installed)} as ${installed.name}, ${installed.approval}`);
             if (user.length) tags.push(row.kind === 'mcp' ? `installed for every project as ${user.map((installed) => installed.name).join(', ')}` : 'installed for every project');
             if (row.kind === 'mcp') tags.push(...alsoProvided(inventory, row.id, connectors).map((provider) => provider.tag));
-            const stays = [...(user.length ? ['the one for every project'] : []), ...inherited.map((installed) => `the one inherited from ${fromHere(inventory, installed.from!)}`)];
+            const stays = [...(user.length ? ['the one for every project'] : []), ...inherited.map((installed) => `the one inherited from ${fromOf(installed)}`)];
             const keep = `${stays.join(' and ')} ${stays.length > 1 ? 'stay' : 'stays'}${user.length ? '' : stays.length > 1 ? ' in their folders' : ' in its folder'}`;
             // windows-mcp 0.8.8 keeps one per desktop healthy; a copy under the row's own name replaces that one here
             const others = row.id === 'windows-control' ? otherWindowsMcp(inventory, row.name) : [];
-            const warn = `${others.length ? `; another windows-mcp already starts here (${others.join(', ')}) - keep one per desktop` : ''}${rule.add.has(row.id) ? `; ${existingServers.twoServers(row.label, rule.add.get(row.id)!)}` : ''}`;
+            const added = rule.add.get(row.id);
+            const warn = `${others.length ? `; another windows-mcp already starts here (${others.join(', ')}) - keep one per desktop` : ''}${added !== undefined ? `; ${existingServers.twoServers(row.label, added)}` : ''}`;
             items.push({ group: group, label: `${row.label}${tags.length ? ` (${tags.join('; ')})` : ''}`, description: `${have.length ? `adds this project's own copy; ${keep} - ${row.summary}` : row.summary}${warn}` });
         }
     return packed(items, { id: 'pick', question: 'which tools do you want to install?', none: 'install nothing' });
@@ -128,6 +134,6 @@ export function rootInUse(inventory: Inventory, family: Family, context: Partial
     return roots.inUse(inventory, family, { project: inventory.project, platform: inventory.os, home: context.home || homeDir(process.env), exists: context.exists, catalog: context.catalog });
 }
 
-export const ROOT_LABEL: Record<string, string> = { project: 'Project root folder', global: 'Global root folder' };
-export const ROOT_MOVES: Record<string, string> = { project: "this project's keys, key helper and tool data", global: 'the keys, key helper and tool data for every project' };
+export const ROOT_LABEL: Record<Family, string> = { project: 'Project root folder', global: 'Global root folder' };
+export const ROOT_MOVES: Record<Family, string> = { project: "this project's keys, key helper and tool data", global: 'the keys, key helper and tool data for every project' };
 

@@ -9,6 +9,7 @@ import * as account from '../core/account.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import { parseJson, deepEqual } from '../core/json-file.ts';
 import { replaceFile } from '../core/replace-file.ts';
+import { errorCode, isRecord, isServerEntry } from '../core/guards.ts';
 import { bridgeParts, helperParts, withoutPairs } from '../entries/entry.ts';
 import { pathApiOf, pathFor } from '../entries/platform.ts';
 import { mcpRemotePackage } from '../entries/sign-in.ts';
@@ -32,22 +33,28 @@ export function fileFor(family: string, context: CursorPlace): string
     return pathApi.join(context.project, CURSOR_FOLDER, CURSOR_FILE);
 }
 
+// Cursor's file at its top level: an object whose mcpServers is an object. Each entry is checked where it is used: the
+// ones the lists manage (cursorWrite), and the ones a reader takes (`servers`); any other is the user's, kept as it is.
+const isCursorDoc = (value: unknown): value is CursorDoc => isRecord(value) && isRecord(value['mcpServers']);
+// The entries of the shape Claude Code writes, the ones a reader may take.
+const serversIn = (doc: CursorDoc): ServerMap => Object.fromEntries(Object.entries(doc.mcpServers).filter((pair): pair is [string, ServerEntry] => isServerEntry(pair[1])));
+
 // -> { state: 'absent' | 'ok' | 'symlink' | 'bad' | 'shape', doc, lineEnd }
 export function readCursor(file: string): CursorRead
 {
     let stats: fs.Stats;
     try { stats = fs.lstatSync(file); }
-    catch (caught) { const err = caught as NodeJS.ErrnoException;  return err.code === 'ENOENT' || err.code === 'ENOTDIR' ? { state: 'absent', doc: { mcpServers: {} }, lineEnd: '\n' } : { state: 'bad', doc: null, lineEnd: '\n', error: err.code }; }
+    catch (caught) { const code = errorCode(caught); return code === 'ENOENT' || code === 'ENOTDIR' ? { state: 'absent', doc: { mcpServers: {} }, servers: {}, lineEnd: '\n' } : { state: 'bad', doc: null, lineEnd: '\n', error: code }; }
     if (stats.isSymbolicLink()) return { state: 'symlink', doc: null, lineEnd: '\n' };
     let text: string;
     try { text = fs.readFileSync(file, 'utf8'); }
-    catch (caught) { const err = caught as NodeJS.ErrnoException;  return { state: 'bad', doc: null, lineEnd: '\n', error: err.code }; }
+    catch (caught) { return { state: 'bad', doc: null, lineEnd: '\n', error: errorCode(caught) }; }
     const lineEnd = text.includes('\r\n') ? '\r\n' : '\n';
-    let doc: CursorDoc | null;
-    try { doc = parseJson(text) as CursorDoc | null; }
+    let doc: unknown;
+    try { doc = parseJson(text); }
     catch { return { state: 'bad', doc: null, lineEnd: lineEnd }; }
-    if (!doc || typeof doc !== 'object' || Array.isArray(doc) || !doc.mcpServers || typeof doc.mcpServers !== 'object' || Array.isArray(doc.mcpServers)) return { state: 'shape', doc, lineEnd: lineEnd };
-    return { state: 'ok', doc, lineEnd: lineEnd, text };
+    if (!isCursorDoc(doc)) return { state: 'shape', doc: null, lineEnd: lineEnd };
+    return { state: 'ok', doc, servers: serversIn(doc), lineEnd: lineEnd, text };
 }
 
 // Why a file is left as it is, or null when it can be written.
@@ -84,7 +91,7 @@ export function compose(doc: CursorDoc | null, managed: Map<string, Managed>, { 
     const at = ({ row }: Managed) => { const i = row === null ? -1 : order.indexOf(row); return i < 0 ? order.length : i; };
     const sorted = [...managed].sort(([, first], [, second]) => at(first) - at(second));
     // null prototypes here and in `out`: a server or a key named __proto__ is the user's own and is kept as one
-    const next: ServerMap = Object.create(null);
+    const next: Record<string, unknown> = Object.create(null);
     for (const [name, server] of sorted)
     {
         // a skipped name keeps the file's own value, and one the file lacks stays out (spec D1: never re-added)
@@ -117,8 +124,11 @@ export function cursorWrite(step: CursorWriteStep, context: CursorCtx | null | u
     if (why) return { ok: false, detail: `${step.file} ${why} - left as it is` };
     const sources = (step.lists || []).map((list) => ({ file: list.file, scopes: list.scopes, servers: ((list.file && lists.readList(list.file)) || { servers: [] }).servers }));
     const managed = managedSet(sources);
+    const servers: Record<string, unknown> = read.doc ? read.doc.mcpServers : {};
+    // a managed name the file holds in a shape Cursor does not read is named, never overwritten or read on
+    const misshapen = [...managed.keys()].filter((name) => Object.hasOwn(servers, name) && !isServerEntry(servers[name]));
+    if (misshapen.length) return { ok: false, detail: `${step.file}: ${misshapen.join(', ')} ${misshapen.length > 1 ? 'are' : 'is'} not in the shape Cursor reads (a string command or url, args a list of strings, env and headers maps of strings) - correct or remove ${misshapen.length > 1 ? 'them' : 'it'} there; left as it is` };
     const notes = fillStdioKeys(managed, context);
-    const servers: ServerMap = read.doc ? read.doc.mcpServers : {};
     const before = step.before || [];
     const theirs = [...managed.keys()].filter((name) => Object.hasOwn(servers, name) && !before.includes(name) && !(step.replace || []).includes(name));
     // `only`: the names this write may change (fix's client-drift); every other managed name keeps the file's value
@@ -136,7 +146,7 @@ export function cursorWrite(step: CursorWriteStep, context: CursorCtx | null | u
     try { mode = fs.statSync(step.file).mode & 0o777; } catch { /* a new file takes the default */ }
     replaceFile(step.file, text, mode);
     const back = readCursor(step.file);
-    const written = back.state === 'ok' && back.doc ? back.doc.mcpServers : null;
+    const written = back.state === 'ok' ? back.doc.mcpServers : null;
     const wrong = written === null ? [...managed.keys()] : [...managed].filter(([name, server]) => !skip.includes(name) && !deepEqual(written[name], server.entry)).map(([name]) => name);
     if (wrong.length) return { ok: false, detail: `${step.file}: ${wrong.join(', ')} did not read back as written` };
     const kept = theirs.length ? ` - ${theirs.join(', ')} left as your own` : '';
@@ -149,7 +159,7 @@ export function cursorWrite(step: CursorWriteStep, context: CursorCtx | null | u
 // a field keys.tokenFields reads (github's Docker route, sentry's npm route, context7 local with --api-key).
 export function stdioKeyed(entry: ServerEntry, row: CatalogRow | null | undefined, routeId: string | null | undefined): boolean
 {
-    const route = row && row.routes ? row.routes[routeId!] : null;
+    const route = row && row.routes && routeId ? row.routes[routeId] : null;
     return Boolean(route && route.tokenVar && keys.tokenFields(entry, route).length);
 }
 
@@ -203,14 +213,14 @@ export function matchesRow(entry: ServerEntry, row: CatalogRow | null | undefine
 export function cursorOf(file: string, marked: { name: string; row: string | null }[], catalog: Catalog): CursorOf
 {
     const read = readCursor(file);
-    const servers: ServerMap = read.state === 'ok' && read.doc ? read.doc.mcpServers : {};
+    const servers: ServerMap = read.state === 'ok' ? read.servers : {};
     const entries: Record<string, ServerEntry> = {};
     for (const markedServer of marked)
     {
         const server = servers[markedServer.name];
         if (Object.hasOwn(servers, markedServer.name) && server !== undefined && !Object.hasOwn(entries, markedServer.name)) entries[markedServer.name] = kept.maskCredentials(server, markedServer.row === null ? undefined : catalog.byId.get(markedServer.row));
     }
-    return { file, state: read.state, names: Object.keys(servers), entries };
+    return { file, state: read.state, names: read.state === 'ok' ? Object.keys(read.doc.mcpServers) : [], entries };
 }
 
 // ---- hosted keyed routes: two forms (spec D5) -------------------------------------------------------------------------

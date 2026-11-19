@@ -6,11 +6,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { replaceFile } from './replace-file.ts';
 import { parseJson } from './json-file.ts';
+import { errorCode, isRecord } from './guards.ts';
 import type { Declined, DeclinedFile, Outcome } from './types.ts';
 
 const FILE = 'retired-declined.json';
 const fileOf = (dataDir: string): string => path.join(dataDir, FILE);
 export const same = (first: Declined, second: Declined): boolean => first.id === second.id && first.scope === second.scope;
+const isDeclined = (entry: unknown): entry is Declined => isRecord(entry) && typeof entry['id'] === 'string' && typeof entry['scope'] === 'string';
 
 // -> { declined } | { bad } | null (no file)
 function load(dataDir: string): { declined: Declined[]; bad?: undefined } | { bad: true; declined?: undefined } | null
@@ -18,12 +20,13 @@ function load(dataDir: string): { declined: Declined[]; bad?: undefined } | { ba
     let text: string;
     try { text = fs.readFileSync(fileOf(dataDir), 'utf8'); }
     // only a file that is not there is no file: one that cannot be read is never replaced by a fresh one
-    catch (caught) { return caught instanceof Error && 'code' in caught && caught.code === 'ENOENT' ? null : { bad: true }; }
+    catch (caught) { return errorCode(caught) === 'ENOENT' ? null : { bad: true }; }
     try
     {
-        const doc = parseJson(text) as Partial<DeclinedFile> | null;
-        if (!doc || !Array.isArray(doc.declined)) return { bad: true };
-        return { declined: doc.declined.filter((entry) => entry && typeof entry.id === 'string' && typeof entry.scope === 'string').map(({ id, scope }) => ({ id, scope })) };
+        const doc = parseJson(text);
+        const declined: unknown = isRecord(doc) ? doc['declined'] : undefined;
+        if (!Array.isArray(declined)) return { bad: true };
+        return { declined: declined.filter(isDeclined).map(({ id, scope }) => ({ id, scope })) };
     }
     catch { return { bad: true }; }
 }
@@ -46,7 +49,7 @@ export function add(dataDir: string | null | undefined, items: Declined[]): Outc
     for (const it of items) if (!declined.some((entry) => same(entry, it))) declined.push({ id: it.id, scope: it.scope });
     fs.mkdirSync(dataDir, { recursive: true });
     const file = fileOf(dataDir);
-    replaceFile(file, `${JSON.stringify({ version: 1, declined }, null, 2)}\n`);
+    replaceFile(file, `${JSON.stringify({ version: 1, declined } satisfies DeclinedFile, null, 2)}\n`);
     return { ok: true, detail: `recorded in ${file}: ${items.map((item) => `${item.id} (${item.scope})`).join(', ')} - not offered again` };
 }
 

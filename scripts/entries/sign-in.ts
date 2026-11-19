@@ -7,8 +7,13 @@ import type { SignInParts } from './types.ts';
 // ---- one sign-in for both apps (spec D5, ruling 12) ----------------------------------------------------------------
 
 // mcp-remote's pin and cut-off, which the catalog keeps once, on sentry's bridge route; tests/catalog.test.ts holds that
-// route and its pinned mcp-remote, so none of the three lookups comes back empty.
-export const mcpRemotePackage = (catalog: Catalog): CatalogPackage => catalog.byId.get('sentry')!.routes.bridge!.package!;
+// route and its pinned mcp-remote, so a catalog without them is a broken one.
+export function mcpRemotePackage(catalog: Catalog): CatalogPackage
+{
+    const packageSpec = catalog.byId.get('sentry')?.routes.bridge?.package;
+    if (!packageSpec) throw new Error("the catalog has no sentry bridge route, whose package is mcp-remote's pin");
+    return packageSpec;
+}
 
 // A hosted route picked with no key, for Claude Code and Cursor: mcp-remote with its sign-in kept in the family's root
 // (MCP_REMOTE_CONFIG_DIR), so both apps share one OAuth sign-in. The pin and cut-off are the catalog's mcp-remote, the
@@ -29,14 +34,17 @@ export function signInParts(entry: ServerEntry | null | undefined): SignInParts 
     let cmd = entry.command;
     let args = entry.args.map(String);
     if (throughCmd(cmd, args)) { cmd = args[1] || ''; args = args.slice(2); }
-    if (cmd.replace(/\\/g, '/').split('/').pop()!.replace(/\.(cmd|exe)$/i, '').toLowerCase() !== 'npx') return null;
+    const slashed = cmd.replace(/\\/g, '/');
+    if (slashed.slice(slashed.lastIndexOf('/') + 1).replace(/\.(cmd|exe)$/i, '').toLowerCase() !== 'npx') return null;
     const at = args.findIndex((argument) => /^mcp-remote@\S+$/.test(argument));
-    if (at < 0) return null;
+    const pin = args[at];
+    if (at < 0 || pin === undefined) return null;
     const url = args.slice(at + 1).find((argument) => !argument.startsWith('-'));
+    if (url === undefined) return null;
     let parsedUrl: URL;
-    try { parsedUrl = new URL(url!); } catch { return null; }
+    try { parsedUrl = new URL(url); } catch { return null; }
     if (!/^https?:$/.test(parsedUrl.protocol)) return null;
     const dir = entry.env && entry.env['MCP_REMOTE_CONFIG_DIR'];
-    return typeof dir === 'string' && dir ? { url: url!, dir, pin: args[at]! } : null;
+    return typeof dir === 'string' && dir ? { url, dir, pin } : null;
 }
 

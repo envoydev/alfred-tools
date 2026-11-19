@@ -2,5 +2,7 @@
 export const CONFIG_DIR_NAME = '.claude';
 export const SETTINGS_FILE = 'settings.json';
 export const INSTALLED_PLUGINS_FILE = 'installed_plugins.json';
+// the folder of a config dir that holds INSTALLED_PLUGINS_FILE
+export const PLUGINS_DIR = 'plugins';
 // the plugin's id before and since the rename, each followed by the marketplace
 export const PLUGIN_KEY_PREFIXES = ['alfred-tools@', 'preferred-tools@'];

@@ -30,6 +30,14 @@ test('readList: missing is null, not JSON is bad, newer is kept', () => {
     assert.equal(ok.cursorOffer, 'declined');
 });
 
+test('readList: a server or own entry not in the shape the plugin writes is not read', () => {
+    const good = srv('serena', 'project');
+    write('shape.json', JSON.stringify({ version: 1, servers: [good, { ...good, name: 'no-entry', entry: 'npx x' }, { ...good, name: 'no-clients', clients: 'claude' }, { ...good, name: 'bad-key', key: 5 }], own: [{ name: 'mine', scope: 'local', choice: 'own' }, { name: 7, scope: 'local' }] }));
+    const read = readList(join(dir, 'shape.json'))!;
+    assert.deepStrictEqual(read.servers.map((server) => server.name), ['serena']);
+    assert.deepStrictEqual(read.own, [{ name: 'mine', scope: 'local', choice: 'own' }]);
+});
+
 test('writeList: unchanged is not rewritten', () => {
     const f = fresh('same.json');
     const doc = { version: LIST_VERSION, servers: [srv('serena', 'project')], own: [] };

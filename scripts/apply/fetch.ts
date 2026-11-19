@@ -19,6 +19,7 @@ import * as cli from '../core/claude-cli.ts';
 import { shimOfLaunch, spawnArgs } from '../core/cmd-line.ts';
 import * as account from '../core/account.ts';
 import * as kept from '../core/kept.ts';
+import { errorMessage } from '../core/guards.ts';
 import { expandVars } from '../entries/locations.ts';
 import { bridgeParts } from '../entries/entry.ts';
 import { signInParts } from '../entries/sign-in.ts';
@@ -35,17 +36,22 @@ const INIT = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVe
 // ${VAR} and ${VAR:-default}, as Claude Code expands them in an MCP entry (entries/locations.ts expandVars)
 export const expandedText = (text: unknown, env: Env): string => expandVars(text, env).value;
 // the first ${VAR} with no default that is not set: a start without it only fails
-const unsetVar = (entry: ServerEntry, env: Env): string | null => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((match) => match[1]!).find((variableName) => env[variableName] === undefined) || null;
+const unsetVar = (entry: ServerEntry, env: Env): string | null => [...JSON.stringify([entry.command, entry.args || [], entry.env || {}]).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)].map(([, variableName = '']) => variableName).find((variableName) => env[variableName] === undefined) || null;
 
 // How the runtime (npm, uvx, docker) is spawned, never the claude CLI, and with no limit of Claude Code's. Windows: one
 // quoted command line through the shell so npm.cmd resolves, and no args array (Node's DEP0190); the fetch step's own
 // `cmd /c` in front is dropped. The double escape is for a shim: realFetch resolves the name on the step's PATH and passes
 // `shim` (a Volta `npm.exe` is no shim); without it the name decides. See core/cmd-line.ts spawnArgs.
-export const fetchSpawnArgs = (argv: string[], platform: string, shim?: boolean) => spawnArgs(argv[0]!, argv.slice(1), platform, shim);
+export function fetchSpawnArgs(argv: string[], platform: string, shim?: boolean): ReturnType<typeof spawnArgs>
+{
+    const [command = '', ...rest] = argv;
+    return spawnArgs(command, rest, platform, shim);
+}
 
 function realFetch(argv: string[], { cwd, env }: { cwd: string; env: Env })
 {
-    const shim = process.platform === 'win32' ? shimOfLaunch(argv[0]!, argv.slice(1), env, fs.existsSync, cwd) : undefined;
+    const [command = '', ...rest] = argv;
+    const shim = process.platform === 'win32' ? shimOfLaunch(command, rest, env, fs.existsSync, cwd) : undefined;
     const spawnArguments = fetchSpawnArgs(argv, process.platform, shim);
     return spawnSync(spawnArguments.file, spawnArguments.args, { cwd, env, encoding: 'utf8', timeout: FETCH_LIMIT_MS, windowsHide: true, shell: spawnArguments.shell, stdio: ['ignore', 'pipe', 'pipe'] });
 }
@@ -57,7 +63,9 @@ function stopTree(child: ChildProcessByStdio<Writable, Readable, Readable>): Pro
     {
         if (child.exitCode !== null || child.signalCode !== null) return resolve();
         if (process.platform === 'win32') { spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }); return resolve(); }
-        const kill = (signal: NodeJS.Signals) => { try { process.kill(-child.pid!, signal); } catch { /* already gone */ } };
+        // a server that never started has no pid: there is nothing to signal, and the wait below ends it as before
+        const pid = child.pid;
+        const kill = (signal: NodeJS.Signals) => { if (pid === undefined) return; try { process.kill(-pid, signal); } catch { /* already gone */ } };
         const hard = setTimeout(() => { kill('SIGKILL'); resolve(); }, KILL_AFTER_MS);
         child.once('exit', () => { clearTimeout(hard); kill('SIGKILL'); resolve(); });
         kill('SIGTERM');
@@ -75,7 +83,7 @@ export function realStart(entry: ServerEntry, { cwd, env, ms: timeoutMillisecond
         const startedAt = Date.now();
         let child: ChildProcessByStdio<Writable, Readable, Readable>;
         try { child = spawn(expandedText(entry.command, env), (entry.args || []).map((argument) => expandedText(argument, env)), { cwd, env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32', windowsHide: true }); }
-        catch (caught) { const error = caught as NodeJS.ErrnoException; resolve({ ok: false, ms: 0, why: error.message }); return; }
+        catch (caught) { resolve({ ok: false, ms: 0, why: errorMessage(caught) }); return; }
         let out = '';
         let err = '';
         let settled = false;
@@ -95,7 +103,8 @@ export function realStart(entry: ServerEntry, { cwd, env, ms: timeoutMillisecond
         child.stdout.on('data', (chunk) =>
         {
             const lines = `${out}${chunk}`.split('\n');
-            out = lines.pop()!;
+            // split gives at least one part: the last, unfinished line
+            out = lines.pop() ?? '';
             for (const line of lines)
             {
                 let msg: { id?: unknown; result?: unknown; error?: unknown };
@@ -198,9 +207,9 @@ export async function runFetchJob(job: FetchJob, { env = process.env, runFetch =
         }
         log(`${stepNumber}. ...    starting '${step.name}' once (a first start can download more, such as a model)`);
         // serena writes its settings at that start (D7), where the home is one the plugin may edit
-        const home = step.row === 'serena' && entry.env && entry.env.SERENA_HOME;
-        const editable = Boolean(home) && serenaConfig.editableHome(home as string, { platform: process.platform }).ok;
-        const keyWasThere = editable && serenaConfig.folderState(serenaConfig.configOf(home as string), home as string) === 'same';
+        const home = (step.row === 'serena' && entry.env && entry.env.SERENA_HOME) || null;
+        const editable = home !== null && serenaConfig.editableHome(home, { platform: process.platform }).ok;
+        const keyWasThere = home !== null && editable && serenaConfig.folderState(serenaConfig.configOf(home), home) === 'same';
         const startResult = await start(entry, { cwd, env });
         if (startResult.ok)
         {
