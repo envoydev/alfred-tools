@@ -1642,3 +1642,15 @@ Page: https://pypi.org/project/macos-mcp/ (read 2026-11-19); the published 0.4.7
 - Side effect, same page: an HTTP or SSE server's per-request timer is 'the greatest of three values: 60 seconds, the
   tool timeout that applies to the server, and `MCP_TIMEOUT`', so with 90000 a hosted server's stalled request waits
   90 s before it fails, not 60 s.
+
+## Cursor - an MCP server's start limit (read 2026-11-19)
+
+- https://cursor.com/docs/context/mcp names no start limit, connection timeout or setting for one, and says nothing of
+  a stdio server that fails to start; its FAQ says a crash or timeout shows an error in chat and marks the tool call
+  failed, and that Cursor isolates one server's failure from the others.
+- Forum reports only, not verified: an interactive server timing out after about 4-5 minutes
+  (https://forum.cursor.com/t/custom-mcp-server-timed-out-time-is-extremely-short/145618), and a cursor-agent CLI
+  `startupTimeoutSec` setting (unconfirmed by any doc).
+- So the start-timeout guard stays Claude Code's: nothing shows Cursor cuts a server at 30 s, and no documented
+  setting exists to raise.
+
