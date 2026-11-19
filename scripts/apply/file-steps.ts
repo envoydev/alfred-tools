@@ -248,13 +248,29 @@ export function listWrite(step: ListWriteStep, context: ApplyCtx, { failure = fa
     return lists.writeList(step.file, doc, read);
 }
 
+// The file a settings writer reads and writes: a symbolic link (a dotfiles manager's) is followed, so the temporary file and
+// the rename of writeJson replace the target and the link stays; a link whose target is not there is an error, named, with
+// nothing written. Anything else - absent, a regular file, a path lstat cannot read - is the file itself.
+// -> { file } | { error }
+function settingsTarget(file: string): { file: string } | { error: string }
+{
+    let isLink = false;
+    try { isLink = fs.lstatSync(file).isSymbolicLink(); } catch { return { file }; }
+    if (!isLink) return { file };
+    try { return { file: fs.realpathSync(file) }; }
+    catch { return { error: `${file} is a link to a file that is not there - left as it is` }; }
+}
+
 // The read guard (ruling 13): each rule permissions.deny lacks, appended in Claude Code's settings file - every other key,
 // value and order kept, written through a temporary file and a rename. An absent file reads as {}; one that is not a JSON
 // object is left as it is. -> { ok, detail, unchanged? }
 export function denyRead(file: string, rules: string[]): StepResult
 {
+    const target = settingsTarget(file);
+    if ('error' in target) return { ok: false, detail: target.error };
+    const real = target.file;
     let text: string | null = null;
-    try { text = fs.readFileSync(file, 'utf8'); } catch (caught) { const code = errorCode(caught); if (code !== 'ENOENT') return { ok: false, detail: `${file} cannot be read (${code}) - left as it is` }; }
+    try { text = fs.readFileSync(real, 'utf8'); } catch (caught) { const code = errorCode(caught); if (code !== 'ENOENT') return { ok: false, detail: `${file} cannot be read (${code}) - left as it is` }; }
     let doc: { permissions?: { deny?: string[] } } | null = {};
     if (text !== null)
     {
@@ -267,7 +283,7 @@ export function denyRead(file: string, rules: string[]): StepResult
     const lack = rules.filter((rule) => !deny.includes(rule));
     if (!lack.length) return { ok: true, unchanged: true, detail: `${file} already denies ${rules.join(' and ')} - left as it is` };
     const next = { ...doc, permissions: { ...(doc.permissions || {}), deny: [...deny, ...lack] } };
-    writeJson(file, next, null);
+    writeJson(real, next, null);
     return { ok: true, detail: `added ${lack.join(' and ')} to permissions.deny in ${file}` };
 }
 
@@ -277,8 +293,11 @@ export function denyRead(file: string, rules: string[]): StepResult
 // env is not one, is left as it is. -> { ok, detail, unchanged? }
 export function settingsEnv(file: string, env: Record<string, string>): StepResult
 {
+    const target = settingsTarget(file);
+    if ('error' in target) return { ok: false, detail: target.error };
+    const real = target.file;
     let text: string | null = null;
-    try { text = fs.readFileSync(file, 'utf8'); } catch (caught) { const code = errorCode(caught); if (code !== 'ENOENT') return { ok: false, detail: `${file} cannot be read (${code}) - left as it is` }; }
+    try { text = fs.readFileSync(real, 'utf8'); } catch (caught) { const code = errorCode(caught); if (code !== 'ENOENT') return { ok: false, detail: `${file} cannot be read (${code}) - left as it is` }; }
     let doc: unknown = {};
     if (text !== null) { try { doc = JSON.parse(stripBom(text)); } catch { doc = null; } }
     const held = isRecord(doc) ? doc[SETTINGS_ENV_KEY] : undefined;
@@ -287,7 +306,7 @@ export function settingsEnv(file: string, env: Record<string, string>): StepResu
     const present = held ?? {};
     const lack = Object.entries(env).filter(([name]) => !Object.hasOwn(present, name));
     if (!lack.length) return { ok: true, unchanged: true, detail: `${file} has ${Object.keys(env).join(' and ')} in ${SETTINGS_ENV_KEY} already - left as it is` };
-    writeJson(file, { ...doc, [SETTINGS_ENV_KEY]: { ...present, ...Object.fromEntries(lack) } }, null);
+    writeJson(real, { ...doc, [SETTINGS_ENV_KEY]: { ...present, ...Object.fromEntries(lack) } }, null);
     return { ok: true, detail: `added ${lack.map(([name, value]) => `${name}=${value}`).join(' and ')} to ${SETTINGS_ENV_KEY} in ${file}` };
 }
 
