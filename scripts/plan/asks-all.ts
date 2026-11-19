@@ -6,7 +6,7 @@ import { currentOf } from '../entries/entry.ts';
 import { installedOf, targetOf } from '../inventory/inventory.ts';
 import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
-import { liveReader, keyNameQuestion, urlNameQuestions, settingsQuestion, heldKey, keyStateOf } from './asks-keys.ts';
+import { liveReader, keyNameQuestion, urlNameQuestions, settingsQuestion, excludeQuestion, heldKey, keyStateOf } from './asks-keys.ts';
 import { pickQuestions, rootInUse } from './asks-picks.ts';
 import { changeQuestions, routeQuestion, scopeOrder } from './asks-tool.ts';
 import { STATIC, removeQuestions, clientsQuestion, toolAsk, targetClientsQuestion } from './asks-other.ts';
@@ -37,6 +37,7 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
     const context: AskCtx = { project: inventory.project, platform: inventory.os, arch: inventory.arch, home: home || homeDir(process.env), env, keyHome: home, exists: (filePath: string) => fs.existsSync(filePath) };
     // the roots answered so far (the walk asks them before a tool's folder), else the recommended ones
     context.roots = roots.resolveRoots(inventory, picks && picks.roots, { ...context, catalog }).roots;
+    context.knownRoots = roots.knownRoots(inventory, context.roots, { ...context, catalog });
     out.change = changeQuestions(inventory, catalog, context);
     // which apps (spec D3): asked once an install run, when it picked something
     out.clients = picks && (picks.rows || []).length ? clientsQuestion(cursorFound(context, inventory)) : null;
@@ -87,6 +88,7 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
     // D9, asked after the tool's questions: the key's name for each route that can use one, the settings of each stdio one
     out.keyNames = {};
     out.settings = {};
+    out.excludes = {};
     // a bridge's URL names (0.4.0): { <row id or target key>: { <VAR>: { question, answers } } }
     out.urlNames = {};
     const urlBlock = (list: (Asked<string> & { var: string })[]) => Object.fromEntries(list.map((urlQuestion) => [urlQuestion.var, { question: urlQuestion.question, answers: urlQuestion.answers }]));
@@ -104,6 +106,8 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
         if (urlQuestions.length) out.urlNames[id] = urlBlock(urlQuestions);
         const settings = settingsQuestion(row, routeId);
         if (settings) out.settings[id] = settings;
+        const exclude = excludeQuestion(row, routeId, { context });
+        if (exclude) out.excludes[id] = exclude;
     }
     for (const key of (picks && picks.targets) || [])
     {
@@ -133,6 +137,8 @@ export function allQuestions(inventory: Inventory, picks: Picks | null | undefin
         if (urlQuestions.length) out.urlNames[key] = urlBlock(urlQuestions);
         const settings = settingsQuestion(row, routeId, { entry: same ? registration.entry : null });
         if (settings) out.settings[key] = settings;
+        const exclude = excludeQuestion(row, routeId, { entry: same ? registration.entry : null, context });
+        if (exclude) out.excludes[key] = exclude;
     }
     return out;
 }

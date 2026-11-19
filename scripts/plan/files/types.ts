@@ -62,6 +62,7 @@ export interface PickAnswer
     token?: unknown; // stored - do not rename
     params?: ({ host?: string } & Record<string, string>) | undefined; // stored - do not rename
     urlNames?: Record<string, string> | undefined; // stored - do not rename
+    exclude?: boolean | undefined; // stored - do not rename
     row?: string | undefined; // stored - do not rename
     // filled by the planner, never in the file
     target?: Endpoint | undefined;

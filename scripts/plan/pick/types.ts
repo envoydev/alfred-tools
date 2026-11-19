@@ -37,6 +37,7 @@ export interface PickAnswers
     unfilledStdio: boolean;
     sendNow: boolean;
     urlNames: Record<string, string>;
+    exclude: boolean;
 }
 
 // The entry the pick writes, whether it is built fresh, its data folder and its hosted settings.

@@ -225,3 +225,10 @@ test('recordStep does not mutate its inputs', () => {
     assert.deepStrictEqual(JSON.parse(JSON.stringify({ step, built, chosen })), beforeStep);
     assert.notStrictEqual((result as { picks: object }).picks, state.picks);
 });
+
+test("macos-control's Shell question: 'Turn off the Shell tool' is exclude true, 'Keep every tool' false (spec D4)", () => {
+    const state = advanceTo(each(['macos-control']), 'macos-control:keys');
+    assert.ok(stepOf(state).step.call!.some((question) => question.id === 'exclude-macos-control'));
+    assert.strictEqual(entryOf(record(state), 'macos-control')!.exclude, true);
+    assert.strictEqual(entryOf(record(state, { 'exclude-macos-control': 'Keep every tool' }), 'macos-control')!.exclude, false);
+});

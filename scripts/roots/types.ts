@@ -56,6 +56,12 @@ export interface InventoryView
     alfredCodeEnabled?: boolean | undefined;
 }
 
+// What knownRoots reads: the inventory's roots as the plan sees them, with each family's root in use.
+export interface KnownRootsView extends InventoryView
+{
+    roots?: { map?: RootsMap | undefined; project?: InUse | null | undefined; global?: InUse | null | undefined } | null | undefined;
+}
+
 export type RootsCtx = Machine;
 
 // An answer to a root question: an option id, and the folder typed for 'named'.

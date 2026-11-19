@@ -70,6 +70,15 @@ export interface TokenForm
     optionalArgs?: { token?: string[] }; // stored - do not rename
 }
 
+// A file of tools the server leaves out at start, written into the root and named by a flag (macos-mcp's
+// `[tools] exclude`, spec D4).
+export interface ExcludeFile
+{
+    file: string; // stored - do not rename
+    flag: string; // stored - do not rename
+    tools: string[]; // stored - do not rename
+}
+
 // One way to run a row's server: a local runtime, a hosted URL, or the bridge.
 export interface CatalogRoute
 {
@@ -88,6 +97,7 @@ export interface CatalogRoute
     tokenVar?: string; // stored - do not rename
     optionalArgs?: { executablePath?: string[]; token?: string[]; [arg: string]: string[] | undefined }; // stored - do not rename
     optionalEnv?: { token?: Record<string, string> }; // stored - do not rename
+    excludeFile?: ExcludeFile; // stored - do not rename
     formerly?: TokenForm[]; // stored - do not rename
     envSince?: Record<string, string>; // stored - do not rename
     image?: { name: string; tag: string }; // stored - do not rename

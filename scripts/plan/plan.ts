@@ -57,6 +57,7 @@ export function plan(inventory: Inventory, answers: Answers, options: PlanOption
     const resolved = roots.resolveRoots(inventory, answers.roots, { ...context, catalog });
     out.errors.push(...resolved.errors);
     context.roots = resolved.roots;
+    context.knownRoots = roots.knownRoots(inventory, resolved.roots, { ...context, catalog });
     out.roots = context.roots;
     // what changed outside alfred-tools since its last write (spec D1): named first, only fix changes it
     out.outside = changedOutside(inventory, catalog);

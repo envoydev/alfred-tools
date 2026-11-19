@@ -2,6 +2,7 @@
 import { isInside, pathFor } from '../entries/platform.ts';
 import { rootOf } from '../entries/locations.ts';
 import { settingsOf } from '../entries/entry.ts';
+import { excludeArgAt, excludeRecommended, hasForeignExclude, userConfigPath } from '../entries/exclude.ts';
 import { routeField } from '../catalog/rows.ts';
 import { hostedSettingsQuestion } from './hosted-settings.ts';
 import * as keys from '../keys/keys.ts';
@@ -10,6 +11,7 @@ import { ALL_SCOPES } from '../core/constants.ts';
 import { PREFIX, RECOMMENDED_SUFFIX } from './record-constants.ts';
 import { plainLabel } from './record-resolve.ts';
 import type { Env, ServerEntry } from '../core/types.ts';
+import type { Machine } from '../entries/types.ts';
 import type { CatalogRoute, CatalogRow } from '../catalog/types.ts';
 import type { AskCtx, Asked, HostedSettingsAnswer, KeyState, NameAt } from './types.ts';
 
@@ -168,6 +170,27 @@ export function settingsQuestion(row: CatalogRow, routeId: string, { entry = nul
     return {
         question: { id: `${PREFIX.settings}${row.id}`, header: 'Settings', multiSelect: false, question: `${row.label}'s settings`, options: [keep, change] },
         answers: { [keep.label]: 'keep', [change.label]: 'change' },
+    };
+}
+
+// D4: macos-mcp's Shell tool. Off writes the root's exclude file and names it with the route's flag. At install Off is
+// recommended unless ~/.macos-mcp/config.toml is there (the plan reads only whether it exists); at configure what the
+// registration has now. One whose flag names a file of the user's is not asked. -> { question, answers: { <label>: off? } } | null
+export function excludeQuestion(row: CatalogRow, routeId: string, { entry = null, context }: { entry?: ServerEntry | null | undefined; context: Pick<Machine, 'platform' | 'project' | 'home' | 'exists' | 'roots' | 'knownRoots'> }): Asked<boolean> | null
+{
+    const route = row.routes[routeId];
+    const excludeFile = route ? route.excludeFile : undefined;
+    if (!excludeFile || hasForeignExclude(entry, excludeFile, context)) return null;
+    const off = entry ? excludeArgAt(entry, excludeFile, context) >= 0 : excludeRecommended(context);
+    const tools = excludeFile.tools.join(', ');
+    const offOption = { label: `Turn off the ${tools} tool`, description: `writes ${excludeFile.file} in the root and passes it with ${excludeFile.flag} - ${tools} runs commands with your full rights` };
+    const theirs = !entry && !off;
+    const keepOption = { label: 'Keep every tool', description: theirs ? `${userConfigPath(context)} is there: turning ${tools} off makes macos-mcp read this plugin's file in its place - adding "${tools}" to its [tools] exclude keeps both` : `${tools} stays on` };
+    const [first, second] = off ? [offOption, keepOption] : [keepOption, offOption];
+    const firstLabel = `${first.label}${RECOMMENDED_SUFFIX}`;
+    return {
+        question: { id: `${PREFIX.exclude}${row.id}`, header: 'Shell tool', multiSelect: false, question: `${row.label}: turn off its ${tools} tool?`, options: [{ label: firstLabel, description: first.description }, second] },
+        answers: { [firstLabel]: first === offOption, [second.label]: second === offOption },
     };
 }
 

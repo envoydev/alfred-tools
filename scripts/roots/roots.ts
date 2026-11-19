@@ -22,7 +22,7 @@ import { BRIDGE_VERSION } from '../copied/mcp-bridge.js';
 import type { Catalog, CatalogRow } from '../catalog/types.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Machine, Roots } from '../entries/types.ts';
-import type { Family, IgnoreGap, InUse, InventoryView, MapRead, PendingMove, RecordEntry, Resolved, RootAnswer, RootOption, RootReg, RootsCtx, RootsMap, ShippedKind, ShippedState, StandardRoot } from './types.ts';
+import type { Family, IgnoreGap, InUse, InventoryView, KnownRootsView, MapRead, PendingMove, RecordEntry, Resolved, RootAnswer, RootOption, RootReg, RootsCtx, RootsMap, ShippedKind, ShippedState, StandardRoot } from './types.ts';
 
 // A root folder's names: their home is core/constants.ts, which entries/ and keys/ can import (this file imports both).
 export { FILES, FORMER_ROOT_NAME, ROOT_NAME };
@@ -228,6 +228,15 @@ export function inUse(inventory: InventoryView, family: Family, context: RootsCt
     const pathApi = pathFor(context.platform);
     const held = standard(family, context).find((standardRoot) => exists(pathApi.join(standardRoot.root, FILES.secrets)));
     return held ? { path: held.root, from: 'secrets' } : null;
+}
+
+// The roots a registration may name as the plugin's (spec D4): this run's resolved roots of both families, and each
+// family's root in use - the old one during a root change, so its files are recognised and re-pointed.
+export function knownRoots(inventory: KnownRootsView, resolved: Partial<Record<Family, string | null | undefined>> | null | undefined, context: RootsCtx): string[]
+{
+    const inUseOf = (family: Family) => (inventory.roots && Object.hasOwn(inventory.roots, family) ? inventory.roots[family] : inUse(inventory, family, context));
+    const found = [...FAMILIES.map((family) => resolved && resolved[family]), ...FAMILIES.map((family) => inUseOf(family)?.path)];
+    return [...new Set(found.filter((root): root is string => typeof root === 'string' && root !== ''))];
 }
 
 // ---- the options ----------------------------------------------------------------------------------------------------

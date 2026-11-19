@@ -10,6 +10,7 @@ import { alfredSerenaHome, applyRoot, familyOf, rootOf, rootOfEntry } from './lo
 import { FILES } from '../core/constants.ts';
 import { API_KEY_FLAG, BRIDGE_SLOT, EXECUTABLE_PATH_FLAG } from './constants.ts';
 import { signInParts } from './sign-in.ts';
+import { withExclude } from './exclude.ts';
 import { routeField, routeNamed } from '../catalog/rows.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow, CatalogRules } from '../catalog/types.ts';
@@ -351,6 +352,7 @@ export function buildEntry(row: CatalogRow, routeId: string, answers: BuildAnswe
     if (!entry) throw new Error(`${row.id}: no registration form for the '${String(route.runtime)}' runtime`);
     // an optional key goes in the server's environment, never on its command line, where every process listing shows it (D1)
     if (answers.token && route.optionalEnv && route.optionalEnv.token) entry.env = { ...(entry.env || {}), ...route.optionalEnv.token };
+    if (answers.exclude) entry = withExclude(entry, route, true, answers.scope, context);
     if (row.locations && answers.rootStr !== undefined) entry = applyRoot(entry, row, answers.rootStr, answers.scope, context);
     // serena's home is set by now: its context file goes in it
     return applyContext(entry, answers.scope, context);

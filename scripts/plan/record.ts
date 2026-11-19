@@ -9,7 +9,7 @@ import { isRecord, isTextList } from '../core/shapes.ts';
 import { isLocationAnswer } from './files/shapes.ts';
 import type { Answers, Picks, RecordedStep, RecordInput, RecordResult, Refusal, Resolved, Run, Question } from './types.ts';
 
-const KEYED = [PREFIX.route, PREFIX.scope, PREFIX.name, PREFIX.location, PREFIX.browser, PREFIX.host, PREFIX.token, PREFIX.keyName, PREFIX.urlName, PREFIX.settings, PREFIX.clients];
+const KEYED = [PREFIX.route, PREFIX.scope, PREFIX.name, PREFIX.location, PREFIX.browser, PREFIX.host, PREFIX.token, PREFIX.keyName, PREFIX.urlName, PREFIX.settings, PREFIX.clients, PREFIX.exclude];
 
 const refuse = (refused: string): Refusal => ({ refused });
 const sameSet = (left: string[], right: string[]) => left.length === right.length && left.every((item) => right.includes(item));
@@ -188,6 +188,12 @@ function mapApps(run: Run, key: string | null, resolved: Resolved): Refusal | vo
     putEntry(run, ['clients'], resolved.value, !sameSet(resolved.value, run.target?.current?.clients ?? []));
 }
 
+function mapExclude(run: Run, resolved: Resolved): Refusal | void
+{
+    if (typeof resolved.value !== 'boolean') return refuse(`'${resolved.label}' has no Shell answer`);
+    putEntry(run, ['exclude'], resolved.value, resolved.index !== 0);
+}
+
 function mapOne(run: Run, question: Question, resolved: Resolved): Refusal | void
 {
     const { id } = question;
@@ -213,6 +219,7 @@ function mapOne(run: Run, question: Question, resolved: Resolved): Refusal | voi
     if (id.startsWith(PREFIX.keyName)) return mapKeyName(run, key, resolved);
     if (id.startsWith(PREFIX.urlName)) return mapUrlName(run, key, question, resolved);
     if (id.startsWith(PREFIX.settings)) return mapSettings(run, key, resolved);
+    if (id.startsWith(PREFIX.exclude)) return mapExclude(run, resolved);
     return mapApps(run, key, resolved);
 }
 

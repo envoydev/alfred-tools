@@ -67,8 +67,9 @@ export function nextQuestion(inventory: Inventory, picks: Picks | null | undefin
         // allQuestions always gives both maps; a tool with no entry in one has nothing to ask there
         const keyNameAsk = tokens[toolId] === false ? null : builtQuestions.keyNames?.[toolId];
         const settingsAsk = builtQuestions.settings?.[toolId];
+        const excludeAsk = builtQuestions.excludes?.[toolId];
         const urlAsks = Object.values((builtQuestions.urlNames || {})[toolId] || {});
-        add(`${toolId}:keys`, toolId, [keyNameAsk && keyNameAsk.question, ...urlAsks.map((urlAsk) => urlAsk.question), settingsAsk && settingsAsk.question], { ...(keyNameAsk ? { [keyNameAsk.question.id]: keyNameAsk.answers } : {}), ...Object.fromEntries(urlAsks.map((urlAsk) => [urlAsk.question.id, urlAsk.answers])), ...(settingsAsk ? { [settingsAsk.question.id]: settingsAsk.answers } : {}) });
+        add(`${toolId}:keys`, toolId, [keyNameAsk && keyNameAsk.question, ...urlAsks.map((urlAsk) => urlAsk.question), settingsAsk && settingsAsk.question, excludeAsk && excludeAsk.question], { ...(keyNameAsk ? { [keyNameAsk.question.id]: keyNameAsk.answers } : {}), ...Object.fromEntries(urlAsks.map((urlAsk) => [urlAsk.question.id, urlAsk.answers])), ...(settingsAsk ? { [settingsAsk.question.id]: settingsAsk.answers } : {}), ...(excludeAsk ? { [excludeAsk.question.id]: excludeAsk.answers } : {}) });
     };
     const toolSteps = (toolBlock: ToolBlock, id: string, rootStep: (() => void) | null) =>
     {

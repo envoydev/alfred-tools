@@ -752,6 +752,13 @@
           "env": {
             "ANONYMIZED_TELEMETRY": "false"
           },
+          "excludeFile": {
+            "file": "macos-mcp.toml",
+            "flag": "--config",
+            "tools": [
+              "Shell"
+            ]
+          },
           "fingerprints": [
             {
               "pkg": "macos-mcp"

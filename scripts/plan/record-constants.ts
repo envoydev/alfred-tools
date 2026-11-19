@@ -19,6 +19,7 @@ export const PREFIX = {
     root: 'root-',
     own: 'own-',
     clients: 'clients-',
+    exclude: 'exclude-',
 } as const;
 
 export const WALK_QUESTION = { settings: 'settings', clients: 'clients' } as const;

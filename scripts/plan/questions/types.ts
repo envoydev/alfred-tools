@@ -116,6 +116,7 @@ export interface Questions
     roots?: { questions: Question[]; answers: Record<string, Record<string, unknown>> }; // stored - do not rename
     keyNames?: Record<string, Asked<string>>; // stored - do not rename
     settings?: Record<string, Asked<string | HostedSettingsAnswer>>; // stored - do not rename
+    excludes?: Record<string, Asked<boolean>>; // stored - do not rename
     urlNames?: Record<string, Record<string, Asked<string>>>; // stored - do not rename
     next?: WalkStep; // stored - do not rename
 }

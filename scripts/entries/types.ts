@@ -26,11 +26,15 @@ export interface Machine
     arch?: string | undefined;
     env?: Env | undefined;
     roots?: Roots | null | undefined;
+    knownRoots?: string[] | undefined; // every root folder a --config may name as the plugin's: the resolved ones and those in use
     machine?: { docker?: boolean | undefined } | null | undefined;
     exists?: ((file: string) => boolean) | undefined;
     isDir?: ((file: string) => boolean) | undefined;
     catalog?: Catalog | undefined;
 }
+
+// What the --config test reads of a machine: where the roots are, and which roots are known.
+export type RootsView = Pick<Machine, 'platform' | 'project' | 'home' | 'roots' | 'knownRoots'>;
 
 // An installed registration, as the inventory reads it.
 export interface Registration
@@ -67,6 +71,7 @@ export interface BuildAnswers
     params?: Record<string, string | undefined> | undefined;
     urlNames?: Record<string, string> | undefined;
     settings?: Record<string, string> | undefined;
+    exclude?: boolean | undefined;
 }
 
 // A `headersHelper` command's helper file, the arguments after it, and those read as the helper reads them: the global

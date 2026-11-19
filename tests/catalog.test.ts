@@ -5,6 +5,7 @@ import path from 'node:path';
 import { load, fingerprintKey, CATALOG_DIR } from '../scripts/catalog/catalog.ts';
 import { reservedFrom } from '../scripts/catalog/refresh-reserved.ts';
 import * as bridge from '../scripts/copied/mcp-bridge.js';
+import { FILES } from '../scripts/core/constants.ts';
 import type { CatalogRoute } from '../scripts/catalog/types.ts';
 
 const cat = load();
@@ -338,4 +339,8 @@ test('the optional catalog fields keep their shapes: choices, helper headers and
             }
         }
     }
+});
+
+test('macos-control names its exclude file as the roots do (spec D4)', () => {
+    assert.deepStrictEqual(cat.byId.get('macos-control')!.routes['local']!.excludeFile, { file: FILES.macosExclude, flag: '--config', tools: ['Shell'] });
 });

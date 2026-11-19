@@ -7,3 +7,7 @@ export const API_KEY_FLAG = '--api-key';
 // A bridge launch, `node <path>/mcp-bridge.js <template> <KEY> <SCHEME> <pkg> [<root>] [--header <pair>]...`: each
 // argument's place counted from the bridge's own path.
 export const BRIDGE_SLOT = { path: 0, template: 1, keyName: 2, scheme: 3, packageSpec: 4, globalRoot: 5 } as const;
+
+// macos-mcp's own config file under the home: when it is there, turning a tool off makes the server read the root's file in
+// its place (spec D4)
+export const MACOS_USER_CONFIG = ['.macos-mcp', 'config.toml'] as const;

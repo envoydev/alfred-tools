@@ -4,6 +4,7 @@ import { formatRoot, applyRoot } from '../../entries/locations.ts';
 import { checkHostedSettings, currentHostedSettings, defaultHostedSettings } from '../hosted-settings.ts';
 import { buildEntry, applyContext, bridgeParts, helperParts, helperGlobalRoot, bridgePathFor, renameTemplate, helperFor, subst, rebridgedArgs } from '../../entries/entry.ts';
 import { EXECUTABLE_PATH_FLAG } from '../../entries/constants.ts';
+import { withExclude } from '../../entries/exclude.ts';
 import { routeField } from '../../catalog/rows.ts';
 import * as keys from '../../keys/keys.ts';
 import * as kept from '../../core/kept.ts';
@@ -24,6 +25,7 @@ function editedEntry(base: PickBase, answers: PickAnswers, current: Current, edi
     if (row.locations && edit.rootStr !== current.rootStr && edit.rootStr !== undefined) entry = applyRoot(entry, row, edit.rootStr, scope, context);
     // serena's context file follows the scope's root (D7)
     if (route.run && route.run.includes('{contextFile}')) entry = applyContext(entry, scope, context);
+    if (route.excludeFile) entry = withExclude(entry, route, answers.exclude, scope, context);
     if (route.optionalArgs && route.optionalArgs.executablePath && edit.wantExec !== current.executablePath)
     {
         const args = (entry.args || []).slice();
@@ -115,7 +117,7 @@ export function pickEntry(base: PickBase, answers: PickAnswers, pick: PickAnswer
     const { params, sendNow, keyName, urlNames } = answers;
     const fresh = !current || current.route !== routeId;
     const entry = !current || current.route !== routeId
-        ? buildEntry(row, routeId, { rootStr, scope, executablePath: wantExec, token: sendNow, keyName, params, urlNames, settings: toolSettings }, context, catalog.rules)
+        ? buildEntry(row, routeId, { rootStr, scope, executablePath: wantExec, token: sendNow, keyName, params, urlNames, settings: toolSettings, exclude: answers.exclude }, context, catalog.rules)
         : editedEntry(base, answers, current, { rootStr, wantExec, toolSettings }, context, out);
     return { entry, fresh, rootStr, ensure, dataAbs, hostedSettings: Boolean(hostedSettings) };
 }

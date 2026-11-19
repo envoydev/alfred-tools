@@ -2,6 +2,8 @@
 // bridge's URL names (0.4.0).
 import { keyStateOf, heldKey } from '../asks-keys.ts';
 import * as keys from '../../keys/keys.ts';
+import fs from 'node:fs';
+import { excludeArgAt, excludeRecommended } from '../../entries/exclude.ts';
 import { required } from '../required.ts';
 import type { Inventory } from '../../inventory/types.ts';
 import type { HostParams, PickAnswer, PickAnswers, PickBase, Plan, PlanCtx } from '../types.ts';
@@ -61,5 +63,9 @@ export function pickAnswers(base: PickBase, pick: PickAnswer, inventory: Invento
         }
     }
     if (unfilledStdio) out.notes.push(`${row.id}: fill ${keyName} in ${keyState.files[0]}, then /alfred-tools:configure -> Use a key from .mcps-secrets writes it in`);
-    return { params, wantToken, keyState, liveKey, keyName, unfilledStdio, sendNow, urlNames };
+    // macos-mcp's Shell (spec D4): answered, else what the registration has (its --config naming a known root's file), else
+    // Off unless ~/.macos-mcp/config.toml is there
+    const exists = context.exists || ((filePath: string) => fs.existsSync(filePath));
+    const exclude = !route.excludeFile ? false : pick.exclude !== undefined ? Boolean(pick.exclude) : sameRoute && current ? excludeArgAt(current.entry, route.excludeFile, context) >= 0 : excludeRecommended({ platform: context.platform, home: context.home, exists });
+    return { params, wantToken, keyState, liveKey, keyName, unfilledStdio, sendNow, urlNames, exclude };
 }

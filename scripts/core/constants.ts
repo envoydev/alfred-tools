@@ -28,7 +28,7 @@ export const NO_FILE_NAMES = new Set(['', '.', '..']);
 
 // ---- a root folder's names (roots/roots.ts re-exports FILES, ROOT_NAME, FORMER_ROOT_NAME) ---------------------------
 // the files a root folder holds, and the roots map's name in the plugin's data folder
-export const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json', signIns: 'mcp-remote-v1', serenaContext: 'serena-context.yml' };
+export const FILES = { secrets: '.mcps-secrets', helper: 'mcp-headers.js', record: 'preferred-tools.json', map: 'roots.json', bridge: 'mcp-bridge.js', list: 'mcps.json', signIns: 'mcp-remote-v1', serenaContext: 'serena-context.yml', macosExclude: 'macos-mcp.toml' };
 // the root folder's name, and the one this plugin gave it under its former name (preferred-tools until 0.4.0, spec D3)
 export const ROOT_NAME = '.alfred-tools';
 export const FORMER_ROOT_NAME = '.preferred-tools';
