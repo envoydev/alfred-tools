@@ -29,8 +29,10 @@ ask. It takes no argument: one typed after the command changes nothing - say so.
   passes data to a server it set up is one (the user's ruling, 2026-11-12): the check runs every `/alfred-tools:fix`
   row marked `upgrade` in `${CLAUDE_PLUGIN_ROOT}/catalog/fixes.json` - among them a key moved from an Authorization
   header to `mcp-headers.js` once the user has put it in `.mcps-secrets`, absolute project paths, the root's
-  `.gitignore`, the `.mcp.json` order, the deny rules and the retired plugins - offers what they find under 'New ways
-  to pass data', and applies it with fix's own code. A finding that needs the user - a key not filled yet, a folder to
+  `.gitignore`, the `.mcp.json` order, the deny rules and the retired plugins; context7's key moved from `--api-key`
+  into its environment (`context7-key-env`); sentry's variable renamed where its pin reads `SENTRY_AUTH_TOKEN`
+  (`sentry-auth-env`); and a managed server whose row was retired offered for removal (`retired-server`) - offers what
+  they find under 'New ways to pass data', and applies it with fix's own code. A finding that needs the user - a key not filled yet, a folder to
   name - is a note naming `/alfred-tools:fix`, never an offer.
 
 If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
@@ -50,7 +52,10 @@ folder as `<fix id>: <what it found>`. Below them: plugins whose marketplace lis
 (`claude plugin update` is the check for those, so each is offered on its own), releases held back, what was skipped (a hosted URL has no
 pin; a Docker image tag is not checked; a server on its own), and what could not be checked. Among the new ways to pass data,
 `retired-plugin` offers to uninstall a plugin the catalog no longer lists (typescript-lsp, csharp-lsp, claude-hud - they
-work in Claude Code alone), one offer per plugin and scope; one the user turned down before is not offered.
+work in Claude Code alone), one offer per plugin and scope; one the user turned down before is not offered. The same
+section also lists `context7-key-env` (a context7 key moved from `--api-key` into its environment), `sentry-auth-env`
+(sentry's variable renamed to `SENTRY_AUTH_TOKEN` where its pin reads that name) and `retired-server` (a managed server
+whose row the catalog retired, offered for removal).
 
 Above the tables, a line per server changed since alfred-tools last wrote it: '<name> was changed outside
 alfred-tools' (an update starts from the registration as it is, and carries it into the list and Cursor), or
@@ -91,6 +96,8 @@ offer carries 'None of these' (description `none`), which passes nothing.
 An uninstall offer (`upgrade:retired-plugin:<id>~<scope>`) shown under 'Pick which' and left unpicked is a decline, and
 so is one 'All of them' leaves out because alfred-code is set up (its label ends 'alfred-code also installs it, and this
 removes it for both'): pass each as `--input retired-declined=<id>~<scope>,...` in step 3, and it is not offered again.
+A removal offer (`upgrade:retired-server:<name>~<scope>`) left unpicked is a decline too: pass the
+`retired-declined=<id>~<scope>` its note prints.
 When nothing else was picked, step 3 runs with `none`. 'Skip' declines nothing.
 
 Each question in `cursorOffers` is asked as printed, one per root, by this procedure:

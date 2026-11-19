@@ -84,6 +84,11 @@ serena runs with a context file of the plugin's, `serena-context.yml`, that give
 reading, editing and searching stay with the app's own tools. See [serena's folders](#serenas-folders) for where its
 files live.
 
+macos-control's Shell tool runs shell commands and AppleScript. Install and configure ask 'Turn off the Shell tool'
+(recommended unless `~/.macos-mcp/config.toml` exists). Off writes `macos-mcp.toml` in the root and passes it with
+`--config`; an existing file is never overwritten. The root's `.gitignore` keeps the file in git like serena's context
+(it holds no secret). A `--config` naming any file outside the roots is yours and left alone.
+
 ## The four commands
 
 - **`/alfred-tools:install`** adds tools that are not installed in this project. It never changes, moves or removes
@@ -238,9 +243,11 @@ CONTEXT7_API_KEY=ctx7sk-...   # a note after whitespace and # is not part of the
   the first value found wins, so one key in the global root serves every project.
 - A local server (github in Docker, sentry with `npx`) gets its key written into its registration at Local or Global
   scope; `/alfred-tools:fix` writes it again after you change it. Those routes are not offered at Project scope.
-  context7's local route (`npx`) with a key gets it written in the same way at Local or Global scope, as `--api-key`
-  on the server's command line, where the machine's process list shows it; at Project scope it runs without a key,
-  so the committed `.mcp.json` carries none. The hosted route keeps the key out of both.
+  context7's local route (`npx`) with a key gets it written in the same way at Local or Global scope, in its
+  environment (`CONTEXT7_API_KEY`), never on the command line; at Project scope it runs without a key, so the
+  committed `.mcp.json` carries none. The hosted route keeps the key out of both.
+  Sentry's local route passes the key to the server as `SENTRY_AUTH_TOKEN` (the name `@sentry/mcp-server` reads from
+  0.48.0); the name in `.mcps-secrets` stays `SENTRY_ACCESS_TOKEN`.
 - The helper prints a key only when Claude Code runs it; run by hand it prints `{}`. The file itself is plain text: a
   command that reads it shows its keys, so keep it out of anything you share.
 - After an install, the plan says for each keyed server whether its key is filled, and how it connects once it is. A
@@ -371,7 +378,10 @@ only what you pick, in one confirmation:
   and `base_modes: []` in its `serena_config.yml`, the two deny rules are added, and each retired plugin is offered for
   uninstall. The next version adds two: serena's `serena_config.yml` gets the line that sends new project folders to its
   home (an existing `.serena/` folder is named, never moved), and a hand-added server that runs its own key helper is
-  moved to the plugin's. These run before the version moves, so both changes stay.
+  moved to the plugin's. 0.7.0 adds three: context7's key moves from `--api-key` into its environment, sentry's
+  variable is renamed to `SENTRY_AUTH_TOKEN` where its pin reads that name, and a managed server whose row the catalog
+  retired is offered for removal (`/alfred-tools:fix` offers it too; not picking it is a decline, kept per project).
+  These run before the version moves, so all of these changes stay.
 - **Cursor** - asked with the updates, once per root, when Cursor is on this machine and the root's servers are set
   up for Claude Code only. 'Not now' is remembered in the list.
 

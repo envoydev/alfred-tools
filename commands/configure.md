@@ -131,8 +131,9 @@ what to fix. What each step is:
   and no key value, and names both.
 - **A registration**: its first question is 'Who looks after <name>?'. 'Leave it on its own' ends this pick: configure,
   update and fix skip it from now on. 'alfred-tools' goes on to its route, scope and name, location and extras, key name
-  and settings, then 'Set up <name> for which apps?'. A change of the apps alone makes no `claude` call: the plan writes
-  the list and Cursor's file only.
+  and settings, then 'Set up <name> for which apps?'. macos-control's extras add 'Turn off the Shell tool' (what it has
+  is recommended; your own `--config` file is not asked). A change of the apps alone makes no `claude` call: the plan
+  writes the list and Cursor's file only.
 
 <!-- shared:typed-values -->
 
@@ -154,8 +155,7 @@ A bridge route (sentry's 'Bridge') adds one 'URL name' question per value its UR
 takes effect when the server starts again: say to restart Claude Code or reconnect it in `/mcp`.
 
 A scope change on an MCP server is a move: a copy for every project moved to Local is gone from the other projects. To
-keep it there and add this project's own copy, use `/alfred-tools:install`; say so when the user picks another scope for
-a Global registration.
+keep it there and add this project's own copy, use `/alfred-tools:install`; say so for a Global registration.
 
 ## 6. Prerequisites
 
@@ -205,9 +205,9 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --skip <tmp>/inventory.json <tmp>/p
 node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" <tmp>/inventory.json <tmp>/answers.json --out <tmp>/plan.json --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
-Paste the output verbatim in a fenced block. An entry that holds a credential
-outside its key helper is a plan error, never written. A root change notes that the user copies the values from the old
-`.mcps-secrets` to the new one themselves - say it again after the apply. Exit 1 means the plan has errors; show them
+Paste the output verbatim in a fenced block. An entry that holds a credential outside its key helper is a plan error,
+never written. A root change notes that the user copies the old `.mcps-secrets` values to the new one - say it again
+after the apply. Exit 1 means the plan has errors; show them
 and rewind the pick each names (below), never go around them.
 
 <!-- shared:cursor-name -->
@@ -253,7 +253,7 @@ the apply ask again with the plan as it was. `'another'` - ask for the pick in o
 from what is typed through `change.keys`. With the pick chosen it drops that pick's recorded steps and prints the walk's
 next step. Run step 5's loop again to `done` from that `next`, then steps 6 and 7's plan again, then the apply ask.
 
-A plan that says 'Nothing to do': show that and stop without asking.
+A plan that says 'Nothing to do': show it and stop.
 
 ## 8. Apply
 

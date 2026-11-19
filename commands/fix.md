@@ -43,6 +43,12 @@ claude-hud, its own statusLine goes too, any other line stays). One the user tur
 APPLICABLE: <id> is kept at <scope>; remove it with ...': advice, never offered again. Where alfred-code is set up, the
 line ends '<id> - alfred-code also installs it, and this removes it for both'.
 
+`retired-server` offers to remove a server the plugin manages whose row the catalog retired (`claude mcp remove`, then
+its list entry and Cursor's copy). Its line's note names the decline to pass; one declined before is NOT APPLICABLE.
+`context7-key-env` and `sentry-auth-env` rewrite a registration - context7's key from `--api-key` into its environment,
+sentry's variable to `SENTRY_AUTH_TOKEN` - keeping the value and printing nothing of it. `macos-config` writes a missing
+`macos-mcp.toml` again, the file a managed macos-control's `--config` names.
+
 A finding about a parent folder's `.mcp.json` ends 'NOT APPLICABLE: run /alfred-tools:fix in <folder>': that file
 is the parent's, and fix run there repairs it. `data-folder-ignore` also finds a 0.2.0 copy a session made in this
 folder (`.alfred/playwright-chrome`, say) that no server uses any more: its fix writes the copy's `.gitignore`, and its
@@ -77,7 +83,8 @@ Ask `choose` as one AskUserQuestion, exactly as printed:
 - 'Skip' - say nothing was changed and stop. Nothing is declined, so the uninstall offer comes back next time.
 
 A decline is passed as `--input retired-declined=<id>~<scope>,<id>~<scope>` - the plugin id and scope from each
-`retired-plugin` line - and recorded in the plugin's data folder.
+`retired-plugin` line, and for a `retired-server` the `retired-declined=` its note prints - and recorded in the plugin's
+data folder.
 
 Then ask the questions in `drift` as printed, one AskUserQuestion per call (at most four questions) - whatever the
 answer to `choose`, except 'Skip'. Each is one server whose copy in one app changed by hand:

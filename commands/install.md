@@ -147,6 +147,9 @@ These labels are answered by a value typed next, one plain line each (see the Ru
 A bridge route (sentry's 'Bridge') asks one 'URL name' question per value its URL takes from `.mcps-secrets`, beside the
 key name. A URL value is a plain name the user writes in `.mcps-secrets`, never a key.
 
+macos-control also asks, in its keys step, 'Turn off the Shell tool' or 'Keep every tool', answered as printed (no typed
+value). The recommendation is Off, unless `~/.macos-mcp/config.toml` exists.
+
 ## 5. Prerequisites
 
 ```

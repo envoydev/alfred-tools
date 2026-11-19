@@ -446,7 +446,7 @@ claude plugin update alfred-tools@envoydev</code></pre>
             <dl class="facts">
               <div><dt>Hosted</dt><dd><code>https://mcp.context7.com/mcp</code> - recommended, nothing to run</dd></div>
               <div><dt>Local</dt><dd><code>npx</code> - <code>@upstash/context7-mcp</code> 4.7.0</dd></div>
-              <div><dt>Key</dt><dd>Optional, <code>CONTEXT7_API_KEY</code>. Without it the rate limits are lower.</dd></div>
+              <div><dt>Key</dt><dd>Optional, <code>CONTEXT7_API_KEY</code>. Without it the rate limits are lower. At Local or Global the local route passes it in the server's environment.</dd></div>
             </dl>
           </div>
         </article>
@@ -539,7 +539,7 @@ claude plugin update alfred-tools@envoydev</code></pre>
               <div><dt>Needs</dt><dd><code>uvx</code></dd></div>
               <div><dt>Key</dt><dd>None</dd></div>
             </dl>
-            <p class="caution"><b>Can run code.</b> Its <code>Shell</code> tool runs shell commands and AppleScript.</p>
+            <p class="caution"><b>Can run code.</b> Its <code>Shell</code> tool runs shell commands and AppleScript. Install offers to turn it off, and recommends that unless macos-mcp's own config file (<code>~/.macos-mcp/config.toml</code>) exists.</p>
           </div>
         </article>
 
@@ -566,7 +566,7 @@ claude plugin update alfred-tools@envoydev</code></pre>
               <div><dt>Hosted</dt><dd><code>https://mcp.sentry.dev/mcp</code> - recommended. A key, or OAuth without one.</dd></div>
               <div><dt>Local</dt><dd><code>npx</code> - <code>@sentry/mcp-server</code> 0.49.0. A key is required.</dd></div>
               <div><dt>Bridge</dt><dd>The hosted server, limited to one organization and project. See <a href="#bridge">the Sentry bridge</a>.</dd></div>
-              <div><dt>Key</dt><dd>Recommended, <code>SENTRY_ACCESS_TOKEN</code> - a Sentry user auth token</dd></div>
+              <div><dt>Key</dt><dd>Recommended, <code>SENTRY_ACCESS_TOKEN</code> - a Sentry user auth token, passed to the local server as <code>SENTRY_AUTH_TOKEN</code></dd></div>
             </dl>
           </div>
         </article>
@@ -641,7 +641,7 @@ CONTEXT7_API_KEY=ctx7sk-...   # a note after whitespace and # is not part of the
           <div class="chain"><span>.mcps-secrets</span><i>&rarr;</i><span>mcp-bridge.js</span><i>&rarr;</i><span>mcp-remote</span><i>&rarr;</i><span>the vendor's server</span></div>
         </div>
         <div>
-          <p><strong>A local server with a key</strong> (github in Docker, sentry with <code>npx</code>, context7 with <code>npx</code>). The key is written into the registration when you apply, at Local or Global scope only, so it never lands in a file you commit; context7's sits on the server's command line, as <code>--api-key</code>. At Project scope context7's local route runs without a key. After you change the key, run <code>/alfred-tools:fix</code> to write it again.</p>
+          <p><strong>A local server with a key</strong> (github in Docker, sentry with <code>npx</code>, context7 with <code>npx</code>). The key is written into the registration when you apply, at Local or Global scope only, so it never lands in a file you commit; context7's sits in the server's environment (<code>CONTEXT7_API_KEY</code>), not on its command line. At Project scope context7's local route runs without a key. After you change the key, run <code>/alfred-tools:fix</code> to write it again.</p>
           <div class="chain"><span>.mcps-secrets</span><i>&rarr;</i><span>the registration</span><i>&rarr;</i><span>the local server</span></div>
         </div>
       </div>
@@ -654,7 +654,7 @@ CONTEXT7_API_KEY=ctx7sk-...   # a note after whitespace and # is not part of the
             <tr><td>github</td><td><code>GITHUB_PERSONAL_ACCESS_TOKEN</code></td><td class="wrap">A GitHub personal access token</td></tr>
             <tr><td>gitlab</td><td><code>GITLAB_TOKEN</code></td><td class="wrap">A fine-grained personal access token with the MCP tool resource and the Execute permission</td></tr>
             <tr><td>atlassian</td><td><code>ATLASSIAN_API_TOKEN</code></td><td class="wrap"><code>email:api_token</code></td></tr>
-            <tr><td>sentry</td><td><code>SENTRY_ACCESS_TOKEN</code></td><td class="wrap">A Sentry user auth token</td></tr>
+            <tr><td>sentry</td><td><code>SENTRY_ACCESS_TOKEN</code></td><td class="wrap">A Sentry user auth token, passed to the local server as <code>SENTRY_AUTH_TOKEN</code></td></tr>
             <tr><td>context7</td><td><code>CONTEXT7_API_KEY</code></td><td class="wrap">A Context7 API key (optional)</td></tr>
             <tr><td>sonarqube</td><td><code>SONARQUBE_TOKEN</code></td><td class="wrap">A SonarQube Cloud user token (My Account, Security)</td></tr>
             <tr><td>sonarqube</td><td><code>SONARQUBE_ORG</code></td><td class="wrap">Your organization key (optional): it fixes the organization for every request; left empty, the tools take an <code>organization</code> argument</td></tr>

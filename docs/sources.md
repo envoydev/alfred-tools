@@ -1573,3 +1573,29 @@ Pages: https://code.claude.com/docs/en/managed-mcp.md and https://code.claude.co
   `MCP_REMOTE_CONFIG_DIR` in `env`; an npx row on native Windows, `cmd /c npx -y ...`.
 - No script of the plugin reads or writes `allowedMcpServers`, `deniedMcpServers` or `managed-mcp.json` (a grep of
   `scripts/`, 2026-11-19).
+
+## context7 - the key in the environment (read 2026-11-19)
+
+Page: https://www.npmjs.com/package/@upstash/context7-mcp (read 2026-11-19); the published packs of 4.5.0 and 4.7.0.
+
+- 4.5.0 and 4.7.0 read `cliOptions.apiKey`, then `process.env.CONTEXT7_API_KEY` (`dist/index.js:675` / `:647`).
+- They print 'Running without an API key' for an unexpanded `${CONTEXT7_API_KEY}` (`:678` / `:650`).
+
+## Sentry MCP server - SENTRY_AUTH_TOKEN (read 2026-11-19)
+
+Page: https://www.npmjs.com/package/@sentry/mcp-server (read 2026-11-19); the published packs of each release named.
+
+- 0.43.0-0.47.0 hold no `SENTRY_AUTH_TOKEN`; 0.48.0 is the first that does.
+- 0.49.0 reads both names, the old one as a deprecated alias (`dist/sentry-mcp.cjs:3172-3176`).
+- 0.42.0 reads only `SENTRY_ACCESS_TOKEN`.
+
+## macos-mcp 0.4.7 - serve --config (read 2026-11-19)
+
+Page: https://pypi.org/project/macos-mcp/ (read 2026-11-19); the published 0.4.7 source.
+
+- `serve --config <path>` (`macos_mcp/__main__.py:564`) reads a TOML file whose `[tools] exclude = [...]` removes those
+  tools at start (`:705-710`). There is no exclude flag.
+- An explicit path replaces `~/.macos-mcp/config.toml` (`infrastructure/config.py:46-52`).
+- A missing explicit path raises `FileNotFoundError` (`config.py:76-77`, called at `__main__.py:635-637`), so the
+  server does not start; it never falls back to the defaults.
+- Tool names, per the README: App, Shell, Snapshot, Click, Type, Scroll, Move, Shortcut, Wait, Scrape, Notification.

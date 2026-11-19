@@ -52,8 +52,8 @@
         "npm run validate"
       ],
       "notes": [
-        "Every catalog row is an MCP server (kind: mcp, 14 rows); there are no plugin rows since 0.5.0 (claude-hud, typescript-lsp and csharp-lsp left), and a plugin row returns only when it works in both Claude Code and Cursor.",
-        "Each row's routes are a hosted remote (url, authMode, header helper) or a local launch (runtime npx/uvx, package registry, name and pinned version, cutoff); npm run refresh-pins moves the pins under the 7-day release-age gate (rules.ageGateDays, rules.cutoff), and the vendor facts behind each row are in docs/sources.md.",
+        "Every catalog row is an MCP server (kind: mcp, 15 rows); there are no plugin rows since 0.5.0 (claude-hud, typescript-lsp and csharp-lsp left), and a plugin row returns only when it works in both Claude Code and Cursor.",
+        "Each row's routes are a hosted remote (url, authMode, header helper) or a local launch (runtime npx/uvx, package registry, name and pinned version, cutoff); npm run refresh-pins moves the pins under the 7-day release-age gate (AGE_DAYS in scripts/catalog/registry.ts), setting each moved route's own cutoff, and the vendor facts behind each row are in docs/sources.md.",
         "The claude CLI is the only writer of .mcp.json and the account .claude.json (claude mcp add-json/remove/get, claude plugin install/update/uninstall/list --json); the one exception is scripts/mcps-list/mcp-order.ts, a reorder-only rewrite of .mcp.json.",
         "Cursor is a second host: scripts/cursor/cursor-mcp.ts writes <project>/.cursor/mcp.json and ~/.cursor/mcp.json, so both are part of the install and are read beside Claude Code's.",
         "The catalog holds no secret: a hosted key is named by its helper block, which mcp-headers.js reads from .mcps-secrets, and a stdio key is only ever a ${VAR} reference.",

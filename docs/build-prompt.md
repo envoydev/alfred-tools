@@ -51,6 +51,9 @@ Done means every acceptance criterion in 'Acceptance criteria' holds and its pro
 The catalog held 17 rows until 0.5.0, which removed the three plugins (claude-hud, typescript-lsp, csharp-lsp): the
 catalog keeps only tools that work in Claude Code and Cursor (rulings 3, 5 and 6 of 'One list, both apps - 0.5.0').
 
+`catalog/tools.json` also holds a top-level `retired` list: the MCP rows the catalog dropped, which fix and update offer
+to remove from a project that still has one managed. It is empty in this release.
+
 Items marked (verify) are facts from the alfred-code record or from memory, unchecked against today's vendor docs. Step
 1 checks each one and records the source.
 
@@ -488,6 +491,21 @@ What 0.5.0 builds on them:
   the same run, and the plan names each Cursor entry that will ask to be approved again.
 - **A workspace.** Which folders form one is read from alfred-code's workspace record (ruling 10), never needed: no
   record, no workspace.
+
+## Pre-release follow-up - 0.7.0
+
+The spec is `docs/superpowers/specs/2026-11-19-pre-release-follow-up-design.md` (machine-local). One ruling line per
+picked approach, each this session's call under auto-run, 2026-11-19:
+
+- **G1 (a)** - the key in the route's env: context7's local route passes `CONTEXT7_API_KEY` in its environment, never
+  as `--api-key`; fix row `context7-key-env` (upgrade 0.7.0) moves an older registration.
+- **G2 (a)** - pass `SENTRY_AUTH_TOKEN` to sentry's local route, keep the key's name `SENTRY_ACCESS_TOKEN`; fix row
+  `sentry-auth-env` renames the variable where the pin reads it.
+- **G3 (a)** - a top-level `retired` list in `catalog/tools.json` and an `upgrade` removal row, `retired-server`.
+- **G4 (a)** - a root TOML file, `macos-mcp.toml`, named by `--config`, asked at install and configure ('Turn off the
+  Shell tool'); fix row `macos-config` writes it again when missing.
+- **G5 (a)** - the two rule keys (`rules.ageGateDays`, `rules.cutoff`) removed; `AGE_DAYS` in
+  `scripts/catalog/registry.ts` is the gate's one home.
 
 ## The install command - `commands/install.md`
 
