@@ -1677,3 +1677,24 @@ Page: https://pypi.org/project/macos-mcp/ (read 2026-11-19); the published 0.4.7
 - So the start-timeout guard stays Claude Code's: nothing shows Cursor cuts a server at 30 s, and no documented
   setting exists to raise.
 
+
+## Read guard - Edit rules, and Cursor's equivalent (read 2026-11-20)
+
+- https://code.claude.com/docs/en/permissions, 'What Read and Edit rules cover': 'A `Read` deny rule also blocks the
+  Edit and Write tools on the same path, including creating a new file there. NotebookEdit isn't covered, so add an
+  `Edit` deny rule for paths no tool may change. For the Write tool, the check requires Claude Code v2.1.228 or
+  later.' So the two `Read(...)` rules already stop Claude Code's Edit and Write tools on `.mcps-secrets` and
+  `mcp-remote-v1/`; an `Edit(...)` rule would add NotebookEdit only, which never edits either. No Edit rule is written.
+- Same page: the rules 'don't apply to a command that reads files without naming them, such as `grep -r pattern .`
+  ... [or] a Python or Node script that opens files itself' - the G1 routes, unchanged.
+- Cursor's editor: https://cursor.com/docs/context/ignore-files - `.cursorignore` blocks 'Code accessible by Agent and
+  Tab' and '@ mention references'; 'The terminal and MCP server tools used by Agent cannot block access to code
+  governed by `.cursorignore`'; 'complete protection isn't guaranteed due to LLM unpredictability'. A global list
+  exists - 'Set ignore patterns for all projects in user settings' - whose setting key the page does not name. Whether
+  it covers Agent edits is not stated.
+- Cursor's CLI: https://cursor.com/docs/cli/reference/permissions - `permissions.deny` with `Read(pathOrGlob)` and
+  `Write(pathOrGlob)` tokens in `~/.cursor/cli-config.json` (global) or `<project>/.cursor/cli.json`; 'Deny rules take
+  precedence over allow rules'. The page frames them as 'your CLI configuration' and does not say the editor's Agent
+  reads them - not verified.
+- So Cursor has no documented guard with Claude Code's reach: the closest are the global ignore list (by hand, key
+  unnamed) and the CLI deny rules (CLI only, as documented). Neither stops the terminal, as in Claude Code.
