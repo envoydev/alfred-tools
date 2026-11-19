@@ -15,6 +15,7 @@ import * as F from '../scripts/fix/fix-functions.ts';
 import { makeCtx, detectAll, applyFixes, questions, renderFixes } from '../scripts/fix/fix.ts';
 import { runFixCommand } from '../scripts/fix/command.ts';
 import * as C from '../scripts/fix/common.ts';
+import { READ_GUARD_RESIDUAL } from '../scripts/fix/constants.ts';
 import fs from 'node:fs';
 import fsx from 'node:fs';
 import { existsSync } from 'node:fs';
@@ -1836,6 +1837,9 @@ test('read-guard finds every config dir with the plugin', () =>
         const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'read-guard');
         assert.deepStrictEqual(found.map((f) => f.name).sort(), [path.join(dirs['-old']!, 'settings.json'), path.join(dirs['-personal']!, 'settings.json')].sort());
         assert.ok(found.find((f) => f.name.startsWith(dirs['-personal']!))!.found.startsWith(`${dirs['-personal']!} has alfred-tools installed and does not deny ${SECRETS_RULE}`));
+        // the routes the rules leave open, residual by the user's ruling (2026-11-19): named in every finding
+        const residual = process.platform === 'win32' ? READ_GUARD_RESIDUAL.win32 : READ_GUARD_RESIDUAL.sandboxed;
+        for (const finding of found) assert.ok(finding.found.endsWith(residual), finding.found);
         assert.deepStrictEqual(configDirsWithPlugin(w.home, dirs['']!).sort(), [dirs['-old']!, dirs['-personal']!].sort());
         const l = logged();
         const res = applyFixes(ctxOf(w), ['read-guard'], { tmp: path.join(w.dir, 'tmp'), log: l.log });

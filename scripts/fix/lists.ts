@@ -21,6 +21,7 @@ import * as workspace from '../roots/workspace.ts';
 import { deepEqual } from '../core/json-file.ts';
 import * as serenaConfig from '../apply/serena-config.ts';
 import { fieldOf, isManaged } from './common.ts';
+import { READ_GUARD_RESIDUAL } from './constants.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRow } from '../catalog/types.ts';
 import type { ListServer } from '../mcps-list/types.ts';
@@ -128,14 +129,15 @@ export function readGuardDetect(context: FixCtx): Finding[]
     if (!want.length) return [];
     const bad = (file: string): Finding => ({ id: 'read-guard', name: file, scope: null, rules: want, found: `${file}: not a settings object alfred-tools can read`, blocked: `add ${want.join(' and ')} to permissions.deny yourself` });
     const out: Finding[] = [];
+    const residual = context.platform === 'win32' ? READ_GUARD_RESIDUAL.win32 : READ_GUARD_RESIDUAL.sandboxed;
     const current = readGuardOf(context, want);
     if (current.bad) out.push(bad(current.file));
-    else if (current.rules.length) out.push({ id: 'read-guard', name: current.file, scope: null, rules: current.rules, found: `${current.file} does not deny ${current.rules.join(' or ')} - an AI session's Read tool can open ${why.join(' and ')}` });
+    else if (current.rules.length) out.push({ id: 'read-guard', name: current.file, scope: null, rules: current.rules, found: `${current.file} does not deny ${current.rules.join(' or ')} - an AI session's Read tool can open ${why.join(' and ')}${residual}` });
     for (const dir of configDirsWithPlugin(context.home, pathApi.dirname(current.file), context.platform))
     {
         const guard = readGuardOf(context, want, dir);
         if (guard.bad) out.push(bad(guard.file));
-        else if (guard.rules.length) out.push({ id: 'read-guard', name: guard.file, scope: null, rules: guard.rules, found: `${dir} has alfred-tools installed and does not deny ${guard.rules.join(' or ')} - an AI session's Read tool can open ${why.join(' and ')}`, afterNote: `${dir}: read guard added - it keeps its own plugin data, so an update there may offer a declined uninstall again` });
+        else if (guard.rules.length) out.push({ id: 'read-guard', name: guard.file, scope: null, rules: guard.rules, found: `${dir} has alfred-tools installed and does not deny ${guard.rules.join(' or ')} - an AI session's Read tool can open ${why.join(' and ')}${residual}`, afterNote: `${dir}: read guard added - it keeps its own plugin data, so an update there may offer a declined uninstall again` });
     }
     return out;
 }

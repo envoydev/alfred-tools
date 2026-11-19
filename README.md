@@ -322,7 +322,10 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
   from a folder above, or a script that opens the file itself, unless Claude Code's sandbox is on (`/sandbox`; macOS,
   Linux and WSL2, not native Windows). A key the plugin writes into a local server's registration (github in Docker,
   sentry with `npx`, context7 with `npx` and a key) sits in Claude Code's account file and, for Cursor's copy, in
-  `~/.cursor/mcp.json`, which no rule covers. The plugin adds the two rules when it first writes a sign-in entry or a
+  `~/.cursor/mcp.json`, which no rule covers. Both routes are known and left open on purpose: closing them would mean
+  turning the sandbox on for every project, or a rule that also blocks the plugin's own calls. With the sandbox on,
+  the rules also reach the plugin's own key fills, and Claude Code offers to rerun those unsandboxed. The plugin adds
+  the two rules when it first writes a sign-in entry or a
   key name; a rule you remove by hand comes back on the next plan that needs it. `/alfred-tools:fix` and
   `/alfred-tools:update` also add them
   to every other Claude Code config folder on this machine (`~/.claude`, `~/.claude-<name>`) that has this plugin

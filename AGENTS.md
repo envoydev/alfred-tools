@@ -129,8 +129,12 @@ The first five plus `kit:check` are what CI runs, in that order.
   `Read(//**/.mcps-secrets)`. They reach Claude Code's file tools and the Bash file commands it recognizes (`cat`,
   `head`, `tail`, `sed`), not a `grep -r` run from a folder above or a script that opens the file itself, unless Claude
   Code's sandbox is on (macOS, Linux, WSL2); and a stdio key written into a registration sits in the account file and,
-  for Cursor's copy, in `~/.cursor/mcp.json`, which no rule covers (`docs/sources.md`, F15). Both are open gaps until a
-  guard covers them.
+  for Cursor's copy, in `~/.cursor/mcp.json`, which no rule covers (`docs/sources.md`, F15). Both are residual risks the
+  user accepted (2026-11-19, 'Record as residual'): no guard closes the shell routes without the sandbox, which is off
+  by default and blocks broadly, and a `Read` deny on the account file would also stop the plugin's own `claude` and
+  `node` calls whenever the sandbox runs. With the sandbox on, the two rules reach every shell command - the plugin's
+  own key fills (`apply.ts`, fix `token-sync`) included, which Claude Code then offers to rerun unsandboxed (from the
+  docs, not measured; `docs/sources.md`, 'Read guard - the residual routes').
 - **Paths absolute at every scope** (the user's ruling, 2026-11-11, 'Absolute, always'), `project` included, with `~`
   expanded by the script: one data folder whatever folder Claude starts in, at the cost that the committed `.mcp.json`
   names this machine's path. Never a key in `.mcp.json`. Every file the plugin writes for a scope family sits in that

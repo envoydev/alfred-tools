@@ -912,6 +912,12 @@ Each step ends with its check; the next step starts only when it passes.
 - Three servers expose a tool that runs arbitrary code (Playwright's `browser_run_code_unsafe`, windows-mcp's `App` in
   mode `launch_executable`, macos-mcp's `Shell`). This build adds no guard of its own; see the deny-row line under
   'Optional'. It relies on no other plugin's guard.
+- Key reads past the read guard (the system audit's G1 and G2, 2026-11-19). The two `Read` deny rules stop the file
+  tools and `cat`-style commands, not a `grep -r` or a script, unless the sandbox is on; a stdio key written into a
+  registration sits in the account file and `~/.cursor/mcp.json`, which no rule covers. The user's ruling (2026-11-19,
+  'Record as residual', over a launcher for stdio keys and over offering the sandbox): no further guard - the sandbox
+  blocks broadly and a deny on the account file would also stop the plugin's own calls under it. The routes are named
+  in AGENTS.md, README, the guide and every read-guard finding (`docs/sources.md`, 'Read guard - the residual routes').
 - Shared plugins. alfred-code also installs claude-hud and the LSP pair, and its update installs an absent pick, so it
   may add back one that alfred-tools removed. The plugins stay standalone (no hand-over), so the gap stays open.
   Mitigation: while `claude plugin list --json` shows alfred-code enabled, the walk notes on those three rows that
@@ -992,3 +998,5 @@ at alfred-tools for those three would make one plugin need the other.
 
 - Claude Code lets a plugin's server take a per-project name - then plugin-declared servers beat plain registrations.
 - A fix row is applied on the same machine more than twice - the install-time rule behind it is wrong.
+- Claude Code ships a sandbox on native Windows, or a read rule that reaches shell commands without one - then the
+  read guard can close G1 and G2.

@@ -1599,3 +1599,24 @@ Page: https://pypi.org/project/macos-mcp/ (read 2026-11-19); the published 0.4.7
 - A missing explicit path raises `FileNotFoundError` (`config.py:76-77`, called at `__main__.py:635-637`), so the
   server does not start; it never falls back to the defaults.
 - Tool names, per the README: App, Shell, Snapshot, Click, Type, Scroll, Move, Shortcut, Wait, Scrape, Notification.
+
+## Read guard - the residual routes (read 2026-11-19)
+
+- https://code.claude.com/docs/en/sandboxing.md: 'The sandbox is off by default'; on, 'the shell commands Claude runs
+  start inside its boundary, and so do the processes they start'; its network has 'No direct route out' and allowed
+  domains that 'start empty'; 'The sandbox runs on macOS, Linux, and WSL2. On native Windows, Claude Code runs commands
+  unsandboxed.' Other processes Claude Code starts - 'command hooks, local MCP servers ... and helper commands' - run
+  outside it with full access, so `mcp-headers.js` (a `headersHelper`) and the bridge (an MCP server) still read
+  `.mcps-secrets` with the sandbox on.
+- Same page: permission rules are merged into the sandbox configuration (recorded above, 'Claude Code's sandbox', read
+  2026-11-18). So with the sandbox on, `Read(//**/.mcps-secrets)` also reaches the plugin's own scripts that a session
+  runs through Bash and that read a key value (`apply.ts` writing a stdio key in, fix `token-sync`); the page's
+  'unsandboxed retry' is how such a call runs - Claude asks first in the default modes. Inferred from the page, not
+  measured.
+- https://code.claude.com/docs/en/settings-reference.md: `sandbox.credentials.files` `deny` entries are 'the same read
+  block as `sandbox.filesystem.denyRead`' and act only inside the sandbox; `permissions.blockReadsOutsideWorkingDirectories`
+  makes the file tools refuse reads outside the working directories but 'Claude Code doesn't refuse shell commands the
+  same way'.
+- So: with the sandbox off no setting stops a `grep -r` or a script, and a `Read` deny on the account file would, with
+  the sandbox on, stop the plugin's own `claude` and `node` calls too. The user's ruling (2026-11-19, 'Record as
+  residual'): no further guard; the routes are named in AGENTS.md, README, the guide and every read-guard finding.
