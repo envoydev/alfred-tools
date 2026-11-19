@@ -49,7 +49,7 @@ function reAdd(w: World, name: string, entry: ServerEntry, scope = 'local')
     assert.strictEqual(cli.runClaude(['mcp', 'add-json', name, JSON.stringify(entry), '-s', scope], { cwd: w.project, env: w.env }).status, 0);
 }
 // a Cursor copy as the tests edit it
-type Copy = { args: string[]; env: Record<string, string> & { SENTRY_ACCESS_TOKEN?: string; MINE?: string }; headers: Record<string, string> };
+type Copy = { args: string[]; env: Record<string, string> & { SENTRY_AUTH_TOKEN?: string; MINE?: string }; headers: Record<string, string> };
 function editCursor(file: string, name: string, change: ((copy: Copy) => unknown) | null)
 {
     const doc = readJson(file);
@@ -141,7 +141,7 @@ function keyInRegistrationOnly(w: World)
     fs.writeFileSync(path.join(root, '.mcps-secrets'), 'SENTRY_ACCESS_TOKEN=\n');
     return value;
 }
-const sentryKey = (e: { env: Record<string, string> & { SENTRY_ACCESS_TOKEN?: string } }) => e.env.SENTRY_ACCESS_TOKEN;
+const sentryKey = (e: { env: Record<string, string> & { SENTRY_AUTH_TOKEN?: string } }) => e.env.SENTRY_AUTH_TOKEN;
 
 test('a stdio keyed copy restored in Cursor takes the value from the registration when the key files lack it', () =>
 {
@@ -165,7 +165,7 @@ test('a Cursor copy whose key field is empty where the list holds the key offers
     try
     {
         const value = keyInRegistrationOnly(w);
-        editCursor(globalCursor(w), 'sentry', (e) => { e.env.SENTRY_ACCESS_TOKEN = ''; });
+        editCursor(globalCursor(w), 'sentry', (e) => { e.env.SENTRY_AUTH_TOKEN = ''; });
         const found = drifts(w);
         assert.deepStrictEqual(found.map((f) => [f.app, f.change, f.keyEmpty]), [['cursor', 'differs', true]]);
         const [q] = driftQs(w) as [DriftQuestion];

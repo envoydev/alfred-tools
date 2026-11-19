@@ -6,6 +6,7 @@ import { FAMILIES } from '../roots/roots.ts';
 import { pinnedVersion } from '../inventory/fingerprint.ts';
 import { bumpEntry } from './offers-plugins.ts';
 import * as kept from '../core/kept.ts';
+import * as keys from '../keys/keys.ts';
 import { errorMessage } from '../core/guards.ts';
 import type { Release } from '../catalog/types.ts';
 import type { UpdateCheck, UpdateCtx } from './types.ts';
@@ -48,7 +49,9 @@ export async function mcpOffers(context: UpdateCtx, out: UpdateCheck): Promise<v
         const pick = registryLib.choose(versions, { registry: packageSpec.registry, now: context.now, current: from });
         if (pick.held.length) out.held.push(`${at}: ${registryLib.heldLine(packageSpec.name, pick.held)}`);
         if (!pick.offer) continue;
-        const entry = bumpEntry(registration.entry, packageSpec.name, pick.offer.version, registryLib.cutoffOf(context.now));
+        const bumped = bumpEntry(registration.entry, packageSpec.name, pick.offer.version, registryLib.cutoffOf(context.now));
+        // a key name the new pin reads in place of the old one goes with the pin, in the same rewrite (spec D2)
+        const entry = bumped ? keys.renameSinceEnv(bumped, routeDefinition, pick.offer.version) : null;
         if (!entry) { out.errors.push(`${at}: could not move the pin of ${packageSpec.name} in the registration as it is written - change it with /alfred-tools:configure`); continue; }
         out.offers.push({ kind: 'mcp', id: `mcp:${registration.name}~${registration.scope}`, name: registration.name, scope: registration.scope, row: registration.rowId, route: registration.route, package: packageSpec.name, from, to: pick.offer.version, ageDays: pick.offer.ageDays, cutoff: registryLib.cutoffOf(context.now), old: registration.entry, entry, group: 'mcp', label: `${registration.name} (${registration.scope})` });
     }

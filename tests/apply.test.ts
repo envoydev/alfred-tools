@@ -329,7 +329,7 @@ test('no token value reaches any file the install wrote', () => {
         }
         // a hosted key is read by mcp-headers.js when Claude Code connects: the committed entry names the helper, no key
         assert.deepStrictEqual(mcpJson(w).mcpServers.github, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: helperCmd(path.join(w.project, '.alfred-tools', 'mcp-headers.js'), 'GITHUB_PERSONAL_ACCESS_TOKEN', 'Bearer') });
-        assert.strictEqual(accountDoc(w).mcpServers.sentry.env.SENTRY_ACCESS_TOKEN, '', 'a key in the shell is never written in: the apply reads .mcps-secrets only');
+        assert.strictEqual(accountDoc(w).mcpServers.sentry.env.SENTRY_AUTH_TOKEN, '', 'a key in the shell is never written in: the apply reads .mcps-secrets only');
     }
     finally { w.clean(); }
 });
@@ -577,6 +577,7 @@ test('apply makes its temp folder as tmpdir.ts does: in the real temp folder, af
 // ---- key files (D7): the key is written in by the target scope, from the file the scope reads ----------------------
 
 const S = 'SENTRY_ACCESS_TOKEN';
+const SA = 'SENTRY_AUTH_TOKEN';
 const G = 'GITHUB_PERSONAL_ACCESS_TOKEN';
 // alfred-code enabled for every project, as `claude plugin list` and the user settings report it
 function alfredOn(w: World)
@@ -599,7 +600,7 @@ test('a stdio key at local scope is written in from the key file, a hosted route
         const r = walk(w, { picks: { sentry: { route: 'local', scope: 'local' }, github: { route: 'remote', scope: 'project' } } });
         assert.deepStrictEqual(r.p.errors, []);
         assert.strictEqual(r.report.failed, null, r.text);
-        assert.strictEqual(accountDoc(w).projects[accountKey(w.project)].mcpServers.sentry.env[S], s, 'the value, as the file holds it');
+        assert.strictEqual(accountDoc(w).projects[accountKey(w.project)].mcpServers.sentry.env[SA], s, 'the value, as the file holds it');
         assert.deepStrictEqual(mcpJson(w).mcpServers.github, { type: 'http', url: 'https://api.githubcopilot.com/mcp/', headersHelper: helperCmd(path.join(w.project, '.alfred-tools', 'mcp-headers.js'), G, 'Bearer') }, 'the project file names the helper by absolute path');
         assert.ok(r.text.includes(`${S} for 'sentry' (local) from ${path.join(w.project, '.alfred-tools', '.mcps-secrets')}`), r.text);
         noValueIn(w, r, [s, g]);
@@ -687,7 +688,7 @@ test('a missing key writes an empty value, never a ${VAR}, and the note names th
     {
         const r = walk(w, { picks: { sentry: { route: 'local', scope: 'local' } } });
         assert.strictEqual(r.report.failed, null, r.text);
-        assert.strictEqual(accountDoc(w).projects[accountKey(w.project)].mcpServers.sentry.env[S], '');
+        assert.strictEqual(accountDoc(w).projects[accountKey(w.project)].mcpServers.sentry.env[SA], '');
         assert.ok(r.text.includes(`fill ${S} in ${path.join(w.project, '.alfred-tools', '.mcps-secrets')}, then run /alfred-tools:configure and keep ${S} as the key's name - it writes the key in`), r.text);
     }
     finally { w.clean(); }
@@ -781,7 +782,7 @@ test('the apply writes a stdio key from the stdio chain under the chosen name; n
         mcps(path.dirname(file), { ACME_SENTRY_TOKEN: s });
         const r = walk(w, { picks: { sentry: { route: 'local', scope: 'local' } }, keyNames: { sentry: 'ACME_SENTRY_TOKEN' } });
         assert.strictEqual(r.report.failed, null, r.text);
-        assert.strictEqual(accountDoc(w).projects[accountKey(w.project)].mcpServers.sentry.env[S], s);
+        assert.strictEqual(accountDoc(w).projects[accountKey(w.project)].mcpServers.sentry.env[SA], s);
         assert.ok(r.text.includes(`ACME_SENTRY_TOKEN for 'sentry' (local) from ${file}`), r.text);
         noValueIn(w, r, [s]);
         onlyIn(w, s, [file, account.accountFile(w.env)]);

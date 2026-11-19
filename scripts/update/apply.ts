@@ -10,6 +10,7 @@ import * as mcpOrder from '../mcps-list/mcp-order.ts';
 import { reapproveLine } from '../plan/cursor-steps.ts';
 import { repairTail } from '../plan/repair-tail.ts';
 import * as account from '../core/account.ts';
+import * as keys from '../keys/keys.ts';
 import { bumpEntry } from './offers-plugins.ts';
 import { upgradeCatalog } from './offers-files.ts';
 import { ordered } from './check.ts';
@@ -48,7 +49,9 @@ function updateMcp(context: ApplyCtx, offer: McpOffer, tmp: string, log: Log): b
     if (context.touched.has(`${offer.name}~${offer.scope}`))
     {
         const now = inventory.buildInventory({ project: context.project, env: context.env, run: context.runCli, data: context.data, catalog: context.catalog }).registrations.find((registration) => registration.name === offer.name && registration.scope === offer.scope);
-        const entry = now ? bumpEntry(now.entry, offer.package, offer.to, offer.cutoff) : null;
+        const route = offer.row && offer.route ? context.catalog.byId.get(offer.row)?.routes[offer.route] : undefined;
+        const bumped = now ? bumpEntry(now.entry, offer.package, offer.to, offer.cutoff) : null;
+        const entry = bumped ? keys.renameSinceEnv(bumped, route, offer.to) : null;
         if (!now || !entry) { log(`CHECK  ${offer.label}: rewritten earlier in this run and no longer pins ${offer.package} - left`); return false; }
         offer = { ...offer, old: now.entry, entry };
     }

@@ -340,3 +340,13 @@ test('on win32 the shared sign-in form is wrapped in cmd /c npx', () => {
     assert.deepStrictEqual([f.command, f.args!.slice(0, 4)], ['cmd', ['/c', 'npx', '-y', `mcp-remote@${MR.version}`]]);
     assert.deepStrictEqual(signInParts(f), { url: 'https://mcp.sentry.dev/mcp', dir: 'C:\\Users\\me\\.alfred-tools', pin: `mcp-remote@${MR.version}` });
 });
+
+test('stdioKeyed sees a key in each place a route keeps it now or kept it before: Cursor is refused at Local for each (spec D0)', () => {
+    const c7 = catalog.byId.get('context7');
+    const sentry = catalog.byId.get('sentry');
+    assert.strictEqual(C.stdioKeyed({ command: 'npx', args: ['-y', '@upstash/context7-mcp@4.5.0', '--api-key', 'test-key-not-real'] }, c7, 'local'), true, 'context7 before 0.7.0');
+    assert.strictEqual(C.stdioKeyed({ command: 'npx', args: ['-y', '@upstash/context7-mcp@4.7.0'], env: { CONTEXT7_API_KEY: 'test-key-not-real' } }, c7, 'local'), true);
+    assert.strictEqual(C.stdioKeyed({ command: 'npx', args: ['-y', '@sentry/mcp-server@0.42.0'], env: { SENTRY_ACCESS_TOKEN: 'test-key-not-real' } }, sentry, 'local'), true, 'sentry before 0.7.0');
+    assert.strictEqual(C.stdioKeyed({ command: 'npx', args: ['-y', '@sentry/mcp-server@0.49.0'], env: { SENTRY_AUTH_TOKEN: 'test-key-not-real' } }, sentry, 'local'), true);
+    assert.strictEqual(C.stdioKeyed({ command: 'npx', args: ['-y', '@upstash/context7-mcp@4.7.0'] }, c7, 'local'), false);
+});

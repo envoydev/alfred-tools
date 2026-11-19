@@ -974,6 +974,7 @@ test('fix makes its temp folder as tmpdir.ts does: in the real temp folder, afte
 // ---- the 0.2.0 key rows (D7): key-to-helper, helper-missing, helper-stale, root-ignore, token-sync on stdio -----------
 
 const SK = 'SENTRY_ACCESS_TOKEN';
+const SA = 'SENTRY_AUTH_TOKEN';
 const GK = 'GITHUB_PERSONAL_ACCESS_TOKEN';
 const SENTRY = (value: string) => ({ command: 'npx', args: ['-y', '@sentry/mcp-server@0.42.0'], env: { [SK]: value } });
 const GITHUB = (value: string) => ({ command: 'docker', args: ['run', '-i', '--rm', '-e', GK, 'ghcr.io/github/github-mcp-server:v2.1.0', 'stdio'], env: { [GK]: value } });
@@ -2217,24 +2218,24 @@ test('token-sync with a key changed in .mcps-secrets refills ~/.cursor/mcp.json 
         secretsAt(homeRoot(w), { [SK]: v1 });
         installBoth(w, { picks: { sentry: { route: 'local', scope: 'user', token: true } } });
         const cursorFile = path.join(w.home, '.cursor', 'mcp.json');
-        assert.strictEqual(readJson(cursorFile).mcpServers.sentry.env[SK], v1, 'the install wrote the key into Cursor');
+        assert.strictEqual(readJson(cursorFile).mcpServers.sentry.env[SA], v1, 'the install wrote the key into Cursor');
         secretsAt(homeRoot(w), { [SK]: v2 });
         const ts = () => detect(ctxOf(w), 'token-sync').found;
         assert.deepStrictEqual(ts().map((f) => [f.name, f.scope, Boolean(f.blocked)]), [['sentry', 'user', false]]);
         const l = logged();
         assert.strictEqual(applyFixes(ctxOf(w), ['token-sync'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
-        assert.strictEqual(userEntry(w, 'sentry')!.env![SK], v2);
-        assert.strictEqual(readJson(cursorFile).mcpServers.sentry.env[SK], v2, 'Cursor\'s copy refilled');
+        assert.strictEqual(userEntry(w, 'sentry')!.env![SA], v2);
+        assert.strictEqual(readJson(cursorFile).mcpServers.sentry.env[SA], v2, 'Cursor\'s copy refilled');
         assert.deepStrictEqual(ts(), []);
         // Cursor's copy alone behind: found, and refilled with no claude call
         const doc = readJson(cursorFile);
-        doc.mcpServers.sentry.env[SK] = v1;
+        doc.mcpServers.sentry.env[SA] = v1;
         writeJson(cursorFile, doc);
         const [f] = ts() as [Finding];
         assert.match(f.found, /Cursor's copy in .*mcp\.json holds a key/);
         const calls = w.calls().length;
         assert.strictEqual(applyFixes(ctxOf(w), ['token-sync'], { tmp: path.join(w.dir, 'tmp'), log: l.log }).failed, null, l.text());
-        assert.strictEqual(readJson(cursorFile).mcpServers.sentry.env[SK], v2);
+        assert.strictEqual(readJson(cursorFile).mcpServers.sentry.env[SA], v2);
         assert.strictEqual(w.calls().slice(calls).filter((a) => a[0] === 'mcp' && a[1] !== 'list' && a[1] !== 'get').length, 0, 'Claude Code is not touched');
         assert.deepStrictEqual(ts(), []);
         for (const v of [v1, v2]) assert.ok(!l.text().includes(v), 'no value printed');

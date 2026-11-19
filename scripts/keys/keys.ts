@@ -12,6 +12,7 @@ import path from 'node:path';
 import { readDotenv, valueIn as helperValueIn } from '../copied/mcp-headers.js';
 import { ALFRED_DATA, FILES, FORMER_ROOT_NAME, ROOT_NAME } from '../core/constants.ts';
 import { PLACEHOLDER, valueAt } from '../core/kept.ts';
+import { compareVersions } from '../core/versions.ts';
 import { pathFor } from '../entries/platform.ts';
 import { isRecord, isServerEntry } from '../core/guards.ts';
 import type { ServerEntry } from '../core/types.ts';
@@ -213,3 +214,24 @@ export function nameOfValue(files: string[], value: unknown): string | null
 // A name that looks like a credential (spec D9, the docs' own test): a key belongs in .mcps-secrets, never in a setting.
 export const credentialName = (name: unknown): boolean => /TOKEN|SECRET|PASSWORD|KEY|AUTH/i.test(String(name));
 
+
+// The entry with each former env field renamed to the route's current name once the pin `to` reads it (`envSince`), the
+// value kept: sentry's SENTRY_ACCESS_TOKEN becomes SENTRY_AUTH_TOKEN from @sentry/mcp-server 0.48.0 (spec D2). Below that
+// pin, with a pin that is not a version, or with nothing to rename: the same object, unchanged.
+export function renameSinceEnv(entry: ServerEntry, route: CatalogRoute | null | undefined, to: string | null): ServerEntry
+{
+    if (!route || !route.envSince || to === null || !entry.env) return entry;
+    let env: Record<string, string> = entry.env;
+    for (const [name, since] of Object.entries(route.envSince))
+    {
+        const order = compareVersions(to, since);
+        const template = route.env ? route.env[name] : undefined;
+        if (order === null || order < 0 || template === undefined || Object.hasOwn(env, name)) continue;
+        const held = env;
+        const former = (route.formerly || []).flatMap((form) => Object.entries(form.env || {})).find(([formerName, formerTemplate]) => formerTemplate === template && Object.hasOwn(held, formerName));
+        if (!former) continue;
+        const [formerName] = former;
+        env = Object.fromEntries(Object.entries(held).map(([key, value]): [string, string] => (key === formerName ? [name, value] : [key, value])));
+    }
+    return env === entry.env ? entry : { ...entry, env };
+}

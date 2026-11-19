@@ -191,7 +191,7 @@ test('every fix row has the fields the brief names and points at an existing row
     const FIX = ['id', 'tool', 'os', 'symptom', 'detect', 'fix', 'verifiedOn', 'source'];
     assert.strictEqual(new Set(cat.fixes.map((f) => f.id)).size, cat.fixes.length);
     assert.deepStrictEqual(cat.fixes.map((f) => f.id), ['root-move', 'root-repoint', 'serena-windows-home', 'serena-windows-ts-shim', 'uvx-python', 'windows-arm-python',
-        'windows-npx-cmd', 'playwright-webmcp', 'appium-sdk-env', 'serena-telemetry', 'token-sync', 'context7-key-env', 'serena-context', 'serena-base-modes', 'serena-project-folder', 'list-import', 'retired-plugin', 'read-guard', 'client-drift', 'cursor-file', 'windows-mcp-one-per-desktop', 'data-folder-ignore', 'npx-cache-entry',
+        'windows-npx-cmd', 'playwright-webmcp', 'appium-sdk-env', 'serena-telemetry', 'token-sync', 'context7-key-env', 'sentry-auth-env', 'serena-context', 'serena-base-modes', 'serena-project-folder', 'list-import', 'retired-plugin', 'read-guard', 'client-drift', 'cursor-file', 'windows-mcp-one-per-desktop', 'data-folder-ignore', 'npx-cache-entry',
         'key-to-helper', 'helper-foreign', 'helper-missing', 'helper-stale', 'root-ignore', 'project-relative-path', 'mcp-order', 'helper-child-folder']);
     for (const f of cat.fixes)
     {
@@ -211,7 +211,7 @@ test('every fix row has the fields the brief names and points at an existing row
 // Then no guard treats the catalog as a key file, whatever words it knows.
 test('no catalog field named like a credential holds a plain string', () => {
     const CREDENTIAL = /(?:auth|token|key|secret|passw(?:or)?d|pwd|credentials?)$/i;
-    const NOT_A_VALUE = [/^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/, /^[A-Z][A-Z0-9_]*$/, /^--[a-z0-9-]+$/];
+    const NOT_A_VALUE = [/^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/, /^[A-Z][A-Z0-9_]*$/, /^--[a-z0-9-]+$/, /^\d+(\.\d+)+$/];
     const bad: string[] = [];
     const walk = (v: unknown, at: string): void =>
     {
@@ -302,7 +302,7 @@ test('sonarqube is a hosted token row with two region fingerprints', () => {
         headers: [{ header: 'SONARQUBE_ORG', var: 'SONARQUBE_ORG', label: 'organization key' }] });
     assert.deepStrictEqual(route.settings, [{ header: 'SONARQUBE_READ_ONLY', label: 'read-only tools', values: ['true'], default: 'true' },
         { header: 'SONARQUBE_TOOLSETS', label: 'toolsets', values: ['analysis', 'coverage', 'dependency-risks', 'duplications', 'issues', 'measures', 'projects', 'quality-gates', 'rules', 'security-hotspots'] }]);
-    const NOT_FOR_IT = ['windows-npx-cmd', 'npx-cache-entry', 'token-sync'];
+    const NOT_FOR_IT = ['windows-npx-cmd', 'npx-cache-entry', 'token-sync', 'sentry-auth-env'];
     for (const f of cat.fixes) assert.strictEqual(f.tool.includes('sonarqube'), f.tool.includes('sentry') && !NOT_FOR_IT.includes(f.id), f.id);
 });
 

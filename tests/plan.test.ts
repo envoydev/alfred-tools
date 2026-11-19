@@ -47,7 +47,7 @@ import type { Approval, Inventory, InvRegistration } from '../scripts/inventory/
 import type { Answers, AskCtx, CursorWritePlanStep, EnsureKeyNameStep, FileStep, ListWriteStep, McpAddStep, McpMoveStep, McpReplaceStep, MoveRootFileStep, PathStep, PickAnswer, Plan, Asked, Picks, PlanOptions, PlanStep, Question, RecordRootStep, RetireShippedStep, ToolBlock } from '../scripts/plan/types.ts';
 
 // the names the tests read off a map by a dotted read, named on its type
-type EntryEnv = Record<string, string> & { ALLOW_REMOTE_APP_URLS?: string; ANDROID_HOME?: string; ANONYMIZED_TELEMETRY?: string; EXTRA_FLAG?: string; GITHUB_TOOLSETS?: string; JAVA_HOME?: string; MCP_EXTRA_DIR?: string; MCP_MEMORY_SQLITE_PATH?: string; MCP_REMOTE_CONFIG_DIR?: string; MEMORY_API_TOKEN?: string; MY_FLAG?: string; MY_TOOL?: string; MY_VAR?: string; NO_UI?: string; PAGE_SOURCES_DIR?: string; SCREENSHOTS_DIR?: string; SENTRY_ACCESS_TOKEN?: string; SERENA_LOG_LEVEL?: string; TOOL_DIR?: string };
+type EntryEnv = Record<string, string> & { ALLOW_REMOTE_APP_URLS?: string; ANDROID_HOME?: string; ANONYMIZED_TELEMETRY?: string; EXTRA_FLAG?: string; GITHUB_TOOLSETS?: string; JAVA_HOME?: string; MCP_EXTRA_DIR?: string; MCP_MEMORY_SQLITE_PATH?: string; MCP_REMOTE_CONFIG_DIR?: string; MEMORY_API_TOKEN?: string; MY_FLAG?: string; MY_TOOL?: string; MY_VAR?: string; NO_UI?: string; PAGE_SOURCES_DIR?: string; SCREENSHOTS_DIR?: string; SENTRY_AUTH_TOKEN?: string; SERENA_LOG_LEVEL?: string; TOOL_DIR?: string };
 type Grp = { id: string; label: string };
 type ToolsKeyed = Record<string, ToolBlock> & { atlassian?: ToolBlock; context7?: ToolBlock; memory?: ToolBlock; serena?: ToolBlock };
 type MapKeyed = ServerMap & { context7?: ServerEntry; github?: ServerEntry };
@@ -206,7 +206,8 @@ test('routes: context7, github and sentry each build both ways; the others have 
     assert.deepStrictEqual(sr, { type: 'http', url: 'https://mcp.sentry.dev/mcp', headersHelper: 'node /work/shop/.alfred-tools/mcp-headers.js SENTRY_ACCESS_TOKEN Sentry-Bearer' });
     assert.deepStrictEqual(addStep(plan(inv(MAC), pickOne('sentry', { route: 'remote', token: false }), opts('/h'))).entry, { type: 'http', url: 'https://mcp.sentry.dev/mcp' });
     const sl = addStep(plan(inv(MAC), pickOne('sentry', { route: 'local' }), opts('/h'))).entry;
-    assert.strictEqual((sl.env as EntryEnv).SENTRY_ACCESS_TOKEN, '${SENTRY_ACCESS_TOKEN}');
+    assert.strictEqual((sl.env as EntryEnv).SENTRY_AUTH_TOKEN, '${SENTRY_ACCESS_TOKEN}');
+    assert.ok(!('SENTRY_ACCESS_TOKEN' in sl.env!));
     assert.match(plan(inv(MAC), pickOne('gitlab', { route: 'local' }), opts('/h')).errors[0]!, /no local route/);
     assert.match(plan(inv(MAC), pickOne('atlassian', { route: 'local' }), opts('/h')).errors[0]!, /no local route/);
     assert.strictEqual(addStep(plan(inv(MAC), pickOne('gitlab', { params: { host: 'git.corp.example' } }), opts('/h'))).entry.url, 'https://git.corp.example/api/v4/mcp');

@@ -861,7 +861,17 @@
           },
           "run": [],
           "env": {
-            "SENTRY_ACCESS_TOKEN": "${SENTRY_ACCESS_TOKEN}"
+            "SENTRY_AUTH_TOKEN": "${SENTRY_ACCESS_TOKEN}"
+          },
+          "formerly": [
+            {
+              "env": {
+                "SENTRY_ACCESS_TOKEN": "${SENTRY_ACCESS_TOKEN}"
+              }
+            }
+          ],
+          "envSince": {
+            "SENTRY_AUTH_TOKEN": "0.48.0"
           },
           "fingerprints": [
             {

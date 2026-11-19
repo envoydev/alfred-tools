@@ -186,3 +186,16 @@ test('tokenFields and fillKeys see a key in a former place the route declares, a
     assert.deepStrictEqual(keys.fillKeys(inEnv, c7moved, 'local', 'local', { CONTEXT7_API_KEY: v }).env, { npm_config_before: 'x', CONTEXT7_API_KEY: v });
     assert.deepStrictEqual(keys.tokenFields({ command: 'npx', args: ['-y', '@upstash/context7-mcp@4.7.0'] }, c7moved.routes['local']), [], 'a keyless entry holds no field');
 });
+
+test('renameSinceEnv renames a former env field from the pin that reads the new name, value kept (spec D2)', () => {
+    const route = row('sentry')!.routes['local']!;
+    const at = (version: string) => ({ command: 'npx', args: ['-y', `@sentry/mcp-server@${version}`], env: { npm_config_before: 'x', [S]: 'test-key-not-real' } });
+    assert.deepStrictEqual(keys.renameSinceEnv(at('0.42.0'), route, '0.49.0').env, { npm_config_before: 'x', SENTRY_AUTH_TOKEN: 'test-key-not-real' });
+    assert.deepStrictEqual(keys.renameSinceEnv(at('0.42.0'), route, '0.48.0').env, { npm_config_before: 'x', SENTRY_AUTH_TOKEN: 'test-key-not-real' });
+    const below = at('0.42.0');
+    assert.strictEqual(keys.renameSinceEnv(below, route, '0.47.0'), below, 'below 0.48.0: as it is');
+    assert.strictEqual(keys.renameSinceEnv(below, route, 'latest'), below, 'a pin that is not a version: as it is');
+    assert.strictEqual(keys.renameSinceEnv(below, route, null), below);
+    const now = { command: 'npx', args: ['-y', '@sentry/mcp-server@0.49.0'], env: { SENTRY_AUTH_TOKEN: 'k' } };
+    assert.strictEqual(keys.renameSinceEnv(now, route, '0.49.0'), now, 'already the new name');
+});
