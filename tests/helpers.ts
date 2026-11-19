@@ -47,6 +47,8 @@ export function world(prefix = 'pt-')
     const env = { ...process.env };
     // the catalog's key variables come from the test itself, never from the shell that runs it (the plan's defaults read them)
     for (const k of TOKEN_VARS) delete env[k];
+    // the start limit too: a Claude Code session whose settings hold it passes it to every command it runs
+    delete env['MCP_TIMEOUT'];
     // npm's cache is the world's, never the real one: `npm test` hands its scripts npm_config_cache, which npx-cache-entry
     // reads ahead of npm's own answer
     for (const k of Object.keys(env)) if (k.toLowerCase() === 'npm_config_cache') delete env[k];

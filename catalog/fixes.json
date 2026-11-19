@@ -446,7 +446,7 @@
         "win32"
       ],
       "kind": "file",
-      "symptom": "a server launched through npx, uvx or docker (or the sign-in form, which runs npx) asks its registry at every start, and Claude Code gives a server 30 s to start, so a slow first network of the day fails it until /mcp Reconnect - MCP_TIMEOUT in the env of Claude Code's settings gives it 90 s, in the current config dir and in every other one under the home that has the plugin installed",
+      "symptom": "Claude Code gives a server 30 s to start, and npx (the sign-in form included) asks the npm registry at every start, so a slow first network of the day fails it until /mcp Reconnect (uvx and docker launches get the same guard, unmeasured) - MCP_TIMEOUT in the env of Claude Code's settings gives it 90 s, in the current config dir and in every other one under the home that has the plugin installed",
       "detect": "startTimeoutDetect",
       "fix": null,
       "steps": "startTimeoutSteps",

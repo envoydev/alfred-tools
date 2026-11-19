@@ -1635,4 +1635,7 @@ Page: https://pypi.org/project/macos-mcp/ (read 2026-11-19); the published 0.4.7
 - Seen in the field: a server started through `cmd /c npx -y mcp-remote@<pin> <url>` on Windows logged 'connection timed
   out after 30000ms', printed nothing in those 30 s, and connected in 6.6 s on the retry.
 - The guard: `MCP_TIMEOUT=90000` added to `env` in Claude Code's settings by the `settings-env` step and fix's
-  `start-timeout` row; an existing `MCP_TIMEOUT` of any value is never replaced.
+  `start-timeout` row; an existing `MCP_TIMEOUT` of any value - in the file or in the environment - is never replaced.
+- Side effect, same page: an HTTP or SSE server's per-request timer is 'the greatest of three values: 60 seconds, the
+  tool timeout that applies to the server, and `MCP_TIMEOUT`', so with 90000 a hosted server's stalled request waits
+  90 s before it fails, not 60 s.

@@ -102,6 +102,8 @@ export class Harness
         for (const k of Object.keys(this.env)) if (k.startsWith('FAKE_CLAUDE') || k.startsWith('FAKE_RUNTIME')) delete this.env[k];
         // the key variables come from a case itself, never from the shell running the matrix (the plan's defaults read them)
         for (const k of TOKEN_VARS) delete this.env[k];
+        // the start limit too: a Claude Code session whose settings hold it passes it to every command it runs
+        delete this.env['MCP_TIMEOUT'];
         this.before = snapshot();
     }
 

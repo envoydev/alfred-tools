@@ -331,15 +331,18 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
   to every other Claude Code config folder on this machine (`~/.claude`, `~/.claude-<name>`) that has this plugin
   installed, and say which. Each of those folders keeps its own plugin data, so an update run there may offer a
   retired plugin's uninstall again after a 'No' given elsewhere.
-- **Start limit.** Claude Code gives a server 30 s to start, and `npx` asks the npm registry at every start
-  (measured; `uvx` and Docker were not), so a slow first network of the day fails the first start until you pick Reconnect in `/mcp`. When a plan writes
-  such a server, the plugin adds `MCP_TIMEOUT=90000` (90 s) to `env` in the same settings file; `/alfred-tools:fix` and
-  `/alfred-tools:update` add it for the servers you have, in every config folder with the plugin. A value you set
-  yourself is never changed. Measured with `npm` 11.6.1 and Claude Code 2.1.328: see `docs/sources.md`.
+- **Start limit.** Claude Code gives a server 30 s to start, and `npx` asks the npm registry at every start (measured;
+  `uvx` and Docker were not), so a slow first network of the day fails the first start until you pick Reconnect in
+  `/mcp`. When a plan writes such a server, the plugin adds `MCP_TIMEOUT=90000` (90 s) to `env` in the same settings
+  file; `/alfred-tools:fix` and `/alfred-tools:update` add it for the servers you have, in every config folder with the
+  plugin. A value you set yourself, in the file or in your shell, is never changed. A side effect: a hosted server's
+  stalled request also waits 90 s before it fails, not 60 s. Measured with `npm` 11.6.1 and Claude Code 2.1.328: see
+  `docs/sources.md`.
 - **Signing in.** After an install, configure or update that sets up a new sign-in, a question offers 'Sign in now'
   (recommended): the browser opens and waits up to five minutes. Otherwise the first session start opens it, which has
-  only 30 seconds, and `/mcp` -> the server -> Reconnect finishes it. The update output says for each such server why
-  its route changed (Cursor was added), where the sign-in is kept, and whether it is done.
+  only Claude Code's start limit (30 s, or 90 s with the 'Start limit' setting above), and `/mcp` -> the server ->
+  Reconnect finishes it. The update output says for each such server why its route changed (Cursor was added), where the
+  sign-in is kept, and whether it is done.
 - **Signing out.** Delete that server's `<hash>_*` files in `<root>/mcp-remote-v1/`, or the folder for every server.
   The next start opens the browser again.
 - **When the sign-in fails in both apps.** A vendor can turn off the self-registration mcp-remote relies on (a GitLab
@@ -421,7 +424,8 @@ Run `/alfred-tools:fix` first; it knows these:
 - a data folder git would commit, or a key file or sign-in folder git would commit;
 - one app's copy of a server was changed by hand, or a Cursor `mcp.json` is not JSON;
 - a deny rule for the sign-ins or the keys is missing, in this config folder or another that has the plugin;
-- `MCP_TIMEOUT` is missing from Claude Code's settings and a server that starts through `npx`, `uvx` or Docker times out at 30 s;
+- `MCP_TIMEOUT` is missing from Claude Code's settings while a server starts through `npx`, `uvx` or Docker (an `npx` start can
+  pass Claude Code's 30 s limit on a slow network);
 - serena's `serena_config.yml` does not send its project folders to its home, or its context file is not in its home.
 
 A first start can take a while: install downloads each new package right after the plan and starts it once in the

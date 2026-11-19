@@ -10,6 +10,7 @@ import * as lists from '../mcps-list/mcps-list.ts';
 import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { deepEqual, stripBom } from '../core/json-file.ts';
 import { isRecord } from '../core/shapes.ts';
+import { errorCode } from '../core/guards.ts';
 import { fetchStep } from '../entries/names.ts';
 import { SETTINGS_ENV_KEY, START_TIMEOUT } from './start-timeout-constants.ts';
 import { CONFIG_DIR_NAME, INSTALLED_PLUGINS_FILE, PLUGINS_DIR, PLUGIN_KEY_PREFIXES, SETTINGS_FILE } from './read-guard-constants.ts';
@@ -214,8 +215,12 @@ export function denyReadSteps(steps: PlanStep[], context: SettingsCtx, out: Pick
 export function startTimeoutOf(context: SettingsCtx, dir?: string): { file: string; missing: boolean; bad?: undefined } | { file: string; bad: true; missing?: undefined }
 {
     const file = settingsFileOf(context, dir);
+    // a value the environment holds already - a shell's export, or the settings' env a session hands its commands - counts
+    // as set, so a limit the user chose is never overridden
+    if ((context.env || {})[START_TIMEOUT.name]) return { file, missing: false };
     let text: string | null = null;
-    try { text = fs.readFileSync(file, 'utf8'); } catch { /* absent: {} */ }
+    // absent: {}; there but unreadable: no file to write, so bad, never missing
+    try { text = fs.readFileSync(file, 'utf8'); } catch (caught) { if (errorCode(caught) !== 'ENOENT') return { file, bad: true }; }
     if (text === null) return { file, missing: true };
     let doc: unknown = null;
     try { doc = JSON.parse(stripBom(text)); } catch { /* below */ }

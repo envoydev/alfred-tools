@@ -116,6 +116,34 @@ test('startTimeoutOf reads the settings file of CLAUDE_CONFIG_DIR, else the home
     finally { w.clean(); }
 });
 
+test('a MCP_TIMEOUT the environment already holds counts as set, so a value the shell chose is never overridden', () =>
+{
+    const w = world();
+    try
+    {
+        const plain = path.join(w.home, '.claude', 'settings.json');
+        assert.deepStrictEqual(startTimeoutOf({ platform: process.platform, home: w.home, env: { MCP_TIMEOUT: '180000' } }), { file: plain, missing: false });
+    }
+    finally { w.clean(); }
+});
+
+test('a settings file that cannot be read is no file to write: startTimeoutOf calls it bad, never missing', { skip: process.platform === 'win32' ? 'chmod does not deny a read on Windows' : false }, () =>
+{
+    const w = world();
+    try
+    {
+        const plain = path.join(w.home, '.claude', 'settings.json');
+        put(plain, '{}');
+        fs.chmodSync(plain, 0o000);
+        // root reads a 000 file anyway: then the test proves nothing, so it says so
+        let readable = true;
+        try { fs.readFileSync(plain); } catch { readable = false; }
+        if (readable) return;
+        assert.deepStrictEqual(startTimeoutOf({ platform: process.platform, home: w.home, env: {} }), { file: plain, bad: true });
+    }
+    finally { try { fs.chmodSync(path.join(w.home, '.claude', 'settings.json'), 0o600); } catch { /* gone */ } w.clean(); }
+});
+
 // ---- install and configure --------------------------------------------------------------------------------------------
 
 const planIn = (conf: string, answers: Parameters<typeof plan>[1]) => plan(inv(MAC), answers, opts('/Users/me', { env: { CLAUDE_CONFIG_DIR: conf } }));
