@@ -65,6 +65,11 @@ function need<Holder, Key extends keyof Holder>(holder: Holder, key: Key, what: 
     return value;
 }
 
+// The picked findings that the plan-time detect finds blocked - a file spoiled after the first detect: fix names and skips
+// each, never drops it in silence. -> [the re-detected finding, with its block]
+export const blockedAtPlan = (redetected: Finding[], picked: Finding[]): Finding[] =>
+    redetected.filter((candidate) => candidate.blocked && picked.some((pickedFinding) => pickedFinding.id === candidate.id && pickedFinding.name === candidate.name && pickedFinding.scope === candidate.scope && pickedFinding.app === candidate.app));
+
 export const finding = (fixId: string, registration: { rowId: string | null; name: string; scope: string }, what: string, extra: Partial<Finding> = {}): Finding => ({ id: fixId, row: registration.rowId, name: registration.name, scope: registration.scope, found: what, ...extra });
 
 export { compareVersions } from '../core/versions.ts';

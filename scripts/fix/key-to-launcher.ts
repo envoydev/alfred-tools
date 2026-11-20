@@ -270,5 +270,7 @@ export function driftAnswersOf(finding: Finding, found: Finding[]): string
 {
     const settling = (drift: Finding): string[] => (drift.inherited || drift.keyGuard || drift.keyEmpty ? ['restore'] : drift.change === 'missing' ? ['drop', 'restore'] : ['keep', 'restore']);
     const answers = new Set(openDriftsOf(finding, found).flatMap(settling));
-    return `${SETTLING.filter((answer) => answers.has(answer)).join(' or ')}; 'leave' does not settle it`;
+    const named = SETTLING.filter((answer) => answers.has(answer));
+    const list = named.length > 2 ? `${named.slice(0, -1).join(', ')} or ${named.at(-1)}` : named.join(' or ');
+    return `${list}; 'leave' does not settle it`;
 }

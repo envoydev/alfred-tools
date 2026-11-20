@@ -26,7 +26,7 @@ import { writeJob, fetchJob, nextLines } from '../apply/fetch.ts';
 import { DETECTORS, FILE_STEPS, MACHINE_FIXES, REGISTRATION_FIXES, gates, helperStaleFix, machineOf, movedRoots, passesGate, repointDataMap, repointEntry, rootMoveFix } from './fix-functions.ts';
 import { RestoreBlocked, driftAnswersOf, waitsForDrift } from './key-to-launcher.ts';
 import { clientDriftDetect } from './lists.ts';
-import { realMachine, clone, fieldOf, isManaged } from './common.ts';
+import { realMachine, clone, fieldOf, isManaged, blockedAtPlan } from './common.ts';
 import { retiredServerSteps } from './retired-server.ts';
 import { FIX_ID } from './constants.ts';
 import { errorMessage } from '../core/guards.ts';
@@ -394,7 +394,14 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
     if (filePicked.length)
     {
         const fctx = steps.length ? { ...context, inventory: inventory.buildInventory({ project: context.inventory.project, env: context.env, data: context.data }) } : context;
-        const now = detectAll(fctx, { only }).found.filter((finding) => plannedAsFile(finding) && !finding.blocked && filePicked.some((pickedFinding) => pickedFinding.id === finding.id && pickedFinding.name === finding.name && pickedFinding.scope === finding.scope && pickedFinding.app === finding.app));
+        const redetected = detectAll(fctx, { only }).found;
+        for (const finding of blockedAtPlan(redetected.filter(plannedAsFile), filePicked))
+        {
+            result.skipped.push(finding);
+            todo = todo.filter((candidate) => !(candidate.id === finding.id && candidate.name === finding.name && candidate.scope === finding.scope && candidate.app === finding.app));
+            log(`skipped ${finding.id} on ${where(finding)}: ${finding.blocked}`);
+        }
+        const now = redetected.filter((finding) => plannedAsFile(finding) && !finding.blocked && filePicked.some((pickedFinding) => pickedFinding.id === finding.id && pickedFinding.name === finding.name && pickedFinding.scope === finding.scope && pickedFinding.app === finding.app));
         const planned: PlanStep[] = [];
         const planNotes: string[] = [];
         for (const row of context.catalog.fixes.filter((candidate) => candidate.kind === 'file' || candidate.steps !== undefined))
