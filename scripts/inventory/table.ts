@@ -33,7 +33,10 @@ export const isInventoryFile = (value: unknown): value is Inventory => typeof va
 
 export function renderTable(inventory: Inventory, catalog: Catalog = catalogLib.load()): string
 {
-    const rows = catalog.tools.filter((row) => row.os.includes(inventory.os));
+    // the pick lists' order (plan/walk.ts pickOrder): group order, then catalog order; a row with an unknown group goes last
+    const known = new Set(catalog.groups.map((group) => group.id));
+    const ordered = [...catalog.groups.flatMap((group) => catalog.tools.filter((row) => row.group === group.id)), ...catalog.tools.filter((row) => !known.has(row.group))];
+    const rows = ordered.filter((row) => row.os.includes(inventory.os));
     const body = rows.map((row, i) =>
     {
         const cells = new Map<string, string[]>(ALL_SCOPES.map((scope) => [scope, []]));

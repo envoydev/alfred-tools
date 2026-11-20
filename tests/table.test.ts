@@ -29,7 +29,7 @@ test('one numbered table of every row for this OS: nothing installed shows a das
     const rows = lines.slice(2).filter((l) => /^\d+ /.test(l));
     const offered = catalog.tools.filter((r) => r.os.includes('darwin'));
     assert.strictEqual(rows.length, offered.length, 'windows-control is not offered on macOS');
-    assert.deepStrictEqual(rows.map((l) => parseInt(l, 10)), offered.map((_, i) => i + 1), 'numbered from 1, in catalog order');
+    assert.deepStrictEqual(rows.map((l) => parseInt(l, 10)), offered.map((_, i) => i + 1), 'numbered from 1');
     assert.match(text, /Not offered on this OS \(darwin\): windows-control\./);
     assert.ok(!/windows-control +mcp/.test(text));
     assert.match(rows.find((l) => /serena/.test(l))!, /serena\s+mcp\s+local\s+-\s+-\s+-$/);
@@ -38,6 +38,14 @@ test('one numbered table of every row for this OS: nothing installed shows a das
     const win = renderTable(inv({ os: 'win32' }), catalog);
     assert.ok(/windows-control\s+mcp/.test(win));
     assert.match(win, /Not offered on this OS \(win32\): macos-control\./);
+});
+
+test('the table lists its rows in the pick lists\' order: catalog group order, then catalog order within a group', () =>
+{
+    const rows = renderTable(inv(), catalog).split('\n').filter((l) => /^\d+ /.test(l));
+    const toolOf = (line: string) => catalog.tools.find((row) => row.os.includes('darwin') && new RegExp(`\\s${row.label}\\s+${row.kind}\\s`).test(line))!;
+    const want = catalog.groups.flatMap((group) => catalog.tools.filter((row) => row.group === group.id && row.os.includes('darwin')).map((row) => row.id));
+    assert.deepStrictEqual(rows.map((line) => toolOf(line).id), want);
 });
 
 test('what is installed shows by scope as name [route, pin], a custom name included; the pin is the installed one', () =>
