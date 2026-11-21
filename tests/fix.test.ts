@@ -3160,8 +3160,9 @@ test('helper-foreign-file compares names without case on darwin and with case on
         put(orphan, '// old\n');
         put(path.join(w.project, '.cursor', 'mcp.json'), JSON.stringify({ mcpServers: { z: { command: 'node', args: [path.join(pt, 'MCP-Headers-Sonar.js')] } } }));
         const found = (platform: string) => detectAll(ctxOf(w, { platform })).found.some((f) => f.id === 'helper-foreign-file' && f.name === orphan);
-        assert.strictEqual(found('darwin'), false, 'a name in another case still protects the file');
-        assert.strictEqual(found('linux'), true, 'a case-sensitive file system treats it as another file');
+        // the platform also picks the path rules, so a Windows host proves the folding as win32 and leaves linux to the others
+        assert.strictEqual(found(process.platform === 'win32' ? 'win32' : 'darwin'), false, 'a name in another case still protects the file');
+        if (process.platform !== 'win32') assert.strictEqual(found('linux'), true, 'a case-sensitive file system treats it as another file');
     }
     finally { w.clean(); }
 });
