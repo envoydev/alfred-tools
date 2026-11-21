@@ -406,15 +406,16 @@ only what you pick, in one confirmation:
   order. 0.5.0 adds its own: every server the plugin manages goes into the root's `mcps.json` (the 0.4.x
   record is moved in and renamed with `.0.4.bak` added), serena gets the navigation context
   and `base_modes: []` in its `serena_config.yml`, the two deny rules are added, and each retired plugin is offered for
-  uninstall. The next version adds two: serena's `serena_config.yml` gets the line that sends new project folders to its
-  home (an existing `.serena/` folder moves there when it safely can, else it is named with its reason), and a
-  hand-added server that runs its own key helper is moved to the plugin's (0.8.0 also removes the old helper file when
-  nothing names it). 0.7.0 adds three: context7's key moves from `--api-key` into its environment, sentry's
+  uninstall. 0.6.0 adds two: serena's `serena_config.yml` gets the line that sends new project folders to its home, and
+  a hand-added server that runs its own key helper is moved to the plugin's. 0.7.0 adds three: context7's key moves
+  from `--api-key` into its environment, sentry's
   variable is renamed to `SENTRY_AUTH_TOKEN` where its pin reads that name, and a managed server whose row the catalog
   retired is offered for removal (`/alfred-tools:fix` offers it too; not picking it is a decline, kept per project at
   project and local scope and for every project at global scope). It adds a fourth: `MCP_TIMEOUT=90000` in the `env` of
-  your Claude Code settings (see 'Start limit' below). These run before the version moves, so all of these
-  changes stay.
+  your Claude Code settings (see 'Start limit' below). 0.8.0 adds two: each `.serena/` folder already in a project
+  moves to serena's home when it safely can (else it is named with its reason), and the old key helper file of a
+  hand-added server is removed once nothing names it and git does not track it. These run before the version moves,
+  so all of these changes stay.
 - **Cursor** - asked with the updates, once per root, when Cursor is on this machine and the root's servers are set
   up for Claude Code only. 'Not now' is remembered in the list.
 
