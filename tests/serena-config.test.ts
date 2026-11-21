@@ -5,8 +5,10 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import * as sc from '../scripts/apply/serena-config.ts';
-import { inTreeLines, projectsOf } from '../scripts/apply/serena-projects.ts';
+import { projectsOf } from '../scripts/apply/serena-projects.ts';
+import { inTreeLines, moveFolder, serenaFolderMove } from '../scripts/apply/serena-folder-move.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import type { McpAddStep } from '../scripts/plan/types.ts';
 import type { Inventory } from '../scripts/inventory/types.ts';
@@ -175,12 +177,87 @@ test('configOf joins a POSIX home that holds a backslash pair the POSIX way, a d
     assert.strictEqual(sc.configOf('\\\\server\\share\\serena'), '\\\\server\\share\\serena\\serena_config.yml');
 });
 
-test('inTreeLines names each listed project that still keeps its own .serena folder, with where it moves under the home', () => {
+test('inTreeLines names each listed project whose .serena folder stays in its tree, with the reason', () => {
     const kept = path.join(tmp, 'tree-kept');
     const bare = path.join(tmp, 'tree-bare');
     fs.mkdirSync(path.join(kept, '.serena'), { recursive: true });
     fs.mkdirSync(bare);
     const file = path.join(tmp, 'tree-projects.yml');
     fs.writeFileSync(file, `projects:\n  - ${kept}\n  - ${bare}\n  - ${path.join(tmp, 'tree-gone')}\n`);
-    assert.deepStrictEqual(inTreeLines(file, '/h/serena/'), [`serena keeps using ${kept}/.serena until it is moved to /h/serena/projects/tree-kept`]);
+    assert.deepStrictEqual(inTreeLines(file, '/h/serena/'), [`serena keeps using ${path.join(kept, '.serena')} - the project has no .git, so serena would lose the project`]);
+});
+
+// ---- serena-folder-move ----------------------------------------------------------------------------------------------
+const gitInit = (dir: string) => { fs.mkdirSync(dir, { recursive: true }); assert.strictEqual(spawnSync('git', ['init', '-q', dir]).status, 0); };
+function movable(name: string)
+{
+    const project = path.join(tmp, name);
+    gitInit(project);
+    fs.mkdirSync(path.join(project, '.serena'));
+    fs.writeFileSync(path.join(project, '.serena', 'project.yml'), `project_name: ${name}\n`);
+    return { project, from: path.join(project, '.serena'), to: path.join(tmp, `home-${name}`, 'projects', name) };
+}
+
+test('serenaFolderMove renames the folder into the home and says to restart Claude Code', () => {
+    const { project, from, to } = movable('fm-rename');
+    const result = serenaFolderMove({ op: 'serena-folder-move', project, from, to, why: 'test' });
+    assert.deepStrictEqual([result.ok, fs.existsSync(from), fs.readFileSync(path.join(to, 'project.yml'), 'utf8')], [true, false, 'project_name: fm-rename\n']);
+    assert.match(result.detail, /restart Claude Code/);
+});
+
+test('serenaFolderMove re-checks at apply: a destination that appeared, and a tracked folder, stay with ok true', () => {
+    const taken = movable('fm-taken');
+    fs.mkdirSync(taken.to, { recursive: true });
+    const first = serenaFolderMove({ op: 'serena-folder-move', project: taken.project, from: taken.from, to: taken.to, why: 'test' });
+    assert.deepStrictEqual([first.ok, fs.existsSync(taken.from)], [true, true]);
+    assert.match(first.detail, /is there already/);
+    const tracked = movable('fm-tracked');
+    assert.strictEqual(spawnSync('git', ['-C', tracked.project, 'add', '.serena']).status, 0);
+    const second = serenaFolderMove({ op: 'serena-folder-move', project: tracked.project, from: tracked.from, to: tracked.to, why: 'test' });
+    assert.deepStrictEqual([second.ok, fs.existsSync(tracked.from), fs.existsSync(tracked.to)], [true, true, false]);
+    assert.match(second.detail, /git tracks files under/);
+});
+
+test('moveFolder copies and removes the source when the rename crosses devices (EXDEV)', () => {
+    const { from, to } = movable('fm-exdev');
+    const exdev = () => { throw Object.assign(new Error('cross-device'), { code: 'EXDEV' }); };
+    assert.strictEqual(moveFolder(from, to, { rename: exdev }), null);
+    assert.deepStrictEqual([fs.existsSync(from), fs.readFileSync(path.join(to, 'project.yml'), 'utf8')], [false, 'project_name: fm-exdev\n']);
+    // an error that is not EXDEV is thrown as it is
+    assert.throws(() => moveFolder(from, to, { rename: () => { throw Object.assign(new Error('denied'), { code: 'EACCES' }); } }), { code: 'EACCES' });
+});
+
+test('moveFolder never copies over what is at the destination: a file there stays and the source stays', () => {
+    const broken = movable('fm-broken');
+    const exdev = () => { throw Object.assign(new Error('cross-device'), { code: 'EXDEV' }); };
+    fs.mkdirSync(path.dirname(broken.to), { recursive: true });
+    fs.writeFileSync(broken.to, 'a file is in the way\n');
+    assert.throws(() => moveFolder(broken.from, broken.to, { rename: exdev }));
+    assert.ok(fs.existsSync(broken.from), 'the source stays');
+    assert.strictEqual(fs.readFileSync(broken.to, 'utf8'), 'a file is in the way\n', 'what was already at the destination is not removed');
+    // errorOnExist alone does not stop an overwrite: a folder already there keeps its file
+    const taken = movable('fm-force');
+    fs.mkdirSync(taken.to, { recursive: true });
+    fs.writeFileSync(path.join(taken.to, 'project.yml'), 'mine\n');
+    assert.throws(() => moveFolder(taken.from, taken.to, { rename: exdev }));
+    assert.strictEqual(fs.readFileSync(path.join(taken.to, 'project.yml'), 'utf8'), 'mine\n');
+});
+
+test('moveFolder removes a copy that failed part-way into an empty destination', () => {
+    const { from, to } = movable('fm-partial');
+    const exdev = () => { throw Object.assign(new Error('cross-device'), { code: 'EXDEV' }); };
+    const partial = () => { fs.mkdirSync(to, { recursive: true }); fs.writeFileSync(path.join(to, 'half.yml'), 'half\n'); throw Object.assign(new Error('disk full'), { code: 'ENOSPC' }); };
+    assert.throws(() => moveFolder(from, to, { rename: exdev, copy: partial }), { code: 'ENOSPC' });
+    assert.ok(!fs.existsSync(to), 'the partial copy is gone');
+    assert.ok(fs.existsSync(path.join(from, 'project.yml')), 'the source is whole');
+});
+
+test('serenaFolderMove reports a half move when the copy worked and the source could not be removed', () => {
+    const { project, from, to } = movable('fm-half');
+    const exdev = () => { throw Object.assign(new Error('cross-device'), { code: 'EXDEV' }); };
+    const stuck = () => { throw Object.assign(new Error('busy'), { code: 'EBUSY' }); };
+    const result = serenaFolderMove({ op: 'serena-folder-move', project, from, to, why: 'test' }, { rename: exdev, remove: stuck });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.detail, `copied to ${to}; ${from} could not be removed - EBUSY: remove it by hand once serena is stopped`);
+    assert.ok(fs.existsSync(path.join(to, 'project.yml')));
 });

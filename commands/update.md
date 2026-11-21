@@ -31,7 +31,7 @@ ask. It takes no argument: one typed after the command changes nothing - say so.
   header to `mcp-headers.js` once the user has put it in `.mcps-secrets`, absolute project paths, the root's
   `.gitignore`, the `.mcp.json` order, the deny rules and the retired plugins; context7's key moved from `--api-key`
   into its environment (`context7-key-env`); sentry's variable renamed where its pin reads `SENTRY_AUTH_TOKEN`
-  (`sentry-auth-env`); a stdio key moved out of its registration into `mcp-bridge.js --run` (`key-to-launcher`); and a managed server whose row was retired offered for removal (`retired-server`); and `MCP_TIMEOUT` in Claude Code's settings (`start-timeout`) - offers what
+  (`sentry-auth-env`); a stdio key moved out of its registration into `mcp-bridge.js --run` (`key-to-launcher`); and a managed server whose row was retired offered for removal (`retired-server`); and `MCP_TIMEOUT` in Claude Code's settings (`start-timeout`); a hand-built key helper file left in a root once nothing names it (`helper-foreign-file`) and a project's in-tree `.serena` folder that can move to serena's home (`serena-project-folder`, each removal or move checked again when it runs) - offers what
   they find under 'New ways to pass data', and applies it with fix's own code. A finding that needs the user - a key
   not filled yet, a folder to name - is a note naming `/alfred-tools:fix`, never an offer.
 

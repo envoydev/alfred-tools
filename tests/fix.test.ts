@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import path from 'node:path';
-import { world, readJson, helperCmd, writeJson, files, serenaFolderLine, slashed, tempOf } from './helpers.ts';
+import { world, readJson, helperCmd, writeJson, files, serenaFolderLine, tempOf } from './helpers.ts';
 import * as catalogLib from '../scripts/catalog/catalog.ts';
 import * as inventory from '../scripts/inventory/inventory.ts';
 import { pythonRequest, pathFor } from '../scripts/entries/platform.ts';
@@ -17,6 +17,7 @@ import { makeCtx, detectAll, applyFixes, questions, renderFixes } from '../scrip
 import { runFixCommand } from '../scripts/fix/command.ts';
 import * as C from '../scripts/fix/common.ts';
 import { READ_GUARD_RESIDUAL } from '../scripts/fix/constants.ts';
+import { retirableHelper, retireHelperSteps } from '../scripts/plan/retire-context.ts';
 import fs from 'node:fs';
 import fsx from 'node:fs';
 import { existsSync } from 'node:fs';
@@ -2100,10 +2101,10 @@ test('serena-project-folder finds a home without the key and names in-tree .sere
         const res = applyFixes(ctxOf(w), ['serena-project-folder'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
         assert.strictEqual(res.failed, null, l.text());
         assert.strictEqual(fsx.readFileSync(cfg, 'utf8'), `projects:\n- ${proj}\n- ${clean}\nbase_modes: []\nauth_secret: s3cr3t-fixture\n${serenaFolderLine(home)}\n`);
-        assert.ok(l.text().includes(`serena keeps using ${proj}/.serena until it is moved to ${slashed(home)}/projects/shop`), l.text());
+        assert.ok(l.text().includes(`serena keeps using ${path.join(proj, '.serena')} - the project has no .git, so serena would lose the project`), l.text());
         assert.ok(!l.text().includes(`${clean}/.serena`), 'a project with no in-tree folder is not named');
         assert.ok(!l.text().includes('s3cr3t'));
-        assert.ok(fsx.existsSync(path.join(proj, '.serena', 'project.yml')), 'nothing is moved or deleted');
+        assert.ok(fsx.existsSync(path.join(proj, '.serena', 'project.yml')), 'a project with no .git keeps its folder');
         assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-project-folder'), []);
         // a home with no config yet is found, and the fix writes the file
         const bare = path.join(ptRoot(w), 'bare');
@@ -2117,6 +2118,89 @@ test('serena-project-folder finds a home without the key and names in-tree .sere
         seed(w, 'serena3', 'project', { ...e, env: { ...e.env, SERENA_HOME: alfredHome } });
         seed(w, 'serena4', 'user', { ...e, env: { ...e.env, SERENA_HOME: path.join(w.dir, '$odd', 'serena') } });
         assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-project-folder'), []);
+    }
+    finally { w.clean(); }
+});
+
+// a managed serena whose home already holds a context file and the folder key (0.7.0 set it), listing the given projects
+function serenaWith(w: World, projects: string[], { keySet = true } = {})
+{
+    const home = path.join(ptRoot(w), 'serena');
+    const e = SERENA_OLD(home);
+    e.args[e.args.indexOf('claude-code')] = path.join(home, 'serena-context.yml');
+    put(path.join(home, 'serena-context.yml'), rootsLib.shippedSource('serenaContext'));
+    seed(w, 'serena', 'local', e);
+    const cfg = path.join(home, 'serena_config.yml');
+    put(cfg, `projects:\n${projects.map((project) => `- ${project}\n`).join('')}base_modes: []\n${keySet ? `${serenaFolderLine(home)}\n` : ''}`);
+    return { home, cfg };
+}
+// a project folder holding a .serena folder with a project.yml, a git work tree when `git` is set
+function projectWithSerena(dir: string, { git = true } = {})
+{
+    if (git) gitInit(dir);
+    put(path.join(dir, '.serena', 'project.yml'), `project_name: ${path.basename(dir)}\n`);
+    return dir;
+}
+
+test('serena-project-folder moves a movable .serena folder to the home, also when the key is already set', () =>
+{
+    const w = world();
+    try
+    {
+        const shop = projectWithSerena(path.join(w.dir, 'repos', 'shop'));
+        const { home, cfg } = serenaWith(w, [shop]);
+        const found = detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-project-folder');
+        assert.deepStrictEqual(found.map((f) => f.name), [cfg], 'the key is set and a folder can move: found');
+        const l = logged();
+        const res = applyFixes(ctxOf(w), ['serena-project-folder'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.strictEqual(res.failed, null, l.text());
+        assert.ok(fsx.existsSync(path.join(home, 'projects', 'shop', 'project.yml')), 'the folder is under the home');
+        assert.ok(!fsx.existsSync(path.join(shop, '.serena')), 'and gone from the project');
+        assert.match(l.text(), /restart Claude Code so serena reads the moved folder/);
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-project-folder'), [], 'nothing left to move');
+    }
+    finally { w.clean(); }
+});
+
+test('serena-project-folder with the key unset sets it and then moves a movable folder', () =>
+{
+    const w = world();
+    try
+    {
+        const shop = projectWithSerena(path.join(w.dir, 'repos', 'shop'));
+        const { home, cfg } = serenaWith(w, [shop], { keySet: false });
+        const l = logged();
+        const res = applyFixes(ctxOf(w), ['serena-project-folder'], { tmp: path.join(w.dir, 'tmp'), log: l.log });
+        assert.strictEqual(res.failed, null, l.text());
+        assert.ok(fsx.readFileSync(cfg, 'utf8').includes(serenaFolderLine(home)), 'the key is set');
+        assert.ok(fsx.existsSync(path.join(home, 'projects', 'shop', 'project.yml')) && !fsx.existsSync(path.join(shop, '.serena')));
+    }
+    finally { w.clean(); }
+});
+
+test('serena-project-folder is not found with the key set when no folder can move, and a folder that cannot move stays, named with its reason', () =>
+{
+    const w = world();
+    try
+    {
+        const bare = projectWithSerena(path.join(w.dir, 'repos', 'bare'), { git: false });
+        const tracked = projectWithSerena(path.join(w.dir, 'repos', 'tracked'));
+        assert.strictEqual(spawnSync('git', ['-C', tracked, 'add', '.serena']).status, 0);
+        const taken = projectWithSerena(path.join(w.dir, 'repos', 'taken'));
+        const { home, cfg } = serenaWith(w, [bare, tracked, taken]);
+        put(path.join(home, 'projects', 'taken', 'other.yml'), 'x: 1\n');
+        assert.deepStrictEqual(detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-project-folder'), [], 'key set and nothing movable: not found');
+        // one movable project joins: found, moved; the three others stay and the finding names why
+        const shop = projectWithSerena(path.join(w.dir, 'repos', 'shop'));
+        put(cfg, `projects:\n${[bare, tracked, taken, shop].map((project) => `- ${project}\n`).join('')}base_modes: []\n${serenaFolderLine(home)}\n`);
+        const [finding] = detectAll(ctxOf(w)).found.filter((f) => f.id === 'serena-project-folder') as [Finding];
+        assert.match(finding.found, /the project has no \.git/);
+        assert.match(finding.found, /git tracks files under/);
+        assert.match(finding.found, /is there already/);
+        const res = applyFixes(ctxOf(w), ['serena-project-folder'], { tmp: path.join(w.dir, 'tmp'), log: () => {} });
+        assert.strictEqual(res.failed, null);
+        for (const kept of [bare, tracked, taken]) assert.ok(fsx.existsSync(path.join(kept, '.serena', 'project.yml')), `${kept} keeps its folder`);
+        assert.ok(fsx.existsSync(path.join(home, 'projects', 'shop', 'project.yml')));
     }
     finally { w.clean(); }
 });
@@ -2847,13 +2931,13 @@ test('retired-plugin offers preferred-tools@envoydev with its text, outside the 
 // ---- helper-foreign: a hand-added server with a helper of the user's own (Part C2) ----------------------------------
 
 const ADOPT_NINE = ['atlassian', 'github', 'gitlab', 'context7', 'sentry', 'memory', 'serena', 'windows-control', 'playwright-chrome'];
-function adoptRoot(w: World, { secrets = 'SONARQUBE_TOKEN=tok-123\nSONARQUBE_ORG=acme\n', firstArg = 'SONARQUBE_TOKEN', mixed = false } = {})
+function adoptRoot(w: World, { secrets = 'SONARQUBE_TOKEN=tok-123\nSONARQUBE_ORG=acme\n', firstArg = 'SONARQUBE_TOKEN', mixed = false, outside = false } = {})
 {
     const pt = ptRoot(w);
     put(path.join(pt, '.mcps-secrets'), secrets);
     const clients = (i: number) => (mixed && i === 0 ? ['claude'] : ['claude', 'cursor']);
     put(path.join(pt, 'mcps.json'), `${JSON.stringify({ version: 1, servers: ADOPT_NINE.map((name, i) => ({ name, scope: 'project', row: name, route: 'local', clients: clients(i), entry: { command: 'node', args: [`${name}.js`] }, key: null })), own: [] }, null, 2)}\n`);
-    const companion = path.join(pt, 'mcp-headers-sonarqube.js');
+    const companion = path.join(outside ? path.join(w.dir, 'elsewhere') : pt, 'mcp-headers-sonarqube.js');
     put(companion, '// mine\n');
     seed(w, 'my-sonarqube', 'project', { type: 'http', url: 'https://api.sonarcloud.io/mcp', headersHelper: `node ${companion} ${firstArg} SONARQUBE_ORG` });
     return { pt, companion };
@@ -2964,6 +3048,120 @@ test('a blocked helper-foreign leaves Cursor\'s foreign-form copy; once the key 
         assert.ok(copy.args.includes(path.join(pt, 'mcp-bridge.js')) && copy.args.includes('SONARQUBE_ORG=SONARQUBE_ORG'), JSON.stringify(copy));
         assert.strictEqual(copy.headersHelper, undefined);
         assert.ok(fsx.existsSync(path.join(pt, 'mcp-bridge.js')));
+    }
+    finally { w.clean(); }
+});
+
+test('helper-foreign retires the old helper after the replace: removed from a root, left outside the roots', () =>
+{
+    for (const outside of [false, true])
+    {
+        const w = world();
+        try
+        {
+            const { companion } = adoptRoot(w, { outside });
+            const lines = logged();
+            const res = applyFixes(ctxOf(w), ['helper-foreign'], { tmp: path.join(w.dir, 'tmp'), log: lines.log });
+            assert.strictEqual(res.failed, null, lines.text());
+            assert.match(readJson(path.join(w.project, '.mcp.json')).mcpServers['my-sonarqube'].headersHelper, /mcp-headers\.js/, 'the registration runs the plugin\'s helper');
+            if (outside)
+            {
+                assert.ok(fsx.existsSync(companion), 'a file outside the roots is left');
+                assert.match(lines.text(), /mcp-headers-sonarqube\.js is no longer used.*left where it is - it is not directly in a root folder/);
+                assert.ok(!/removed .*mcp-headers-sonarqube/.test(lines.text()));
+            }
+            else
+            {
+                assert.ok(!fsx.existsSync(companion), 'a file in a root, named by nothing now, is removed');
+                assert.ok(lines.text().includes(`removed ${companion}`), lines.text());
+            }
+        }
+        finally { w.clean(); }
+    }
+});
+
+test('retireHelperSteps plans a step only for a hand-built helper inside a root that the rewrite replaces with the plugin\'s own', () =>
+{
+    const w = world();
+    try
+    {
+        const { pt } = adoptRoot(w);
+        const ctx = ctxOf(w);
+        const own = helperCmd(path.join(pt, 'mcp-headers.js'), 'SONARQUBE_TOKEN', 'Bearer');
+        const rewrite = (command: string, to = own) => ({ name: 'x', scope: 'project', old: { type: 'http', url: 'https://x', headersHelper: command }, entry: { type: 'http', url: 'https://x', headersHelper: to } });
+        const inRoot = path.join(pt, 'mcp-headers-mine.js');
+        assert.deepStrictEqual(retireHelperSteps(ctx, [rewrite(`node ${inRoot} A B`)]).map((step) => step.file), [inRoot]);
+        assert.deepStrictEqual(retireHelperSteps(ctx, [rewrite(`node ${path.join(w.dir, 'elsewhere', 'mcp-headers-mine.js')} A B`)]), [], 'outside the roots');
+        assert.deepStrictEqual(retireHelperSteps(ctx, [rewrite(`node ${path.join(pt, 'mcp-headers.js')} A Bearer`)]), [], 'the plugin\'s own helper is never retired');
+        assert.deepStrictEqual(retireHelperSteps(ctx, [rewrite(`node ${inRoot} A B`, `node ${inRoot} A B`)]), [], 'a rewrite that keeps the foreign helper retires nothing');
+        assert.deepStrictEqual(retireHelperSteps(ctx, [rewrite(`node ${path.join(pt, 'sub', 'mcp-headers-mine.js')} A B`)]), [], 'a file below a root folder is not retired');
+        assert.deepStrictEqual(retireHelperSteps(ctx, [rewrite(`node ${path.join(pt, 'sonar-token.js')} A B`)]), [], 'a script that is not named mcp-headers-<name> is not retired');
+        assert.strictEqual(retirableHelper(`node ${path.join(pt, 'sonar-token.js')} A B`, ctx)?.left, 'its name is not mcp-headers-<name>.js');
+        assert.strictEqual(retirableHelper(`node ${path.join(pt, 'sub', 'mcp-headers-mine.js')} A B`, ctx)?.left, 'it is not directly in a root folder');
+        assert.strictEqual(retirableHelper(`node ${inRoot} A B`, ctx)?.left, null);
+    }
+    finally { w.clean(); }
+});
+
+test('helper-foreign-file finds mcp-headers-<name> files in a root that no registration names, and not mcp-headers.js', () =>
+{
+    const w = world();
+    try
+    {
+        const { pt, companion } = adoptRoot(w);
+        const orphan = path.join(pt, 'mcp-headers-old.js');
+        const orphanMjs = path.join(pt, 'mcp-headers-other.mjs');
+        put(orphan, '// old\n');
+        put(orphanMjs, '// old\n');
+        put(path.join(pt, 'mcp-headers.js'), rootsLib.shippedSource('helper'));
+        const found = () => detect(ctxOf(w)).found.filter((f) => f.id === 'helper-foreign-file').map((f) => f.name).sort();
+        assert.deepStrictEqual(found(), [orphanMjs, orphan].sort(), 'the plugin\'s helper and the one my-sonarqube names are not found');
+        const lines = logged();
+        const res = applyFixes(ctxOf(w), ['helper-foreign-file'], { tmp: path.join(w.dir, 'tmp'), log: lines.log });
+        assert.strictEqual(res.failed, null, lines.text());
+        assert.ok(!fsx.existsSync(orphan) && !fsx.existsSync(orphanMjs), 'both are removed');
+        assert.ok(fsx.existsSync(companion) && fsx.existsSync(path.join(pt, 'mcp-headers.js')), 'a named file and the plugin\'s helper stay');
+        assert.deepStrictEqual(found(), []);
+    }
+    finally { w.clean(); }
+});
+
+test('helper-foreign-file is found only when the apply would remove the file: a name in another project, the account file, Cursor or git keeps it', () =>
+{
+    const w = world();
+    try
+    {
+        const { pt } = adoptRoot(w);
+        const cases: [string, (file: string) => void][] = [
+            ['another project\'s .mcp.json', (file) => { const other = path.join(w.dir, 'other'); put(path.join(other, '.mcp.json'), JSON.stringify({ mcpServers: { x: { command: 'node', args: [file] } } })); const doc = fs.existsSync(account.accountFile(w.env)) ? readJson(account.accountFile(w.env)) : {}; writeJson(account.accountFile(w.env), { ...doc, projects: { ...(doc.projects || {}), [other]: {} } }); }],
+            ['the account file\'s local server', (file) => { const doc = fs.existsSync(account.accountFile(w.env)) ? readJson(account.accountFile(w.env)) : {}; writeJson(account.accountFile(w.env), { ...doc, projects: { ...(doc.projects || {}), [path.join(w.dir, 'elsewhere')]: { mcpServers: { y: { command: 'node', args: [file] } } } } }); }],
+            ['the home Cursor file', (file) => put(path.join(w.home, '.cursor', 'mcp.json'), JSON.stringify({ mcpServers: { z: { command: 'node', args: [file] } } }))],
+            ['git tracking', (file) => { gitInit(w.project); assert.strictEqual(spawnSync('git', ['-C', w.project, 'add', '-f', '--', file]).status, 0); }],
+        ];
+        for (const [label, keep] of cases)
+        {
+            const orphan = path.join(pt, `mcp-headers-${label.replace(/\W+/g, '-')}.js`);
+            put(orphan, '// old\n');
+            assert.ok(detect(ctxOf(w)).found.some((f) => f.name === orphan), `${label}: found before anything names it`);
+            keep(orphan);
+            assert.ok(!detect(ctxOf(w)).found.some((f) => f.name === orphan), `${label}: not offered`);
+        }
+    }
+    finally { w.clean(); }
+});
+
+test('helper-foreign-file compares names without case on darwin and with case on linux', () =>
+{
+    const w = world();
+    try
+    {
+        const { pt } = adoptRoot(w);
+        const orphan = path.join(pt, 'mcp-headers-sonar.js');
+        put(orphan, '// old\n');
+        put(path.join(w.project, '.cursor', 'mcp.json'), JSON.stringify({ mcpServers: { z: { command: 'node', args: [path.join(pt, 'MCP-Headers-Sonar.js')] } } }));
+        const found = (platform: string) => detectAll(ctxOf(w, { platform })).found.some((f) => f.id === 'helper-foreign-file' && f.name === orphan);
+        assert.strictEqual(found('darwin'), false, 'a name in another case still protects the file');
+        assert.strictEqual(found('linux'), true, 'a case-sensitive file system treats it as another file');
     }
     finally { w.clean(); }
 });

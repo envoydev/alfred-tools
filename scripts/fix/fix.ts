@@ -42,7 +42,7 @@ import * as keys from '../keys/keys.ts';
 import * as roots from '../roots/roots.ts';
 import * as declines from '../core/declines.ts';
 import { repairTail } from '../plan/repair-tail.ts';
-import { retireContextSteps, rewritesOf } from '../plan/retire-context.ts';
+import { retireContextSteps, retireHelperSteps, rewritesOf } from '../plan/retire-context.ts';
 import { writeMissingContext } from './context-move.ts';
 import { driftQuestion } from '../plan/asks-other.ts';
 import type { Declined, Env, ServerEntry } from '../core/types.ts';
@@ -375,7 +375,7 @@ export function applyFixes(context: FixCtx, ids: string[], { only, name, scope, 
         const files = fileCtx.uses.length && usedRoots ? fileSteps(context.inventory, { ...fileCtx, roots: usedRoots }, { notes: fileNotes }) : { before: [] };
         for (const rootUse of [...new Map(fileCtx.uses.map((usage) => [usage.root, usage] as const)).values()]) log(`the key helper goes in the ${rootUse.family} root ${rootUse.root}`);
         for (const note of [...fileNotes, ...tailNotes]) log(`note: ${note}`);
-        const plan = { version: 1, project: context.inventory.project, os: context.platform, alfredCodeEnabled: Boolean(context.inventory.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch, ...removals, ...tail, ...retireContextSteps(context, rewritesOf(steps))], context.inventory.project, mcpOrder.ownProjectNames(context.inventory)), notes: [], errors: [], expect: steps.map((step) => ({ kind: 'mcp', name: step.name, scope: step.scope, route: step.route })) };
+        const plan = { version: 1, project: context.inventory.project, os: context.platform, alfredCodeEnabled: Boolean(context.inventory.alfredCodeEnabled), steps: mcpOrder.withOrderStep([...files.before, ...withFetch, ...removals, ...tail, ...retireContextSteps(context, rewritesOf(steps)), ...retireHelperSteps(context, rewritesOf(steps))], context.inventory.project, mcpOrder.ownProjectNames(context.inventory)), notes: [], errors: [], expect: steps.map((step) => ({ kind: 'mcp', name: step.name, scope: step.scope, route: step.route })) };
         result.tmp = tmp || makeTempDir();
         const report = apply(plan, { env: context.env, tmp: result.tmp, runCli, log, fetchFile });
         result.fetchFile = report.fetchFile;

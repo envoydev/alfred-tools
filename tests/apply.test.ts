@@ -20,6 +20,8 @@ import { HELPER_VERSION as HV } from '../scripts/copied/mcp-headers.js';
 import { fetchStep } from '../scripts/entries/names.ts';
 import { BRIDGE_VERSION as BV } from '../scripts/copied/mcp-bridge.js';
 import { tmpdir } from 'node:os';
+import { retireHelper } from '../scripts/apply/retire-helper.ts';
+import { trackedState } from '../scripts/apply/git-tracked.ts';
 import { rootIgnoreLines, rootIgnore, denyRead, listWrite, serenaConfigInit, moveRootFile } from '../scripts/apply/file-steps.ts';
 import { readList } from '../scripts/mcps-list/mcps-list.ts';
 import * as cursorMcp from '../scripts/cursor/cursor-mcp.ts';
@@ -1636,6 +1638,106 @@ test('serena-config-init that cannot write says so and does not fail the apply',
         const ok = serenaConfigInit(path.join(w.dir, 'h2', 'serena_config.yml'), path.join(w.dir, 'h2'));
         assert.match(ok.detail, /wrote .*serena_config\.yml with project_serena_folder_location/);
         assert.strictEqual(fs.readFileSync(path.join(w.dir, 'h2', '.gitignore'), 'utf8'), '*\n', 'a home this step creates is git-ignored');
+    }
+    finally { w.clean(); }
+});
+
+// ---- retire-helper: the hand-built key helper a repaired registration no longer runs ----------------------------------
+const retireCtx = (w: World) => ({ project: w.project, env: w.env }) as ApplyCtx;
+const helperFile = (w: World) => { const file = path.join(w.project, '.alfred-tools', 'mcp-headers-mine.js'); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, '// mine\n'); return file; };
+const retire = (w: World, file: string) => retireHelper({ op: 'retire-helper', file, why: 'test' }, retireCtx(w));
+
+test('retire-helper removes a file that nothing names and git does not track', () => {
+    const w = world();
+    try
+    {
+        const file = helperFile(w);
+        const result = retire(w, file);
+        assert.deepStrictEqual([result.ok, result.detail, fs.existsSync(file)], [true, `removed ${file}`, false]);
+        assert.deepStrictEqual(retire(w, file), { ok: true, detail: `${file} is already gone` });
+    }
+    finally { w.clean(); }
+});
+
+test('retire-helper keeps a file that any registration text or Cursor file names, this project\'s or another the account lists', () => {
+    const other = (w: World) => path.join(w.dir, 'other-project');
+    const cases: [string, (w: World) => string][] = [
+        ['the project .mcp.json', (w) => path.join(w.project, '.mcp.json')],
+        ['the account file', (w) => account.accountFile(retireCtx(w).env)],
+        ['the home Cursor file', (w) => path.join(w.home, '.cursor', 'mcp.json')],
+        ['the project Cursor file', (w) => path.join(w.project, '.cursor', 'mcp.json')],
+        ['another project\'s .mcp.json', (w) => path.join(other(w), '.mcp.json')],
+        ['another project\'s Cursor file', (w) => path.join(other(w), '.cursor', 'mcp.json')],
+    ];
+    for (const [label, where] of cases)
+    {
+        const w = world();
+        try
+        {
+            const file = helperFile(w);
+            const named = where(w);
+            fs.mkdirSync(path.dirname(named), { recursive: true });
+            const text = JSON.stringify({ mcpServers: { x: { headersHelper: `node ${file} A B` } } });
+            fs.writeFileSync(named, text);
+            // another project is known to the account file by its key
+            if (named.startsWith(other(w))) fs.writeFileSync(account.accountFile(retireCtx(w).env), JSON.stringify({ projects: { [other(w)]: {} } }));
+            const result = retire(w, file);
+            assert.ok(result.ok && fs.existsSync(file), `${label}: the file stays`);
+            assert.match(result.detail, new RegExp(`^left .*mcp-headers-mine\\.js - .* names it$`), label);
+        }
+        finally { w.clean(); }
+    }
+});
+
+test('retire-helper keeps a file git tracks', () => {
+    const w = world();
+    try
+    {
+        const file = helperFile(w);
+        assert.strictEqual(spawnSync('git', ['init', '-q', w.project]).status, 0);
+        assert.strictEqual(git(w.project, 'add', '--', file).status, 0);
+        const result = retire(w, file);
+        assert.deepStrictEqual([result.ok, result.detail, fs.existsSync(file)], [true, `left ${file} - tracked by git`, true]);
+        // the same file in a work tree, untracked: removed
+        assert.strictEqual(git(w.project, 'rm', '--cached', '-q', '--', file).status, 0);
+        assert.strictEqual(retire(w, file).detail, `removed ${file}`);
+    }
+    finally { w.clean(); }
+});
+
+test('retire-helper compares names without case on darwin and win32, with case elsewhere', () => {
+    for (const [platform, kept] of [['darwin', true], ['win32', true], ['linux', false]] as [string, boolean][])
+    {
+        const w = world();
+        try
+        {
+            const file = helperFile(w);
+            fs.writeFileSync(path.join(w.project, '.mcp.json'), JSON.stringify({ mcpServers: { x: { headersHelper: `node ${path.join(path.dirname(file), 'MCP-Headers-MINE.JS')} A B` } } }));
+            const result = retireHelper({ op: 'retire-helper', file, why: 'test' }, retireCtx(w), { platform });
+            assert.strictEqual(fs.existsSync(file), kept, `${platform}: ${result.detail}`);
+        }
+        finally { w.clean(); }
+    }
+});
+
+test('trackedState: status 1 is untracked, 128 is untracked only for a missing repository, anything else is unknown', () => {
+    const answer = (status: number | null, stderr = '') => () => ({ status, stderr });
+    assert.strictEqual(trackedState('/x/f.js', answer(0)), 'tracked');
+    assert.strictEqual(trackedState('/x/f.js', answer(1, 'error: pathspec did not match')), 'untracked');
+    assert.strictEqual(trackedState('/x/f.js', answer(128, 'fatal: not a git repository (or any of the parent directories): .git')), 'untracked');
+    assert.strictEqual(trackedState('/x/f.js', answer(128, "fatal: detected dubious ownership in repository at '/x'")), 'unknown');
+    assert.strictEqual(trackedState('/x/f.js', answer(null)), 'unknown');
+    assert.strictEqual(trackedState('/x/f.js', () => ({ status: null, stderr: '', error: new Error('ENOENT') })), 'unknown');
+});
+
+test('retire-helper keeps a file when git cannot say whether it is tracked (dubious ownership)', () => {
+    const w = world();
+    try
+    {
+        const file = helperFile(w);
+        const result = retireHelper({ op: 'retire-helper', file, why: 'test' }, retireCtx(w), { run: () => ({ status: 128, stderr: "fatal: detected dubious ownership in repository" }) });
+        assert.deepStrictEqual([result.ok, fs.existsSync(file)], [true, true]);
+        assert.match(result.detail, /git could not say/);
     }
     finally { w.clean(); }
 });

@@ -8,7 +8,7 @@ import { parsePairs } from '../copied/mcp-headers.js';
 import { pathFor, pythonRequest } from './platform.ts';
 import { alfredSerenaHome, applyRoot, familyOf, rootOf, rootOfEntry } from './locations.ts';
 import { FILES } from '../core/constants.ts';
-import { API_KEY_FLAG, BRIDGE_SLOT, EXECUTABLE_PATH_FLAG, RUN } from './constants.ts';
+import { API_KEY_FLAG, BRIDGE_SLOT, EXECUTABLE_PATH_FLAG, RUN, SCRIPT_FILE } from './constants.ts';
 import { launcherParts, launchOf } from './launcher.ts';
 import { signInParts } from './sign-in.ts';
 import { withExclude } from './exclude.ts';
@@ -133,6 +133,15 @@ export function helperArgv(command: unknown): string[]
     }
     if (current !== null) out.push(current);
     return out;
+}
+
+// The script a foreign helper command runs and its first argument, as the plugin's helper reads its own: the key's name.
+export function foreignScript(command: string): { file: string; first: string | undefined } | null
+{
+    const argv = helperArgv(command);
+    const at = argv.findIndex((argument) => SCRIPT_FILE.test(argument));
+    const file = argv[at];
+    return file === undefined ? null : { file, first: argv[at + 1] };
 }
 
 // A `--header` pair back to the text it was written as: NAME=VAR or NAME:value.

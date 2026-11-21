@@ -198,9 +198,11 @@ never in your project:
   file when there is none, so serena makes no `.serena/` folder in a project. The file holds serena's own secret: the
   plugin edits the one line and never prints the file. The root's `.gitignore` keeps the home out of git, so none of
   this is committed.
-- **A `.serena/` folder that is already in a project** keeps being used: `/alfred-tools:update` and
-  `/alfred-tools:fix` name each one and never move it. To move one, copy it to `<home>/projects/<project folder name>`
-  yourself.
+- **A `.serena/` folder that is already in a project** is moved to `<home>/projects/<project folder name>` by
+  `/alfred-tools:update` and `/alfred-tools:fix`, shown in the plan first. It moves only when the project has a `.git`
+  (serena would lose the project without it), git tracks nothing under `.serena`, and that destination is free; any
+  other stays where it is and is named with its reason. Restart Claude Code after a move so serena reads the new
+  folder.
 - **Two projects with the same folder name share one folder** under a Global home, or any home two projects use, and so
   share one `project.yml`. Give such projects different folder names, or each its own copy of serena.
 - **No git folder, no project.** serena takes the nearest folder at or above where the session starts that holds
@@ -227,7 +229,9 @@ cover a self-hosted SonarQube Server.
 - **A sonarqube you added by hand** is recognised by its URL and managed once `/alfred-tools:fix` or
   `/alfred-tools:update` offers to move it to the plugin's key helper. It reads the key name your own helper used; the
   offer waits until that name holds a value in `.mcps-secrets`, so a working server never turns keyless. Your old
-  helper file is named as no longer used and is left where it is.
+  helper file, when it sits in a root folder, is removed once the server runs the plugin's helper - only if no
+  registration or Cursor file still names it and git does not track it; `helper-foreign-file` does the same for a
+  `mcp-headers-<name>.js` an earlier run left in a root. A file outside the roots is named and left where it is.
 
 ## Keys: `.mcps-secrets`
 
@@ -403,8 +407,9 @@ only what you pick, in one confirmation:
   record is moved in and renamed with `.0.4.bak` added), serena gets the navigation context
   and `base_modes: []` in its `serena_config.yml`, the two deny rules are added, and each retired plugin is offered for
   uninstall. The next version adds two: serena's `serena_config.yml` gets the line that sends new project folders to its
-  home (an existing `.serena/` folder is named, never moved), and a hand-added server that runs its own key helper is
-  moved to the plugin's. 0.7.0 adds three: context7's key moves from `--api-key` into its environment, sentry's
+  home (an existing `.serena/` folder moves there when it safely can, else it is named with its reason), and a
+  hand-added server that runs its own key helper is moved to the plugin's (0.8.0 also removes the old helper file when
+  nothing names it). 0.7.0 adds three: context7's key moves from `--api-key` into its environment, sentry's
   variable is renamed to `SENTRY_AUTH_TOKEN` where its pin reads that name, and a managed server whose row the catalog
   retired is offered for removal (`/alfred-tools:fix` offers it too; not picking it is a decline, kept per project at
   project and local scope and for every project at global scope). It adds a fourth: `MCP_TIMEOUT=90000` in the `env` of

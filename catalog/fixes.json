@@ -335,12 +335,12 @@
         "serena"
       ],
       "kind": "file",
-      "symptom": "a managed serena's <SERENA_HOME>/serena_config.yml does not set project_serena_folder_location, so serena keeps each project's .serena folder inside the project (not an alfred-code 2.x home)",
+      "symptom": "a managed serena's <SERENA_HOME>/serena_config.yml does not set project_serena_folder_location, so serena keeps each project's .serena folder inside the project - or sets it while a listed project still has one: each such folder moves to <SERENA_HOME>/projects/<project> when the project has a .git, git tracks nothing in it and the destination is free (not an alfred-code 2.x home)",
       "detect": "serenaProjectFolderDetect",
       "fix": null,
       "steps": "serenaProjectFolderSteps",
-      "verifiedOn": "this build: tests/fix.test.ts serena-project-folder (2026-11-18)",
-      "source": "docs/superpowers/specs/2026-11-18-session-issues-design.md Part B"
+      "verifiedOn": "this build: tests/fix.test.ts serena-project-folder (2026-11-21)",
+      "source": "docs/superpowers/specs/2026-11-18-session-issues-design.md Part B; docs/superpowers/2026-11-21-auto-run.md Part 2"
     },
     {
       "id": "list-import",
@@ -640,11 +640,35 @@
         "win32"
       ],
       "kind": "registration",
-      "symptom": "a managed hosted registration whose headersHelper runs a helper the user wrote (not mcp-headers.js), as a hand-added my-sonarqube does; it moves to this plugin's helper once the key it names has a value in the key files, and the old file is named as no longer used",
+      "symptom": "a managed hosted registration whose headersHelper runs a helper the user wrote (not mcp-headers.js), as a hand-added my-sonarqube does; it moves to this plugin's helper once the key it names has a value in the key files, and the old file - when it sits in a root folder - is removed after the replace if no registration or Cursor file names it and git does not track it; a file outside the roots is named and left",
       "detect": "helperForeignDetect",
       "fix": "helperForeignFix",
-      "verifiedOn": "this build: tests/fix.test.ts helper-foreign and tests/update.test.ts update adopts my-sonarqube (2026-11-18)",
-      "source": "docs/superpowers/specs/2026-11-18-session-issues-design.md Part C2"
+      "verifiedOn": "this build: tests/fix.test.ts helper-foreign and tests/update.test.ts update adopts my-sonarqube (2026-11-21)",
+      "source": "docs/superpowers/specs/2026-11-18-session-issues-design.md Part C2; docs/superpowers/2026-11-21-auto-run.md Part 1"
+    },
+    {
+      "id": "helper-foreign-file",
+      "upgrade": "0.8.0",
+      "tool": [
+        "context7",
+        "github",
+        "gitlab",
+        "atlassian",
+        "sentry",
+        "sonarqube"
+      ],
+      "os": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "kind": "file",
+      "symptom": "a hand-built key helper, mcp-headers-<name>.js, .cjs or .mjs, is left directly in a root folder that no registration names (helper-foreign moved its server and left the file, as 0.7.0 did); it is removed when no registration or Cursor file names it and git does not track it",
+      "detect": "helperForeignFileDetect",
+      "fix": null,
+      "steps": "helperForeignFileSteps",
+      "verifiedOn": "this build: tests/fix.test.ts helper-foreign-file (2026-11-21)",
+      "source": "docs/superpowers/2026-11-21-auto-run.md Part 1"
     },
     {
       "id": "helper-missing",

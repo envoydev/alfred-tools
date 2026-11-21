@@ -2,6 +2,7 @@ export * from './registration.ts';
 export * from './machine.ts';
 export * from './keys.ts';
 export * from './helper-foreign.ts';
+export * from './helper-foreign-file.ts';
 export * from './paths.ts';
 export * from './lists.ts';
 export * from './rename.ts';
@@ -20,6 +21,7 @@ import { rootMoveDetect, rootMoveFix, rootRepointDetect, rootRepointFix } from '
 import { context7KeyEnvDetect, context7KeyEnvFix, sentryAuthEnvDetect, sentryAuthEnvFix } from './key-env.ts';
 import { keyToLauncherCursorSteps, keyToLauncherDetect, keyToLauncherFix } from './key-to-launcher.ts';
 import { retiredServerDetect } from './retired-server.ts';
+import { helperForeignFileDetect, helperForeignFileSteps } from './helper-foreign-file.ts';
 import { macosConfigDetect, macosConfigSteps } from './macos-config.ts';
 import { startTimeoutDetect, startTimeoutSteps } from './start-timeout.ts';
 import type { Detector, FileSteps, MachineFix, RegistrationFix } from './types.ts';
@@ -43,6 +45,7 @@ export const DETECTORS: ReadonlyMap<string, Detector> = new Map<string, Detector
     ['serenaContextDetect', serenaContextDetect],
     ['serenaBaseModesDetect', serenaBaseModesDetect],
     ['serenaProjectFolderDetect', serenaProjectFolderDetect],
+    ['helperForeignFileDetect', helperForeignFileDetect],
     ['listImportDetect', listImportDetect],
     ['retiredPluginDetect', retiredPluginDetect],
     ['retiredServerDetect', retiredServerDetect],
@@ -94,6 +97,7 @@ export const MACHINE_FIXES: ReadonlyMap<string, MachineFix> = new Map<string, Ma
 export const FILE_STEPS: ReadonlyMap<string, FileSteps> = new Map<string, FileSteps>([
     ['serenaBaseModesSteps', serenaBaseModesSteps],
     ['serenaProjectFolderSteps', serenaProjectFolderSteps],
+    ['helperForeignFileSteps', helperForeignFileSteps],
     ['listImportSteps', listImportSteps],
     ['readGuardSteps', readGuardSteps],
     ['startTimeoutSteps', startTimeoutSteps],

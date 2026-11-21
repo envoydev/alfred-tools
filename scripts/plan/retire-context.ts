@@ -1,10 +1,11 @@
 // The root's old copy of serena's context file: retired once no registration names it. Shared by fix (serena-context) and
 // by a plan that rewrites a serena registration from the root's copy to the home's (rename, move, root change).
 import { pathFor } from '../entries/platform.ts';
-import { contextArgAt } from '../entries/entry.ts';
+import { contextArgAt, foreignScript, helperParts } from '../entries/entry.ts';
+import { FOREIGN_HELPER_FILE } from '../entries/constants.ts';
 import * as roots from '../roots/roots.ts';
 import type { ServerEntry } from '../core/types.ts';
-import type { PlanStep, RetireCtx, RetireShippedStep, Rewrite } from './types.ts';
+import type { PlanStep, RetireCtx, RetireHelperStep, RetireShippedStep, Rewrite } from './types.ts';
 
 const rootContext = (context: RetireCtx) => ({ project: context.inventory.project, home: context.home, platform: context.platform, catalog: context.catalog });
 const contextFileOf = (entry: ServerEntry | null | undefined, context: RetireCtx): string | null =>
@@ -52,6 +53,38 @@ export function retireContextSteps(context: RetireCtx, rewrites: Rewrite[]): Ret
         const root = familyRoots[roots.familyOf(rewrite.scope)];
         if (!file || !root || file !== pathApi.join(root, roots.FILES.serenaContext) || file === contextFileOf(rewrite.entry, context)) continue;
         out.set(file, { op: 'retire-shipped', kind: 'serenaContext', file, namedBy: namedBy(file, context, except), why: `${file}: the old copy of serena's context file, now in each serena's home - removed when it is unedited and no registration names it` });
+    }
+    return [...out.values()];
+}
+
+// The hand-built helper script a command runs: its absolute path, and why the plan leaves it - null when it may be retired.
+// Only a file named mcp-headers-<name>.js directly in a resolved root folder is retired; any other script a user's
+// registration ran (a `~/bin` script, with a global root of `~`) is never touched. null for a command with no script, or
+// the plugin's own helper.
+export function retirableHelper(command: unknown, context: RetireCtx): { file: string; left: string | null } | null
+{
+    if (typeof command !== 'string' || helperParts(command)) return null;
+    const script = foreignScript(command);
+    if (!script) return null;
+    const pathApi = pathFor(context.platform);
+    const file = roots.absOf(script.file, rootContext(context));
+    if (!FOREIGN_HELPER_FILE.test(pathApi.basename(file))) return { file, left: 'its name is not mcp-headers-<name>.js' };
+    const familyRoots = Object.values(roots.resolveRoots(context.inventory, null, rootContext(context)).roots);
+    const direct = familyRoots.some((root) => typeof root === 'string' && pathApi.relative(root, pathApi.dirname(file)) === '');
+    return { file, left: direct ? null : 'it is not directly in a root folder' };
+}
+
+// A step for each hand-built helper script a rewritten registration ran and now does not: its entry runs this plugin's
+// helper. The apply removes the file only when nothing else names it and git does not track it.
+export function retireHelperSteps(context: RetireCtx, rewrites: Rewrite[]): RetireHelperStep[]
+{
+    const out = new Map<string, RetireHelperStep>();
+    for (const rewrite of rewrites)
+    {
+        const found = retirableHelper(rewrite.old.headersHelper, context);
+        if (!found || found.left !== null || !helperParts(rewrite.entry.headersHelper)) continue;
+        const { file } = found;
+        out.set(file, { op: 'retire-helper', file, why: `${file}: the old key helper of ${rewrite.name}, now on this plugin's helper - removed when no registration or Cursor file names it and git does not track it` });
     }
     return [...out.values()];
 }

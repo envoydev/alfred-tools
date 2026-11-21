@@ -149,3 +149,39 @@ export interface FetchRun
     warnings: string[];
     status: Status[];
 }
+
+// A listed project that keeps a .serena folder in its tree: where it is, where it would go, and why it stays - or null when
+// it can move.
+export interface InTreeFolder
+{
+    project: string;
+    from: string;
+    to: string;
+    reason: string | null;
+}
+
+// What a git call answered: its exit status, its error text and the spawn error, if any
+export interface GitAnswer
+{
+    status: number | null;
+    stderr: string;
+    error?: Error | undefined;
+}
+export type GitRunner = (args: string[], cwd: string) => GitAnswer;
+
+// What keepReason reads about the run: the project, the environment, the platform's case rule and the git runner
+export interface KeepCheck
+{
+    project: string;
+    env: Env;
+    platform?: string;
+    run?: GitRunner;
+}
+
+// The file operations of a move, replaceable in a test
+export interface MoveOps
+{
+    rename?: (from: string, to: string) => void;
+    copy?: (from: string, to: string) => void;
+    remove?: (folder: string) => void;
+}

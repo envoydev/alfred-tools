@@ -657,7 +657,7 @@ const listed = (root: string, servers: [string, string, unknown][]) => writeJson
 test('the fix rows update applies are the ones marked upgrade, each with the version that brought its way', () =>
 {
     const catalog = load();
-    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['root-move', '0.5.0'], ['root-repoint', '0.5.0'], ['context7-key-env', '0.7.0'], ['sentry-auth-env', '0.7.0'], ['key-to-launcher', '0.7.0'], ['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['serena-project-folder', '0.6.0'], ['list-import', '0.5.0'], ['retired-plugin', '0.5.0'], ['retired-server', '0.7.0'], ['read-guard', '0.5.0'], ['start-timeout', '0.7.0'], ['key-to-helper', '0.2.0'], ['helper-foreign', '0.6.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
+    assert.deepStrictEqual(catalog.fixes.filter((f) => f.upgrade).map((f) => [f.id, f.upgrade]), [['root-move', '0.5.0'], ['root-repoint', '0.5.0'], ['context7-key-env', '0.7.0'], ['sentry-auth-env', '0.7.0'], ['key-to-launcher', '0.7.0'], ['serena-context', '0.5.0'], ['serena-base-modes', '0.5.0'], ['serena-project-folder', '0.6.0'], ['list-import', '0.5.0'], ['retired-plugin', '0.5.0'], ['retired-server', '0.7.0'], ['read-guard', '0.5.0'], ['start-timeout', '0.7.0'], ['key-to-helper', '0.2.0'], ['helper-foreign', '0.6.0'], ['helper-foreign-file', '0.8.0'], ['root-ignore', '0.2.0'], ['project-relative-path', '0.3.0'], ['mcp-order', '0.3.0']]);
 });
 
 test('update offers the new ways to pass data that fix knows - a 0.1.x key header, a relative project path - and applies them after the pins, by registration', async () =>
@@ -1378,7 +1378,7 @@ test('update adopts my-sonarqube once, for both apps', async () =>
         assert.ok(copy.args.includes(path.join(pt, 'mcp-bridge.js')) && copy.args.includes('SONARQUBE_ORG=SONARQUBE_ORG'), JSON.stringify(copy));
         assert.ok(fs.existsSync(path.join(pt, 'mcp-bridge.js')), 'the bridge the copy runs is written');
         assert.match(a.text, /mcp-headers-sonarqube\.js is no longer used/);
-        assert.ok(fs.existsSync(companion), 'the old companion file is never deleted');
+        assert.ok(!fs.existsSync(companion), 'the old companion file, in the root and named by nothing now, is removed');
         assert.ok(!a.text.includes('tok-123') && !a.text.includes('acme'), 'no key value printed');
 
         const after = JSON.parse((await run(w, ['--check', '--no-refresh', '--json'])).text);

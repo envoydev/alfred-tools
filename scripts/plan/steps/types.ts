@@ -132,6 +132,14 @@ export interface RetireShippedStep
     namedBy: string[]; // stored - do not rename
     why: string; // stored - do not rename
 }
+// The hand-built helper script a registration ran before helper-foreign moved it to the plugin's helper: removed at apply
+// time only when no registration or Cursor file names it and git does not track it.
+export interface RetireHelperStep
+{
+    op: 'retire-helper'; // stored - do not rename
+    file: string; // stored - do not rename
+    why: string; // stored - do not rename
+}
 // What retireContextSteps reads: the inventory (every registration and list), the machine and the catalog.
 export interface RetireCtx
 {
@@ -178,6 +186,15 @@ export interface SerenaProjectFolderStep
     home: string; // stored - do not rename
     why: string; // stored - do not rename
 }
+// one project's in-tree .serena folder moved to serena's home, where project_serena_folder_location points
+export interface SerenaFolderMoveStep
+{
+    op: 'serena-folder-move'; // stored - do not rename
+    project: string; // stored - do not rename
+    from: string; // stored - do not rename
+    to: string; // stored - do not rename
+    why: string; // stored - do not rename
+}
 export interface DenyReadStep
 {
     op: 'deny-read'; // stored - do not rename
@@ -201,7 +218,7 @@ export interface RecordRootStep
     root: string; // stored - do not rename
     why: string; // stored - do not rename
 }
-export type PlanStep = RegistrationStep | (FetchStep & { scope?: string }) | ListWriteStep | CursorWritePlanStep | PathStep | ExcludeFileStep | MoveRootFileStep | FileStep | RetireShippedStep | EnsureKeyNameStep | SerenaBaseModesStep | SerenaConfigInitStep | SerenaProjectFolderStep | DenyReadStep | SettingsEnvStep | RecordRootStep | OrderStep;
+export type PlanStep = RegistrationStep | (FetchStep & { scope?: string }) | ListWriteStep | CursorWritePlanStep | PathStep | ExcludeFileStep | MoveRootFileStep | FileStep | RetireShippedStep | RetireHelperStep | EnsureKeyNameStep | SerenaBaseModesStep | SerenaConfigInitStep | SerenaProjectFolderStep | SerenaFolderMoveStep | DenyReadStep | SettingsEnvStep | RecordRootStep | OrderStep;
 
 // The lines a plan prints beside its steps.
 export interface KeyLine

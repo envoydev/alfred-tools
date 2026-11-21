@@ -20,13 +20,14 @@ import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import * as workspace from '../roots/workspace.ts';
 import { deepEqual } from '../core/json-file.ts';
 import * as serenaConfig from '../apply/serena-config.ts';
+import { inTreeFolders } from '../apply/serena-folder-move.ts';
 import { fieldOf, isManaged } from './common.ts';
 import { restoredLauncher, restoreLauncherSteps } from './key-to-launcher.ts';
 import { READ_GUARD_RESIDUAL } from './constants.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { CatalogRow } from '../catalog/types.ts';
 import type { ListServer } from '../mcps-list/types.ts';
-import type { CursorWritePlanStep, ListCtx, ListWriteStep, McpAddStep, McpReplaceStep, PlannedServer, PlanStep, SerenaBaseModesStep, SerenaConfigInitStep, SerenaProjectFolderStep } from '../plan/types.ts';
+import type { CursorWritePlanStep, ListCtx, ListWriteStep, McpAddStep, McpReplaceStep, PlannedServer, PlanStep, SerenaBaseModesStep, SerenaConfigInitStep, SerenaFolderMoveStep, SerenaProjectFolderStep } from '../plan/types.ts';
 import type { DriftWhere, Finding, FixCtx } from './types.ts';
 
 const pathOf = (context: { platform: string }) => pathFor(context.platform);
@@ -168,8 +169,9 @@ export function serenaBaseModesDetect(context: FixCtx): Finding[]
 export const serenaBaseModesSteps = (finding: Finding): SerenaBaseModesStep[] => [{ op: 'serena-base-modes', file: fieldOf(finding, 'file'), shared: finding.shared, why: `${finding.file}: base_modes: [], so serena's manual names only the tools it has` }];
 
 // serena-project-folder (0.6.0, Part B): a managed serena's home, other than an alfred-code 2.x one and one holding a $, whose
-// serena_config.yml lacks project_serena_folder_location or holds another value - or is not there yet. The steps write the
-// file when it is missing and set the key, and name each project that still keeps a .serena folder in its own tree.
+// serena_config.yml lacks project_serena_folder_location or holds another value - or is not there yet - or sets it while a
+// listed project still has a movable in-tree .serena folder. The steps write the file when it is missing, set the key, move
+// each movable folder to the home, and name each one that stays with its reason.
 export function serenaProjectFolderDetect(context: FixCtx): Finding[]
 {
     const out: Finding[] = [];
@@ -182,18 +184,26 @@ export function serenaProjectFolderDetect(context: FixCtx): Finding[]
         const file = serenaConfig.configOf(home);
         if (!editable.ok || 'error' in serenaConfig.folderValue(home) || seen.has(file)) continue;
         seen.add(file);
-        if (serenaConfig.folderState(file, home) === 'same') continue;
-        out.push({ id: 'serena-project-folder', name: file, scope: null, file, path: home, shared: Boolean(editable.shared), found: `${file} does not set ${serenaConfig.FOLDER_KEY} - serena keeps each project's .serena folder inside the project`, ...(editable.shared ? { note: serenaConfig.planNote(registration.entry, { platform: context.platform }) } : {}) });
+        const same = serenaConfig.folderState(file, home) === 'same';
+        const inTree = inTreeFolders(file, home);
+        const movable = inTree.filter((folder) => folder.reason === null);
+        if (same && !movable.length) continue;
+        const stays = inTree.flatMap((folder) => (folder.reason === null ? [] : [`${folder.from} stays - ${folder.reason}`]));
+        const found = same ? `${file} sets ${serenaConfig.FOLDER_KEY}, and ${movable.length} listed project${movable.length === 1 ? ' still keeps' : 's still keep'} a .serena folder inside the project - it moves to ${home}/projects${stays.length ? `; ${stays.join('; ')}` : ''}` : `${file} does not set ${serenaConfig.FOLDER_KEY} - serena keeps each project's .serena folder inside the project`;
+        out.push({ id: 'serena-project-folder', name: file, scope: null, file, path: home, shared: Boolean(editable.shared), found, ...(editable.shared ? { note: serenaConfig.planNote(registration.entry, { platform: context.platform }) } : {}) });
     }
     return out;
 }
 
-export const serenaProjectFolderSteps = (finding: Finding): (SerenaConfigInitStep | SerenaProjectFolderStep)[] =>
+export const serenaProjectFolderSteps = (finding: Finding): (SerenaConfigInitStep | SerenaProjectFolderStep | SerenaFolderMoveStep)[] =>
 {
     const file = fieldOf(finding, 'file');
     const home = fieldOf(finding, 'path');
-    const init: SerenaConfigInitStep[] = serenaConfig.folderState(file, home) === 'absent' && !fs.existsSync(file) ? [{ op: 'serena-config-init', file, home, why: `${file}: written with its project folders under ${home}/projects` }] : [];
-    return [...init, { op: 'serena-project-folder', file, home, why: `${file}: ${serenaConfig.FOLDER_KEY} under ${home}/projects, so serena keeps each project's .serena folder there` }];
+    const state = serenaConfig.folderState(file, home);
+    const init: SerenaConfigInitStep[] = state === 'absent' && !fs.existsSync(file) ? [{ op: 'serena-config-init', file, home, why: `${file}: written with its project folders under ${home}/projects` }] : [];
+    const setKey: SerenaProjectFolderStep[] = state === 'same' ? [] : [{ op: 'serena-project-folder', file, home, why: `${file}: ${serenaConfig.FOLDER_KEY} under ${home}/projects, so serena keeps each project's .serena folder there` }];
+    const moves = inTreeFolders(file, home).filter((folder) => folder.reason === null).map((folder): SerenaFolderMoveStep => ({ op: 'serena-folder-move', project: folder.project, from: folder.from, to: folder.to, why: `${folder.from}: moved to ${folder.to}, where serena keeps this project's folder now - a running serena may write to the old folder until Claude Code restarts` }));
+    return [...init, ...setKey, ...moves];
 };
 
 // ---- client-drift and cursor-file (0.5.0, D9) -------------------------------------------------------------------------

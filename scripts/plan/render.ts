@@ -69,8 +69,10 @@ export function renderPlan(plan: Plan): string
         else if (step.op === 'write-serena-context') lines.push(`   writes ${pathApi.join(step.path, roots.FILES.serenaContext)}  (serena's context: code navigation only)`);
         else if (step.op === 'write-exclude-file') lines.push(`   writes ${pathApi.join(step.path, roots.FILES.macosExclude)}  (the tools macos-mcp leaves out: ${step.tools.join(', ')} - only when it is not there)`);
         else if (step.op === 'retire-shipped') lines.push(`   removes ${step.file}  (only when it is this plugin's own, unedited copy and no registration names it)`);
+        else if (step.op === 'retire-helper') lines.push(`   removes ${step.file}  (only when no registration or Cursor file names it and git does not track it)`);
+        else if (step.op === 'serena-folder-move') lines.push(`   moves ${step.from} to ${step.to}  (only when the project has a .git, git tracks nothing in it and the destination is free; a running serena may write to the old folder until Claude Code restarts)`);
         else if (step.op === 'serena-config-init') lines.push(`   writes ${step.file}  (projects: [], base_modes: [] and project_serena_folder_location - only when it is not there)`);
-        else if (step.op === 'serena-project-folder') lines.push(`   sets project_serena_folder_location in ${step.file}  (no other line changes; in-tree .serena folders are named, never moved)`);
+        else if (step.op === 'serena-project-folder') lines.push(`   sets project_serena_folder_location in ${step.file}  (no other line changes; a project's in-tree .serena folder that cannot move is named with its reason)`);
         else if (step.op === 'ensure-key-name') lines.push(`   writes ${step.file}  (names only: ${step.names.join(', ')} - you fill in each value)`);
         else if (step.op === 'list-write' || step.op === 'retire-record' || step.op === 'cursor-write' || step.op === 'deny-read' || step.op === 'settings-env') lines.push(renderLine(step));
         else if (step.op === 'order-mcp-json') lines.push(`   reorders ${step.file}  (no value changes)`);

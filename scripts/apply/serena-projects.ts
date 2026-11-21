@@ -1,7 +1,6 @@
-// The projects serena_config.yml lists, and which of them still keep a .serena folder inside their own tree. Reads the
+// The projects serena_config.yml lists. Reads the
 // `projects:` list only (a YAML list of scalars, block or flow); the file's other lines, auth_secret included, are never read.
 import fs from 'node:fs';
-import path from 'node:path';
 import { scalarOf } from './yaml.ts';
 
 const PROJECTS_KEY = /^projects[ \t]*:(.*?)\r?$/;
@@ -33,13 +32,4 @@ export function projectsOf(file: string): string[]
         if (value) out.push(value);
     }
     return out;
-}
-
-// -> one line for each listed project that still has a <project>/.serena folder: names only, nothing is moved or deleted
-export function inTreeLines(file: string, home: string): string[]
-{
-    const base = home.replace(/\\/g, '/').replace(/\/+$/, '');
-    return projectsOf(file)
-        .filter((project) => { try { return fs.statSync(path.join(project, '.serena')).isDirectory(); } catch { return false; } })
-        .map((project) => `serena keeps using ${project}/.serena until it is moved to ${base}/projects/${project.replace(/\\/g, '/').replace(/\/+$/, '').split('/').pop()}`);
 }

@@ -22,3 +22,10 @@ export const RUN = { flag: '--run', end: '--', optional: '?' } as const;
 // the ENV names the bridge keeps for itself (its RESERVED_ENV): a launcher naming one is not a launcher.
 export const RUN_RESERVED_ENV = /^PT_BRIDGE_/;
 export const RUN_PAIR = /^([A-Za-z_][A-Za-z0-9_]*)=([A-Za-z_][A-Za-z0-9_]*)(\?)?$/;
+
+// A script file in a helper command's arguments
+export const SCRIPT_FILE = /\.[cm]?js$/i;
+
+// A hand-built key helper beside this plugin's mcp-headers.js: `mcp-headers-<anything>.js|.cjs|.mjs` (the user's own, as for
+// my-sonarqube). The plugin's own two files never match it.
+export const FOREIGN_HELPER_FILE = /^mcp-headers-.+\.[cm]?js$/i;

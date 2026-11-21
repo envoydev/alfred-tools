@@ -32,7 +32,8 @@ import * as cursorMcp from '../cursor/cursor-mcp.ts';
 import { addAndVerify, rowOf, removeAndVerify, restoreBy, makeRunner, restoreStep, fillStep } from './cli-steps.ts';
 import { rootIgnore, writeHelper, writeShipped, moveRootFile, ensureKeyName, listWrite, retireRecord, retireShipped, serenaConfigInit, denyRead, settingsEnv, recordRoot, failureLists, writeExcludeFile } from './file-steps.ts';
 import { emptyBaseModes, setProjectFolder } from './serena-config.ts';
-import { inTreeLines } from './serena-projects.ts';
+import { inTreeLines, serenaFolderMove } from './serena-folder-move.ts';
+import { retireHelper } from './retire-helper.ts';
 import { GITIGNORE_ALL } from './constants.ts';
 import type { Endpoint, PlanStep, Reconnect } from '../plan/types.ts';
 import type { ApplyCtx, ApplyOptions, ApplyPlan, ApplyReport, Call, StepResult, Status } from './types.ts';
@@ -61,6 +62,8 @@ function runStep(step: PlanStep, context: ApplyCtx, call: Call): StepResult
         case 'list-write': return listWrite(step, context);
         case 'retire-record': return retireRecord(step.file);
         case 'retire-shipped': return retireShipped(step);
+        case 'retire-helper': return retireHelper(step, context);
+        case 'serena-folder-move': return serenaFolderMove(step);
         case 'cursor-write': return cursorMcp.cursorWrite(step, context);
         case 'deny-read': return denyRead(step.file, step.rules || []);
         case 'settings-env': return settingsEnv(step.file, step.env || {});

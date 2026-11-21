@@ -1,10 +1,12 @@
 // helper-foreign (0.6.0, spec C2): a managed hosted registration whose `headersHelper` runs a helper that is not this
 // plugin's mcp-headers.js - one the user wrote beside it, as for my-sonarqube. The fix rewrites the registration as
-// read to this plugin's helper command; the old file is named as no longer used and never touched. Compared by name
-// only: a finding names a key and a file, never a value.
+// read to this plugin's helper command. The old file is named as no longer used: one inside a root is retired by a step
+// after the replace (retireHelperSteps), one outside the roots is left. Compared by name only: a finding names a key and
+// a file, never a value.
 import path from 'node:path';
-import { helperArgv, helperFor, helperParts } from '../entries/entry.ts';
+import { foreignScript, helperFor, helperParts } from '../entries/entry.ts';
 import { adoptedClients } from '../plan/lists.ts';
+import { retirableHelper } from '../plan/retire-context.ts';
 import { mixedNote } from './lists.ts';
 import * as keys from '../keys/keys.ts';
 import * as kept from '../core/kept.ts';
@@ -14,17 +16,6 @@ import * as common from './common.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { InvRegistration } from '../inventory/types.ts';
 import type { Finding, FixCtx } from './types.ts';
-
-const SCRIPT_FILE = /\.[cm]?js$/i;
-
-// The script a foreign helper command runs and its first argument, as the plugin's helper reads its own: the key's name.
-function foreignScript(command: string): { file: string; first: string | undefined } | null
-{
-    const argv = helperArgv(command);
-    const at = argv.findIndex((argument) => SCRIPT_FILE.test(argument));
-    const file = argv[at];
-    return file === undefined ? null : { file, first: argv[at + 1] };
-}
 
 // The key's name: the foreign helper's first argument when it is a name a key file of the chain defines and is not shaped
 // like a key (a token is name-shaped, and a finding or note would print it), else the row's own. Names only are read.
@@ -62,7 +53,9 @@ export function helperForeignDetect(context: FixCtx): Finding[]
         const keyName = keyNameOf(script.first, chain, route.helper.var);
         const apps = appsOf(context, registration);
         const what = `headersHelper runs ${path.basename(script.file)}, not mcp-headers.js - it moves to the plugin's helper, which reads ${keyName} from the key files`;
-        const afterNote = [`${path.basename(script.file)} is no longer used - ${registration.name} runs mcp-headers.js now; the old file is left where it is`, ...(apps.mixed ? [mixedNote([registration.name])] : [])].join('\n');
+        const left = retirableHelper(command, context)?.left;
+        const fate = left === null ? 'it is removed when no registration or Cursor file names it and git does not track it' : `the old file is left where it is - ${left ?? 'it is not a script file'}`;
+        const afterNote = [`${path.basename(script.file)} is no longer used - ${registration.name} runs mcp-headers.js now; ${fate}`, ...(apps.mixed ? [mixedNote([registration.name])] : [])].join('\n');
         const extra = { route: registration.route, roots: resolvedRoots, keyName, cursor: apps.cursor, afterNote, ...(apps.clients ? { clients: apps.clients } : {}) };
         out.push(keys.valueIn(chain, keyName)
             ? common.finding('helper-foreign', registration, what, extra)

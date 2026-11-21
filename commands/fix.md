@@ -37,6 +37,13 @@ These three rows look after a Project-scope `.mcp.json`:
 - `helper-child-folder` - advice only: a hosted server inherited from a parent folder's `.mcp.json` connects here
   without its key, since Claude Code does not run a parent folder's key helper in a child folder.
 
+Two rows tidy what an earlier version left, each shown in the plan first: `helper-foreign-file` removes a hand-built
+`mcp-headers-<name>.js` left in a root folder once no registration or Cursor file names it and git does not track it
+(`helper-foreign` plans the same removal right after it moves the server; a file outside the roots is named and left),
+and `serena-project-folder` moves a project's in-tree `.serena` folder to serena's home when the project has a `.git`, git
+tracks nothing in it and the destination is free - any other stays and is named with its reason. After a move, tell the
+user to restart Claude Code so serena reads the moved folder.
+
 `retired-plugin` offers to uninstall a plugin the catalog no longer lists - typescript-lsp, csharp-lsp or claude-hud,
 which work in Claude Code alone - once per plugin and scope (`claude plugin uninstall <id> --scope <scope>`; for the last
 claude-hud, its own statusLine goes too, any other line stays). One the user turned down before is listed as 'NOT
