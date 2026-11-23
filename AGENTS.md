@@ -66,12 +66,14 @@ CI runs `typecheck`, `lint`, `build:check`, `validate`, `test` and `kit:check`, 
 
 - `commands/` - the four commands: `install`, `configure`, `fix`, `update`.
 - `catalog/` - `tools.json` (the tools and their routes), `fixes.json` (the problems fix knows), `reserved-names.json`.
-- `scripts/` - the entry scripts a command calls (`plan.ts`, `apply.ts`, `fix.ts`, `update.ts`, `inventory.ts`,
-  `fetch.ts`, `prereq.ts`), each with a folder of its parts; `core/` holds what they share (`claude-cli.ts` is the one
-  way the `claude` CLI is started); `copied/` is the CommonJS a root runs outside the plugin.
+- `scripts/` - the TypeScript sources of the `dist/` bundles: one entry file per bundle (`plan.ts`, `apply.ts`,
+  `fix.ts`, `update.ts`, `inventory.ts`, `fetch.ts`, `prereq.ts`, `tmpdir.ts`, `table.ts`, `sign-in.ts`), each with a
+  folder of its parts; `core/` holds what they share (`claude-cli.ts` is the one way the `claude` CLI is started);
+  `copied/` is the CommonJS a root runs outside the plugin.
 - `dist/` - the bundles the commands run, one `.mjs` per entry (`plan`, `update`, `fix`, `prereq`, `tmpdir`, `table`,
-  `inventory`, `fetch`, `sign-in`, `apply`), built from `scripts/` by `npm run build` and committed. Generated: edit the
-  source, run `npm run build`, commit both, and never edit `dist/` by hand (`npm run build:check` fails on a stale one).
+  `inventory`, `fetch`, `sign-in`, `apply`), built from `scripts/` by `npm run build` and committed. Generated: edit
+  the source, run `npm run build`, commit both, and never edit `dist/` by hand (`npm run build:check` fails on a
+  stale one).
 - `tests/` - `*.test.ts` beside their fakes (`fake-claude.ts`, `fake-mcp-server.ts`), `lint.ts`,
   `validate-plugin.ts`, `matrix/` (the by-hand real-CLI cases) and `proof/`.
 - `docs/` - `build-prompt.md` (the design and the rulings), `sources.md` (outside facts with URL and date),
@@ -154,13 +156,15 @@ CI runs `typecheck`, `lint`, `build:check`, `validate`, `test` and `kit:check`, 
   expanded by the script: one data folder whatever folder Claude starts in, at the cost that the committed `.mcp.json`
   names this machine's path. Never a key in `.mcp.json`. Every file the plugin writes for a scope family sits in that
   family's root folder (project root: project and local scope; global root: global scope), memory's data included.
-- **`allowed-tools` pre-approves read-only calls only.** `dist/apply.mjs`, `dist/fetch.mjs`, `dist/fix.mjs --apply`, `dist/update.mjs --apply` and the
-  `hud-statusline.ts` writes are never listed, so Claude Code's own prompt guards a change beside the command's written ask. `tests/lint.ts`
-  enforces it. Two exceptions write into a temp folder. `inventory.ts --json` and `plan.ts --out`, `--record`,
-  `--rewind` and `--skip` each refuse (exit 2) a file outside a folder `tmpdir.ts` made, and write through that folder's
-  real path with a temporary file and a rename; `tmpdir.ts` makes the folder and removes its own old ones. And
-  `prereq.ts --audit` makes a `pt-audit-*` folder of its own, runs `npm install --package-lock-only --ignore-scripts`
-  and `npm audit` there for one npm package at its pin, and removes it (`auditPrereqs` in `scripts/prereq/prereq.ts`).
+- **`allowed-tools` pre-approves read-only calls only.** `dist/apply.mjs`, `dist/fetch.mjs`, `dist/fix.mjs --apply`,
+  `dist/update.mjs --apply` and the `hud-statusline.ts` writes (`scripts/hud/`, run inside the fix bundle)
+  are never listed, so Claude Code's own prompt guards a change beside the command's written ask. `tests/lint.ts`
+  enforces it. Two exceptions write into a temp folder. `dist/inventory.mjs --json` and `dist/plan.mjs --out`,
+  `--record`, `--rewind` and `--skip` each refuse (exit 2) a file outside a folder `dist/tmpdir.mjs` made, and write
+  through that folder's real path with a temporary file and a rename; `dist/tmpdir.mjs` makes the folder and removes
+  its own old ones. And `dist/prereq.mjs --audit` makes a `pt-audit-*` folder of its own, runs
+  `npm install --package-lock-only --ignore-scripts` and `npm audit` there for one npm package at its pin, and removes
+  it (`auditPrereqs` in `scripts/prereq/prereq.ts`).
 - **Script paths go through the plugin root.** A command's shell runs in the user's project, so every call is
   `node "${CLAUDE_PLUGIN_ROOT}/dist/<entry>.mjs"`, the bundle built from `scripts/<entry>.ts`.
 - **Asks stay within the AskUserQuestion limits** (1-4 questions per call, 2-4 options each). Exactly one option is

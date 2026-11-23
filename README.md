@@ -473,13 +473,19 @@ embedding model for about 2 minutes). Restart Claude Code once it reports.
 ## Development
 
 ```bash
-npm test          # node:test, one file per script
-npm run lint      # catalog and manifest shape checks
-npm run validate  # claude plugin validate --profile directory --strict, on a copy of the files git would ship
-npm run matrix    # real-CLI cases in a throwaway home and account (minutes; plugin cases need the network)
+npm run build        # bundle scripts/ into the ten files in dist/ with esbuild
+npm run build:check  # a fresh in-memory build against dist/ - exit 1 when they differ
+npm test             # node:test, one file per script
+npm run lint         # catalog and manifest shape checks
+npm run validate     # claude plugin validate --profile directory --strict, on a copy of the files git would ship
+npm run matrix       # real-CLI cases in a throwaway home and account (minutes; plugin cases need the network)
 npm run refresh-pins              # which catalog pins have a newer release at least 7 days old
 npm run refresh-pins -- --write   # move catalog/tools.json; a moved pin is a release
 ```
+
+The commands run the bundles in `dist/`, not the TypeScript in `scripts/`. Edit `scripts/`, run `npm run build` and
+commit both - never edit `dist/` by hand. Building needs Node 22.18 or newer (it runs the TypeScript directly); running
+the plugin needs Node 20.19.
 
 This repo's own rules are in `AGENTS.md` (not loaded by installs).
 
