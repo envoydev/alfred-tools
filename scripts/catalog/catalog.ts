@@ -1,10 +1,11 @@
 // The catalog, loaded and indexed. Everything else reads rows through here, so the shape lives in one place.
 import fs from 'node:fs';
 import path from 'node:path';
+import { pluginRoot } from '../core/plugin-root.ts';
 import { isFixesFile, isReservedFile, isToolsFile } from './shapes.ts';
 import type { Catalog, Fingerprint } from './types.ts';
 
-export const CATALOG_DIR = path.join(import.meta.dirname, '..', '..', 'catalog');
+export const CATALOG_DIR = path.join(pluginRoot(), 'catalog');
 
 // One of the catalog's files, checked by its shape: a file of another shape stops the load with the file named.
 function readChecked<Doc>(file: string, isDoc: (value: unknown) => value is Doc): Doc

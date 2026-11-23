@@ -11,6 +11,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as account from '../core/account.ts';
 import { ALFRED_DATA, FILES, FORMER_ROOT_NAME, ROOT_NAME } from '../core/constants.ts';
+import { pluginRoot } from '../core/plugin-root.ts';
 import { replaceFile } from '../core/replace-file.ts';
 import { errorCode, isRecord } from '../core/guards.ts';
 import { rootOfEntry, alfredData } from '../entries/locations.ts';
@@ -428,7 +429,7 @@ export function ignoreGap(root: string, family: string, { writes = [] }: { write
 const SHIPPED_LINE: Record<ShippedKind, RegExp> = { helper: /^\/\/ (alfred|preferred)-tools mcp-headers (\d+)\s*$/, bridge: /^\/\/ (alfred|preferred)-tools mcp-bridge (\d+)\s*$/, serenaContext: /^# (alfred|preferred)-tools serena-context (\d+)\s*$/ };
 const shippedVersion = (kind: ShippedKind): number => (kind === 'bridge' ? BRIDGE_VERSION : kind === 'serenaContext' ? SERENA_CONTEXT_VERSION : helper.HELPER_VERSION);
 const shippedText: Partial<Record<ShippedKind, string>> = {};
-export const shippedSource = (kind: ShippedKind): string => (shippedText[kind] = shippedText[kind] || fs.readFileSync(path.join(import.meta.dirname, '..', 'copied', FILES[kind]), 'utf8'));
+export const shippedSource = (kind: ShippedKind): string => (shippedText[kind] = shippedText[kind] || fs.readFileSync(path.join(pluginRoot(), 'scripts', 'copied', FILES[kind]), 'utf8'));
 export const helperSource = () => shippedSource('helper');
 
 // The file at `file` against this plugin's copy of `kind` ('helper' or 'bridge'): 'absent', 'lower' (rewrite it), 'same',

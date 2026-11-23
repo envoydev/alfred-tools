@@ -49,3 +49,7 @@ export const MCP_JSON = '.mcp.json';
 // ---- a registration's scopes (inventory/ and plan/ read them) -------------------------------------------------------
 // every scope a registration or a plugin install can have, in the inventory table's column order
 export const ALL_SCOPES: readonly string[] = ['local', 'project', 'user'];
+
+// ---- The plugin root (plugin-root.ts) -------------------------------------------------------------------------------
+// The file that marks the plugin's root folder: a bundle in dist/ finds the catalog and the copied files by walking up to it
+export const PLUGIN_MANIFEST = '.claude-plugin/plugin.json';
