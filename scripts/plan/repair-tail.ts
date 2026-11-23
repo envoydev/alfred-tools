@@ -13,7 +13,7 @@ import { isRecord } from '../core/shapes.ts';
 import { errorCode } from '../core/guards.ts';
 import { fetchStep } from '../entries/names.ts';
 import { SETTINGS_ENV_KEY, START_TIMEOUT } from './start-timeout-constants.ts';
-import { CONFIG_DIR_NAME, INSTALLED_PLUGINS_FILE, PLUGINS_DIR, PLUGIN_KEY_PREFIXES, SETTINGS_FILE } from './read-guard-constants.ts';
+import { ACCOUNT_FILE, CONFIG_DIR_NAME, INSTALLED_PLUGINS_FILE, PLUGINS_DIR, PLUGIN_KEY_PREFIXES, SETTINGS_FILE } from './read-guard-constants.ts';
 import { REG_OPS, listSteps } from './lists.ts';
 import { cursorSteps, SCOPES, heldCopies, keepOf } from './cursor-steps.ts';
 import type { ServerEntry } from '../core/types.ts';
@@ -149,12 +149,11 @@ export function readGuardOf(context: SettingsCtx, want: string[], dir?: string):
     return { file, rules: want.filter((rule) => !deny.includes(rule)) };
 }
 
-// The config dirs other than `current` that have this plugin installed (Part E): each folder directly under `home` named
-// `.claude` or `.claude-<suffix>` whose plugins/installed_plugins.json is JSON with a key of the plugin's ids. Names
-// only - the file's content is never kept, and one that is absent, not JSON or without a `plugins` object skips the dir.
-// Dirs are compared by real path, so a symlink to the current dir or to a dir already listed is no dir of its own (the
-// first name in sort order is the one listed); `platform` (the caller's context) says whether case is folded.
-export function configDirsWithPlugin(home: string, current: string, platform: string = process.platform): string[]
+// The config dirs under `home` other than `current` that `wanted` accepts: each folder directly under `home` named `.claude`
+// or `.claude-<suffix>`. Dirs are compared by real path, so a symlink to the current dir or to a dir already listed is no
+// dir of its own (the first name in sort order is the one listed); `platform` (the caller's context) says whether case is
+// folded. `wanted` runs only on a dir that passed those checks.
+function configDirsWhere(home: string, current: string, platform: string, wanted: (dir: string) => boolean): string[]
 {
     const realKey = (dir: string) =>
     {
@@ -173,15 +172,37 @@ export function configDirsWithPlugin(home: string, current: string, platform: st
         const dir = path.join(home, name);
         const key = realKey(dir);
         if (key === currentKey || listed.has(key)) continue;
+        if (wanted(dir)) { found.push(dir); listed.add(key); }
+    }
+    return found;
+}
+
+// The config dirs other than `current` that have this plugin installed (Part E): each folder directly under `home` named
+// `.claude` or `.claude-<suffix>` whose plugins/installed_plugins.json is JSON with a key of the plugin's ids. Names
+// only - the file's content is never kept, and one that is absent, not JSON or without a `plugins` object skips the dir.
+export function configDirsWithPlugin(home: string, current: string, platform: string = process.platform): string[]
+{
+    return configDirsWhere(home, current, platform, (dir) =>
+    {
         try
         {
             const doc: unknown = JSON.parse(stripBom(fs.readFileSync(path.join(dir, PLUGINS_DIR, INSTALLED_PLUGINS_FILE), 'utf8')));
             const plugins = isRecord(doc) ? doc['plugins'] : null;
-            if (isRecord(plugins) && Object.keys(plugins).some((pluginKey) => PLUGIN_KEY_PREFIXES.some((prefix) => pluginKey.startsWith(prefix)))) { found.push(dir); listed.add(key); }
+            return isRecord(plugins) && Object.keys(plugins).some((pluginKey) => PLUGIN_KEY_PREFIXES.some((prefix) => pluginKey.startsWith(prefix)));
         }
-        catch { /* no record, or not JSON: skipped */ }
-    }
-    return found;
+        catch { return false; /* no record, or not JSON: skipped */ }
+    });
+}
+
+// The config dirs other than `current` that Claude Code has used, with or without this plugin: the same folders, kept when
+// they hold `.claude.json` or plugins/installed_plugins.json - for `.claude` itself, the `.claude.json` beside it in the
+// home. Existence only - no file is read. A Project-scope server runs in every such profile that opens the project, so
+// the start limit reaches them all (start-timeout).
+export function configDirsUnderHome(home: string, current: string, platform: string = process.platform): string[]
+{
+    const there = (file: string) => { try { return fs.statSync(file).isFile(); } catch { return false; } };
+    // the default profile keeps its account file beside it, in the home, not inside it (core/account.ts)
+    return configDirsWhere(home, current, platform, (dir) => there(path.join(dir, ACCOUNT_FILE)) || there(path.join(dir, PLUGINS_DIR, INSTALLED_PLUGINS_FILE)) || (path.basename(dir) === CONFIG_DIR_NAME && there(path.join(home, ACCOUNT_FILE))));
 }
 
 // The deny-read step as one plan line - or none when the file has every rule.
@@ -210,14 +231,15 @@ export function denyReadSteps(steps: PlanStep[], context: SettingsCtx, out: Pick
 
 // The start limit guard: the settings file MCP_TIMEOUT goes in, and whether its env lacks it - { file, missing } - or
 // { file, bad: true } for a file that is not a JSON object or whose env is not one. Shared by install and configure
-// (startTimeoutSteps) and fix's start-timeout row; `dir` is another config dir (configDirsWithPlugin). A value the file
-// holds, of any kind, counts as set.
+// (startTimeoutSteps) and fix's start-timeout row; `dir` is another config dir (configDirsWithPlugin, configDirsUnderHome).
+// A value the file holds, of any kind, counts as set.
 export function startTimeoutOf(context: SettingsCtx, dir?: string): { file: string; missing: boolean; bad?: undefined } | { file: string; bad: true; missing?: undefined }
 {
     const file = settingsFileOf(context, dir);
     // a value the environment holds already - a shell's export, or the settings' env a session hands its commands - counts
-    // as set, so a limit the user chose is never overridden
-    if ((context.env || {})[START_TIMEOUT.name]) return { file, missing: false };
+    // as set for the current config dir, so a limit the user chose is never overridden; it is this session's, not another
+    // profile's, so for another dir its own settings file decides
+    if (!dir && (context.env || {})[START_TIMEOUT.name]) return { file, missing: false };
     let text: string | null = null;
     // absent: {}; there but unreadable: no file to write, so bad, never missing
     try { text = fs.readFileSync(file, 'utf8'); } catch (caught) { if (errorCode(caught) !== 'ENOENT') return { file, bad: true }; }
@@ -239,20 +261,27 @@ export function settingsEnvStep(file: string): SettingsEnvStep
 // fetchStep knows.
 export const launchesPackage = (name: string, entry: ServerEntry | null | undefined): boolean => fetchStep(name, entry) !== null;
 
-// The start limit guard: one settings-env for the plan when a registration it writes launches through npx, uvx or docker
-// and Claude Code's settings lack MCP_TIMEOUT. A settings file that is not a JSON object is a note: the rest of the plan
-// is still written. -> [settings-env step]
+// The start limit guard: one settings-env for Claude Code's settings file when a registration the plan writes launches
+// through npx, uvx or docker and the file lacks MCP_TIMEOUT. A step that writes Project scope adds one for each other
+// profile under the home (configDirsUnderHome) that lacks it: the project's .mcp.json is read by every profile that opens
+// it. A settings file that is not a JSON object is a note: the rest of the plan is still written. -> [settings-env step]
 export function startTimeoutSteps(steps: PlanStep[], context: SettingsCtx, out: Pick<PlanOut, 'notes'>): SettingsEnvStep[]
 {
-    const launches = steps.some((step) => (step.op === 'mcp-add' || step.op === 'mcp-replace' || step.op === 'mcp-move') && launchesPackage(step.op === 'mcp-move' ? step.to.name : step.name, step.entry));
-    if (!launches) return [];
+    const launching = steps.filter((step): step is RegistrationStep => (step.op === 'mcp-add' || step.op === 'mcp-replace' || step.op === 'mcp-move') && launchesPackage(step.op === 'mcp-move' ? step.to.name : step.name, step.entry));
+    if (!launching.length) return [];
+    const badNote = (file: string) => out.notes.push(`${file} is not a settings object alfred-tools can read - add ${START_TIMEOUT.name}=${START_TIMEOUT.value} to ${SETTINGS_ENV_KEY} yourself`);
+    const result: SettingsEnvStep[] = [];
     const current = startTimeoutOf(context);
-    if (current.bad)
+    if (current.bad) badNote(current.file);
+    else if (current.missing) result.push(settingsEnvStep(current.file));
+    if (!launching.some((step) => (step.op === 'mcp-move' ? step.to.scope : step.scope) === 'project')) return result;
+    for (const dir of configDirsUnderHome(context.home, pathFor(context.platform).dirname(current.file), context.platform))
     {
-        out.notes.push(`${current.file} is not a settings object alfred-tools can read - add ${START_TIMEOUT.name}=${START_TIMEOUT.value} to ${SETTINGS_ENV_KEY} yourself`);
-        return [];
+        const other = startTimeoutOf(context, dir);
+        if (other.bad) badNote(other.file);
+        else if (other.missing) result.push(settingsEnvStep(other.file));
     }
-    return current.missing ? [settingsEnvStep(current.file)] : [];
+    return result;
 }
 
 // The plan line of a list-write, retire-record, cursor-write, deny-read or settings-env step.

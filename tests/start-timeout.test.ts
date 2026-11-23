@@ -9,12 +9,13 @@ import { load } from '../scripts/catalog/catalog.ts';
 import { world, readJson } from './helpers.ts';
 import { runSteps } from './apply-helpers.ts';
 import { ctxFor, ctxOf, logged, put, reg, seed } from './fix-helpers.ts';
+import { fingerprintOf } from '../scripts/inventory/existing.ts';
 import { MAC, POSIX_FIXTURE, inv, opts, pickOne } from './plan-helpers.ts';
 import { detectAll, applyFixes } from '../scripts/fix/fix.ts';
 import { settingsEnv } from '../scripts/apply/file-steps.ts';
 import { plan } from '../scripts/plan/plan.ts';
 import { renderPlan } from '../scripts/plan/render.ts';
-import { startTimeoutOf } from '../scripts/plan/repair-tail.ts';
+import { configDirsUnderHome, startTimeoutOf } from '../scripts/plan/repair-tail.ts';
 import { START_TIMEOUT } from '../scripts/plan/start-timeout-constants.ts';
 import { run, fakeRegistry, ago } from './update-helpers.ts';
 import type { SettingsEnvStep } from '../scripts/plan/types.ts';
@@ -117,13 +118,19 @@ test('startTimeoutOf reads the settings file of CLAUDE_CONFIG_DIR, else the home
     finally { w.clean(); }
 });
 
-test('a MCP_TIMEOUT the environment already holds counts as set, so a value the shell chose is never overridden', () =>
+test('a MCP_TIMEOUT the environment already holds counts as set for the current config dir only, so a value the shell chose is never overridden', () =>
 {
     const w = world();
     try
     {
         const plain = path.join(w.home, '.claude', 'settings.json');
-        assert.deepStrictEqual(startTimeoutOf({ platform: process.platform, home: w.home, env: { MCP_TIMEOUT: '180000' } }), { file: plain, missing: false });
+        const context = { platform: process.platform, home: w.home, env: { MCP_TIMEOUT: '180000' } };
+        assert.deepStrictEqual(startTimeoutOf(context), { file: plain, missing: false });
+        // the value is this session's: another profile's settings still decide for that profile
+        const other = path.join(w.home, '.claude-work');
+        assert.deepStrictEqual(startTimeoutOf(context, other), { file: path.join(other, 'settings.json'), missing: true });
+        put(path.join(other, 'settings.json'), JSON.stringify({ env: { MCP_TIMEOUT: '1' } }));
+        assert.deepStrictEqual(startTimeoutOf(context, other), { file: path.join(other, 'settings.json'), missing: false });
     }
     finally { w.clean(); }
 });
@@ -143,6 +150,51 @@ test('a settings file that cannot be read is no file to write: startTimeoutOf ca
         assert.deepStrictEqual(startTimeoutOf({ platform: process.platform, home: w.home, env: {} }), { file: plain, bad: true });
     }
     finally { try { fs.chmodSync(path.join(w.home, '.claude', 'settings.json'), 0o600); } catch { /* gone */ } w.clean(); }
+});
+
+// ---- the profiles under the home --------------------------------------------------------------------------------------
+
+test('configDirsUnderHome lists each .claude dir that holds .claude.json or a plugin record, and skips the current dir, its symlink and a dir with neither', () =>
+{
+    const w = world();
+    try
+    {
+        const mine = path.join(w.home, '.claude');
+        const work = path.join(w.home, '.claude-work');
+        const recorded = path.join(w.home, '.claude-recorded');
+        const empty = path.join(w.home, '.claude-x');
+        put(path.join(mine, 'settings.json'), '{}');
+        // existence only: the content is never read, so a file that is not JSON counts
+        put(path.join(work, '.claude.json'), 'not json');
+        put(path.join(recorded, 'plugins', 'installed_plugins.json'), JSON.stringify({ version: 2, plugins: { 'other@market': [] } }));
+        put(path.join(empty, 'settings.json'), '{}');
+        put(path.join(w.home, 'notes', '.claude.json'), '{}');
+        try { fs.symlinkSync(mine, path.join(w.home, '.claude-link')); } catch { /* no symlink right: the rest still holds */ }
+        assert.deepStrictEqual(configDirsUnderHome(w.home, mine).sort(), [recorded, work].sort());
+        assert.deepStrictEqual(configDirsUnderHome(path.join(w.home, 'absent'), mine), []);
+    }
+    finally { w.clean(); }
+});
+
+test('configDirsUnderHome lists the default profile by the .claude.json beside it, and a Project-scope server gives its settings a finding from a session in another profile', () =>
+{
+    const w = world();
+    try
+    {
+        const plain = path.join(w.home, '.claude');
+        const work = path.join(w.home, '.claude-work');
+        w.env.CLAUDE_CONFIG_DIR = work;
+        put(path.join(plain, 'settings.json'), '{}');
+        put(path.join(w.home, '.claude.json'), '{}');
+        put(path.join(work, 'settings.json'), JSON.stringify({ env: SETTING }));
+        assert.deepStrictEqual(configDirsUnderHome(w.home, work), [plain]);
+        // a .claude.json in the home counts for the dir named .claude only
+        put(path.join(w.home, '.claude-other', 'settings.json'), '{}');
+        assert.deepStrictEqual(configDirsUnderHome(w.home, work), [plain]);
+        seed(w, 'playwright-chrome', 'project', NPX_CHROME);
+        assert.deepStrictEqual(found(w).map((f) => f.name), [path.join(plain, 'settings.json')]);
+    }
+    finally { w.clean(); }
 });
 
 // ---- install and configure --------------------------------------------------------------------------------------------
@@ -195,6 +247,34 @@ test('settings that already hold MCP_TIMEOUT, at any value, plan no step; one th
         assert.ok(bad.steps.some((s) => s.op === 'mcp-add'), 'the rest of the plan is written');
         assert.ok(!bad.steps.some((s) => s.op === 'settings-env'));
         assert.ok(bad.notes.some((n) => n.startsWith(`${path.join(conf, 'settings.json')} is not a settings object`) && n.includes('MCP_TIMEOUT')), bad.notes.join('\n'));
+    }
+    finally { w.clean(); }
+});
+
+test('a Project-scope install of an npx route plans a settings-env step for each other profile under the home, and a Local-scope install does not', { skip: POSIX_FIXTURE }, () =>
+{
+    const w = world();
+    try
+    {
+        const mine = path.join(w.home, '.claude');
+        const work = path.join(w.home, '.claude-work');
+        const done = path.join(w.home, '.claude-done');
+        const odd = path.join(w.home, '.claude-odd');
+        put(path.join(mine, 'settings.json'), '{}');
+        put(path.join(work, '.claude.json'), '{}');
+        put(path.join(done, '.claude.json'), '{}');
+        put(path.join(done, 'settings.json'), JSON.stringify({ env: { MCP_TIMEOUT: '1000' } }));
+        put(path.join(odd, '.claude.json'), '{}');
+        put(path.join(odd, 'settings.json'), '{ nope');
+        const at = (scope: string) => plan(inv(MAC), pickOne('playwright-chrome', { scope }), opts(w.home, { env: { CLAUDE_CONFIG_DIR: mine } }));
+        const project = at('project');
+        assert.deepStrictEqual(project.errors, []);
+        const steps = project.steps.filter((s): s is SettingsEnvStep => s.op === 'settings-env');
+        assert.deepStrictEqual(steps.map((s) => [s.file, s.env]), [[path.join(mine, 'settings.json'), SETTING], [path.join(work, 'settings.json'), SETTING]]);
+        assert.ok(renderPlan(project).includes(`   adds MCP_TIMEOUT=90000 to env in ${path.join(work, 'settings.json')}  (gives a server 90 s to start - npx asks the npm registry first)`), renderPlan(project));
+        assert.ok(project.notes.some((n) => n.startsWith(`${path.join(odd, 'settings.json')} is not a settings object`) && n.includes('MCP_TIMEOUT')), project.notes.join('\n'));
+        const local = at('local');
+        assert.deepStrictEqual(local.steps.filter((s): s is SettingsEnvStep => s.op === 'settings-env').map((s) => s.file), [path.join(mine, 'settings.json')]);
     }
     finally { w.clean(); }
 });
@@ -252,16 +332,78 @@ test('start-timeout reads a launch through cmd /c, and a hosted route beside it 
     assert.strictEqual(detectAll(ctxFor({ platform: 'win32', registrations: [via, hosted] })).found.filter((f) => f.id === 'start-timeout').length, 1);
 });
 
-test('an unmanaged, an inherited and an alfred-retired npx registration give no start-timeout finding', () =>
+test('an unmanaged and an alfred-retired npx registration give no start-timeout finding', () =>
 {
     const mine = { own: true };
-    const inherited = { scope: 'inherited' };
     const retired = { alfredRetired: true };
-    for (const over of [mine, inherited, retired])
+    for (const over of [mine, retired])
     {
         const registration = { ...reg('playwright-chrome', NPX_CHROME, { scope: 'user' }), ...over };
         assert.deepStrictEqual(detectAll(ctxFor({ registrations: [registration] })).found.filter((f) => f.id === 'start-timeout'), [], JSON.stringify(over));
     }
+});
+
+// start-timeout writes Claude Code's settings and never the registration, so a server a parent folder's .mcp.json gives
+// (scope inherited) counts like a Project one: it starts in every profile that opens the child folder
+test('start-timeout counts a managed npx server inherited from a parent folder, for the current profile and for one without the plugin', () =>
+{
+    const w = world();
+    try
+    {
+        const mine = path.join(w.home, '.claude');
+        const work = path.join(w.home, '.claude-work');
+        w.env.CLAUDE_CONFIG_DIR = mine;
+        put(path.join(mine, 'settings.json'), '{}');
+        put(path.join(work, '.claude.json'), '{}');
+        put(path.join(w.dir, '.mcp.json'), JSON.stringify({ mcpServers: { 'playwright-chrome': NPX_CHROME } }));
+        const list = found(w);
+        assert.deepStrictEqual(list.map((f) => f.name).sort(), [path.join(mine, 'settings.json'), path.join(work, 'settings.json')].sort());
+        const { res, l } = runFix(w);
+        assert.strictEqual(res.failed, null, l.text());
+        assert.deepStrictEqual(readJson(path.join(work, 'settings.json')), { env: SETTING });
+        assert.deepStrictEqual(found(w), []);
+    }
+    finally { w.clean(); }
+});
+
+test('start-timeout skips an inherited server the parent folder\'s list leaves on its own, and counts it without that entry', () =>
+{
+    const w = world();
+    try
+    {
+        const mine = path.join(w.home, '.claude');
+        w.env.CLAUDE_CONFIG_DIR = mine;
+        put(path.join(mine, 'settings.json'), '{}');
+        put(path.join(w.dir, '.mcp.json'), JSON.stringify({ mcpServers: { 'playwright-chrome': NPX_CHROME } }));
+        const list = path.join(w.dir, '.alfred-tools', 'mcps.json');
+        const ownEntry = { name: 'playwright-chrome', scope: 'project', fingerprint: fingerprintOf(NPX_CHROME, load()), choice: 'own' };
+        put(list, JSON.stringify({ version: 1, servers: [], own: [ownEntry] }));
+        assert.deepStrictEqual(found(w), []);
+        // a 'manage' answer, another name, or a launch that changed since is no own entry
+        for (const other of [{ ...ownEntry, choice: 'manage' }, { ...ownEntry, name: 'other' }, { ...ownEntry, fingerprint: 'pkg:changed' }])
+        {
+            put(list, JSON.stringify({ version: 1, servers: [], own: [other] }));
+            assert.strictEqual(found(w).length, 1, JSON.stringify(other));
+        }
+        fs.rmSync(list);
+        assert.strictEqual(found(w).length, 1);
+    }
+    finally { w.clean(); }
+});
+
+test('start-timeout skips an inherited server that a nearer registration shadows', () =>
+{
+    const w = world();
+    try
+    {
+        const mine = path.join(w.home, '.claude');
+        const parent = { ...reg('playwright-chrome', NPX_CHROME, { scope: 'inherited' }), from: w.dir, approval: 'approved' as const, shadowed: null };
+        const context = (registration: object) => ctxFor({ home: w.home, env: { CLAUDE_CONFIG_DIR: mine }, registrations: [registration as typeof parent] });
+        const startTimeout = (registration: object) => detectAll(context(registration)).found.filter((f) => f.id === 'start-timeout');
+        assert.strictEqual(startTimeout(parent).length, 1);
+        assert.deepStrictEqual(startTimeout({ ...parent, shadowed: { scope: 'local', from: null } }), []);
+    }
+    finally { w.clean(); }
 });
 
 test('start-timeout refuses a settings file that is not an object, names it, and writes nothing', () =>
@@ -305,6 +447,29 @@ test('start-timeout gives another config dir with the plugin its own finding, an
         assert.deepStrictEqual(readJson(path.join(mine, 'settings.json')), { env: SETTING });
         assert.deepStrictEqual(readJson(path.join(personal, 'settings.json')), { theme: 'dark', env: SETTING });
         assert.deepStrictEqual(readJson(path.join(stranger, 'settings.json')), {}, 'a dir without the plugin is left');
+        assert.deepStrictEqual(found(w), []);
+    }
+    finally { w.clean(); }
+});
+
+test('start-timeout gives a profile without the plugin a finding when a managed npx server is at Project scope, applies it, and leaves it alone at Local scope', () =>
+{
+    const w = world();
+    try
+    {
+        const mine = path.join(w.home, '.claude');
+        const work = path.join(w.home, '.claude-work');
+        w.env.CLAUDE_CONFIG_DIR = mine;
+        put(path.join(mine, 'settings.json'), JSON.stringify({ env: SETTING }));
+        put(path.join(work, '.claude.json'), '{}');
+        put(path.join(work, 'settings.json'), JSON.stringify({ theme: 'dark' }));
+        seed(w, 'playwright-chrome', 'local', NPX_CHROME);
+        assert.deepStrictEqual(found(w), [], 'Local scope: a profile without the plugin is not reached');
+        seed(w, 'playwright-chrome', 'project', NPX_CHROME);
+        assert.deepStrictEqual(found(w).map((f) => f.name), [path.join(work, 'settings.json')]);
+        const { res, l } = runFix(w);
+        assert.strictEqual(res.failed, null, l.text());
+        assert.deepStrictEqual(readJson(path.join(work, 'settings.json')), { theme: 'dark', env: SETTING });
         assert.deepStrictEqual(found(w), []);
     }
     finally { w.clean(); }

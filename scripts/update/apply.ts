@@ -9,6 +9,7 @@ import { pinnedVersion } from '../inventory/fingerprint.ts';
 import * as mcpOrder from '../mcps-list/mcp-order.ts';
 import { reapproveLine } from '../plan/cursor-steps.ts';
 import { renderLine, repairTail } from '../plan/repair-tail.ts';
+import { PLUGIN_KEY_PREFIXES } from '../plan/read-guard-constants.ts';
 import * as account from '../core/account.ts';
 import * as keys from '../keys/keys.ts';
 import { bumpEntry } from './offers-plugins.ts';
@@ -236,6 +237,9 @@ export function applyUpdates(context: UpdateCtx, ids: string[], out: UpdateCheck
     // a helper runs at each connect: rewriting one needs no restart; a new way to pass data needs one when it rewrote a
     // registration (a .gitignore or the .mcp.json order changes nothing a session started)
     if (result.applied.some((id) => !id.startsWith('helper:') && !id.startsWith('upgrade:')) || applying.restart) log('', `Restart Claude Code (or run /reload-plugins for plugins) so the updated servers and plugins load${result.fetchFile ? ' - after the fetch reports' : ''}.`);
+    // a new alfred-tools version's own data moves ('New ways to pass data') are found by its code, which a session started
+    // before the update does not run: a second update after the restart finds them
+    if (result.applied.some((id) => PLUGIN_KEY_PREFIXES.some((prefix) => id.startsWith(`plugin:${prefix}`)))) log('', 'The new alfred-tools version may bring its own New ways to pass data, and they run only from the new code - run /alfred-tools:update again after the restart.');
     return result;
 }
 

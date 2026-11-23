@@ -6,3 +6,5 @@ export const INSTALLED_PLUGINS_FILE = 'installed_plugins.json';
 export const PLUGINS_DIR = 'plugins';
 // the plugin's id before and since the rename, each followed by the marketplace
 export const PLUGIN_KEY_PREFIXES = ['alfred-tools@', 'preferred-tools@'];
+// the account file a config dir holds: with PLUGINS_DIR's record, what marks a folder as a profile Claude Code has used
+export const ACCOUNT_FILE = '.claude.json';

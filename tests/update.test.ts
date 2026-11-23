@@ -261,6 +261,26 @@ test('plugins: every installed plugin is offered under Other plugins; the market
     finally { w.clean(); }
 });
 
+test('updating the alfred-tools plugin itself says to run update again after the restart; another plugin does not', async () =>
+{
+    const w = world();
+    try
+    {
+        const mine = marketplace(w, 'envoydev', [{ name: 'alfred-tools', version: '0.9.0' }, { name: 'tidy', version: '0.5.0' }]);
+        seed(w, { markets: [['envoydev', mine]], installed: [['alfred-tools@envoydev', '0.8.0', 'user'], ['tidy@envoydev', '0.4.0', 'user']] });
+        const versions = { 'alfred-tools@envoydev': '0.9.0', 'tidy@envoydev': '0.5.0' };
+        const env = { ...w.env, FAKE_CLAUDE_VERSIONS: JSON.stringify(versions) };
+        const other = await run(w, ['--apply', 'plugin:tidy@envoydev~user', '--no-refresh'], { env });
+        assert.strictEqual(other.code, 0, other.text);
+        assert.match(other.text, /Restart Claude Code/);
+        assert.doesNotMatch(other.text, /run \/alfred-tools:update again/);
+        const own = await run(w, ['--apply', 'plugin:alfred-tools@envoydev~user', '--no-refresh'], { env });
+        assert.strictEqual(own.code, 0, own.text);
+        assert.match(own.text, /Restart Claude Code[^\n]*\n(?:.*\n)*?.*New ways to pass data.*run \/alfred-tools:update again after the restart/);
+    }
+    finally { w.clean(); }
+});
+
 test('a marketplace entry with no version is unchecked: listed, and updated only on its own id', async () =>
 {
     const w = world();

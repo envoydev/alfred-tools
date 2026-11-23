@@ -933,7 +933,10 @@ Each step ends with its check; the next step starts only when it passes.
   does not help), so a slow first network of the day fails an npx server, the sign-in form included (a uvx start took
   54.6 s on a Windows VM; Docker unmeasured).
   Guard: `MCP_TIMEOUT=90000` in the `env` of Claude Code's settings (`settings-env` step; the `start-timeout` row for
-  what is installed). A value the user set is never replaced. The install fetch (`fetch.ts`) fills the cache but does
+  what is installed: the current config dir, each other one with the plugin, and - for a managed server at Project scope or
+  inherited from a parent folder's `.mcp.json`, unless that folder's list leaves it on its own or a nearer registration
+  shadows it - every profile under the home, `~/.claude` and `~/.claude-*`, with the plugin or not, since each profile
+  that opens the project starts it). A value the user set is never replaced. The install fetch (`fetch.ts`) fills the cache but does
   not skip that registry check.
 - Shared plugins. alfred-code also installs claude-hud and the LSP pair, and its update installs an absent pick, so it
   may add back one that alfred-tools removed. The plugins stay standalone (no hand-over), so the gap stays open.

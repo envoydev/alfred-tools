@@ -353,7 +353,9 @@ the root, so you sign in once in the browser and both apps use it, under any Cla
   `uvx` server took 54.6 s on Windows; Docker not measured), so a slow first network of the day fails the first start
   until you pick Reconnect in `/mcp`. When a plan writes such a server, the plugin adds `MCP_TIMEOUT=90000` (90 s) to
   `env` in the same settings file; `/alfred-tools:fix` and `/alfred-tools:update` add it for the servers you have, in
-  every config folder with the plugin. A value you set yourself, in the file or in your shell, is never changed. A side
+  every config folder with the plugin. A server at project scope, or one a parent folder's `.mcp.json` gives, is started
+  by every Claude Code profile that opens the project, so then every profile under your home (`~/.claude` and
+  `~/.claude-*`) gets it, with the plugin or not. A value you set yourself, in the file or in your shell, is never changed. A side
   effect: a hosted server's stalled request also waits 90 s before it fails, not 60 s. Measured with `npm` 11.6.1 and
   Claude Code 2.1.328: see `docs/sources.md`.
 - **Signing in.** After an install, configure or update that sets up a new sign-in, a question offers 'Sign in now'
@@ -415,7 +417,8 @@ only what you pick, in one confirmation:
   your Claude Code settings (see 'Start limit' below). 0.8.0 adds two: each `.serena/` folder already in a project
   moves to serena's home when it safely can (else it is named with its reason), and the old key helper file of a
   hand-added server is removed once nothing names it and git does not track it. These run before the version moves,
-  so all of these changes stay.
+  so all of these changes stay. When update moves alfred-tools itself, the new version's own data moves run only from
+  the new code: run `/alfred-tools:update` again after the restart.
 - **Cursor** - asked with the updates, once per root, when Cursor is on this machine and the root's servers are set
   up for Claude Code only. 'Not now' is remembered in the list.
 
@@ -445,7 +448,8 @@ Run `/alfred-tools:fix` first; it knows these:
 - one app's copy of a server was changed by hand, or a Cursor `mcp.json` is not JSON;
 - a deny rule for the sign-ins or the keys is missing, in this config folder or another that has the plugin;
 - `MCP_TIMEOUT` is missing from Claude Code's settings while a server starts through `npx`, `uvx` or Docker (an `npx` start can
-  pass Claude Code's 30 s limit on a slow network);
+  pass Claude Code's 30 s limit on a slow network) - in this config folder, in each other one with the plugin, and, for a
+  project-scope or parent-folder server, in every profile under your home;
 - serena's `serena_config.yml` does not send its project folders to its home, or its context file is not in its home.
 
 A first start can take a while: install downloads each new package right after the plan and starts it once in the

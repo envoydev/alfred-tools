@@ -10,8 +10,9 @@ import { ALL_SCOPES, MCP_JSON, RECOMMENDED_SUFFIX } from '../core/constants.ts';
 import { parseJson } from '../core/json-file.ts';
 import { isRecord, isServerEntry } from '../core/guards.ts';
 import { fingerprintKey } from '../catalog/catalog.ts';
-import { serverKey } from '../mcps-list/mcps-list.ts';
+import { listFiles, readList, serverKey } from '../mcps-list/mcps-list.ts';
 import { catalogMatch } from './fingerprint.ts';
+import { INHERITED_OWN_SCOPE } from './constants.ts';
 import type { ServerEntry } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Live, OwnEntry } from '../mcps-list/types.ts';
@@ -66,6 +67,23 @@ export function fingerprintOf(entry: ServerEntry | null | undefined, catalog: Ca
 {
     const match = catalogMatch(entry, catalog);
     return match ? fingerprintKey(match.fingerprint) : null;
+}
+
+// Whether the list in the folder an inherited registration comes from leaves it on its own (AGENTS.md: install, configure,
+// update and fix skip such a server). The inventory gives an inherited registration no choice, so this reads the parent
+// folder's list - the first one listFiles finds for that folder - and matches an own entry by name, project scope and the
+// launch's fingerprint, as a registration's own choice is matched. The current project's registrations are left out of the
+// lookup: they say where the current project's roots are, not the parent's.
+export function inheritedLeftOwn(inventory: Pick<Inventory, 'roots'>, registration: Pick<InvRegistration, 'name' | 'entry' | 'from'>, machine: { platform: string; home: string; catalog: Catalog }): boolean
+{
+    if (!registration.from) return false;
+    const fingerprint = fingerprintOf(registration.entry, machine.catalog);
+    for (const file of listFiles({ roots: inventory.roots, registrations: [] }, 'project', { ...machine, project: registration.from }))
+    {
+        const list = readList(file);
+        if (list) return list.own.some((ownEntry) => ownEntry.name === registration.name && ownEntry.scope === INHERITED_OWN_SCOPE && ownEntry.choice === 'own' && ownEntry.fingerprint === fingerprint);
+    }
+    return false;
 }
 
 const labelOf = (catalog: Catalog, rowId: string | null) => { const row = rowId === null ? undefined : catalog.byId.get(rowId); return row ? row.label : rowId; };

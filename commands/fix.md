@@ -58,7 +58,9 @@ edited bridge, waits for 'restore' or 'keep' on a drifted server (a 'leave' does
 `context7-key-env` and `sentry-auth-env` rewrite a registration - context7's key from `--api-key` into its environment,
 sentry's variable to `SENTRY_AUTH_TOKEN` - keeping the value and printing nothing of it. `macos-config` writes a missing
 `macos-mcp.toml` again, the file a managed macos-control's `--config` names. `start-timeout` adds
-`MCP_TIMEOUT=90000` to `env` in Claude Code's settings - this config dir's and every other one with the plugin - when a
+`MCP_TIMEOUT=90000` to `env` in Claude Code's settings - this config dir's and every other one with the plugin, and, when a
+managed server is at Project scope or comes from a parent folder's `.mcp.json`, every Claude Code profile under the home
+(`~/.claude` and `~/.claude-*`) with the plugin or not, since each profile that opens the project starts it - when a
 managed server launches through npx, uvx or docker: Claude Code gives a server 30 s to start, and npx asks the npm
 registry first (a uvx start took 54.6 s on Windows; docker unmeasured). A value already there stays; a settings file it cannot read is named, never written.
 

@@ -146,7 +146,7 @@ whenever an entry changes': tell the user Cursor will ask.
 A `read-guard` offer covers every Claude Code config dir under the home that has this plugin installed (a second
 `CLAUDE_CONFIG_DIR` such as `~/.claude-personal` included), not only the one this session runs in. For each other dir
 the report prints `note: <dir>: read guard added - it keeps its own plugin data, so an update there may offer a declined
-uninstall again`: repeat it in the summary, naming the dir. A `start-timeout` offer covers those dirs too.
+uninstall again`: repeat it in the summary, naming the dir. A `start-timeout` offer covers those dirs too - and every profile under the home for a project-scope or parent-folder server.
 
 When a Cursor offer was taken, the report prints each plan note as `note   <text>` and, for each server moved onto the
 shared sign-in, a line `<name>: now the shared sign-in in <root>/mcp-remote-v1/ (Cursor added) - sign-in not done yet`:
@@ -187,7 +187,7 @@ A first download can take minutes, and the new version's first-run work would ot
 every start with `ENOENT` until `/alfred-tools:fix` repairs it). After a `warn` line the registration is updated, and
 its first start downloads the pin and may time out once. End with the restart line when the script prints one (new
 servers load on the next session start; `/reload-plugins` for plugins): a key helper runs at each connect, so a run that
-only rewrote helpers needs no restart.
+only rewrote helpers needs no restart. After it moves alfred-tools itself, tell the user to run update again after the restart.
 
 For each server the report named as `now the shared sign-in ... sign-in not done yet`, ask once the fetch has reported
 (sign-in.ts and the fetch both start npx, and two at once is the one case measured to break a start); the scope is the

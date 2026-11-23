@@ -14,3 +14,5 @@ export const LIST_UNREAD_NOTES: ReadonlyMap<string, string> = new Map([
     [PLUGIN_LIST_UNREAD.scope, 'the plugin list could not be read, so this run takes no plugin as installed.'],
     [MARKETPLACE_LIST_UNREAD.scope, 'the marketplace list could not be read, so update offers no plugin update from it.'],
 ]);
+// The scope a parent folder's list records a server of its .mcp.json at: that folder's own Project scope.
+export const INHERITED_OWN_SCOPE = 'project';
