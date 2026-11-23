@@ -55,6 +55,9 @@ jobs:
       - name: npm run lint
         run: npm run lint
 
+      - name: npm run build:check
+        run: npm run build:check
+
       - name: npm run validate
         run: npm run validate
 
@@ -68,3 +71,20 @@ jobs:
 
       - name: npm run kit:check
         run: npm run kit:check
+
+  # The bundles in dist/ must start on the lowest Node the plugin supports. No npm install: the smoke uses built-ins only.
+  node20:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20.19.0
+          package-manager-cache: false
+
+      - name: node tests/dist-smoke.mjs
+        run: node tests/dist-smoke.mjs

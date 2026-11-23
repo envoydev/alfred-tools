@@ -49,15 +49,18 @@ private project names, no absolute local paths, no tokens, nothing from a user's
 
 ```bash
 npm install          # first in a fresh clone: typecheck, lint and test import the pinned typescript
-npm run typecheck    # tsc -p .
+npm run typecheck    # tsc -p . and tsc -p tsconfig.node20.json (the Node 20 types)
 npm run lint         # tests/lint.ts - the repo's own rules (allowed-tools, names, types)
+npm run build        # esbuild: scripts/ to the ten bundles in dist/
+npm run build:check  # a fresh in-memory build against dist/ - exit 1 on a difference
 npm run validate     # claude plugin validate --profile directory --strict on a copy of the files git ships
 npm test             # node --test tests/*.test.ts - the whole suite, minutes; run it in the background
 npm run kit:check    # the files claude-kit manages are unedited, and no CLAUDE.md hides this file
 npm run matrix       # real-CLI cases - by hand only, on a throwaway project and account, never in CI
 ```
 
-The first five plus `kit:check` are what CI runs, in that order.
+CI runs `typecheck`, `lint`, `build:check`, `validate`, `test` and `kit:check`, in that order. A second CI job runs
+`node tests/dist-smoke.mjs` on Node 20.19.0, the run-time floor.
 
 ## Layout
 
@@ -66,6 +69,9 @@ The first five plus `kit:check` are what CI runs, in that order.
 - `scripts/` - the entry scripts a command calls (`plan.ts`, `apply.ts`, `fix.ts`, `update.ts`, `inventory.ts`,
   `fetch.ts`, `prereq.ts`), each with a folder of its parts; `core/` holds what they share (`claude-cli.ts` is the one
   way the `claude` CLI is started); `copied/` is the CommonJS a root runs outside the plugin.
+- `dist/` - the bundles the commands run, one `.mjs` per entry (`plan`, `update`, `fix`, `prereq`, `tmpdir`, `table`,
+  `inventory`, `fetch`, `sign-in`, `apply`), built from `scripts/` by `npm run build` and committed. Generated: edit the
+  source, run `npm run build`, commit both, and never edit `dist/` by hand (`npm run build:check` fails on a stale one).
 - `tests/` - `*.test.ts` beside their fakes (`fake-claude.ts`, `fake-mcp-server.ts`), `lint.ts`,
   `validate-plugin.ts`, `matrix/` (the by-hand real-CLI cases) and `proof/`.
 - `docs/` - `build-prompt.md` (the design and the rulings), `sources.md` (outside facts with URL and date),
@@ -148,7 +154,7 @@ The first five plus `kit:check` are what CI runs, in that order.
   expanded by the script: one data folder whatever folder Claude starts in, at the cost that the committed `.mcp.json`
   names this machine's path. Never a key in `.mcp.json`. Every file the plugin writes for a scope family sits in that
   family's root folder (project root: project and local scope; global root: global scope), memory's data included.
-- **`allowed-tools` pre-approves read-only calls only.** `apply.ts`, `fetch.ts`, `fix.ts --apply`, `update.ts --apply` and the
+- **`allowed-tools` pre-approves read-only calls only.** `dist/apply.mjs`, `dist/fetch.mjs`, `dist/fix.mjs --apply`, `dist/update.mjs --apply` and the
   `hud-statusline.ts` writes are never listed, so Claude Code's own prompt guards a change beside the command's written ask. `tests/lint.ts`
   enforces it. Two exceptions write into a temp folder. `inventory.ts --json` and `plan.ts --out`, `--record`,
   `--rewind` and `--skip` each refuse (exit 2) a file outside a folder `tmpdir.ts` made, and write through that folder's
@@ -156,10 +162,11 @@ The first five plus `kit:check` are what CI runs, in that order.
   `prereq.ts --audit` makes a `pt-audit-*` folder of its own, runs `npm install --package-lock-only --ignore-scripts`
   and `npm audit` there for one npm package at its pin, and removes it (`auditPrereqs` in `scripts/prereq/prereq.ts`).
 - **Script paths go through the plugin root.** A command's shell runs in the user's project, so every call is
-  `node "${CLAUDE_PLUGIN_ROOT}/scripts/<file>"`.
+  `node "${CLAUDE_PLUGIN_ROOT}/dist/<entry>.mjs"`, the bundle built from `scripts/<entry>.ts`.
 - **Asks stay within the AskUserQuestion limits** (1-4 questions per call, 2-4 options each). Exactly one option is
   marked `(Recommended)`, listed first, and nothing is applied before the plan is confirmed.
-- **Zero runtime dependencies.** Node 22.18 built-ins only. A plugin's Node dependencies install only with a lockfile and
+- **Zero runtime dependencies.** The bundles use Node 20.19 built-ins at run time; Node 22.18 is needed only to develop
+  (`engines`). esbuild is a dev dependency, pinned exactly, and only `npm run build` uses it. A plugin's Node dependencies install only with a lockfile and
   `--ignore-scripts`, and `claude plugin update` installs none of the new `dependencies` a release adds. So the
   manifest never declares `dependencies`.
 
@@ -199,14 +206,17 @@ far past those dates.
 - **Read the result, not the exit code.** Open the written `.mcp.json`, account file and settings after each case.
   A case not run is reported as NOT RUN, never implied as passing. Windows-only behaviour is proved on the user's
   Windows VM or reported NOT RUN.
-- **CI runs the same checks, and they run here first** (`.github/workflows/ci.yml`: typecheck, lint, validate, test,
-  kit:check on Linux, macOS and Windows, against the Claude Code build pinned there). Before a push, run those five
+- **CI runs the same checks, and they run here first** (`.github/workflows/ci.yml`: typecheck, lint, build:check, validate,
+  test, kit:check on Linux, macOS and Windows, against the Claude Code build pinned there, plus a `node20` job that
+  runs the dist smoke on Node 20.19.0). Before a push, run those six
   here in that order and push only when each passes; then watch the remote run to its end - it is what proves Linux and
   Windows (the user's ruling, 2026-11-15). The matrix is not in CI: it stays a by-hand run on a throwaway project.
 - **What only the runner showed** (first CI runs, 2026-11-14): a test that read the real home folder (each test makes
   its own temp home), a CRLF checkout failing the lint on Windows (`.gitattributes` holds every file to LF), and the
   Windows runner's 8.3 short temp path (`TEMP` and `TMP` are set to `runner.temp` for the test step).
-- **Check order before a publish:** `npm run validate` (`claude plugin validate --profile directory --strict` on a
+- **Edit the source, never `dist/`.** Change `scripts/`, run `npm run build`, commit both. `npm run build:check` fails
+  when `dist/` is stale; `.gitattributes` marks `dist/**` generated.
+- **Check order before a publish:** `npm run typecheck`, `npm run lint`, `npm run build:check`, then `npm run validate` (`claude plugin validate --profile directory --strict` on a
   scratch copy of the files git would ship, so a Finder `.DS_Store` never fails it), a `claude --plugin-dir .` session
   in a scratch project, then `claude plugin details`. The skill has the full list.
 - **Outside facts are verified, not recalled.** A package, version, endpoint, CLI flag or marketplace shape is checked

@@ -33,7 +33,7 @@ claude plugin marketplace add envoydev/plugins-marketplaces
 claude plugin install alfred-tools@envoydev
 ```
 
-It needs Node 22.18 or newer and the `claude` CLI on your `PATH`. The plugin is listed in the `envoydev` marketplace
+It needs Node 20.19 or newer and the `claude` CLI on your `PATH`. The plugin is listed in the `envoydev` marketplace
 ([envoydev/plugins-marketplaces](https://github.com/envoydev/plugins-marketplaces)); it works the same with or without
 alfred-code installed. If you added `envoydev` from `envoydev/alfred-code` before, the catalog has moved: its
 [README](https://github.com/envoydev/plugins-marketplaces#moving-from-the-old-marketplace) has the steps.

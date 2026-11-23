@@ -3,3 +3,4 @@
 # there though the files are right (seen on the first CI run, windows-latest).
 * text=auto eol=lf
 scripts/copied/mcp-headers.js text eol=lf
+dist/** linguist-generated=true
