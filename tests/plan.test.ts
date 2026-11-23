@@ -1373,8 +1373,8 @@ test('plan.ts refuses an inventory or answers file that is gone or cut short, wi
         fs.writeFileSync(path.join(dir, 'cut.json'), '{"picks": ');
         assert.strictEqual(runPlanCommand([path.join(dir, 'inv.json'), path.join(dir, 'cut.json')]), 2);
         assert.strictEqual(lines.length, 2, lines.join('\n'));
-        assert.match(lines[0]!, /^plan\.ts: .*absent\.json: is not a JSON file this run wrote$/);
-        assert.match(lines[1]!, /^plan\.ts: .*cut\.json: is not a JSON file this run wrote$/);
+        assert.match(lines[0]!, /^plan\.mjs: .*absent\.json: is not a JSON file this run wrote$/);
+        assert.match(lines[1]!, /^plan\.mjs: .*cut\.json: is not a JSON file this run wrote$/);
     }
     finally
     {

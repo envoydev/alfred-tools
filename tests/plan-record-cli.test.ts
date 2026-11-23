@@ -77,7 +77,7 @@ test('files outside a tmpdir folder are refused and untouched', (t) => {
     {
         const refused = w.run(...args);
         assert.strictEqual(refused.status, 2, args[0]);
-        assert.match(refused.stderr, /files must sit in one folder tmpdir\.ts made/);
+        assert.match(refused.stderr, /files must sit in one folder tmpdir\.mjs made/);
     }
     assert.deepStrictEqual(files(w).map((file) => fs.readFileSync(file, 'utf8')), before);
     assert.deepStrictEqual(listing(dir), ['answers.json', 'inventory.json', 'picks.json', 'step.json']);
@@ -88,7 +88,7 @@ test('files in two different folders are refused even when both are ours', (t) =
     const other = work(t, I, EACH, {});
     const refused = w.run('--skip', w.inventory, w.picks, other.answers, 'gitlab');
     assert.strictEqual(refused.status, 2);
-    assert.match(refused.stderr, /files must sit in one folder tmpdir\.ts made/);
+    assert.match(refused.stderr, /files must sit in one folder tmpdir\.mjs made/);
 });
 
 test('a refusal exits 2 and writes nothing', (t) => {
@@ -320,7 +320,7 @@ test('--skip takes a row id when one configure target has that row, and refuses 
     assert.strictEqual((w.read(w.answers) as Answers).change?.[other], undefined);
 });
 
-test('--out outside a folder tmpdir.ts made is refused with exit 2 and writes nothing', (t) => {
+test('--out outside a folder tmpdir.mjs made is refused with exit 2 and writes nothing', (t) => {
     const w = work(t, I, {}, { picks: { gitlab: {} } });
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'outside-'));
     t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
@@ -328,7 +328,7 @@ test('--out outside a folder tmpdir.ts made is refused with exit 2 and writes no
     const refused = w.run(w.inventory, w.answers, '--out', target);
     assert.strictEqual(refused.status, 2, refused.stderr);
     assert.match(refused.stderr, /--out/);
-    assert.strictEqual(refused.stderr.trim().split('\n').filter((line) => line.startsWith('plan.ts:')).length, 1);
+    assert.strictEqual(refused.stderr.trim().split('\n').filter((line) => line.startsWith('plan.mjs:')).length, 1);
     assert.ok(!fs.existsSync(target));
     const relative = w.run(w.inventory, w.answers, '--out', 'plan-relative.json');
     assert.strictEqual(relative.status, 2, relative.stderr);
@@ -392,6 +392,6 @@ test('--out with no file name (a folder, ..) is refused with exit 2, not a crash
     {
         const refused = w.run(w.inventory, w.answers, '--out', out);
         assert.strictEqual(refused.status, 2, `${out}: ${refused.stderr}`);
-        assert.match(refused.stderr, /^plan\.ts: --out/);
+        assert.match(refused.stderr, /^plan\.mjs: --out/);
     }
 });

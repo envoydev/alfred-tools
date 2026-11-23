@@ -80,8 +80,12 @@ test('the commands call exactly the built entries', () =>
     for (const name of ENTRIES) assert.ok(fs.existsSync(path.join(ROOT, 'scripts', `${name}.ts`)), `scripts/${name}.ts exists`);
 });
 
-// a comment names a source module and stays; a usage line or the sign-in hint names the bundle the user runs
-const ENTRY_NAMED = /(usage:?\s|sign in now with )[^'"`]*\b(scripts\/)?(plan|update|fix|prereq|tmpdir|table|inventory|fetch|sign-in|apply)\.ts\b/;
+// a comment names a source module and stays; a usage line, the sign-in hint and a message that prefixes, cites or
+// credits an entry (`plan.ts: `, `tmpdir.ts made`, `(fetch.ts`) name the bundle the user runs
+const ENTRY_NAMES = 'plan|update|fix|prereq|tmpdir|table|inventory|fetch|sign-in|apply';
+const ENTRY_NAMED = new RegExp(
+    `(usage:?\\s|sign in now with )[^'"\`]*\\b(scripts\\/)?(${ENTRY_NAMES})\\.ts\\b`
+    + `|\\b(${ENTRY_NAMES})\\.ts(:\\s| made\\b)|\\((${ENTRY_NAMES})\\.ts\\b`);
 
 function sourceFiles(dir: string): string[]
 {

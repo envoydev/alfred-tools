@@ -43,7 +43,7 @@ export const TOOLSET_SEPARATOR = ',';
 
 export const EXIT_CODE = { ok: 0, stopped: 1, refused: 2 } as const;
 export const REFUSAL = {
-    folder: 'files must sit in one folder tmpdir.ts made',
+    folder: 'files must sit in one folder tmpdir.mjs made',
     notJson: 'is not a JSON file this run wrote',
     notObject: 'is not a JSON object',
     notInventory: 'is not an inventory file: no os or registrations',
@@ -54,7 +54,7 @@ export const REFUSAL = {
     skipPick: '--skip takes a pick',
     stepShape: 'step.json must be { "id": <string>, "answers": <object> }',
     walkDone: 'the walk is done: there is no step to record',
-    outFolder: '--out must name a file in a folder tmpdir.ts made',
+    outFolder: '--out must name a file in a folder tmpdir.mjs made',
     nothingRecorded: 'no answer is recorded yet, so none can be changed',
 } as const;
 

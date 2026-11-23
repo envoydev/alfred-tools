@@ -17,7 +17,7 @@ import { walkOutput } from './walk-output.ts';
 import type { Inventory } from '../inventory/types.ts';
 import type { Answers, FileRead, Picks, PlanArgs, RecordResult, WalkOutput } from './types.ts';
 
-const refuse = (line: string): number => { console.error(`plan.ts: ${line}`); return EXIT_CODE.refused; };
+const refuse = (line: string): number => { console.error(`plan.mjs: ${line}`); return EXIT_CODE.refused; };
 
 // Each file as a path inside its checked folder, all in the one folder; null when any is not
 function sitInOneTempFolder(files: string[]): string[] | null

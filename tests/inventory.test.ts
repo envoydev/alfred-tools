@@ -751,7 +751,7 @@ test('inv.workspace is alfred-code\'s workspace as read, and no workspace withou
     finally { w.clean(); }
 });
 
-test('--json outside a folder tmpdir.ts made is refused with exit 2 and writes nothing', () => {
+test('--json outside a folder tmpdir.mjs made is refused with exit 2 and writes nothing', () => {
     const w = world();
     const tmp = makeTempDir();
     try

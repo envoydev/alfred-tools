@@ -91,5 +91,7 @@ async function main(argv: string[]): Promise<number>
     return 0;
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href)
+// import.meta.url is the real path; argv[1] is as typed, so a symlinked start needs it resolved or main() never runs and
+// the check prints nothing and exits 0
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href)
     process.exitCode = await main(process.argv.slice(2));

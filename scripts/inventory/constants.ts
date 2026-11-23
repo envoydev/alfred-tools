@@ -1,4 +1,4 @@
-export const JSON_FILE_REFUSAL = '--json must name a file in a folder tmpdir.ts made';
+export const JSON_FILE_REFUSAL = '--json must name a file in a folder tmpdir.mjs made';
 export const REFUSED_EXIT_CODE = 2;
 export const CLI_MISSING_EXIT_CODE = 3;
 export const INVENTORY_VERSION = 1;

@@ -487,7 +487,7 @@ function writeJsonNoFollow(file, value) {
 }
 
 // scripts/inventory/constants.ts
-var JSON_FILE_REFUSAL = "--json must name a file in a folder tmpdir.ts made";
+var JSON_FILE_REFUSAL = "--json must name a file in a folder tmpdir.mjs made";
 var REFUSED_EXIT_CODE = 2;
 var CLI_MISSING_EXIT_CODE = 3;
 var INVENTORY_VERSION = 1;

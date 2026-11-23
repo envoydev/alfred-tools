@@ -2364,7 +2364,7 @@ var BACKTICKED_NAME = /`([^`]+)`/;
 var TOOLSET_SEPARATOR = ",";
 var EXIT_CODE = { ok: 0, stopped: 1, refused: 2 };
 var REFUSAL = {
-  folder: "files must sit in one folder tmpdir.ts made",
+  folder: "files must sit in one folder tmpdir.mjs made",
   notJson: "is not a JSON file this run wrote",
   notObject: "is not a JSON object",
   notInventory: "is not an inventory file: no os or registrations",
@@ -2375,7 +2375,7 @@ var REFUSAL = {
   skipPick: "--skip takes a pick",
   stepShape: 'step.json must be { "id": <string>, "answers": <object> }',
   walkDone: "the walk is done: there is no step to record",
-  outFolder: "--out must name a file in a folder tmpdir.ts made",
+  outFolder: "--out must name a file in a folder tmpdir.mjs made",
   nothingRecorded: "no answer is recorded yet, so none can be changed"
 };
 var WALK_PICK_LABEL = { [WALK_QUESTION.clients]: "Apps", [WALK_QUESTION.settings]: "Settings" };
@@ -5384,7 +5384,7 @@ function walkOutput(inventory, picks, flags) {
 
 // scripts/plan/record-modes.ts
 var refuse2 = (line) => {
-  console.error(`plan.ts: ${line}`);
+  console.error(`plan.mjs: ${line}`);
   return EXIT_CODE.refused;
 };
 function sitInOneTempFolder(files) {
@@ -5527,14 +5527,14 @@ function runPlanCommand(argv) {
   blockingStdio();
   const args = parseArgs(argv);
   if (args.error) {
-    console.error(`plan.ts: ${args.error}
+    console.error(`plan.mjs: ${args.error}
 ${USAGE}`);
     return EXIT_CODE.refused;
   }
   if (args.mode === "record" || args.mode === "rewind" || args.mode === "skip") return runRecordMode(args);
   const outFile = args.out ? checkedTarget(args.out) : void 0;
   if (outFile === null) {
-    console.error(`plan.ts: ${REFUSAL.outFolder}`);
+    console.error(`plan.mjs: ${REFUSAL.outFolder}`);
     return EXIT_CODE.refused;
   }
   const [invFile, second] = args.files;
@@ -5544,24 +5544,24 @@ ${USAGE}`);
   }
   const inventoryRead = readObject(invFile);
   if ("refused" in inventoryRead) {
-    console.error(`plan.ts: ${inventoryRead.refused}`);
+    console.error(`plan.mjs: ${inventoryRead.refused}`);
     return EXIT_CODE.refused;
   }
   const secondRead = second ? readObject(second) : { value: null };
   if ("refused" in secondRead) {
-    console.error(`plan.ts: ${secondRead.refused}`);
+    console.error(`plan.mjs: ${secondRead.refused}`);
     return EXIT_CODE.refused;
   }
   const inventory = inventoryRead.value;
   if (!isInventoryFile(inventory)) {
-    console.error(`plan.ts: ${invFile}: ${REFUSAL.notInventory}`);
+    console.error(`plan.mjs: ${invFile}: ${REFUSAL.notInventory}`);
     return EXIT_CODE.refused;
   }
   withRootsMap(inventory, args.data);
   if (args.mode === "questions") {
     const picks = secondRead.value;
     if (picks !== null && !isPicksFile(picks)) {
-      console.error(`plan.ts: ${second}: ${REFUSAL.notPicks}`);
+      console.error(`plan.mjs: ${second}: ${REFUSAL.notPicks}`);
       return EXIT_CODE.refused;
     }
     const output = walkOutput(inventory, picks, args);
@@ -5574,7 +5574,7 @@ ${USAGE}`);
   }
   const answers = secondRead.value;
   if (!isAnswersFile(answers)) {
-    console.error(`plan.ts: ${second}: ${REFUSAL.notAnswers}`);
+    console.error(`plan.mjs: ${second}: ${REFUSAL.notAnswers}`);
     return EXIT_CODE.refused;
   }
   const madePlan = plan(inventory, answers, { env: process.env, connectors: args.connectors !== null ? parseConnectors(args.connectors) : null });

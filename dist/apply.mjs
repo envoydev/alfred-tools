@@ -3023,7 +3023,7 @@ function apply(plan, { env = process.env, tmp, runCli = runClaude, log = console
   for (const [i, step] of plan.steps.entries()) {
     if (step.op === "fetch") {
       report.toFetch.push(step);
-      log(`${i + 1}. later  ${step.why} (fetch.ts, after the read-back)`);
+      log(`${i + 1}. later  ${step.why} (fetch.mjs, after the read-back)`);
       continue;
     }
     const ready = restoreStep(step, context);

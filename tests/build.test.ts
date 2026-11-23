@@ -4,6 +4,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { ENTRIES, buildOptions, compareDist } from './build.ts';
 
 const BANNER_LINES = [
@@ -71,4 +72,19 @@ test('buildOptions bundles every entry for Node 20 as ESM with the two-line bann
     assert.ok(!options.minify, 'minify stays off');
     assert.ok(!options.sourcemap, 'no source map');
     assert.strictEqual(options.write, false);
+});
+
+test('build.ts --check runs and reports when it is started through a symlink', { skip: process.platform === 'win32' && 'a symlink needs a privilege on Windows' }, (t) =>
+{
+    const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'build-link-')));
+    t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+    fs.symlinkSync(import.meta.dirname, path.join(scratch, 'tests'), 'dir');
+    // node resolves import.meta.url to the real file but leaves argv[1] as typed: a guard that compares them
+    // unresolved never starts main(), so the check prints nothing and exits 0 - it looks like a pass
+    const run = spawnSync(process.execPath, [path.join(scratch, 'tests', 'build.ts'), '--check'], {
+        env: { PATH: process.env['PATH'] ?? '', TMPDIR: scratch },
+        encoding: 'utf8',
+    });
+    assert.strictEqual(run.status, 0, run.stderr);
+    assert.match(run.stdout, /^build: dist\/ matches the source/);
 });

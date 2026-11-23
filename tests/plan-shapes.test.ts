@@ -30,7 +30,7 @@ test('a picks file given where the inventory goes is refused in one line, exit 2
     const { paths, run } = files(t, { inventory: { rows: ['gitlab'] }, answers: { picks: { gitlab: {} } } });
     const refused = run(paths['inventory'] ?? '', paths['answers'] ?? '');
     assert.strictEqual(refused.status, 2, refused.stderr);
-    assert.strictEqual(refused.stderr.trim(), `plan.ts: ${paths['inventory']}: is not an inventory file: no os or registrations`);
+    assert.strictEqual(refused.stderr.trim(), `plan.mjs: ${paths['inventory']}: is not an inventory file: no os or registrations`);
 });
 
 test('an answers file whose pick is not an object is refused in one line, exit 2', (t) =>
@@ -38,7 +38,7 @@ test('an answers file whose pick is not an object is refused in one line, exit 2
     const { paths, run } = files(t, { inventory: inv(MAC), answers: { picks: { gitlab: 5 } } });
     const refused = run(paths['inventory'] ?? '', paths['answers'] ?? '');
     assert.strictEqual(refused.status, 2, refused.stderr);
-    assert.strictEqual(refused.stderr.trim(), `plan.ts: ${paths['answers']}: is not an answers file: its picks or change are not a map of picks`);
+    assert.strictEqual(refused.stderr.trim(), `plan.mjs: ${paths['answers']}: is not an answers file: its picks or change are not a map of picks`);
 });
 
 test('the walk refuses a picks file whose rows are not a list, exit 2', (t) =>
@@ -46,7 +46,7 @@ test('the walk refuses a picks file whose rows are not a list, exit 2', (t) =>
     const { paths, run } = files(t, { inventory: inv(MAC), picks: { rows: 'gitlab' } });
     const refused = run('--questions', paths['inventory'] ?? '', paths['picks'] ?? '');
     assert.strictEqual(refused.status, 2, refused.stderr);
-    assert.strictEqual(refused.stderr.trim(), `plan.ts: ${paths['picks']}: is not a picks file: a list or a map of it is not one`);
+    assert.strictEqual(refused.stderr.trim(), `plan.mjs: ${paths['picks']}: is not a picks file: a list or a map of it is not one`);
 });
 
 test("a 'path' location with no folder is a plan error, not a data folder named 'undefined'", () =>

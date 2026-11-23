@@ -1,6 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    "lib": ["es2023"],
     "typeRoots": ["./node_modules/@node20types"],
     "types": ["node"]
   },

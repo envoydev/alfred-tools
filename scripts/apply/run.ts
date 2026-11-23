@@ -115,7 +115,7 @@ export function apply(plan: ApplyPlan, { env = process.env, tmp, runCli = cli.ru
     report.tmp = context.tmp;
     for (const [i, step] of plan.steps.entries())
     {
-        if (step.op === 'fetch') { report.toFetch.push(step); log(`${i + 1}. later  ${step.why} (fetch.ts, after the read-back)`); continue; }
+        if (step.op === 'fetch') { report.toFetch.push(step); log(`${i + 1}. later  ${step.why} (fetch.mjs, after the read-back)`); continue; }
         const ready = restoreStep(step, context);
         const filled = ready.error === undefined ? fillStep(ready.step, context) : null;
         // a step that throws (a .cursor that is a file, a read-only target) is a failed step, so the failure path below
