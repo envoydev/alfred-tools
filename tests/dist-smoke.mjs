@@ -3,6 +3,7 @@
 // tests/dist-world.mjs and Node built-ins, so Node 20.19 - the oldest Node a user may have - runs it with no
 // install and no type stripping (the CI `node20` job). tests/dist.test.ts checks EXPECTED against the source's own run
 // so it cannot drift: when it fails after a deliberate change, copy the values it shows in here.
+import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { distWorld, runEntry, mask, chain, condense, REFUSING } from './dist-world.mjs';
 
@@ -89,4 +90,6 @@ function main()
     }
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) process.exitCode = main();
+// import.meta.url is the real path; argv[1] is as typed, so a symlinked start needs it resolved or main() never runs and
+// the gate prints nothing and passes
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href) process.exitCode = main();

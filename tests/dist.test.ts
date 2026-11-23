@@ -3,7 +3,9 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { ENTRIES, buildInMemory, compareDist } from './build.ts';
 import { distWorld, runEntry, mask, chain, condense, REFUSING } from './dist-world.mjs';
 import { EXPECTED, startsOf } from './dist-smoke.mjs';
@@ -110,4 +112,19 @@ test('the smoke expectations match the source', { skip: process.platform === 'wi
     t.after(world.clean);
     const fromSource = { starts: startsOf(world, (name: string) => `scripts/${name}.ts`), chain: condense(chain(world, 'ts')) };
     assert.deepStrictEqual(EXPECTED, fromSource);
+});
+
+test('the smoke runs and reports when it is started through a symlink', { skip: process.platform === 'win32' && 'a symlink needs a privilege on Windows' }, (t) =>
+{
+    const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dist-link-')));
+    t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+    fs.symlinkSync(import.meta.dirname, path.join(scratch, 'tests'), 'dir');
+    // node resolves import.meta.url to the real file but leaves argv[1] as typed: a guard that compares them
+    // unresolved never starts main(), so the run prints nothing and exits 0 - it looks like a pass
+    const run = spawnSync(process.execPath, [path.join(scratch, 'tests', 'dist-smoke.mjs')], {
+        env: { PATH: process.env['PATH'] ?? '', TMPDIR: scratch },
+        encoding: 'utf8',
+    });
+    assert.strictEqual(run.status, 0, run.stderr);
+    assert.match(run.stdout, /^dist-smoke: /);
 });
