@@ -143,13 +143,13 @@ test('the flows run every script call the commands name, with each of its flags'
 {
     const commands = path.join(golden.TREE, 'commands');
     const lines = fs.readdirSync(commands).filter((f) => f.endsWith('.md'))
-        .flatMap((f) => fs.readFileSync(path.join(commands, f), 'utf8').match(/scripts\/[a-z-]+\.[jt]s[^`\n]*/g) || [])
+        .flatMap((f) => fs.readFileSync(path.join(commands, f), 'utf8').match(/dist\/[a-z-]+\.mjs[^`\n]*/g) || [])
         .filter((l) => !l.includes('), Bash('));
     assert.ok(lines.length >= 18, `${lines.length} call forms`);
     const steps = golden.readFlows().flows.flatMap((f: Flow) => f.steps).filter((s: FlowStep) => s.entry);
     for (const line of lines)
     {
-        const entry = /scripts\/([a-z-]+)\./.exec(line)![1];
+        const entry = /dist\/([a-z-]+)\./.exec(line)![1];
         const flags = [...new Set(line.match(/--[a-z-]+/g) || [])];
         for (const flag of flags)
             assert.ok(steps.some((s: FlowStep) => s.entry === entry && s.argv!.includes(flag)), `no flow step runs ${entry} with ${flag} (${line})`);

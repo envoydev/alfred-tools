@@ -20,7 +20,7 @@
 // THE SCRATCH FOLDER sits outside the temp folder: alfred-code's cross-project write guard allows the temp folder only
 // while it does not hold the project, so projects built inside it would see the Write of <tmp>/picks.json blocked.
 //
-// THE STEPS COME FROM commands/*.md. Every `node "${CLAUDE_PLUGIN_ROOT}/scripts/..."` line a command names is parsed
+// THE STEPS COME FROM commands/*.md. Every `node "${CLAUDE_PLUGIN_ROOT}/dist/..."` line a command names is parsed
 // from its text; a line the replay does not take is reported NOT RUN with its reason, so a new step cannot slip past.
 // The files the steps name are built for real, from a folder seeded with every catalog server for this OS plus
 // registrations that hold live-shaped values.
@@ -106,7 +106,7 @@ const REPO = path.resolve(import.meta.dirname, '..', '..');
 const VERSIONS = ['2.9.0', '2.11.0', '3.0.0', '3.2.1'];
 const WORKSPACE_FROM = '2.11.0';
 const COMMANDS = ['install', 'configure', 'fix', 'update'];
-const NODE_LINE = /node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/([a-z-]+\.ts)"([^`\n]*)/g;
+const NODE_LINE = /node "\$\{CLAUDE_PLUGIN_ROOT\}\/dist\/([a-z-]+\.mjs)"([^`\n]*)/g;
 
 const newer = (a: string, b: string) => { const x = a.split('.').map(Number); const y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i]! > y[i]!; return true; };
 
@@ -117,7 +117,7 @@ export function commandLines(name: string)
     const text = fs.readFileSync(path.join(REPO, 'commands', `${name}.md`), 'utf8');
     const body = text.replace(/^---[\s\S]*?\n---\n/, '');
     const lines: { script: string; rest: string; text: string }[] = [];
-    for (const m of body.matchAll(NODE_LINE)) lines.push({ script: m[1]!, rest: m[2]!.trim(), text: `node "\${CLAUDE_PLUGIN_ROOT}/scripts/${m[1]}" ${m[2]!.trim()}`.trim() });
+    for (const m of body.matchAll(NODE_LINE)) lines.push({ script: m[1]!, rest: m[2]!.trim(), text: `node "\${CLAUDE_PLUGIN_ROOT}/dist/${m[1]}" ${m[2]!.trim()}`.trim() });
     return { body, lines };
 }
 
@@ -309,26 +309,26 @@ const fetchFileOf = (out: { stdout: string }) => { const m = /Fetch next[^:]*:\s
 
 function common(s: Session)
 {
-    const tmp = s.bash('tmpdir.ts', '').stdout.trim();
+    const tmp = s.bash('tmpdir.mjs', '').stdout.trim();
     const t = (f: string) => `${tmp}/${f}`.replace(/\\/g, '/');
-    s.bash('inventory.ts', '--json', { '<tmp>': tmp });
-    s.bash('table.ts', '<tmp>/inventory.json', { '<tmp>': tmp });
-    const q = json(s.bash('plan.ts', '--questions', { '<tmp>': tmp })) as PlanQuestions;
+    s.bash('inventory.mjs', '--json', { '<tmp>': tmp });
+    s.bash('table.mjs', '<tmp>/inventory.json', { '<tmp>': tmp });
+    const q = json(s.bash('plan.mjs', '--questions', { '<tmp>': tmp })) as PlanQuestions;
     return { tmp, t, q };
 }
 
 function prereqAndApply(s: Session, tmp: string, t: (f: string) => string, answers: object, q: PlanQuestions)
 {
     s.write(t('answers.json'), JSON.stringify(answers, null, 2));
-    s.bash('prereq.ts', '<tmp>/answers.json --audit', { '<tmp>': tmp });
-    const pre = json(s.bash('prereq.ts', '<tmp>/answers.json --json', { '<tmp>': tmp }));
+    s.bash('prereq.mjs', '<tmp>/answers.json --audit', { '<tmp>': tmp });
+    const pre = json(s.bash('prereq.mjs', '<tmp>/answers.json --json', { '<tmp>': tmp }));
     s.write(t('answers.json'), JSON.stringify({ ...answers, machine: (pre && pre.machine) || {} }, null, 2));
-    s.bash('plan.ts', '<tmp>/inventory.json <tmp>/answers.json --out', { '<tmp>': tmp });
+    s.bash('plan.mjs', '<tmp>/inventory.json <tmp>/answers.json --out', { '<tmp>': tmp });
     if (q.static.apply) s.ask([q.static.apply]);
-    const applied = s.bash('apply.ts', '<tmp>/plan.json --tmp', { '<tmp>': tmp });
+    const applied = s.bash('apply.mjs', '<tmp>/plan.json --tmp', { '<tmp>': tmp });
     const file = fetchFileOf(applied);
-    if (file) s.bash('fetch.ts', '"<file>"', { '<file>': file });
-    else s.skip('fetch.ts', '"<file>"', 'apply handed no fetch file on');
+    if (file) s.bash('fetch.mjs', '"<file>"', { '<file>': file });
+    else s.skip('fetch.mjs', '"<file>"', 'apply handed no fetch file on');
     s.skip('hud-statusline.ts', '--check', 'claude-hud is not picked');
 }
 
@@ -340,7 +340,7 @@ function install(s: Session, ctx: HookCtx)
     for (const call of q.pick || []) s.ask(call, (qq) => (qq.options.find((o) => o.label === want) || qq.options[qq.options.length - 1]!).label);
     if (q.static.settings) s.ask([q.static.settings], (qq) => (qq.options.find((o) => /^Set each/.test(o.label)) || qq.options[0]!).label);
     s.write(t('picks.json'), JSON.stringify({ rows: [want], routes: {} }, null, 2));
-    const per = json(s.bash('plan.ts', '--questions', { '<tmp>': tmp, extra: t('picks.json') }));
+    const per = json(s.bash('plan.mjs', '--questions', { '<tmp>': tmp, extra: t('picks.json') }));
     const tool = per && per.tools && per.tools[want];
     if (tool && tool.questions) s.ask(tool.questions);
     prereqAndApply(s, tmp, t, { picks: { [want]: {} } }, q);
@@ -354,45 +354,45 @@ function configure(s: Session, ctx: HookCtx)
     const label = Object.keys(q.change.keys).find((l) => q.change.keys[l] === key);
     for (const call of q.change.calls || []) s.ask(call, (qq) => (qq.options.find((o) => o.label === label) || qq.options[0]!).label);
     s.write(t('picks.json'), JSON.stringify({ targets: [key], routes: {} }, null, 2));
-    const per = json(s.bash('plan.ts', '--questions', { '<tmp>': tmp, extra: t('picks.json') }));
+    const per = json(s.bash('plan.mjs', '--questions', { '<tmp>': tmp, extra: t('picks.json') }));
     const target = per && per.targets && per.targets[key];
     if (target && target.questions) s.ask(target.questions, (qq) => (/name/i.test(qq.header || qq.question) ? ctx.newName : qq.options[0]!.label));
     prereqAndApply(s, tmp, t, { change: { [key]: { row: 'sentry', name: ctx.newName } } }, q);
-    s.skip('apply.ts', '<tmp>/remove-plan.json', 'the remove path is not taken');
+    s.skip('apply.mjs', '<tmp>/remove-plan.json', 'the remove path is not taken');
 }
 
 function fix(s: Session)
 {
-    const found = s.bash('fix.ts', '--detect');
+    const found = s.bash('fix.mjs', '--detect');
     if (/No known problem found/.test(found.stdout))
     {
-        s.skip('fix.ts', '--questions', 'nothing found');
-        s.skip('fix.ts', '--apply', 'nothing found');
-        s.skip('fetch.ts', '"<file>"', 'nothing found');
+        s.skip('fix.mjs', '--questions', 'nothing found');
+        s.skip('fix.mjs', '--apply', 'nothing found');
+        s.skip('fetch.mjs', '"<file>"', 'nothing found');
         return;
     }
-    const q = json(s.bash('fix.ts', '--questions'));
+    const q = json(s.bash('fix.mjs', '--questions'));
     if (q && q.choose) s.ask([q.choose]);
-    const applied = s.bash('fix.ts', '--apply', { '<id,id | all>': 'all' });
+    const applied = s.bash('fix.mjs', '--apply', { '<id,id | all>': 'all' });
     const file = fetchFileOf(applied);
-    if (file) s.bash('fetch.ts', '"<file>"', { '<file>': file });
-    else s.skip('fetch.ts', '"<file>"', 'fix handed no fetch file on');
+    if (file) s.bash('fetch.mjs', '"<file>"', { '<file>': file });
+    else s.skip('fetch.mjs', '"<file>"', 'fix handed no fetch file on');
 }
 
 function update(s: Session)
 {
-    const check = s.bash('update.ts', '--check');
+    const check = s.bash('update.mjs', '--check');
     if (/everything current/.test(check.stdout))
     {
-        for (const [script, start] of [['update.ts', '--questions'], ['update.ts', '--apply'], ['fetch.ts', '"<file>"']] as [string, string][]) s.skip(script, start, 'everything current');
+        for (const [script, start] of [['update.mjs', '--questions'], ['update.mjs', '--apply'], ['fetch.mjs', '"<file>"']] as [string, string][]) s.skip(script, start, 'everything current');
         return;
     }
-    const q = json(s.bash('update.ts', '--questions --no-refresh'));
+    const q = json(s.bash('update.mjs', '--questions --no-refresh'));
     if (q && q.offer) s.ask([q.offer]);
-    const applied = s.bash('update.ts', '--apply', { '<id,id | all>': 'all' });
+    const applied = s.bash('update.mjs', '--apply', { '<id,id | all>': 'all' });
     const file = fetchFileOf(applied);
-    if (file) s.bash('fetch.ts', '"<file>"', { '<file>': file });
-    else s.skip('fetch.ts', '"<file>"', 'update handed no fetch file on');
+    if (file) s.bash('fetch.mjs', '"<file>"', { '<file>': file });
+    else s.skip('fetch.mjs', '"<file>"', 'update handed no fetch file on');
 }
 
 // ---- the seed -------------------------------------------------------------------------------------------------------------
