@@ -11,6 +11,8 @@ import { spawnSync } from 'node:child_process';
 const REPO_ROOT = path.join(import.meta.dirname, '..');
 const CLAUDE_VERSION_LINE = '2.1.330 (Claude Code)';
 const CLAIMED_BY_STUB = ['claude'];
+// the Node script the Windows claude.cmd shim runs
+const WINDOWS_STUB_SCRIPT = 'claude-stub.mjs';
 const KEYCHAIN_NOT_FOUND_EXIT = 44;
 // The machine table and plan read the inventory as: their text depends on the inventory's os and arch (a table lists
 // the rows offered on that OS), so the chain fixes both and one expectation holds on every system.
@@ -45,18 +47,16 @@ function writeClaudeStub(bin, marker)
 {
     if (process.platform === 'win32')
     {
-        const lines = [
-            '@echo off',
-            `echo called>>"${marker}"`,
-            'if "%~1"=="--version" goto version',
-            'echo []',
-            'exit /b 0',
-            ':version',
-            `echo ${CLAUDE_VERSION_LINE}`,
-            'exit /b 0',
+        // claude-cli.ts caret-escapes each argument twice for a .cmd shim, as npm's claude.cmd needs: a batch test on
+        // %1 then reads `^"--version^"` and cmd.exe stops with a syntax error. So the shim hands %* to node, as npm's does.
+        const script = path.join(bin, WINDOWS_STUB_SCRIPT);
+        fs.writeFileSync(script, [
+            "import fs from 'node:fs';",
+            `fs.appendFileSync(${JSON.stringify(marker)}, 'called\\n');`,
+            `console.log(process.argv[2] === '--version' ? ${JSON.stringify(CLAUDE_VERSION_LINE)} : '[]');`,
             '',
-        ];
-        fs.writeFileSync(path.join(bin, 'claude.cmd'), lines.join('\r\n'));
+        ].join('\n'));
+        fs.writeFileSync(path.join(bin, 'claude.cmd'), `@echo off\r\n"${process.execPath}" "${script}" %*\r\n`);
         return;
     }
     const script = `#!/bin/sh
