@@ -192,7 +192,7 @@ export async function runFetchJob(job: FetchJob, { env = process.env, runFetch =
         // the shared sign-in form (D5): its first start opens a browser to sign in, which is the user's to do in an app
         if (signInParts(entry))
         {
-            const line = `'${step.name}' not started: its first start opens the sign-in, which belongs to Claude Code or Cursor - sign in now with scripts/sign-in.ts ${step.name} ${step.scope}`;
+            const line = `'${step.name}' not started: its first start opens the sign-in, which belongs to Claude Code or Cursor - sign in now with dist/sign-in.mjs ${step.name} ${step.scope}`;
             report.skipped.push(line);
             log(`${stepNumber}. skip   ${line}`);
             continue;

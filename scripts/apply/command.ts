@@ -9,7 +9,7 @@ export function runApplyCommand(argv: string[]): number
 {
     blockingStdio();
     const file = argv[0];
-    if (!file) { console.error('usage: apply.ts <plan.json> [--tmp <dir>] [--data <plugin data dir>]'); return 2; }
+    if (!file) { console.error('usage: apply.mjs <plan.json> [--tmp <dir>] [--data <plugin data dir>]'); return 2; }
     let parsed: unknown;
     try { parsed = JSON.parse(fs.readFileSync(file, 'utf8')); }
     catch (caught) { console.error(`apply: cannot read ${file} (${caught instanceof Error ? caught.message : String(caught)})`); return 2; }

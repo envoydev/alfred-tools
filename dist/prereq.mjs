@@ -823,7 +823,7 @@ function runPrereqCommand(argv, { env = process.env, machine, platform = process
     return EXIT_CODE.usage;
   }
   if (!picks) {
-    out("usage: prereq.ts <answers.json> | --rows id,id  [--json]");
+    out("usage: prereq.mjs <answers.json> | --rows id,id  [--json]");
     return EXIT_CODE.usage;
   }
   const unknown = picks.filter((pick) => !catalog.byId.has(pick.row));

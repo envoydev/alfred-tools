@@ -995,7 +995,7 @@ async function runFetchJob(job, { env = process.env, runFetch = realFetch, start
       continue;
     }
     if (signInParts(entry)) {
-      const line = `'${step.name}' not started: its first start opens the sign-in, which belongs to Claude Code or Cursor - sign in now with scripts/sign-in.ts ${step.name} ${step.scope}`;
+      const line = `'${step.name}' not started: its first start opens the sign-in, which belongs to Claude Code or Cursor - sign in now with dist/sign-in.mjs ${step.name} ${step.scope}`;
       report.skipped.push(line);
       log(`${stepNumber}. skip   ${line}`);
       continue;
@@ -1035,7 +1035,7 @@ async function runFetchCommand(argv) {
   blockingStdio();
   const file = argv[0];
   if (!file) {
-    console.error("usage: fetch.ts <fetch.json>");
+    console.error("usage: fetch.mjs <fetch.json>");
     return 2;
   }
   let job;

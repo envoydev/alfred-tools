@@ -224,7 +224,7 @@ var RUN_TIMEOUT_MS = 32e4;
 var TIMEOUT_ERROR_CODE = "ETIMEDOUT";
 var TOKENS_SUFFIX = "_tokens.json";
 var SCOPES = ["project", "local", "user"];
-var USAGE = "usage: sign-in.ts <name> <project|local|user>";
+var USAGE = "usage: sign-in.mjs <name> <project|local|user>";
 var EXIT_CODE = { ok: 0, failed: 1, usage: 2 };
 var LINE = {
   signedIn: "signed in",

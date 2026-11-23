@@ -45,7 +45,7 @@ export async function runUpdateCommand(argv: string[], { env = process.env, out 
 {
     let args: UpdateArgs;
     try { args = parseArgs(argv); }
-    catch (caught) { out(`update: ${errorMessage(caught)}\nusage: node scripts/update.ts --check | --questions | --apply <id,id|all|none> [--input key=value] [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`); return EXIT_CODE.usage; }
+    catch (caught) { out(`update: ${errorMessage(caught)}\nusage: node dist/update.mjs --check | --questions | --apply <id,id|all|none> [--input key=value] [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`); return EXIT_CODE.usage; }
     const project = path.resolve(args.project || process.cwd());
     const projectInventory = inventory.buildInventory({ project, env, run: runCli || cli.runClaude, data: args.data || null });
     if (!projectInventory.cli || !projectInventory.cli.ok) { out('alfred-tools: the claude CLI is not on PATH - install Claude Code, then run this again.'); return EXIT_CODE.noCli; }

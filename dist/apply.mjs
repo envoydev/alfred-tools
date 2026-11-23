@@ -3109,7 +3109,7 @@ function runApplyCommand(argv) {
   blockingStdio();
   const file = argv[0];
   if (!file) {
-    console.error("usage: apply.ts <plan.json> [--tmp <dir>] [--data <plugin data dir>]");
+    console.error("usage: apply.mjs <plan.json> [--tmp <dir>] [--data <plugin data dir>]");
     return 2;
   }
   let parsed;

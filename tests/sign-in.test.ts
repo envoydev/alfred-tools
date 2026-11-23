@@ -113,22 +113,22 @@ test('sign-in refuses a server that is missing or not in the shared sign-in form
     finally { w.clean(); }
 });
 
-test('each command runs sign-in.ts with a timeout of 330000 or more, through Monitor so the link line arrives while it waits', () => {
+test('each command runs sign-in.mjs with a timeout of 330000 or more, through Monitor so the link line arrives while it waits', () => {
     for (const command of ['update', 'configure', 'install'])
     {
         const text = fs.readFileSync(path.join(import.meta.dirname, '..', 'commands', `${command}.md`), 'utf8');
-        const at = text.indexOf('scripts/sign-in.ts');
-        assert.ok(at >= 0, `${command}.md calls sign-in.ts`);
+        const at = text.indexOf('dist/sign-in.mjs');
+        assert.ok(at >= 0, `${command}.md calls sign-in.mjs`);
         // Monitor's `timeout_ms` or the Bash tool's `timeout`: one of them, 330000 or more
         const near = /timeout(?:_ms)?: (\d+)/.exec(text.slice(at, at + 1500));
         assert.ok(near && Number(near[1]) >= 330000, `${command}.md gives the sign-in call a timeout of 330000 or more`);
         const section = text.slice(at, at + 2500);
-        assert.match(section, /Monitor tool/, `${command}.md runs sign-in.ts with the Monitor tool`);
+        assert.match(section, /Monitor tool/, `${command}.md runs sign-in.mjs with the Monitor tool`);
         assert.match(section, /run_in_background: true/, `${command}.md names the Bash background fallback`);
-        assert.match(section, /no browser opened/, `${command}.md lists the link line sign-in.ts prints`);
+        assert.match(section, /no browser opened/, `${command}.md lists the link line sign-in.mjs prints`);
         assert.match(section, /ssh -L <port>:localhost:<port>/, `${command}.md says how to reach the callback on a remote machine`);
         const allowed = /^allowed-tools:.*$/m.exec(text);
-        assert.ok(!allowed || !allowed[0].includes('sign-in.ts'), `${command}.md does not pre-approve sign-in.ts`);
+        assert.ok(!allowed || !allowed[0].includes('sign-in.mjs'), `${command}.md does not pre-approve sign-in.mjs`);
     }
 });
 

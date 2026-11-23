@@ -64,6 +64,43 @@ test('the bundles give the source\'s output', (t) =>
     assert.deepStrictEqual(chain(world, 'mjs'), fromSource);
 });
 
+// every `dist/<entry>.mjs` a command or the README calls
+function calledBundles(): Set<string>
+{
+    const files = [...fs.readdirSync(path.join(ROOT, 'commands')).map((name) => path.join(ROOT, 'commands', name)), path.join(ROOT, 'README.md')];
+    const called = new Set<string>();
+    for (const file of files)
+        for (const match of fs.readFileSync(file, 'utf8').matchAll(/\/dist\/([a-z-]+)\.mjs/g)) called.add(match[1]!);
+    return called;
+}
+
+test('the commands call exactly the built entries', () =>
+{
+    assert.deepStrictEqual([...calledBundles()].sort(), [...ENTRIES].sort());
+    for (const name of ENTRIES) assert.ok(fs.existsSync(path.join(ROOT, 'scripts', `${name}.ts`)), `scripts/${name}.ts exists`);
+});
+
+// a comment names a source module and stays; a usage line or the sign-in hint names the bundle the user runs
+const ENTRY_NAMED = /(usage:?\s|sign in now with )[^'"`]*\b(scripts\/)?(plan|update|fix|prereq|tmpdir|table|inventory|fetch|sign-in|apply)\.ts\b/;
+
+function sourceFiles(dir: string): string[]
+{
+    return fs.readdirSync(dir, { withFileTypes: true })
+        .flatMap((entry) => entry.isDirectory() ? sourceFiles(path.join(dir, entry.name)) : entry.name.endsWith('.ts') ? [path.join(dir, entry.name)] : []);
+}
+
+test('no message names a .ts entry', () =>
+{
+    const found: string[] = [];
+    for (const file of sourceFiles(path.join(ROOT, 'scripts')))
+        fs.readFileSync(file, 'utf8').split('\n').forEach((line, index) =>
+        {
+            if (/^\s*(\/\/|\*)/.test(line)) return;
+            if (ENTRY_NAMED.test(line)) found.push(`${path.relative(ROOT, file)}:${index + 1}: ${line.trim().slice(0, 100)}`);
+        });
+    assert.deepStrictEqual(found, []);
+});
+
 test('the world never reaches a real claude', (t) =>
 {
     const world = distWorld();

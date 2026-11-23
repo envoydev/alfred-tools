@@ -51,11 +51,11 @@ function parseArgs(argv: string[]): PlanArgs
 }
 
 const USAGE = [
-    'usage: plan.ts <inventory.json> <answers.json> [--out plan.json] [--data <dir>]',
-    '       plan.ts --questions <inventory.json> [<picks.json>] [--data <dir>] [--connectors <Name>,<Name>]',
-    '       plan.ts --record <inventory.json> <picks.json> <answers.json> <step.json> [--data <dir>] [--connectors <Name>,<Name>]',
-    '       plan.ts --rewind <inventory.json> <picks.json> <answers.json> [<pick>] [--data <dir>] [--connectors <Name>,<Name>]',
-    '       plan.ts --skip <inventory.json> <picks.json> <answers.json> <pick> [--data <dir>]',
+    'usage: plan.mjs <inventory.json> <answers.json> [--out plan.json] [--data <dir>]',
+    '       plan.mjs --questions <inventory.json> [<picks.json>] [--data <dir>] [--connectors <Name>,<Name>]',
+    '       plan.mjs --record <inventory.json> <picks.json> <answers.json> <step.json> [--data <dir>] [--connectors <Name>,<Name>]',
+    '       plan.mjs --rewind <inventory.json> <picks.json> <answers.json> [<pick>] [--data <dir>] [--connectors <Name>,<Name>]',
+    '       plan.mjs --skip <inventory.json> <picks.json> <answers.json> <pick> [--data <dir>]',
 ].join('\n');
 
 export function runPlanCommand(argv: string[]): number

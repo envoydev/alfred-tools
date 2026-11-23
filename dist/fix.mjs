@@ -6975,7 +6975,7 @@ function runFixCommand(argv, { env = process.env, out = (line) => process.stdout
     args = parseArgs(argv);
   } catch (caught) {
     out(`fix: ${errorMessage(caught)}
-usage: node scripts/fix.ts --detect | --questions | --apply <id,id|all> [--only <x>] [--input key=value] [--project <dir>] [--data <dir>]`);
+usage: node dist/fix.mjs --detect | --questions | --apply <id,id|all> [--only <x>] [--input key=value] [--project <dir>] [--data <dir>]`);
     return 2;
   }
   const project = path35.resolve(args.project || process.cwd());

@@ -15,7 +15,7 @@ export function runPrereqCommand(argv: string[], { env = process.env, machine, p
     let picks: PrereqPick[] | null;
     try { picks = picksFrom(argv, catalog); }
     catch (caught) { out(`prereq: ${errorMessage(caught)}`); return EXIT_CODE.usage; }
-    if (!picks) { out('usage: prereq.ts <answers.json> | --rows id,id  [--json]'); return EXIT_CODE.usage; }
+    if (!picks) { out('usage: prereq.mjs <answers.json> | --rows id,id  [--json]'); return EXIT_CODE.usage; }
     const unknown = picks.filter((pick) => !catalog.byId.has(pick.row));
     if (unknown.length) { out(`prereq: unknown tool ${unknown.map((unknownPick) => unknownPick.row).join(', ')}`); return EXIT_CODE.usage; }
     const context = { platform, env, home: account.homeDir(env), machine: machine || realMachine({ env, platform }) };

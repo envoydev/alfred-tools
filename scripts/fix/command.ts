@@ -46,7 +46,7 @@ export function runFixCommand(argv: string[], { env = process.env, out = (line: 
 {
     let args: FixArgs;
     try { args = parseArgs(argv); }
-    catch (caught) { out(`fix: ${errorMessage(caught)}\nusage: node scripts/fix.ts --detect | --questions | --apply <id,id|all> [--only <x>] [--input key=value] [--project <dir>] [--data <dir>]`); return 2; }
+    catch (caught) { out(`fix: ${errorMessage(caught)}\nusage: node dist/fix.mjs --detect | --questions | --apply <id,id|all> [--only <x>] [--input key=value] [--project <dir>] [--data <dir>]`); return 2; }
     const project = path.resolve(args.project || process.cwd());
     const data = args.data || null;
     const projectInventory = inventory.buildInventory({ project, env, data });

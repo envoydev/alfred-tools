@@ -735,7 +735,7 @@ function renderTable(inventory, catalog = load()) {
 function runTableCommand(argv, { out = (line) => process.stdout.write(`${line}
 `) } = {}) {
   if (!argv[0]) {
-    out("usage: table.ts <inventory.json>");
+    out("usage: table.mjs <inventory.json>");
     return REFUSED_EXIT_CODE;
   }
   let parsed;

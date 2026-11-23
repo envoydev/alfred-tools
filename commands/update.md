@@ -1,7 +1,7 @@
 ---
 description: "Update what is behind - installed plugins and pinned MCP servers - to releases at least 7 days old, and move servers an older alfred-tools set up to the way it passes data now, after one confirmation"
 disable-model-invocation: true
-allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --check), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --check *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --questions), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --questions *)
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/update.mjs" --check), Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/update.mjs" --check *), Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/update.mjs" --questions), Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/update.mjs" --questions *)
 ---
 
 Bring what is installed up to date: every plugin on this machine, the pinned MCP servers, the files copied into each
@@ -35,13 +35,13 @@ ask. It takes no argument: one typed after the command changes nothing - say so.
   they find under 'New ways to pass data', and applies it with fix's own code. A finding that needs the user - a key
   not filled yet, a folder to name - is a note naming `/alfred-tools:fix`, never an offer.
 
-If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
-alfred-tools needs Node 22.18 or newer - `node --version` shows yours.
+If a script fails to start with a `SyntaxError`, a `TypeError` that names a missing function, or an error naming a
+`node:` module, stop and tell the user: alfred-tools needs Node 20.19 or newer - `node --version` shows yours.
 
 ## 1. What is behind
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --check --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/dist/update.mjs" --check --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 Paste the output verbatim in a fenced block. It refreshes each marketplace the installed plugins come from
@@ -72,7 +72,7 @@ read as current: say so.
 ## 2. Which
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --questions --no-refresh --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/dist/update.mjs" --questions --no-refresh --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 It prints `{ "offer": <ask>, "pick": [<calls>], "cursorOffers": [...], "cursorNameQuestions": [...] }` (the name
@@ -134,7 +134,7 @@ server, that its registration is removed and added again, so the server is brief
 ids picked (comma-separated), or `all` for 'All of them':
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/update.ts" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--input retired-declined=<id>~<scope>,...] [--input cursor-offer:<root>=set|declined] [--input cursor-name:<name>@<file>=replace|keep]
+node "${CLAUDE_PLUGIN_ROOT}/dist/update.mjs" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--input retired-declined=<id>~<scope>,...] [--input cursor-offer:<root>=set|declined] [--input cursor-name:<name>@<file>=replace|keep]
 ```
 
 Each pin moved, and each new way to pass data, is written to every app its list entry names in the same run: the
@@ -170,7 +170,7 @@ A new pin is not in the runtime's cache yet, so an MCP update prints `Fetch next
 with the Bash tool's `run_in_background`:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
+node "${CLAUDE_PLUGIN_ROOT}/dist/fetch.mjs" "<file>"
 ```
 
 <!-- shared:fetch -->
@@ -189,8 +189,8 @@ its first start downloads the pin and may time out once. End with the restart li
 servers load on the next session start; `/reload-plugins` for plugins): a key helper runs at each connect, so a run that
 only rewrote helpers needs no restart. After it moves alfred-tools itself, tell the user to run update again after the restart.
 
-For each server the report named as `now the shared sign-in ... sign-in not done yet`, ask once the fetch has reported
-(sign-in.ts and the fetch both start npx, and two at once is the one case measured to break a start); the scope is the
+For each server the report named as `now the shared sign-in ... sign-in not done yet`, ask once fetch has reported
+(sign-in.mjs and fetch both start npx, and two at once is the one case measured to break a start); the scope is the
 one the offer's `servers` entry gives for that name, and fetch's `skip` line names it too:
 
 <!-- shared:sign-in -->
@@ -201,7 +201,7 @@ Sign in to <name> now?
 - 'At the next session start' - its first start then opens the browser inside Claude Code's 30-second limit, and /mcp reconnects it after
 ```
 
-Then, for 'Sign in now', run `node "${CLAUDE_PLUGIN_ROOT}/scripts/sign-in.ts" "<name>" "<scope>"` with the Monitor tool
+Then, for 'Sign in now', run `node "${CLAUDE_PLUGIN_ROOT}/dist/sign-in.mjs" "<name>" "<scope>"` with the Monitor tool
 (that line as `command`, a `description` naming the server, `timeout_ms: 330000`) - and tell the user the browser opens
 and the sign-in has five minutes. Each stdout line it prints is an event, at most two:
 `<name>: no browser opened - open this link to sign in: <link>` (relay the link at once and send a PushNotification

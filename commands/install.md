@@ -2,7 +2,7 @@
 description: "Install preferred MCP servers that are not installed yet, for Claude Code and Cursor: pick, set up, one confirmed plan"
 argument-hint: "[tool id]"
 disable-model-invocation: true
-allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/table.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" *)
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/tmpdir.mjs"), Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/inventory.mjs" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/table.mjs" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/plan.mjs" *), Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/prereq.mjs" *)
 ---
 
 Walk the user through installing tools from alfred-tools that are not installed here yet. The scripts do the work and
@@ -29,9 +29,9 @@ changed or removed with `/alfred-tools:configure`; say so whenever the user asks
 - **A typed value is asked next, in one plain line that ends your turn.** When the option picked says 'asked next', ask
   for that one value - no `AskUserQuestion` - and end the turn; the user's next message (or an Other answer to that
   question) is the value.
-- If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
-  alfred-tools needs Node 22.18 or newer - `node --version` shows yours.
-- Every file below lives in one temp folder. Make it once with `node "${CLAUDE_PLUGIN_ROOT}/scripts/tmpdir.ts"` and call
+- If a script fails to start with a `SyntaxError`, a `TypeError` that names a missing function, or an error naming a
+  `node:` module, stop and tell the user: alfred-tools needs Node 20.19 or newer - `node --version` shows yours.
+- Every file below lives in one temp folder. Make it once with `node "${CLAUDE_PLUGIN_ROOT}/dist/tmpdir.mjs"` and call
   it `<tmp>`.
 
 <!-- /shared:rules -->
@@ -41,7 +41,7 @@ changed or removed with `/alfred-tools:configure`; say so whenever the user asks
 ## 1. Inventory
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/inventory.ts" --json <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/dist/inventory.mjs" --json <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 It reads the registrations, the plugins and the records of earlier answers, and starts no server. Exit 3 with one line
@@ -52,7 +52,7 @@ exits 2 printed one line naming the input it refused, and wrote nothing.
 ## 2. The table
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/table.ts" <tmp>/inventory.json
+node "${CLAUDE_PLUGIN_ROOT}/dist/table.mjs" <tmp>/inventory.json
 ```
 
 Paste the output verbatim in a fenced block: the whole catalog for this OS, numbered, with what is installed at each
@@ -63,7 +63,7 @@ scope as `name [route, pin]`.
 ## 3. Pick
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --questions <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}" --connectors "<Name>,<Name>"
+node "${CLAUDE_PLUGIN_ROOT}/dist/plan.mjs" --questions <tmp>/inventory.json --data "${CLAUDE_PLUGIN_DATA}" --connectors "<Name>,<Name>"
 ```
 
 `<Name>,<Name>`: the claude.ai connectors this session has loaded - each `<Name>` in your own tool names
@@ -94,7 +94,7 @@ labels picked; each label is the tool id, then what it already has:
 Write `{"rows": [<picked ids>], "done": []}` to `<tmp>/picks.json` and run:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --questions <tmp>/inventory.json <tmp>/picks.json --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/dist/plan.mjs" --questions <tmp>/inventory.json <tmp>/picks.json --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 Its `next` is the one step to ask now: `next.id`, `next.call` (the questions, as one `AskUserQuestion`) and, sometimes,
@@ -110,7 +110,7 @@ second the settings question, then one tool's steps at a time. Until `next.id` i
    and run:
 
    ```
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --record <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <tmp>/step.json --data "${CLAUDE_PLUGIN_DATA}"
+   node "${CLAUDE_PLUGIN_ROOT}/dist/plan.mjs" --record <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <tmp>/step.json --data "${CLAUDE_PLUGIN_DATA}"
    ```
 
 <!-- /shared:walk-steps -->
@@ -153,8 +153,8 @@ value). The recommendation is Off, unless `~/.macos-mcp/config.toml` exists.
 ## 5. Prerequisites
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" <tmp>/answers.json --audit
-node "${CLAUDE_PLUGIN_ROOT}/scripts/prereq.ts" <tmp>/answers.json --json
+node "${CLAUDE_PLUGIN_ROOT}/dist/prereq.mjs" <tmp>/answers.json --audit
+node "${CLAUDE_PLUGIN_ROOT}/dist/prereq.mjs" <tmp>/answers.json --json
 ```
 
 Paste the first output verbatim. It checks what the picks need and runs `npm audit` on appium's package. The audit lines
@@ -181,7 +181,7 @@ Is <prerequisite> installed for <tool> now?
 - 'Skip this tool' - leave it out of the plan
 ```
 
-'Check again' runs `prereq.ts` again; 'Skip this tool' runs the `--skip` call below, as 'Skip' does. 'Register anyway':
+'Check again' runs `prereq.mjs` again; 'Skip this tool' runs the `--skip` call below, as 'Skip' does. 'Register anyway':
 keep it, and say in the confirmation that it will not start yet.
 
 <!-- /shared:prereq -->
@@ -189,13 +189,13 @@ keep it, and say in the confirmation that it will not start yet.
 'Skip' runs:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --skip <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <tool> --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/dist/plan.mjs" --skip <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <tool> --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 ## 6. Plan, then one confirmation
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" <tmp>/inventory.json <tmp>/answers.json --out <tmp>/plan.json --data "${CLAUDE_PLUGIN_DATA}" --connectors "<Name>,<Name>"
+node "${CLAUDE_PLUGIN_ROOT}/dist/plan.mjs" <tmp>/inventory.json <tmp>/answers.json --out <tmp>/plan.json --data "${CLAUDE_PLUGIN_DATA}" --connectors "<Name>,<Name>"
 ```
 
 `--connectors` is step 3's list. Paste the output verbatim in a fenced block. Its `mcps.json` lines are the list of the
@@ -239,7 +239,7 @@ Apply this plan?
 the one it names:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/plan.ts" --rewind <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <pick> --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/dist/plan.mjs" --rewind <tmp>/inventory.json <tmp>/picks.json <tmp>/answers.json <pick> --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 Run it without `<pick>` for 'Change something', when `--rewind <pick>` exits 2, or when the error names no pick: it
@@ -253,7 +253,7 @@ A plan that says 'Nothing to do': show that and stop without asking.
 ## 7. Apply
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/apply.ts" <tmp>/plan.json --tmp <tmp> --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/dist/apply.mjs" <tmp>/plan.json --tmp <tmp> --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 Run it with the Bash tool's `timeout: 600000`. Claude Code asks permission for this call itself. It stops at the first
@@ -284,7 +284,7 @@ apply output has `Fetch next, in the background (...): <file>`, run, with the Ba
 the user it is running:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
+node "${CLAUDE_PLUGIN_ROOT}/dist/fetch.mjs" "<file>"
 ```
 
 <!-- shared:fetch -->
@@ -303,7 +303,7 @@ restart line: the new registrations load on the next session start, and a projec
 prompt then.
 
 **Sign-in.** For each server the plan named in an `OAuth:` line that says its browser opens to sign in the first time it
-starts (the shared sign-in), ask once the fetch has reported (sign-in.ts and the fetch both start npx, and two at once
+starts (the shared sign-in), ask once fetch has reported (sign-in.mjs and fetch both start npx, and two at once
 breaks a start); the scope is the one the user picked for that server:
 
 <!-- shared:sign-in -->
@@ -314,7 +314,7 @@ Sign in to <name> now?
 - 'At the next session start' - its first start then opens the browser inside Claude Code's 30-second limit, and /mcp reconnects it after
 ```
 
-Then, for 'Sign in now', run `node "${CLAUDE_PLUGIN_ROOT}/scripts/sign-in.ts" "<name>" "<scope>"` with the Monitor tool
+Then, for 'Sign in now', run `node "${CLAUDE_PLUGIN_ROOT}/dist/sign-in.mjs" "<name>" "<scope>"` with the Monitor tool
 (that line as `command`, a `description` naming the server, `timeout_ms: 330000`) - and tell the user the browser opens
 and the sign-in has five minutes. Each stdout line it prints is an event, at most two:
 `<name>: no browser opened - open this link to sign in: <link>` (relay the link at once and send a PushNotification

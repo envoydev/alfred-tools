@@ -2,7 +2,7 @@
 description: "Detect known problems in the installed tools and apply the recorded fix for each one you pick"
 argument-hint: "[tool, registration name or fix id]"
 disable-model-invocation: true
-allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --detect), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --detect *), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --questions), Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --questions *)
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/fix.mjs" --detect), Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/fix.mjs" --detect *), Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/fix.mjs" --questions), Bash(node "${CLAUDE_PLUGIN_ROOT}/dist/fix.mjs" --questions *)
 ---
 
 Find the known problems in what is installed and apply the recorded fix for each one the user picks. Every fix row is
@@ -10,15 +10,15 @@ in `${CLAUDE_PLUGIN_ROOT}/catalog/fixes.json`; the detectors are in `${CLAUDE_PL
 detector finds nothing is not shown. The argument, when given, narrows everything below to one fix id, tool or
 registration name: `$ARGUMENTS`.
 
-If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user:
-alfred-tools needs Node 22.18 or newer - `node --version` shows yours.
+If a script fails to start with a `SyntaxError`, a `TypeError` that names a missing function, or an error naming a
+`node:` module, stop and tell the user: alfred-tools needs Node 20.19 or newer - `node --version` shows yours.
 
 ## 1. Detect
 
 Run, adding `--only "$ARGUMENTS"` when there is an argument:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --detect --data "${CLAUDE_PLUGIN_DATA}"
+node "${CLAUDE_PLUGIN_ROOT}/dist/fix.mjs" --detect --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
 Paste its output verbatim in a fenced block. It lists each problem found - the fix id, the tool by its registration
@@ -80,7 +80,7 @@ matches nothing reads the same - relay each `note:` line under it, and stop.
 
 ## 2. Ask
 
-Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --questions --data "${CLAUDE_PLUGIN_DATA}"` (with the same `--only`). It prints the asks as data:
+Run `node "${CLAUDE_PLUGIN_ROOT}/dist/fix.mjs" --questions --data "${CLAUDE_PLUGIN_DATA}"` (with the same `--only`). It prints the asks as data:
 `choose` and, for 'Pick which', `pick` - a list of calls, each at most four questions of at most four options.
 
 When `choose` is null and `drift` is empty, nothing found can be applied: every line is NOT APPLICABLE, and its
@@ -135,7 +135,7 @@ guess a folder.
 ## 3. Apply
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/fix.ts" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--only "$ARGUMENTS"] [--input key=value] [--input drift:<app>:<name>~<scope>=<value>]
+node "${CLAUDE_PLUGIN_ROOT}/dist/fix.mjs" --apply <id,id | all | none> --data "${CLAUDE_PLUGIN_DATA}" [--only "$ARGUMENTS"] [--input key=value] [--input drift:<app>:<name>~<scope>=<value>]
 ```
 
 A drift answer runs after the registration and file rows: 'Keep' writes the edited entry into the list and the other
@@ -164,7 +164,7 @@ A fix that changes what a server launches (a python request, a cut-off), or remo
 `run_in_background`:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/fetch.ts" "<file>"
+node "${CLAUDE_PLUGIN_ROOT}/dist/fetch.mjs" "<file>"
 ```
 
 <!-- shared:fetch -->

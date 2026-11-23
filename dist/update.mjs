@@ -8775,7 +8775,7 @@ async function runUpdateCommand(argv, { env = process.env, out = (line) => proce
     args = parseArgs(argv);
   } catch (caught) {
     out(`update: ${errorMessage(caught)}
-usage: node scripts/update.ts --check | --questions | --apply <id,id|all|none> [--input key=value] [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`);
+usage: node dist/update.mjs --check | --questions | --apply <id,id|all|none> [--input key=value] [--no-refresh] [--project <dir>] [--tmp <dir>] [--data <dir>]`);
     return EXIT_CODE.usage;
   }
   const project = path39.resolve(args.project || process.cwd());

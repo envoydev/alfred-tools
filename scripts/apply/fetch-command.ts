@@ -11,7 +11,7 @@ export async function runFetchCommand(argv: string[]): Promise<number>
 {
     blockingStdio();
     const file = argv[0];
-    if (!file) { console.error('usage: fetch.ts <fetch.json>'); return 2; }
+    if (!file) { console.error('usage: fetch.mjs <fetch.json>'); return 2; }
     let job: FetchJob;
     try { job = JSON.parse(fs.readFileSync(file, 'utf8')); }
     catch (caught) { console.error(`fetch: cannot read ${file} (${errorMessage(caught)})`); return 2; }

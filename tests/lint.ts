@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import { parseAskBlocks, problemsOf } from './ask-blocks.ts';
 import { sendsToOther, walkTexts } from './ask-texts.ts';
+import { CALL, FIRST_CALL, OLD_ENTRY_CALL, OLD_NODE, PLUGIN_ROOT_CALL, WRITES } from './lint-rules.ts';
 
 const root = path.resolve(import.meta.dirname, '..');
 const problems: string[] = [];
@@ -29,7 +30,7 @@ need(/^\d+\.\d+\.\d+$/.test(manifest.version || ''), 'plugin.json version must b
 need(!('dependencies' in manifest), 'plugin.json must not declare dependencies (claude plugin update installs none)');
 need(manifest.version === (docs['package.json'] || {}).version, 'package.json version must equal plugin.json version');
 
-// Script paths in commands and skills: only through the plugin root.
+// Script paths in commands, skills and the README: only through the plugin root, and only to the bundles in dist/.
 const textFiles: string[] = [];
 for (const dir of ['commands', 'skills'])
 {
@@ -39,21 +40,21 @@ for (const dir of ['commands', 'skills'])
     });
     walk(path.join(root, dir));
 }
+textFiles.push(path.join(root, 'README.md'));
 for (const file of textFiles)
 {
     const text = fs.readFileSync(file, 'utf8');
     text.split('\n').forEach((line, i) => {
-        if (/\bnode\s+(?!"\$\{CLAUDE_PLUGIN_ROOT\}\/)["']?(\.\/)?scripts\//.test(line))
-            problems.push(`${path.relative(root, file)}:${i + 1}: a script call must be node "\${CLAUDE_PLUGIN_ROOT}/scripts/<file>"`);
+        if (PLUGIN_ROOT_CALL.test(line))
+            problems.push(`${path.relative(root, file)}:${i + 1}: a script call must be node "\${CLAUDE_PLUGIN_ROOT}/dist/<entry>.mjs"`);
+        if (OLD_ENTRY_CALL.test(line))
+            problems.push(`${path.relative(root, file)}:${i + 1}: a call of a source entry (scripts/<entry>.ts) - the commands run the bundles in dist/`);
         if (/(?<!CLAUDE_PLUGIN_ROOT\}\/)catalog\/[a-z-]+\.json/.test(line) && /node|--catalog/.test(line) && !/\$\{CLAUDE_PLUGIN_ROOT\}\/catalog/.test(line))
             problems.push(`${path.relative(root, file)}:${i + 1}: a catalog path must go through \${CLAUDE_PLUGIN_ROOT}`);
     });
 }
 
-// allowed-tools is a pre-approval, so it never covers a call that changes an install: the CLI's own prompt is the guard
-// beside the command's written ask. A script that writes is listed only with a read-only flag.
-// fetch.ts downloads and runs a package's own install, and sign-in.ts opens a browser and writes tokens, so both count as a write; cursor-mcp.ts writes Cursor's files
-const WRITES = /scripts\/(?:apply|fetch|sign-in)\.ts|cursor-mcp\.ts|scripts\/(?:fix|update)\.ts"\s*(?:\*|--apply|\))/;
+// allowed-tools is a pre-approval: WRITES (tests/lint-rules.ts) names the calls it must not cover.
 for (const file of textFiles)
 {
     const m = /^allowed-tools:\s*(.+)$/m.exec(fs.readFileSync(file, 'utf8'));
@@ -69,7 +70,6 @@ for (const file of textFiles)
 // read-only flag stays first, so the allowed-tools patterns (`--detect *`, `--questions *`, `--check *`) still match. A
 // call is a line of a code block or a backticked one in prose; the allowed-tools line itself is not a call.
 const DATA = '--data "${CLAUDE_PLUGIN_DATA}"';
-const CALL = /(?:node "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/|`)(inventory|plan|apply|fix|update)\.ts"?\s+([^`\n]*)/g;
 for (const file of textFiles)
 {
     fs.readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
@@ -77,9 +77,9 @@ for (const file of textFiles)
         for (const m of line.matchAll(CALL))
         {
             const at = `${path.relative(root, file)}:${i + 1}`;
-            if (!m[2]!.includes(DATA)) problems.push(`${at}: ${m[1]}.ts call without ${DATA}`);
+            if (!m[2]!.includes(DATA)) problems.push(`${at}: ${m[1]}.mjs call without ${DATA}`);
             const ro = /--(?:detect|questions|check)\b/.exec(m[2]!);
-            if (ro && ro.index !== 0) problems.push(`${at}: ${m[1]}.ts call - ${ro[0]} must be its first argument`);
+            if (ro && ro.index !== 0) problems.push(`${at}: ${m[1]}.mjs call - ${ro[0]} must be its first argument`);
         }
     });
 }
@@ -94,14 +94,12 @@ for (const file of commandFiles)
     if (length > COMMAND_MAX_CHARS) problems.push(`commands/${path.basename(file)}: ${length} characters - over ${COMMAND_MAX_CHARS}, the share of a 5,000-token re-attach (docs/sources.md)`);
 }
 
-// The scripts are .ts and run on Node's type stripping (22.18 and newer): each command says what an older Node prints
-// and what to tell the user, before its first script call in the body (the frontmatter, allowed-tools included, is
-// skipped, as the CALL check skips it). Read with its line breaks folded, since prose wraps.
-const OLD_NODE = 'If a script fails with `ERR_UNKNOWN_FILE_EXTENSION` or `Unknown file extension ".ts"`, stop and tell the user: alfred-tools needs Node 22.18 or newer - `node --version` shows yours.';
+// The bundles in dist/ run on Node 20.19 and newer: the old-Node note (OLD_NODE, tests/lint-rules.ts) comes before the
+// first script call in the body (the frontmatter, allowed-tools included, is skipped, as the CALL check skips it).
 for (const file of commandFiles)
 {
     const body = fs.readFileSync(file, 'utf8').replace(/^---\n[\s\S]*?\n---\n/, '').replace(/\s+/g, ' ');
-    const call = body.indexOf('node "${CLAUDE_PLUGIN_ROOT}/scripts/');
+    const call = body.indexOf(FIRST_CALL);
     const rule = body.indexOf(OLD_NODE);
     if (call >= 0 && (rule < 0 || rule > call)) problems.push(`${path.relative(root, file)}: no old-Node rule ('${OLD_NODE.slice(0, 40)}...') before its first script call`);
 }

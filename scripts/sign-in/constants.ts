@@ -9,7 +9,7 @@ export const TIMEOUT_ERROR_CODE = 'ETIMEDOUT';
 // mcp-remote 0.16.0 keeps a sign-in as <config dir>/mcp-remote-v1/<md5 of the server URL>_tokens.json (docs/sources.md)
 export const TOKENS_SUFFIX = '_tokens.json';
 export const SCOPES = ['project', 'local', 'user'];
-export const USAGE = 'usage: sign-in.ts <name> <project|local|user>';
+export const USAGE = 'usage: sign-in.mjs <name> <project|local|user>';
 export const EXIT_CODE = { ok: 0, failed: 1, usage: 2 } as const;
 export const LINE = {
     signedIn: 'signed in',

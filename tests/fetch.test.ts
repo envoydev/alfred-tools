@@ -255,7 +255,7 @@ test('fetch fetches mcp-remote for a shared sign-in entry and does not start it'
         assert.deepStrictEqual(started, []);
         assert.strictEqual(res.skipped.length, 1);
         assert.match(res.skipped[0]!, /^'atlassian' not started: its first start opens the sign-in/);
-        assert.ok(res.skipped[0]!.includes('scripts/sign-in.ts atlassian project'), 'the skip line names the sign-in command with the server and its scope');
+        assert.ok(res.skipped[0]!.includes('dist/sign-in.mjs atlassian project'), 'the skip line names the sign-in command with the server and its scope');
     }
     finally { w.clean(); }
 });
