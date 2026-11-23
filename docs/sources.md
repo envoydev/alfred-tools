@@ -1698,3 +1698,23 @@ Page: https://pypi.org/project/macos-mcp/ (read 2026-11-19); the published 0.4.7
   reads them - not verified.
 - So Cursor has no documented guard with Claude Code's reach: the closest are the global ignore list (by hand, key
   unnamed) and the CLI deny rules (CLI only, as documented). Neither stops the terminal, as in Claude Code.
+
+## esbuild - the bundler (read 2026-11-24)
+
+The facts `tests/build.ts` rests on (the dist bundles, `docs/superpowers/specs/2026-11-23-dist-bundles-design.md`, kept
+locally). Pinned `esbuild` 0.28.2 (`npm view esbuild@0.28.2`, modified 2026-08-08), a dev dependency only.
+
+- The options `tests/build.ts` sets, from https://esbuild.github.io/api/: `bundle` inlines imported files; `platform:
+  'node'`; `format: 'esm'`; `target: 'node20'` ('This sets the target environment', default `esnext`); `outdir`
+  (created if missing, silently overwrites files of the same name); `outExtension: { '.js': '.mjs' }`; `charset:
+  'utf8'` keeps non-ASCII text unescaped (default is ASCII-only); `legalComments: 'none'` (default is `eof` when
+  bundling); `absWorkingDir`; `banner` ('insert an arbitrary string at the beginning of generated JavaScript');
+  `write: false` returns the output in `result.outputFiles` instead of writing it. No `minify` and no `sourcemap`.
+- A source's `#!` line stays first and the banner follows it (measured: `dist/tmpdir.mjs`); the docs excerpt read does
+  not say so.
+- The ESM bundle of the CommonJS files in `scripts/copied/` fails at start with 'Dynamic require of "node:fs" is not
+  supported' unless the banner defines `require` with `createRequire(import.meta.url)` (measured in a spike, 2026-11-24).
+- esbuild's binary is not in its main package: it comes from a per-platform optional package (`@esbuild/<platform>-<arch>`,
+  `darwin-arm64` here), and the main package runs a `postinstall` - `npm view esbuild@0.28.2 scripts` prints
+  `{ postinstall: 'node install.js' }` (checked 2026-11-24). So the install step runs one script from esbuild.
+- npm page: https://www.npmjs.com/package/esbuild.

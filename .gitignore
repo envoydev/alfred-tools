@@ -83,6 +83,8 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
+# the plugin's own bundles are committed (tests/build.ts writes them)
+!/dist/
 .output
 
 # Gatsby files
