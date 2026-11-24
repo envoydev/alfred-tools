@@ -9,6 +9,8 @@ export const ENTRIES: readonly string[] = ['plan', 'update', 'fix', 'prereq', 't
 
 const DIST_DIR = 'dist';
 const CHECK_FLAG = '--check';
+// what macOS Finder drops in a folder it opens: no build writes it and git ignores it
+const FINDER_FILES = new Set(['.DS_Store']);
 
 // The second line gives the CommonJS files in scripts/copied/ a `require`: bundled into ESM they fail at start with
 // 'Dynamic require of "node:fs" is not supported' without it.
@@ -62,7 +64,7 @@ export function compareDist(root: string, built: Map<string, string>): string[]
     }
     const distFolder = path.join(root, DIST_DIR);
     for (const name of fs.existsSync(distFolder) ? fs.readdirSync(distFolder) : [])
-        if (!built.has(`${DIST_DIR}/${name}`))
+        if (!built.has(`${DIST_DIR}/${name}`) && !FINDER_FILES.has(name))
             problems.push(`${DIST_DIR}/${name}: extra - nothing builds it`);
     return problems;
 }

@@ -54,6 +54,22 @@ test('compareDist returns no problem when dist/ holds exactly the built files', 
     }
 });
 
+test('compareDist passes over a Finder .DS_Store in dist/', () =>
+{
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'build-test-'));
+    try
+    {
+        fs.mkdirSync(path.join(root, 'dist'));
+        fs.writeFileSync(path.join(root, 'dist', 'plan.mjs'), 'one');
+        fs.writeFileSync(path.join(root, 'dist', '.DS_Store'), 'finder');
+        assert.deepStrictEqual(compareDist(root, new Map([['dist/plan.mjs', 'one']])), []);
+    }
+    finally
+    {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('buildOptions bundles every entry for Node 26 as ESM with the two-line banner, unminified and with no source map', () =>
 {
     const root = path.join(os.tmpdir(), 'build-test-root');
