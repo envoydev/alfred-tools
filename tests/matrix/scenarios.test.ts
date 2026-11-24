@@ -287,7 +287,7 @@ for (const f of FIXES)
         });
         const found = detectAll(mk(), { only: name }).found.filter((x) => x.id === f.id);
         assert.strictEqual(found.length, 1, `${f.id} not found on ${JSON.stringify(seeded)}`);
-        assert.ok(!found[0]!.blocked, found[0]!.blocked);
+        assert.ok(!found[0]!.blocked, String(found[0]!.blocked));
         const lines: string[] = [];
         const res = applyFixes(mk(), [f.id], { only: name, tmp: path.join(root, 'tmp'), log: (...a) => lines.push(a.join(' ')) });
         assert.ok(!res.failed, lines.join('\n'));

@@ -230,7 +230,7 @@
         <div><dt>Commands</dt><dd>4, all typed by you</dd></div>
         <div><dt>Tools</dt><dd>15 MCP servers</dd></div>
         <div><dt>Apps</dt><dd>Claude Code and Cursor</dd></div>
-        <div><dt>Needs</dt><dd>Node 22.18+, the <code>claude</code> CLI</dd></div>
+        <div><dt>Needs</dt><dd>Node 26.13+, the <code>claude</code> CLI</dd></div>
       </dl>
       <div class="aside">
         <p class="aside-label">New to MCP?</p>
@@ -755,7 +755,7 @@ SENTRY_PROJECT=my-project</code></pre>
             <tr><td class="wrap">OAuth sign-in fails in both apps</td><td class="wrap">The vendor turned that sign-in off</td><td class="wrap">Use a key: configure, then 'Use a key from .mcps-secrets'.</td></tr>
             <tr><td class="wrap">git wants to commit a data folder, key file or sign-in folder</td><td class="wrap">A <code>.gitignore</code> line is missing</td><td class="wrap">Run fix. It adds the line.</td></tr>
             <tr><td class="wrap">A <code>uvx</code> or <code>npx</code> server fails on Windows, or appium cannot find the Android SDK or a JDK</td><td class="wrap">A known platform problem</td><td class="wrap">Run fix.</td></tr>
-            <tr><td class="wrap">A script stops with <code>Unknown file extension ".ts"</code></td><td class="wrap">Node is older than 22.18</td><td class="wrap">Update Node. <code>node --version</code> shows yours.</td></tr>
+            <tr><td class="wrap">A script stops with a <code>SyntaxError</code>, a missing function or a missing <code>node:</code> module</td><td class="wrap">Node is older than 26.13</td><td class="wrap">Update Node. <code>node --version</code> shows yours.</td></tr>
           </tbody>
         </table>
       </div>

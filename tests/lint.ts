@@ -94,7 +94,7 @@ for (const file of commandFiles)
     if (length > COMMAND_MAX_CHARS) problems.push(`commands/${path.basename(file)}: ${length} characters - over ${COMMAND_MAX_CHARS}, the share of a 5,000-token re-attach (docs/sources.md)`);
 }
 
-// The bundles in dist/ run on Node 20.19 and newer: the old-Node note (OLD_NODE, tests/lint-rules.ts) comes before the
+// The bundles in dist/ run on Node 26.13 and newer: the old-Node note (OLD_NODE, tests/lint-rules.ts) comes before the
 // first script call in the body (the frontmatter, allowed-tools included, is skipped, as the CALL check skips it).
 for (const file of commandFiles)
 {

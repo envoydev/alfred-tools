@@ -16,7 +16,7 @@ import { compareVersions } from '../core/versions.ts';
 import { pathFor } from '../entries/platform.ts';
 import { launcherParts, relaunchedArgs } from '../entries/launcher.ts';
 import { isRecord, isServerEntry } from '../core/guards.ts';
-import type { ServerEntry } from '../core/types.ts';
+import type { PathApi, ServerEntry } from '../core/types.ts';
 import type { CatalogRoute, CatalogRow, TokenForm } from '../catalog/types.ts';
 import type { FileNames, KeyChain, KeyHit, TokenField } from './types.ts';
 import type { LauncherParts } from '../entries/types.ts';
@@ -145,7 +145,7 @@ export const SECRETS = FILES.secrets;
 export const NAME_RULE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // A chain is built in the path form of the platform it is for (the plan's or the fix's context), not the host's: a plan for
 // a posix machine run on Windows names `/`-separated files, which the root-matching code reads with the context's own path.
-const pathApiOn = (platform?: string): path.PlatformPath => (platform ? pathFor(platform) : path);
+const pathApiOn = (platform?: string): PathApi => (platform ? pathFor(platform) : path);
 const secretsIn = (dir: string, platform?: string): string => pathApiOn(platform).join(dir, SECRETS);
 const uniq = <Item>(list: Item[]): Item[] => [...new Set(list)];
 

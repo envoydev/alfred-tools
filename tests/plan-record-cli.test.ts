@@ -76,7 +76,7 @@ test('files outside a tmpdir folder are refused and untouched', (t) => {
     for (const args of [['--record', ...files(w)], ['--rewind', w.inventory, w.picks, w.answers, 'gitlab'], ['--skip', w.inventory, w.picks, w.answers, 'gitlab']])
     {
         const refused = w.run(...args);
-        assert.strictEqual(refused.status, 2, args[0]);
+        assert.strictEqual(refused.status, 2, String(args[0]));
         assert.match(refused.stderr, /files must sit in one folder tmpdir\.mjs made/);
     }
     assert.deepStrictEqual(files(w).map((file) => fs.readFileSync(file, 'utf8')), before);

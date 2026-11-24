@@ -80,7 +80,7 @@ test('no value: {} on stdout and one stderr line naming the variable and the fil
         assert.deepStrictEqual(r.json, {});
         const lines = r.stderr.trim().split('\n');
         assert.strictEqual(lines.length, 1);
-        assert.ok(lines[0]!.includes(G) && lines[0]!.includes(sec(w.root)), lines[0]);
+        assert.ok(lines[0]!.includes(G) && lines[0]!.includes(sec(w.root)), String(lines[0]));
         assert.ok(!r.stderr.includes('fake-other') && !r.stdout.includes('fake-other'));
     }
     finally { w.clean(); }

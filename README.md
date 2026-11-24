@@ -33,7 +33,8 @@ claude plugin marketplace add envoydev/plugins-marketplaces
 claude plugin install alfred-tools@envoydev
 ```
 
-It needs Node 20.19 or newer and the `claude` CLI on your `PATH`. The plugin is listed in the `envoydev` marketplace
+It needs Node 26.13 or newer (since 0.9.0; 0.8.0 and older ran on Node 20.19) and the `claude` CLI on your `PATH`.
+The plugin is listed in the `envoydev` marketplace
 ([envoydev/plugins-marketplaces](https://github.com/envoydev/plugins-marketplaces)); it works the same with or without
 alfred-code installed. If you added `envoydev` from `envoydev/alfred-code` before, the catalog has moved: its
 [README](https://github.com/envoydev/plugins-marketplaces#moving-from-the-old-marketplace) has the steps.
@@ -484,8 +485,8 @@ npm run refresh-pins -- --write   # move catalog/tools.json; a moved pin is a re
 ```
 
 The commands run the bundles in `dist/`, not the TypeScript in `scripts/`. Edit `scripts/`, run `npm run build` and
-commit both - never edit `dist/` by hand. Building needs Node 22.18 or newer (it runs the TypeScript directly); running
-the plugin needs Node 20.19.
+commit both - never edit `dist/` by hand. Building and running
+the plugin both need Node 26.13 or newer.
 
 This repo's own rules are in `AGENTS.md` (not loaded by installs).
 

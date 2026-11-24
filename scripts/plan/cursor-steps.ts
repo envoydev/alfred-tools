@@ -9,8 +9,7 @@ import * as workspace from '../roots/workspace.ts';
 import * as kept from '../core/kept.ts';
 import { deepEqual } from '../core/json-file.ts';
 import { foundList, REG_OPS } from './lists.ts';
-import type path from 'node:path';
-import type { ServerEntry, ServerMap } from '../core/types.ts';
+import type { PathApi, ServerEntry, ServerMap } from '../core/types.ts';
 import type { Catalog } from '../catalog/types.ts';
 import type { Machine } from '../entries/types.ts';
 import type { Inventory } from '../inventory/types.ts';
@@ -67,10 +66,10 @@ export function takenNames(inventory: Inventory, context: CursorPlaceCtx, upsert
     return out;
 }
 
-const hasGit = (dir: string, pathApi: path.PlatformPath): boolean => fs.existsSync(pathApi.join(dir, '.git'));
+const hasGit = (dir: string, pathApi: PathApi): boolean => fs.existsSync(pathApi.join(dir, '.git'));
 
 // D4a's 'No workspace' check: the project is a folder of a parent folder's git repo, or holds child git repos.
-function outsideItsRepo(project: string, pathApi: path.PlatformPath): boolean
+function outsideItsRepo(project: string, pathApi: PathApi): boolean
 {
     if (!hasGit(project, pathApi))
         for (let dir = pathApi.dirname(project); ; dir = pathApi.dirname(dir))

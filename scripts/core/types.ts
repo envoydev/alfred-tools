@@ -1,4 +1,5 @@
 // The shapes core/ reads, writes and hands to every other folder.
+import type path from 'node:path';
 import type { CatalogRow } from '../catalog/types.ts';
 
 // A process environment: the variables the scripts read by name, and any other.
@@ -144,3 +145,6 @@ export interface MachineProbe
     run(command: string, args: string[], options?: { cwd?: string; env?: Env }): RunResult | null;
     nodeVersion: string;
 }
+
+// path's POSIX or Windows flavour - the type @types/node 26 no longer names (it was path.PlatformPath)
+export type PathApi = typeof path.posix;

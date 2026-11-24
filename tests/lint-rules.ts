@@ -12,9 +12,9 @@ export const WRITES = /(?:scripts|dist)\/(?:apply|fetch|sign-in)\.(?:ts|mjs)|cur
 // A call of an entry that reads the roots map and the records: a line of a code block or a backticked one in prose.
 export const CALL = /(?:node "\$\{CLAUDE_PLUGIN_ROOT\}\/dist\/|`)(inventory|plan|apply|fix|update)\.mjs"?\s+([^`\n]*)/g;
 
-// The bundles run on Node 20.19 and newer: each command says what an older Node prints and what to tell the user, before
+// The bundles run on Node 26.13 and newer: each command says what an older Node prints and what to tell the user, before
 // its first script call in the body. Read with its line breaks folded, since prose wraps.
-export const OLD_NODE = 'If a script fails to start with a `SyntaxError`, a `TypeError` that names a missing function, or an error naming a `node:` module, stop and tell the user: alfred-tools needs Node 20.19 or newer - `node --version` shows yours.';
+export const OLD_NODE = 'If a script fails to start with a `SyntaxError`, a `TypeError` that names a missing function, or an error naming a `node:` module, stop and tell the user: alfred-tools needs Node 26.13 or newer - `node --version` shows yours.';
 
 export const FIRST_CALL = 'node "${CLAUDE_PLUGIN_ROOT}/dist/';
 

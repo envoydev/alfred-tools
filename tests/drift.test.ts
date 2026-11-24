@@ -203,7 +203,7 @@ test('a kept edit that fails the fingerprint leaves the list', () =>
 });
 
 // every file under a folder, for the search below
-const filesUnder = (dir: string) => (fs.existsSync(dir) ? fs.readdirSync(dir, { recursive: true, withFileTypes: true }).filter((d) => d.isFile()).map((d) => path.join(d.parentPath || d.path, d.name)) : []);
+const filesUnder = (dir: string) => (fs.existsSync(dir) ? fs.readdirSync(dir, { recursive: true, withFileTypes: true }).filter((d) => d.isFile()).map((d) => path.join(d.parentPath, d.name)) : []);
 
 test('a token pasted into a hosted entry\'s headers in .cursor/mcp.json offers no Keep, and no file but Cursor\'s holds it afterwards', () =>
 {

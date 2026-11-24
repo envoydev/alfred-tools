@@ -1718,3 +1718,15 @@ locally). Pinned `esbuild` 0.28.2 (`npm view esbuild@0.28.2`, modified 2026-08-0
   `darwin-arm64` here), and the main package runs a `postinstall` - `npm view esbuild@0.28.2 scripts` prints
   `{ postinstall: 'node install.js' }` (checked 2026-11-24). So the install step runs one script from esbuild.
 - npm page: https://www.npmjs.com/package/esbuild.
+
+## Node 26 - the development Node (read 2026-11-24)
+
+- Node 26 became LTS ('Lithium') with v26.13.0 on 2026-10-28; v26.13.1 followed on 2026-11-10 -
+  https://nodejs.org/dist/index.json (the `lts` field). So `engines` reads `>=26.13.0` and CI's checks job sets up
+  `26`. The run-time floor is the same Node 26.13 (the user's ruling, 2026-11-24: 'I want users to use Node 26'):
+  esbuild's `target` is `node26` and the `node26` CI job runs the dist smoke on 26.13.0.
+- `@types/node` 26.6.6 was published 2026-10-28 and is the `ts6.0` dist-tag (`npm view @types/node`).
+- npm 11.20.0 (with Node 26.13.0) does not run an install script it has not been told to allow: `npm install` prints
+  `npm warn install-scripts esbuild@0.28.2 (postinstall: node install.js)` and goes on. esbuild still builds without
+  that script - its binary comes from `@esbuild/<platform>-<arch>` (measured 2026-11-24 in a fresh scratch install,
+  macOS arm64).

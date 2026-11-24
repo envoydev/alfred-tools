@@ -64,7 +64,7 @@ test('keeps the indent, CRLF and a missing final newline, and every other top-le
     // no indented line at all: 2; a final newline kept
     const flat = `${JSON.stringify({ mcpServers: { 'mine-a': MINE_A, gh: entryOf('github') } })}\n`;
     const f = O.reorderText(flat, catalog, NONE);
-    assert.ok(f.text!.startsWith('{\n  "mcpServers": {\n    "gh"'), f.text);
+    assert.ok(f.text!.startsWith('{\n  "mcpServers": {\n    "gh"'), String(f.text));
     assert.ok(f.text!.endsWith('}\n') && !f.text!.endsWith('}\n\n'));
 });
 

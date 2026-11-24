@@ -12,18 +12,18 @@ import * as roots from '../roots/roots.ts';
 import * as keys from '../keys/keys.ts';
 import * as lists from '../mcps-list/mcps-list.ts';
 import { required } from './required.ts';
-import type path from 'node:path';
 import type { Catalog } from '../catalog/types.ts';
 import type { Inventory } from '../inventory/types.ts';
 import type { ListServer, OwnEntry } from '../mcps-list/types.ts';
 import type { Family } from '../roots/types.ts';
 import type { FileStep, ListWriteStep, FoundList, ListCtx, ListPlan, PlannedServer, PlanOut, PlanStep, RegistrationStep } from './types.ts';
+import type { PathApi } from '../core/types.ts';
 
 export const REG_OPS = ['mcp-add', 'mcp-replace', 'mcp-move', 'mcp-remove'];
 
 // A list as found: the inventory's read for its file, else the disk's; a family with no list yet reads its 0.4.x record
 // beside it. -> null | { servers, own, state? }
-export function foundList(inventory: Inventory, file: string, pathApi: path.PlatformPath): FoundList | null
+export function foundList(inventory: Inventory, file: string, pathApi: PathApi): FoundList | null
 {
     for (const family of roots.FAMILIES)
     {

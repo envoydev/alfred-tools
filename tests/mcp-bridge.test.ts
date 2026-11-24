@@ -170,7 +170,7 @@ test('a missing key exits 1 before npx starts, naming the files (Review Focus 2)
         assert.strictEqual(r.status, 1);
         const lines = r.stderr.trim().split('\n');
         assert.strictEqual(lines.length, 1, r.stderr);
-        assert.ok(lines[0]!.startsWith(`mcp-bridge: no value for ${K} in ${sec(w.root)}, `), lines[0]);
+        assert.ok(lines[0]!.startsWith(`mcp-bridge: no value for ${K} in ${sec(w.root)}, `), String(lines[0]));
         assert.deepStrictEqual(w.calls(), [], 'npx never ran');
     }
     finally { w.clean(); }

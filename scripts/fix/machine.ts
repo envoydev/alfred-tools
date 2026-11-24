@@ -20,6 +20,7 @@ import * as inventory from '../inventory/inventory.ts';
 import * as hud from '../hud/hud-statusline.ts';
 import type { InvRegistration } from '../inventory/types.ts';
 import type { Finding, FixCtx, MachineFixResult, RunResult } from './types.ts';
+import type { PathApi } from '../core/types.ts';
 
 // ---- retired-plugin (spec D8, D9, 0.5.0) -------------------------------------------------------------------------------
 // typescript-lsp, csharp-lsp and claude-hud work in Claude Code alone, so the catalog no longer lists them. Each id the row
@@ -140,7 +141,7 @@ export function dataFolderIgnoreDetect(context: FixCtx): Finding[]
 // A data root written absolute under the folder that declares it (0.3.0, spec F7): a session started in a child folder
 // under 0.2.0, when the path was relative, made its own copy there. Found when this folder is not the declaring one, the
 // copy is on disk and git does not ignore it; the fix gives it the same .gitignore. Its data is never moved or deleted.
-function leftoverCopy(context: FixCtx, registration: InvRegistration, root: string, pathApi: path.PlatformPath): { folder: string; finding: Finding } | null
+function leftoverCopy(context: FixCtx, registration: InvRegistration, root: string, pathApi: PathApi): { folder: string; finding: Finding } | null
 {
     const declared = registration.scope === 'inherited' ? registration.from : context.inventory.project;
     if (!declared || pathApi.resolve(declared) === pathApi.resolve(context.inventory.project)) return null;

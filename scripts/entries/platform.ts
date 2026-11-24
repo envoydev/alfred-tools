@@ -1,17 +1,17 @@
 // The platform a registration is built for: the path flavour of its OS and the Python request on Windows ARM64.
 import path from 'node:path';
-import type { Env } from '../core/types.ts';
+import type { Env, PathApi } from '../core/types.ts';
 import type { CatalogRoute, CatalogRules } from '../catalog/types.ts';
 
-export const pathFor = (platform: string): path.PlatformPath => (platform === 'win32' ? path.win32 : path.posix);
+export const pathFor = (platform: string): PathApi => (platform === 'win32' ? path.win32 : path.posix);
 export const slashes = (pathText: string): string => pathText.replace(/\\/g, '/');
 // The path flavour a path is written in: one that starts with a drive (C:\ or C:/) or a UNC prefix is Windows', any other
 // POSIX's.
-export const pathApiOf = (pathText: string): path.PlatformPath => (/^(?:[A-Za-z]:[\\/]|\\\\)/.test(pathText) ? path.win32 : path.posix);
+export const pathApiOf = (pathText: string): PathApi => (/^(?:[A-Za-z]:[\\/]|\\\\)/.test(pathText) ? path.win32 : path.posix);
 
 // Whether `file` lies inside `folder`, by the path text (no file is read). The folder itself counts only with `orSame`:
 // a root's own files count it (root-files.ts, change.ts), a project file or a path made relative to it does not.
-export function isInside(pathApi: path.PlatformPath, folder: string, file: string, { orSame }: { orSame: boolean }): boolean
+export function isInside(pathApi: PathApi, folder: string, file: string, { orSame }: { orSame: boolean }): boolean
 {
     const relativePath = pathApi.relative(folder, file);
     if (relativePath === '') return orSame;

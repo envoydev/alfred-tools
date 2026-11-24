@@ -1521,7 +1521,7 @@ test('D5: each keyed route at each scope', () => {
     // github Docker and sentry npm: not offered at project scope, written in at local and global scope
     for (const [id, route] of [['github', 'local'], ['sentry', 'local']])
     {
-        assert.match(at(id!, { route, scope: 'project' }).errors.join(), /not offered at project scope/, id);
+        assert.match(at(id!, { route, scope: 'project' }).errors.join(), /not offered at project scope/, String(id));
         for (const scope of ['local', 'user'])
         {
             const p = at(id!, { route, scope });
@@ -2713,12 +2713,12 @@ test('serena args at project, local and global scope: --context absolute, --proj
     for (const [scope, root] of [['project', '/work/shop/.alfred-tools'], ['local', '/work/shop/.alfred-tools'], ['user', '/h/.alfred-tools']])
     {
         const p = plan(inv(MAC), pickOne('serena', { scope }), opts('/h'));
-        assert.deepStrictEqual(p.errors, [], scope);
+        assert.deepStrictEqual(p.errors, [], String(scope));
         const args = addStep(p).entry.args;
-        assert.strictEqual(args![args!.indexOf('--context') + 1], `${root}/serena/serena-context.yml`, scope);
-        assert.ok(args!.includes('--project-from-cwd'), scope);
-        assert.ok(!args!.includes('claude-code'), scope);
-        assert.deepStrictEqual((p.steps.filter((s) => s.op === 'write-serena-context') as PathStep[]).map((s) => s.path), [`${root}/serena`], scope);
+        assert.strictEqual(args![args!.indexOf('--context') + 1], `${root}/serena/serena-context.yml`, String(scope));
+        assert.ok(args!.includes('--project-from-cwd'), String(scope));
+        assert.ok(!args!.includes('claude-code'), String(scope));
+        assert.deepStrictEqual((p.steps.filter((s) => s.op === 'write-serena-context') as PathStep[]).map((s) => s.path), [`${root}/serena`], String(scope));
     }
     // a server that is not serena plans no context file
     assert.deepStrictEqual(plan(inv(MAC), pickOne('memory', { scope: 'project' }), opts('/h')).steps.filter((s) => s.op === 'write-serena-context'), []);

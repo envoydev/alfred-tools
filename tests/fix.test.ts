@@ -1374,7 +1374,7 @@ test('serena-windows-home at project scope: an absolute bad home is fixed in pla
     assert.deepStrictEqual(f.proposal, { SERENA_HOME: 'C:\\work\\shop\\.alfred-tools\\serena' });
     assert.ok(!f.blocked);
     [f] = homes(at(undefined, { home: 'C:\\Users\\Jo Doe' })) as [Finding];
-    assert.ok(f.blocked!.includes('pick a space-free folder with /alfred-tools:configure, Location'), f.blocked);
+    assert.ok(f.blocked!.includes('pick a space-free folder with /alfred-tools:configure, Location'), String(f.blocked));
     // a ${VAR} value is project-relative-path's to convert
     assert.deepStrictEqual(homes(at('${USERPROFILE}/.serena', { env: { USERPROFILE: 'C:\\Users\\dev' } })), []);
 });

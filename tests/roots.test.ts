@@ -191,8 +191,8 @@ test('no option text mentions Other', () => {
     assert.deepStrictEqual(q.roots!.questions.map((x) => x.id), ['root-project', 'root-global']);
     for (const text of [...all.flatMap((o) => [o.label, o.description]), ...q.roots!.questions.flatMap((x) => [x.question, x.header, ...x.options.flatMap((o) => [o.label, o.description])])])
     {
-        assert.doesNotMatch(text!, OTHER_RE, text);
-        assert.doesNotMatch(text!, /under Other/, text);
+        assert.doesNotMatch(text!, OTHER_RE, String(text));
+        assert.doesNotMatch(text!, /under Other/, String(text));
     }
 });
 

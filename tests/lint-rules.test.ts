@@ -52,10 +52,10 @@ test('FIRST_CALL is the start of a bundle call', () =>
     assert.strictEqual(FIRST_CALL, 'node "${CLAUDE_PLUGIN_ROOT}/dist/');
 });
 
-test('OLD_NODE names the Node 20.19 floor', () =>
+test('OLD_NODE names the Node 26.13 floor', () =>
 {
     assert.strictEqual(
         OLD_NODE,
-        'If a script fails to start with a `SyntaxError`, a `TypeError` that names a missing function, or an error naming a `node:` module, stop and tell the user: alfred-tools needs Node 20.19 or newer - `node --version` shows yours.',
+        'If a script fails to start with a `SyntaxError`, a `TypeError` that names a missing function, or an error naming a `node:` module, stop and tell the user: alfred-tools needs Node 26.13 or newer - `node --version` shows yours.',
     );
 });

@@ -37,7 +37,7 @@ jobs:
       # No lockfile is tracked: the build tools are pinned exactly in package.json
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           package-manager-cache: false
 
       - name: npm install
@@ -73,7 +73,7 @@ jobs:
         run: npm run kit:check
 
   # The bundles in dist/ must start on the lowest Node the plugin supports. No npm install: the smoke uses built-ins only.
-  node20:
+  node26:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -83,7 +83,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 20.19.0
+          node-version: 26.13.0
           package-manager-cache: false
 
       - name: node tests/dist-smoke.mjs

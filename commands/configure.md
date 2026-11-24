@@ -32,7 +32,7 @@ nothing, and a change is built from the registration as read, so a pin is never 
   for that one value - no `AskUserQuestion` - and end the turn; the user's next message (or an Other answer to that
   question) is the value.
 - If a script fails to start with a `SyntaxError`, a `TypeError` that names a missing function, or an error naming a
-  `node:` module, stop and tell the user: alfred-tools needs Node 20.19 or newer - `node --version` shows yours.
+  `node:` module, stop and tell the user: alfred-tools needs Node 26.13 or newer - `node --version` shows yours.
 - Every file below lives in one temp folder. Make it once with `node "${CLAUDE_PLUGIN_ROOT}/dist/tmpdir.mjs"` and call
   it `<tmp>`.
 

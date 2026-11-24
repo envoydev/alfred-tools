@@ -49,7 +49,7 @@ private project names, no absolute local paths, no tokens, nothing from a user's
 
 ```bash
 npm install          # first in a fresh clone: typecheck, lint and test import the pinned typescript
-npm run typecheck    # tsc -p . and tsc -p tsconfig.node20.json (the Node 20 types)
+npm run typecheck    # tsc -p . against the Node 26 types
 npm run lint         # tests/lint.ts - the repo's own rules (allowed-tools, names, types)
 npm run build        # esbuild: scripts/ to the ten bundles in dist/
 npm run build:check  # a fresh in-memory build against dist/ - exit 1 on a difference
@@ -60,7 +60,7 @@ npm run matrix       # real-CLI cases - by hand only, on a throwaway project and
 ```
 
 CI runs `typecheck`, `lint`, `build:check`, `validate`, `test` and `kit:check`, in that order. A second CI job runs
-`node tests/dist-smoke.mjs` on Node 20.19.0, the run-time floor.
+`node tests/dist-smoke.mjs` on Node 26.13.0, the run-time floor.
 
 ## Layout
 
@@ -169,8 +169,8 @@ CI runs `typecheck`, `lint`, `build:check`, `validate`, `test` and `kit:check`, 
   `node "${CLAUDE_PLUGIN_ROOT}/dist/<entry>.mjs"`, the bundle built from `scripts/<entry>.ts`.
 - **Asks stay within the AskUserQuestion limits** (1-4 questions per call, 2-4 options each). Exactly one option is
   marked `(Recommended)`, listed first, and nothing is applied before the plan is confirmed.
-- **Zero runtime dependencies.** The bundles use Node 20.19 built-ins at run time; Node 22.18 is needed only to develop
-  (`engines`). esbuild is a dev dependency, pinned exactly, and only `npm run build` uses it. A plugin's Node dependencies install only with a lockfile and
+- **Zero runtime dependencies.** The bundles use Node 26.13 built-ins at run time, the floor `engines` names for
+  developing too. esbuild is a dev dependency, pinned exactly, and only `npm run build` uses it. A plugin's Node dependencies install only with a lockfile and
   `--ignore-scripts`, and `claude plugin update` installs none of the new `dependencies` a release adds. So the
   manifest never declares `dependencies`.
 
@@ -211,8 +211,8 @@ far past those dates.
   A case not run is reported as NOT RUN, never implied as passing. Windows-only behaviour is proved on the user's
   Windows VM or reported NOT RUN.
 - **CI runs the same checks, and they run here first** (`.github/workflows/ci.yml`: typecheck, lint, build:check, validate,
-  test, kit:check on Linux, macOS and Windows, against the Claude Code build pinned there, plus a `node20` job that
-  runs the dist smoke on Node 20.19.0). Before a push, run those six
+  test, kit:check on Linux, macOS and Windows, against the Claude Code build pinned there, plus a `node26` job that
+  runs the dist smoke on Node 26.13.0). Before a push, run those six
   here in that order and push only when each passes; then watch the remote run to its end - it is what proves Linux and
   Windows (the user's ruling, 2026-11-15). The matrix is not in CI: it stays a by-hand run on a throwaway project.
 - **What only the runner showed** (first CI runs, 2026-11-14): a test that read the real home folder (each test makes

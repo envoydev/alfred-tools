@@ -1,6 +1,6 @@
 // The throwaway world every bundle run happens in: a temp home, account folder, project and temp folder, a `claude` stub
 // that records each call, and a PATH that reaches no real claude. Plain JavaScript on purpose: tests/dist-smoke.mjs imports
-// it and runs on Node 20, which cannot load .ts. It repeats the Windows PATH logic and the keychain stub of
+// it and runs with no install and no type stripping. It repeats the Windows PATH logic and the keychain stub of
 // tests/helpers.ts for that reason - keep the two in step.
 import fs from 'node:fs';
 import os from 'node:os';

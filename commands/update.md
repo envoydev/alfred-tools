@@ -36,7 +36,7 @@ ask. It takes no argument: one typed after the command changes nothing - say so.
   not filled yet, a folder to name - is a note naming `/alfred-tools:fix`, never an offer.
 
 If a script fails to start with a `SyntaxError`, a `TypeError` that names a missing function, or an error naming a
-`node:` module, stop and tell the user: alfred-tools needs Node 20.19 or newer - `node --version` shows yours.
+`node:` module, stop and tell the user: alfred-tools needs Node 26.13 or newer - `node --version` shows yours.
 
 ## 1. What is behind
 

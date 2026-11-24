@@ -208,7 +208,7 @@ test("a retired managed server is never called the user's own in a change plan; 
         const changed = plan(i, { change: { 'mcp:old~local': { name: 'renamed' } } }, { home: w.home, env: w.env, catalog: cat });
         assert.strictEqual(changed.errors.length, 1);
         assert.match(changed.errors[0]!, /retired/);
-        assert.ok(!/your own|matches no catalog row/.test(changed.errors[0]!), changed.errors[0]);
+        assert.ok(!/your own|matches no catalog row/.test(changed.errors[0]!), String(changed.errors[0]));
         // an unrelated install never upserts the retired entry into the list
         const added = plan(i, { picks: { 'playwright-chrome': { scope: 'local' } } }, { home: w.home, env: w.env, catalog: cat });
         const upserted = added.steps.flatMap((step) => (step.op === 'list-write' ? step.upserts.map((upsert) => upsert.server.name) : []));

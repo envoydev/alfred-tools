@@ -24,7 +24,7 @@ export function buildOptions(root: string): BuildOptions
         bundle: true,
         platform: 'node',
         format: 'esm',
-        target: 'node20',
+        target: 'node26',
         outdir: DIST_DIR,
         outExtension: { '.js': '.mjs' },
         charset: 'utf8',

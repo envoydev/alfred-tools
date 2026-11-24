@@ -1,7 +1,7 @@
 // The smoke run of the bundles: starts the eight entries that refuse with no arguments and runs the tmpdir -> inventory ->
 // table -> plan chain, all from dist/ and all in a throwaway world, then compares with EXPECTED. It imports only
-// tests/dist-world.mjs and Node built-ins, so Node 20.19 - the oldest Node a user may have - runs it with no
-// install and no type stripping (the CI `node20` job). tests/dist.test.ts checks EXPECTED against the source's own run
+// tests/dist-world.mjs and Node built-ins, so Node 26.13 - the oldest Node a user may have - runs it with no
+// install and no type stripping (the CI `node26` job). tests/dist.test.ts checks EXPECTED against the source's own run
 // so it cannot drift: when it fails after a deliberate change, copy the values it shows in here.
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';

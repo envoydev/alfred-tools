@@ -54,7 +54,7 @@ test('compareDist returns no problem when dist/ holds exactly the built files', 
     }
 });
 
-test('buildOptions bundles every entry for Node 20 as ESM with the two-line banner, unminified and with no source map', () =>
+test('buildOptions bundles every entry for Node 26 as ESM with the two-line banner, unminified and with no source map', () =>
 {
     const root = path.join(os.tmpdir(), 'build-test-root');
     const options = buildOptions(root);
@@ -62,7 +62,7 @@ test('buildOptions bundles every entry for Node 20 as ESM with the two-line bann
     assert.strictEqual(options.bundle, true);
     assert.strictEqual(options.platform, 'node');
     assert.strictEqual(options.format, 'esm');
-    assert.strictEqual(options.target, 'node20');
+    assert.strictEqual(options.target, 'node26');
     assert.strictEqual(options.outdir, 'dist');
     assert.deepStrictEqual(options.outExtension, { '.js': '.mjs' });
     assert.strictEqual(options.charset, 'utf8');
