@@ -44,8 +44,8 @@ If a script fails to start with a `SyntaxError`, a `TypeError` that names a miss
 node "${CLAUDE_PLUGIN_ROOT}/dist/update.mjs" --check --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
-Paste the output verbatim in a fenced block. It refreshes each marketplace the installed plugins come from
-(`claude plugin marketplace update <name>`), then lists, in tables: plugins, MCP servers as
+Paste the output verbatim in a fenced block. It refreshes the installed plugins' marketplaces, then lists, in
+tables: plugins, MCP servers as
 `current -> offered` with the release's age, 'Key helpers' (each copied file older than this plugin's, as
 `<file> in <root>  N -> M`), and 'New ways to pass data', one line per server or
 folder as `<fix id>: <what it found>`. Below them: plugins whose marketplace lists no version
@@ -154,7 +154,7 @@ repeat those lines in the summary to the user, say the route changed from `http`
 why (Cursor was added), and say the sign-in is still to do while the line says 'not done yet'. The offer's servers are
 fetched in the same run's fetch file, like a pin move.
 
-Run it with the Bash tool's `timeout: 600000` (10 minutes, the most it allows by default): a plugin update clones its marketplace, and the new MCP pins are downloaded after it, not inside it. `all` is every
+Run it with the Bash tool's `timeout: 600000`: a plugin update clones its marketplace, and the new MCP pins are downloaded after it, not inside it. `all` is every
 offer with a known newer version; an unchecked plugin runs only when its own id is given. Each update is read back: a
 plugin from the plugin list, an MCP pin from the file the CLI wrote, a key helper
 from its first line and digest, a new way to pass data by its detector run again. The new ways run first - a
@@ -209,9 +209,9 @@ where the session has one; the client keeps waiting), then `<name>: signed in`, 
 1). Where Monitor is not available, run it with the Bash tool's `run_in_background: true` and `timeout: 330000` and Read
 its output file for the link line. The sign-in returns to `http://localhost:<port>/oauth/callback` on the machine
 running the client: over SSH, forward that port first with `ssh -L <port>:localhost:<port> <host>` (the port is in the
-link's `redirect_uri`), or open the link in a browser on that machine. On a failure say why, that the user can run it
-again, and that otherwise the first session start opens the browser inside its 30-second limit. 'At the next session
-start': say exactly that, and that `/mcp` reconnects the server after the browser sign-in.
+link's `redirect_uri`), or open the link in a browser on that machine. On a failure say why, and that the user can run
+it again or let the first session start open the browser. 'At the next session start': say so, and that `/mcp`
+reconnects the server after the browser sign-in.
 
 <!-- /shared:sign-in -->
 

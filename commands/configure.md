@@ -9,7 +9,7 @@ Walk the user through changing or removing alfred-tools tools already installed 
 work and print what you paste; you ask the questions. Argument: `$ARGUMENTS`.
 
 Configure starts from what is installed: every question recommends what the tool has now, so keeping an answer changes
-nothing, and a change is built from the registration as read, so a pin is never downgraded. Adding a tool is `/alfred-tools:install`.
+nothing. Adding a tool is `/alfred-tools:install`.
 
 ## Rules
 
@@ -20,7 +20,7 @@ nothing, and a change is built from the registration as read, so a pin is never 
 
 <!-- shared:rules -->
 
-- **The `claude` CLI is the only writer** of `.mcp.json` and the account file; `apply.ts` calls it. Never edit them by
+- **The `claude` CLI is the only writer** of `.mcp.json` and the account file; `apply.mjs` calls it. Never edit them by
   hand.
 - **Scopes are Global, Project and Local.** Global is `user` scope - every project on this machine.
 - **Keys live in `.mcps-secrets` in the root folder**, one per root (the project root for Project and Local, the global
@@ -205,8 +205,7 @@ node "${CLAUDE_PLUGIN_ROOT}/dist/plan.mjs" --skip <tmp>/inventory.json <tmp>/pic
 node "${CLAUDE_PLUGIN_ROOT}/dist/plan.mjs" <tmp>/inventory.json <tmp>/answers.json --out <tmp>/plan.json --data "${CLAUDE_PLUGIN_DATA}"
 ```
 
-Paste the output verbatim in a fenced block. An entry that holds a credential outside its key helper is a plan error,
-never written. A root change notes that the user copies the old `.mcps-secrets` values to the new one - say it again
+Paste the output verbatim in a fenced block. A root change notes that the user copies the old `.mcps-secrets` values to the new one - say it again
 after the apply. Exit 1 means plan errors: show them and rewind the pick each names (below), never go around them.
 
 <!-- shared:cursor-name -->
@@ -316,9 +315,9 @@ where the session has one; the client keeps waiting), then `<name>: signed in`, 
 1). Where Monitor is not available, run it with the Bash tool's `run_in_background: true` and `timeout: 330000` and Read
 its output file for the link line. The sign-in returns to `http://localhost:<port>/oauth/callback` on the machine
 running the client: over SSH, forward that port first with `ssh -L <port>:localhost:<port> <host>` (the port is in the
-link's `redirect_uri`), or open the link in a browser on that machine. On a failure say why, that the user can run it
-again, and that otherwise the first session start opens the browser inside its 30-second limit. 'At the next session
-start': say exactly that, and that `/mcp` reconnects the server after the browser sign-in.
+link's `redirect_uri`), or open the link in a browser on that machine. On a failure say why, and that the user can run
+it again or let the first session start open the browser. 'At the next session start': say so, and that `/mcp`
+reconnects the server after the browser sign-in.
 
 <!-- /shared:sign-in -->
 

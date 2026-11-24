@@ -7,6 +7,10 @@ everything it relies on is either stated here or named with the file to read.
 
 Graded 2026-10-27 by independent reviewers: 79 -> 79 -> 88 -> 95; six findings fixed after the last grade.
 
+The brief names the first build's JavaScript files (`scripts/*.js`, Node 22). Since then `scripts/` is TypeScript
+(2026-11-14), the commands run the `dist/*.mjs` bundles built from it, and the plugin needs Node 26.13 or newer
+(2026-11-24). `AGENTS.md` has the current layout and floor.
+
 ---
 
 You are building `alfred-tools`, a Claude Code plugin in this repository. The repo collects the tools its owner has
