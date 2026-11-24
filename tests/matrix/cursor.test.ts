@@ -282,6 +282,17 @@ const agent = (hh: Harness, cwd: string, args: string[]) =>
     const r = spawnSync(AGENT!, ['mcp', ...args], { cwd, env: hh.env, encoding: 'utf8', timeout: START_MS });
     return { status: r.status, out: `${r.stdout || ''}${r.stderr || ''}` };
 };
+// The same call while a stub in this process serves the server under test: spawnSync would block the event loop, so
+// the stub could not answer and Cursor's 60-second connect timeout would fail the case
+const agentWhileServing = (hh: Harness, cwd: string, args: string[]) => new Promise<{ status: number | null; out: string }>((resolve) =>
+{
+    const child = spawn(AGENT!, ['mcp', ...args], { cwd, env: hh.env, timeout: START_MS });
+    let out = '';
+    child.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });
+    child.stderr.on('data', (chunk: Buffer) => { out += chunk.toString(); });
+    child.on('error', (err) => resolve({ status: null, out: `${out}${err.message}` }));
+    child.on('close', (status) => resolve({ status, out }));
+});
 const SIGNED_OUT = /log ?in|sign ?in|authenticat/i;
 
 test('M2 Cursor CLI: each server enabled starts and lists its tools; serena lists F7\'s six; context7 through the bridge; the files unchanged by enable', { skip: skipAll || noAgent, timeout: START_MS * 2 }, async (t) =>
@@ -311,17 +322,17 @@ test('M2 Cursor CLI: each server enabled starts and lists its tools; serena list
         const before = files.map((f) => fs.readFileSync(f, 'utf8'));
         for (const name of ['serena', 'context7'])
         {
-            const e = agent(hh, p, ['enable', name]);
+            const e = await agentWhileServing(hh, p, ['enable', name]);
             if (SIGNED_OUT.test(e.out) && e.status !== 0) return t.skip(`NOT RUN: Cursor CLI needs a sign-in here (${e.out.trim().slice(0, 160)})`);
             assert.strictEqual(e.status, 0, e.out);
         }
         assert.deepStrictEqual(files.map((f) => fs.readFileSync(f, 'utf8')), before, 'Assumption 1: enable leaves both Cursor files byte-identical');
-        const serena = agent(hh, p, ['list-tools', 'serena']);
+        const serena = await agentWhileServing(hh, p, ['list-tools', 'serena']);
         assert.strictEqual(serena.status, 0, serena.out);
         assert.deepStrictEqual(ALLOWED.filter((n) => !new RegExp(`\\b${n}\\b`).test(serena.out)), [], `serena lists F7's six:\n${serena.out}`);
         assert.deepStrictEqual(OTHERS.filter((n) => new RegExp(`\\b${n}\\b`).test(serena.out)), [], 'and no other');
         const s0 = s.seen.length;
-        const c7 = agent(hh, p, ['list-tools', 'context7']);
+        const c7 = await agentWhileServing(hh, p, ['list-tools', 'context7']);
         assert.strictEqual(c7.status, 0, c7.out);
         const seen = s.seen.slice(s0);
         assert.ok(seen.some((x) => x.rpc === 'tools/list' && x.auth === 'expected'), `context7 reached the stub through the bridge with its key: ${JSON.stringify(seen)}`);
