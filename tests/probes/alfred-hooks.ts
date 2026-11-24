@@ -329,7 +329,6 @@ function prereqAndApply(s: Session, tmp: string, t: (f: string) => string, answe
     const file = fetchFileOf(applied);
     if (file) s.bash('fetch.mjs', '"<file>"', { '<file>': file });
     else s.skip('fetch.mjs', '"<file>"', 'apply handed no fetch file on');
-    s.skip('hud-statusline.ts', '--check', 'claude-hud is not picked');
 }
 
 function install(s: Session, ctx: HookCtx)
